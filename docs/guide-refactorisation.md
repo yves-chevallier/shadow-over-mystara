@@ -255,8 +255,8 @@ converti avec `rendering` en plus.
   processeur (`Cx`) comme aux convertis (`Gx`). `x.reinsert()`, `x.keep_in_zone()`, `x.keep_on_screen(m)`,
   `x.push_terrain()` font ce qu'il faut selon le banc. Un reste relu par un autre gestionnaire passe par
   `dispatch::Leftovers` (`x.leftovers().d4` sur `Gx`, `*x.c.d5()` générique).
-* **Déclarer un gestionnaire converti** : `0x… "name" #[without] chemin` dans `handlers!` (natif
-  `Body::Handler`). Seulement si sa sortie n'est relue par personne, ou si ses restes relus sont écrits dans
+* **Déclarer un gestionnaire converti** : `NOM 0x… "name" chemin` dans `handlers!` (natif `Body::Handler`,
+  constante `NOM`), puis l'entrée de son type dans la table de sa classe (`dispatch.rs`, `h(&famille::NOM)`). Seulement si sa sortie n'est relue par personne, ou si ses restes relus sont écrits dans
   `Leftovers`.
 * **Créateurs** : écrits sur `effects_creators::leftovers::Regs` (`r.allocated`, `r.d(n, v)`…) ; les appelants Rust
   passent `&mut Pure` (aucun registre), la native passe le processeur.
@@ -328,8 +328,8 @@ Le modèle (`tasks/mod.rs`, `tasks/table.rs`, `kernel.rs`) :
   `Step(Step)`. Une cession range `Resume::Step(step)` (sans registres depuis la partie 4 de la sortie du Cpu : ce que l'étape relit est dans ses champs) ; un appel en cours (`Frame`) n'est plus
   qu'une suite et sa hauteur de pile.
 * **Le noyau appelle le pas** : `kernel::launch` remet registres, SR et pile du contexte puis
-  `tasks::execute(step)` au lieu de poser `c.pc` ; une tâche neuve dont l'entrée est une étape
-  (`tasks::entry`) démarre de même. `execute` exécute le pas et, s'il rend `Flow::Done` (retour de
+  `tasks::execute(step)` au lieu de poser `c.pc` ; une tâche neuve (`tasks::Task`, créée par
+  `kernel::create_task(b, slot, Task::…)`) démarre de même à sa première étape (`Task::first_step`). `execute` exécute le pas et, s'il rend `Flow::Done` (retour de
   sous-programme), `tasks::return_to_caller` : la suite de l'appel en cours, étape exécutée aussitôt ou adresse posée au PC.
   `mem::rts` passe par `return_to_caller`.
 * **Cessions** : `tasks::cede(x, Wait, next)`, `one_frame` (`jsr 0xb64`, D0.w = 1), `wait` (`jsr 0xa40`,
@@ -344,7 +344,7 @@ Convertir un module :
 
 1. `resume!(NOM, ADDRESS, CORPS)` → variante `Nom = ADDRESS => CORPS` d'un bloc `steps!` (mécanique : le lot E
    l'a fait par script pour 330 reprises) ; retirer la native de `NATIVES` ; ajouter la ligne du module à
-   `task_steps!` (et à `tasks::entry` si c'est une entrée de tâche).
+   `task_steps!` (et une variante à `tasks::Task`, avec sa première étape, si c'est une entrée de tâche).
 2. Remplacer chaque adresse de reprise passée à `wait`, `tail`, `push_return`, `cede`... par la variante ; les aides
    qui prenaient une adresse prennent l'`Step` du module ou `impl Into<Next>`. Une adresse oubliée compile encore
    (`u32` est une `Next`) : chercher les adresses converties restées en clair, sinon la reprise s'arrête sur « pas

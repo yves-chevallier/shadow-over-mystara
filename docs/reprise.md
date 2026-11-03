@@ -180,6 +180,16 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    bus), L15 (`World`, couches : `tables` et `objects` sont de la couche monde, `ai_aids`/`effects_aids` dépendent
    encore de `families`).
 
+12. **Lot L13 (aiguillage sans adresses)** fait (branche `wt-l13-aiguillage`, [fin.md](fin.md) « L13 »,
+   « Résultat ») : les dix tables d'aiguillage sont des tableaux Rust `[Handler; N]` (`dispatch.rs`, indexés par
+   `Obj::KIND`, entrées mortes `Handler::Dead`, types hors table `unreachable!`), `handlers!` nomme chaque
+   gestionnaire ; les tâches sont un `enum tasks::Task` (fondus : `tasks::fading::Fade`), `Task::address()` pour
+   `gaps` ; `lookup`, le crible, `all_natives`/`game_natives`/`is_native` sont dans `tools::registry` : le jeu n'a
+   plus de registre par adresse. Pas de réextraction des assets. Pour L14 : les clés d'adresses de routines lues
+   dans les données (`decide` des boss, `run_at` des joueurs, réactions communes, `sound::OTHERS`), les lectures par
+   adresse (`held16`, `speed16`, `reactions`, `screens::tables::Rom`, tables des joueurs) et les accesseurs ROM de
+   `config`, `mem`, `data` (résidu).
+
 ## Méthode qui marche
 
 * **Consignes des agents.** Elles sont dans [agents/brief-commun.md](agents/brief-commun.md) (règles) et [agents/brief-lots.md](agents/brief-lots.md) (mission type d'un lot de refactorisation et règle du code mort). Remplacer `<scratchpad>` par le dossier temporaire de la session.

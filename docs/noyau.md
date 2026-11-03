@@ -59,7 +59,7 @@ que par le menu de mise au point d'origine 0x2c3e0, que le jeu n'exécute pas). 
 le masque du SR.
 
 Toute tâche reprend à une *étape* de sa machine à états (`Resume::Step`) : l'ordonnanceur remet ses registres puis
-appelle son pas (`tasks::execute`) ; une tâche neuve démarre à l'étape de son entrée (`tasks::entry` : y compris
+appelle son pas (`tasks::execute`) ; une tâche neuve démarre à la première étape de sa `tasks::Task` (`Task::first_step`, depuis L13 : y compris
 la tâche de démarrage `0x11b16`, `modes::boot::Step::Entry`, et la machine à modes relancée `0x133fe`,
 `modes::Step::Entry`). Voir « Tâches Rust ». `Resume::Cession` (une native à l'adresse de reprise) a disparu au lot
 « noyau final » : une cession vers une adresse est une erreur (`unreachable!`). L'écran `0x19068` est du code mort (sa
@@ -122,7 +122,7 @@ son module (`steps!`, réunies dans `tasks::Step`), et chaque *pas* une fonction
 `Wait` (`Images(n)` : trap 3, `Ready` : trap 4) que `tasks::cede` remet directement au noyau
 (`kernel::wait`, `kernel::cede_ready`) : la table range l'état, le compte, l'étape de reprise et le contexte de la
 tâche (`Resume::Step`), sans enveloppe d'origine ni adresse empilée. Au lancement suivant, l'ordonnanceur remet les
-registres et appelle le pas (`tasks::execute`) ; une tâche neuve dont l'entrée est une étape (`tasks::entry`)
+registres et appelle le pas (`tasks::execute`) ; une tâche neuve (`tasks::Task`, première étape `Task::first_step`)
 démarre de même. Un pas qui finit (`Flow::Done`, retour de sous-programme) continue à la suite de l'appel en cours
 (`tasks::return_to_caller`). L'adresse d'origine d'une étape (`Step::address`) ne sert plus qu'au diagnostic et à la comparaison
 de la table avec FF0064. Chaque emplacement porte aussi le nom de sa tâche (`table::Task`, d'après son entrée :

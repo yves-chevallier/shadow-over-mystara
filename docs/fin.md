@@ -1202,7 +1202,7 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
 
 ### Série 5 (un agent, transverse)
 
-**L13. Aiguillage sans adresses** (moyen)
+**L13. Aiguillage sans adresses** (moyen) — **fait** (branche `wt-l13-aiguillage`, voir « Résultat »)
 * Périmètre : `dispatch.rs`, `families/mod.rs` et les macros `handler!`, `lib.rs` (`Native`, `lookup`, `NATIVES`),
   `kernel.rs`, `tasks/mod.rs`, `no68k.rs`.
 * Travail :
@@ -1220,6 +1220,58 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
 * Risque : un type hors table, comme l'original le permet (`(kind << 2) as u16`), devient un index hors bornes. Il
   faut le garder comme cas nommé : `unreachable!` consigné dans [code-mort.md](code-mort.md), ou lecture de la suite
   de la table.
+* Résultat :
+  * Tables d'aiguillage : `dispatch::Class` porte `handlers: &[Handler]`, dix tableaux `[Handler; N]` construits à la
+    compilation (`PSHL_HANDLERS`... `SOBJ_HANDLERS`, 25, 48, 29, 23, 73, 92, 4, 34, 10 et 16 types, relevés dans
+    `prog_dec.bin`), indexés par `Obj::KIND`. `Handler::Rust { run, native }` : la fonction et sa native (adresse et
+    nom, métadonnées pour `DDSOM_CHECK`, la couverture et le diagnostic d'arrêt), vérifiée à la compilation
+    (`h(&native)` refuse un corps autre que `Body::Handler`) ; `Handler::Dead { entry }` pour les quatre entrées sans
+    gestionnaire (ENEMY 17, EFFCT 2, 71, 78) ; un type au-delà de la table est un `unreachable!`
+    ([code-mort.md](code-mort.md), « Lot L13 » : ce que l'original lirait, souvent la table d'une autre classe).
+    `Class::table`/`entry` restent des métadonnées (et l'adresse de reprise de `Step::Dispatch`) ; `Class::index`
+    remplace la recherche de la classe à chaque balayage.
+  * `handlers!` nomme chaque gestionnaire (`ESHL_00 0x9dbfc "eshl_00" shot0::run` : une constante par entrée, plus
+    `NATIVES` pour les outils), comme `handler!` ; les tables désignent ces constantes.
+  * Tâches : `tasks::Task` (`Startup`, `Modes`, `Game`, `Service`, `Fading(Fade)`, `Credits`, `Interface`,
+    `Portraits`, `Prompt`, `Freeze`, `Scores`) et `tasks::fading::Fade` (les dix fondus, ex-`TASKS`) remplacent les
+    adresses d'entrée : `kernel::create_task(b, slot, Task)`, `kernel::restart(b, Task)`, `tasks::restart(x, Task)`,
+    `Resume::Entry(Task)`, `Slot::task: Option<Task>` ; `Task::first_step()` remplace `tasks::entry`, `Task::address()`
+    sert à `gaps` (FF0064) et au diagnostic. Les constantes `RomAddr` des créateurs de tâches (fondus de
+    `scene::fading`, `rom::DIM_TASK`, `fireworks::FADE_*`, `MODE_LOOP`, `BOOT_TASK`...) sont des `Task`. Côté outils,
+    `tools::kernel::task_at` retrouve la tâche d'une entrée posée par le code d'origine (A0 de `0x9b6`/`0xae4`) et
+    `Resume::Address` (fonctionnalité `tools`) garde une entrée qui n'est pas une tâche du jeu (table reconstruite
+    depuis FF0064 par `fuzz_couv`).
+  * Registre par adresse : `lookup`, le crible, la table de hachage, `is_native`, `all_natives`, `game_natives` et la
+    liste `NATIVES` de `lib.rs` (natives mémoire appelées par le seul code d'origine) passent dans `tools::registry`
+    (réexportés par `lib.rs` avec `tools`, pour les exemples) ; `no68k::native` devient `no68k::note` (dernières
+    natives pour le diagnostic d'arrêt). `lib.rs` garde les types `Native`, `Body`, `regs` (métadonnées). Les
+    réactions communes des ennemis sont reconnues par leur liste d'adresses (`reactions::ROUTINES`), plus par la
+    liste des natives. Phase 8 de la partie : l'adresse du gestionnaire (relue par l'entrée de scène, A0) est une
+    constante (`PHASE_8_HANDLER`, 0x20c38) ; `mem::prog32` passe dans `tools` (le résidu lit deux mots).
+  * Fin : `grep -n 'lookup\|prog32' port/ddsom-game/src --exclude-dir=tools` vide ; `cargo build -p ddsom-game
+    --no-default-features` ne compile plus le registre ; `DDSOM_CHECK=1` compare toujours (bot30k, 2 000 images :
+    21 444 appels comparés, 0 écart) ; tests `tools::registry` (`unique_inputs`, `dispatch_handlers_are_game_natives`).
+  * Boucle d'image (`no68k::line`) : le point et le masque d'interruption sont lus une fois par tour dans la table
+    des tâches (trois lectures `dyn Any` auparavant), et les dernières natives (diagnostic d'arrêt) sont un anneau
+    fixe (`Cell`) au lieu d'un `VecDeque` sous `RefCell`.
+  * Mesures (`measure_end.py`, tout le jeu hors `tools/`) : accesseurs ROM 13 → 9 (restent `config`, `mem`,
+    `data`), constantes d'adresses ROM 414 → 410, lignes 172 911 → 173 211 (les dix tableaux) ; `tools/` 6 448 →
+    6 606 lignes (`registry.rs`).
+  * `bench` bot30k, 12 000 images, meilleur de 3 en alternance avec main d2b0b7c construit dans le même dossier
+    cible : sans rendu 19 607 images/s (main 19 464), avec rendu 3 838 (main 3 887), même empreinte
+    `a65ecd8aa6e38d4f`. Instructions (`perf stat`, 12 000 images) : sans rendu −1,2 %, avec rendu −0,2 %. L'écart
+    avec rendu vient de la disposition du code (rendu inchangé, même nombre d'instructions, cycles +1,3 %) : un
+    binaire au code identique mais décalé (fonction ajoutée) varie de ±3 % ; avant l'optimisation de la boucle
+    d'image, la branche mesurait 18 800 images/s sans rendu, pour 0,2 % d'instructions de plus que main.
+  * Laissé pour L14 et après : les clés d'adresses de routines lues dans les données restent des `u32` comparés
+    (`match decide(...)` des boss 0, 1, 4, 6, 17, 18, 19, 21 ; `player::scripted::run_at`, `player::hurt::run_at`,
+    les étapes des cinématiques ; `reactions::run_common` ; `sound::OTHERS`) : ce sont des identifiants de routines
+    désignés par des tables de la ROM (mots relatifs, adresses), pas des lectures ; les rendre en index demande de
+    typer ces tables à l'extraction (L14). De même les lectures par adresse `tables::held16`/`speed16`/`reactions`,
+    `screens::tables::Rom` et les 141 constantes d'adresses de tables des joueurs (`player/tables.rs` : `pc*`/`byte`...
+    par adresse, une table pouvant être lue au-delà de sa fin), et les natives `Body::Memory` restées dans les modules
+    du jeu (listes `NATIVES`, lues par les seuls outils : L17).
+  * Validation : VALIDATION_PLACEHOLDER
 
 **L14. Le jeu sans image ROM** (moyen)
 * Préalable : L1, L5 à L13. `rom_reads` doit compter zéro lecture du bus dans 0-0x3fffff sur les 308 scénarios.
