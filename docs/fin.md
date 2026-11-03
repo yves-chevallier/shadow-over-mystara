@@ -993,7 +993,9 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     3000/40 graine 3, `DDSOM_ETATS=1`) VALIDE, sorties identiques à main ; `fuzz_enemy families` (kobold_scene7
     3000/40) : sortie identique à main (mêmes paniques d'états tirés hors contrat).
   * Validation : voir « Validation L9b » ci-dessous.
-* Validation L9b : (à compléter par la validation finale)
+* Validation L9b (d982c10, main b252be3 fusionné : L10, L11, L19) : 309/309 VALID en mode par défaut et avec
+  `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; scénarios de boss
+  ciblés avec résidu 0 ; tests `extract`, `ddsom-assets` ; `cargo clippy` sans avertissement, avec et sans `tools`.
 * Pour L12 et la suite : toute la zone `bosses` est à 0 (accesseurs, décalages, `A5`, constantes) ; les tables des
   boss sont lues par nom (`boss_common::{byte, word, long, per_rank, decide, jump_target}`) sauf celles désignées
   par une adresse rangée en ROM (`tables::held16`, `tables::speed16`, `tables::reactions`) ; les décisions
