@@ -81,7 +81,7 @@ fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK.0, n);
 }
 
-/// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
+/// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : animation kind `k`.
 fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(Boss::ANIM_KIND, k);
     x.set8(Boss::ANIM_LAST, k);

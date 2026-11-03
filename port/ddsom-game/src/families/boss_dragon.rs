@@ -96,7 +96,7 @@ const ACTIVE_LEAVE: u32 = 0x0200_0e00;
 /// The object followed by the camera, if there is one.
 fn leader<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let lead = var::LEADER.get(x.b);
-    (lead != 0).then(|| Obj(lead as i16 as i32 as u32 & 0xff_ffff))
+    (lead != 0).then_some(Obj(lead as i16 as i32 as u32 & 0xff_ffff))
 }
 
 /// Camera abscissa.

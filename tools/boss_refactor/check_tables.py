@@ -11,7 +11,8 @@ for m in re.finditer(r'decision\(rom, s, "([^"]+)", &\[([^\]]*)\]', decl):
     base, k = m.group(1), len(m.group(2).split(","))
     declared.add(base + "_jumps")
     declared.update([base + "_picks"] if k == 1 else [f"{base}_picks_{i}" for i in range(k)])
-read = set()
+# tables read by the address that another table gives (`tables::held16`), never by name
+read = {"boss_11/route_0"}
 for f in glob.glob("port/ddsom-game/src/families/boss*/*.rs") + glob.glob("port/ddsom-game/src/families/boss*.rs"):
     read |= set(re.findall(r'"(boss(?:_[0-9]+)?/[^"]+)"', open(f).read()))
 print("read but not declared:", sorted(read - declared))
