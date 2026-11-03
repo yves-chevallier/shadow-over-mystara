@@ -162,6 +162,23 @@ fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
     }
 }
 
+/// The colours of the palette library from `rom` to `end` (`palettes.png`), as a table of elements of `size` bytes:
+/// the excerpts of the library that the families copy (`name` names them in the residue counters).
+pub(crate) fn library_excerpt(name: &'static str, rom: u32, end: u32, size: u8) -> &'static ddsom_data::effects::Table {
+    use std::sync::Mutex;
+    static EXCERPTS: Mutex<Vec<&'static ddsom_data::effects::Table>> = Mutex::new(Vec::new());
+    let mut excerpts = EXCERPTS.lock().unwrap();
+    if let Some(t) = excerpts.iter().find(|t| t.rom == rom && t.len() == end - rom && t.size == size) {
+        return t;
+    }
+    let library = crate::data::data().palettes.bytes();
+    let bytes = &library[(rom - Palettes::ROM) as usize..(end - Palettes::ROM) as usize];
+    let spec = ddsom_data::effects::Spec { name, rom, program: false, size, end: Some(end) };
+    let table: &'static ddsom_data::effects::Table = Box::leak(Box::new(ddsom_data::effects::Table::from_bytes(&spec, bytes)));
+    excerpts.push(table);
+    table
+}
+
 /// The scene palette tables.
 fn scene_palettes() -> &'static ddsom_data::ScenePalettes {
     &crate::data::data().scene_palettes

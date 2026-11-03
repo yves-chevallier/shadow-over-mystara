@@ -59,7 +59,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
 /// Copies 8 longs from the ROM to the palette RAM.
 fn copy_palette<R: Bench>(x: &mut Cx<'_, R>) {
     for i in 0..8 {
-        let v = tables().shot41_palette.at32(x.b, 4 * i);
+        let v = crate::palette::library_excerpt("shot41_palette", 0x25a6e0, 0x25a700, 4).at32(x.b, 4 * i);
         wr32(x.b, PALETTE_DST + 4 * i, v);
     }
 }

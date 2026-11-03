@@ -69,22 +69,6 @@ record! {
     }
 }
 
-/// The camera leader that the dragon accompanies (a player, `+0x58` read as a word).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Leader(pub Obj);
-
-impl Leader {
-    pub fn at(self, off: u32) -> u32 {
-        self.0.at(off)
-    }
-}
-
-record! {
-    impl Leader {
-        /// Horizontal step of the leader this frame (word) (h).
-        step_x, set_step_x, STEP_X: u16 @ 0x58;
-    }
-}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -273,7 +257,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
         return leave_now(x);
     }
     if let Some(lead) = leader(x) {
-        let dx = Leader(lead).step_x(x.b);
+        let dx = crate::player::Player::of(lead).step_x(x.b);
         x.add16(Obj::X, dx);
         let reach = scroll_x(x).wrapping_add(0x50);
         if x.in_arena(reach) {
@@ -336,7 +320,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     } else if x.u8(Dragon::SLOW) != 0 {
         -8
     } else {
-        (Leader(lead).step_x(x.b) as i16).wrapping_sub(var::PLAYERS_ALIVE.get(x.b) as i16)
+        (crate::player::Player::of(lead).step_x(x.b) as i16).wrapping_sub(var::PLAYERS_ALIVE.get(x.b) as i16)
     };
     x.set16(Enemy::VX, vx as u16);
     let y = lead.u16(x.b, Obj::Y).wrapping_sub(0x10);
@@ -352,7 +336,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let y = lead.u16(x.b, Obj::Y).wrapping_sub(0x10);
     x.set16(Obj::Y, y);
-    let mut dx = Leader(lead).step_x(x.b);
+    let mut dx = crate::player::Player::of(lead).step_x(x.b);
     let lx = lead.u16(x.b, Obj::X);
     let mine = x.u16(Obj::X);
     if (lx.wrapping_sub(0x80).wrapping_sub(mine) as i16) >= 0 {

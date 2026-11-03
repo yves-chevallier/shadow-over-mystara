@@ -108,14 +108,14 @@ fn screen_height(p: &mut Painter, o: Obj) -> u16 {
     h.wrapping_sub(p.cam.y)
 }
 
-/// Ground mark `i` (`sprites/tables.json`), or the words the original reads past the table.
+/// Ground mark `i` (`sprites/tables.json`), or the words the original reads past the table (`sprites/marks_beyond`).
 fn ground_mark(b: &mut Cps2Bus, i: u8) -> [u16; 8] {
     let t = &data().sprite_tables;
     match t.marks.get(i as usize) {
         Some(m) => GroundMark::words(m),
         None => {
             let at = t.marks_rom + 16 * i as u32;
-            std::array::from_fn(|k| Missing { table: "ground mark", key: at }.read16(b, at + 2 * k as u32))
+            std::array::from_fn(|k| crate::tables::engine().word(b, at + 2 * k as u32))
         }
     }
 }

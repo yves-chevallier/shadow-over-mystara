@@ -11,7 +11,7 @@ use crate::families::shell::records::view;
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::suspended;
-use super::shell::tables::{self, Read};
+use super::shell::tables::Read;
 use crate::data::RomAddr;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
@@ -65,7 +65,7 @@ const BRIGHT: u32 = 0xf000_f000;
 /// Copies `n` longs of the palette library (`sobj_palettes`, designated by their address `from`) to video memory or
 /// RAM.
 fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: RomAddr, to: u32, n: u32) {
-    let t = &tables::tables().sobj_palettes;
+    let t = crate::palette::library_excerpt("sobj_palettes", 0x28f340, 0x292260, 4);
     for i in 0..n {
         let v = t.at32(x.b, from.0.wrapping_sub(t.rom) + 4 * i);
         wr32(x.b, to + 4 * i, v);

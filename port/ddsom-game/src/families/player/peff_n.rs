@@ -1,7 +1,6 @@
 //! Player effects (PEFF), fourteenth series: type 41 (the guardian summoned by the wall magic, created by
 //! `player/spawn.rs::wall_target`). See `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -400,7 +399,7 @@ mod guardian {
                 let o = Obj(a1);
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
                     last = Some(o);
-                    if o.u16(x.b, Enemy::HP) != 0 && o.u8(x.b, Victim::GUARD_FLAGS) & 2 == 0 && o.u8(x.b, Obj::FLAGS) & 2 == 0 {
+                    if o.u16(x.b, Enemy::HP) != 0 && o.u8(x.b, Enemy::GUARD_FLAGS) & 2 == 0 && o.u8(x.b, Obj::FLAGS) & 2 == 0 {
                         let mut d = 0u32;
                         for off in [0x8u32, 0xc, 0x10] {
                             d = d.wrapping_add(o.u32(x.b, off).abs_diff(x.u32(off)));
@@ -527,9 +526,9 @@ mod guardian {
         m.set_u16(x.b, Enemy::HP, hp.wrapping_sub(damage));
         m.set_u32(x.b, Enemy::STATE_LONG, 0x0400_0000);
         m.set_u16(x.b, Enemy::HP, 0);
-        if m.u8(x.b, Enemy::CLASS) == 4 && m.u8(x.b, Victim::DEATH_CREDIT) != 0 {
+        if m.u8(x.b, Enemy::CLASS) == 4 && m.u8(x.b, Enemy::DEATH_CREDIT) != 0 {
             owner.set_u8(x.b, Player::HOLY, 1);
-            let v = m.u8(x.b, Victim::DEATH_VALUE);
+            let v = m.u8(x.b, Enemy::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
     }

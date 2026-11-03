@@ -361,6 +361,9 @@ crate::record::record! {
         hit_freeze, set_hit_freeze, HIT_FREEZE: u8 @ 0x57;
         /// Result of the attack: bit 0, a strike landed; positive while it strikes (h).
         strike, set_strike, STRIKE: u8 @ 0x58;
+        /// The same place read as a word by the dragon that accompanies the camera leader: its horizontal step this
+        /// frame (h).
+        step_x, set_step_x, STEP_X: u16 @ 0x58;
         /// Style of the strike in progress (h).
         strike_style, set_strike_style, STRIKE_STYLE: u8 @ 0x59;
         /// Last edge of the screen touched (1 left, 2 right).

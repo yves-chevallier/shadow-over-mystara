@@ -1,7 +1,6 @@
 //! Player effects (PEFF), eighth series: types 25 to 29 (downpour, wizard's lightning, ring, moon, prayer aura). See
 //! `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -230,7 +229,7 @@ mod strike {
     }
 
     fn hit<R: Bench>(x: &mut Cx<'_, R>, player: Obj, m: Obj, power: u32) {
-        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Enemy::FRAME_TAG) == 0 || m.u8(x.b, Victim::BOXES_OFF) != 0 {
+        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Enemy::FRAME_TAG) == 0 || m.u8(x.b, Enemy::BOXES_OFF) != 0 {
             return;
         }
         if m.u32(x.b, Enemy::IMMUNITY) >> 11 & 1 != 0 {
@@ -257,14 +256,14 @@ mod strike {
         // hit
         let v = player.u16(x.b, Player::SPELL_KILLS).wrapping_add(2);
         player.set_u16(x.b, Player::SPELL_KILLS, v);
-        let hits = m.u8(x.b, Victim::HITS_TAKEN).wrapping_add(1);
-        m.set_u8(x.b, Victim::HITS_TAKEN, hits);
+        let hits = m.u8(x.b, Enemy::HITS_TAKEN).wrapping_add(1);
+        m.set_u8(x.b, Enemy::HITS_TAKEN, hits);
         m.set_u32(x.b, Enemy::STATE_LONG, 0x0400_0000);
         m.set_u8(x.b, Enemy::DISPLAY, 1);
         m.set_u8(x.b, Enemy::REACTION, 0x84);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        m.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
-        m.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
+        m.set_u8(x.b, Enemy::HIT_BY_KIND, class_id);
+        m.set_u8(x.b, Enemy::HIT_BY_VARIANT, variant_id);
         m.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         let class = player.u8(x.b, Player::LEVEL) as u32;
         let mut d0 = byte(x.b, power + class) as u16;
@@ -282,9 +281,9 @@ mod strike {
         if m.u8(x.b, Enemy::CLASS) != 4 && matches!(m.u8(x.b, Enemy::KIND), 0 | 0x13) {
             m.set_u16(x.b, Enemy::HP, 0);
         }
-        if m.u16(x.b, Enemy::HP) == 0 && m.u8(x.b, Victim::DEATH_CREDIT) != 0 {
+        if m.u16(x.b, Enemy::HP) == 0 && m.u8(x.b, Enemy::DEATH_CREDIT) != 0 {
             player.set_u8(x.b, Player::HOLY, 1);
-            let v = m.u8(x.b, Victim::DEATH_VALUE);
+            let v = m.u8(x.b, Enemy::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
     }

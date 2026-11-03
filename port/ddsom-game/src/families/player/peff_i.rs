@@ -1,7 +1,6 @@
 //! Player effects (PEFF), ninth series: types 30 (storm), 31 (whirlwind) and 32 (lightning target). See
 //! `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -471,7 +470,7 @@ mod whirl {
     }
 
     fn hit<R: Bench>(x: &mut Cx<'_, R>, player: Obj, m: Obj) {
-        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u8(x.b, Enemy::DISPLAY) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Victim::BOXES_OFF) != 0 {
+        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u8(x.b, Enemy::DISPLAY) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Enemy::BOXES_OFF) != 0 {
             return;
         }
         if m.u32(x.b, Enemy::IMMUNITY) >> 16 & 1 != 0 {
@@ -497,8 +496,8 @@ mod whirl {
         m.set_u8(x.b, Enemy::DISPLAY, 1);
         m.set_u8(x.b, Enemy::REACTION, 0x68);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        m.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
-        m.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
+        m.set_u8(x.b, Enemy::HIT_BY_KIND, class_id);
+        m.set_u8(x.b, Enemy::HIT_BY_VARIANT, variant_id);
         m.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         m.set_u8(x.b, Enemy::GRABBED, 0x78);
         if player.u8(x.b, Player::SPECIAL_KIND) == 0x25 {

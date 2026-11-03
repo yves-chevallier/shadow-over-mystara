@@ -435,7 +435,7 @@ pub(super) fn spell<R: Bench>(x: &mut Cx<'_, R>) {
                     x.add16(Obj::Z, 0x42);
                     // 0xb5228: palette of the spark
                     for k in 0..8 {
-                        let w = tables().spell_spark_palette.nth32(x.b, k);
+                        let w = crate::palette::library_excerpt("spell_spark_palette", 0x25a6e0, 0x25a700, 4).nth32(x.b, k);
                         wr32(x.b, 0x91c2e0 + 4 * k, w);
                     }
                     x.set8(Effect::OWN_PALETTE, 1);

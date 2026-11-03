@@ -115,10 +115,6 @@ view! {
         aim, set_aim, AIM: u16 @ 0x50;
         /// Value of the halo it carries, given back when the halo ends (h).
         halo, set_halo, HALO: u16 @ 0x54;
-        /// Initial hit points.
-        life_max, set_life_max, LIFE_MAX: u16 @ 0x60;
-        /// Hit points left.
-        life, set_life, LIFE: u16 @ 0x62;
         /// Attack state word: attack and detail (h).
         attack, set_attack, ATTACK: u16 @ 0xa0;
         /// Detail of the attack state (h).

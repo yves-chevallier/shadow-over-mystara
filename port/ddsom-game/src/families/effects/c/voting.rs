@@ -391,7 +391,7 @@ pub(super) fn ballot_timer<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            timer_palette(x, &tables().vote_timer_palette);
+            timer_palette(x, crate::palette::library_excerpt("vote_timer_palette", 0x28ff20, 0x28ff40, 4));
             x.set8(VoteTimer::OWN_PALETTE, 1);
             x.set8(VoteTimer::PALETTE, 0xe);
             x.set32(Obj::Y, 0);
@@ -417,7 +417,7 @@ pub(super) fn ballot_timer<R: Bench>(x: &mut Cx<'_, R>) {
             }
             // time elapsed: the ballot ends
             ballot.set_u16(x.b, Ballot::DURATION, 0);
-            timer_palette(x, &tables().vote_timer_palette_end);
+            timer_palette(x, crate::palette::library_excerpt("vote_timer_palette_end", 0x2531c0, 0x2531e0, 4));
             free(x);
         }
         // Original dead code: state 4 (0xb0374), which no step leads to; the original clears word `+0x54` there

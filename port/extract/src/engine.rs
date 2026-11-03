@@ -166,6 +166,10 @@ fn video(t: &mut Tables) {
 /// Texts displayed in sprites (`sprites.rs`, three slots of string pointers: bytes, or words for the two-player
 /// cabinet), by ranges of the strings that the game shows.
 fn sprite_texts(t: &mut Tables) {
+    // the visibility boxes and ground marks past the tables of `sprites/tables.json` (128 and 97 entries) that an
+    // index byte can designate (original glitch: the bytes that follow, code included, read as boxes and marks)
+    t.data("sprites/bounds_beyond", 0x1ca938, "x16", Some((0x1cad38 - 0x1ca938) / 2));
+    t.data("sprites/marks_beyond", 0x1ea6c, "x16", Some((0x1f45c - 0x1ea6c) / 2));
     const RANGES: [(u32, u32); 33] = [
         (0x1d8be, 0x1ddd0),
         (0x1ef5c, 0x1ef5e),

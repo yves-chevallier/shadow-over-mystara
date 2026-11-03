@@ -1,6 +1,6 @@
 use super::*;
 use crate::data::RomAddr;
-use crate::families::shell::records::{Host, view};
+use crate::families::shell::records::view;
 
 const ANIMS: RomAddr = RomAddr(0x16e146);
 const HELD: u8 = 0;
@@ -78,7 +78,7 @@ fn flying<R: Bench>(x: &mut Cx<'_, R>) {
 /// State 4: as long as the owner has HP, nothing; otherwise the object is thrown (or released).
 fn dropped<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(Shot::OWNER);
-    if (owner.u16(x.b, Host::LIFE) as i16) <= 0 {
+    if (owner.u16(x.b, crate::objects::Enemy::HP) as i16) <= 0 {
         x.set8(Obj::ACTIVE, 2);
         x.set32(Obj::STATE, 0x0200_0000);
         return launch(x);

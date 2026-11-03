@@ -13,7 +13,7 @@ use super::pools::{QUEUE_BOX, QUEUE_ENEMY_BOSS, QUEUE_ESHL, QUEUE_ITEM, QUEUE_PS
 use super::Obj;
 use ddsom_data::tables::Bounds;
 
-use crate::data::{data, Missing};
+use crate::data::data;
 use crate::mem::A5;
 use crate::ram::{camera as camera_position, Word, CAMERA_ALT_ACTIVE};
 use crate::regs;
@@ -27,14 +27,14 @@ pub fn camera(b: &mut Cps2Bus) -> u32 {
 pub(crate) const BOUNDS_INDEX: u32 = Obj::BOUNDS;
 
 /// Visibility box `i` (`sprites/tables.json`, `bounds`: dx, width, dy, height), or the words the original reads past
-/// the table (residue).
+/// the table (`sprites/bounds_beyond`).
 pub(crate) fn visibility_box(b: &mut Cps2Bus, i: u8) -> [u16; 4] {
     let t = &data().sprite_tables;
     match t.bounds.get(i as usize) {
         Some(&Bounds(dx, w, dy, h)) => [dx as u16, w, dy as u16, h],
         None => {
             let at = t.bounds_rom + 8 * i as u32;
-            std::array::from_fn(|k| Missing { table: "visibility box", key: at }.read16(b, at + 2 * k as u32))
+            std::array::from_fn(|k| crate::tables::engine().word(b, at + 2 * k as u32))
         }
     }
 }

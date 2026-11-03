@@ -3,7 +3,7 @@ use crate::data::RomAddr;
 use crate::families::shell::vars;
 use crate::ram;
 use crate::families::shell::records::view;
-use crate::families::shell::tables::{tables, Read};
+use crate::families::shell::tables::Read;
 
 const ANIMS_SCREEN: RomAddr = RomAddr(0x1c03a6);
 const ANIMS: RomAddr = RomAddr(0x17e03a);
@@ -26,7 +26,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn load_palettes<R: Bench>(x: &mut Cx<'_, R>) {
     for (dst, src) in PALETTES {
         for i in 0..8 {
-            let v = tables().shot34_palettes.at32(x.b, src + 4 * i);
+            let v = crate::palette::library_excerpt("shot34_palettes", 0x2538c0, 0x253940, 4).at32(x.b, src + 4 * i);
             wr32(x.b, dst + 4 * i, v);
         }
         for i in 0..8 {

@@ -262,9 +262,9 @@ fn set_low8(r: &mut u32, v: u8) {
 
 /// Values of the long state (`+4`: main, substate, `+6`: action, `+7`).
 mod state {
-    /// Victim: "hit", reaction to play (`REACTION` gives the animation).
+    /// Enemy: "hit", reaction to play (`REACTION` gives the animation).
     pub const HIT: u32 = 0x0400_0000;
-    /// Victim that parried the hit.
+    /// Enemy that parried the hit.
     pub const BLOCKED: u32 = 0x0402_0000;
     /// Player: busy acting (push, pickup...), action in byte 6.
     pub const ATTACKING: u32 = 0x0200_0c00;

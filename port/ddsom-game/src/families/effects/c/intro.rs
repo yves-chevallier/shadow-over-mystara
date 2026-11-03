@@ -503,7 +503,7 @@ pub(super) fn swimmer_active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Effect::OWN_PALETTE, 1);
                 x.set8(Effect::PALETTE, 0x1b);
                 for k in 0..8 {
-                    let v = tables().swimmer_palette.nth32(x.b, k);
+                    let v = crate::palette::library_excerpt("swimmer_palette", 0x253440, 0x253460, 4).nth32(x.b, k);
                     let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
                     wr32(x.b, 0x91c360 + 4 * k, v);
                 }

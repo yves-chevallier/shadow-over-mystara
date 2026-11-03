@@ -26,7 +26,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     for i in 0..8 {
-        let v = tables().shot17_palette.at32(x.b, 4 * i);
+        let v = crate::palette::library_excerpt("shot17_palette", 0x25a660, 0x25a680, 4).at32(x.b, 4 * i);
         wr32(x.b, PALETTE_DST + 4 * i, v);
     }
     let tint = rd32(x.b, PALETTE_TINT) & 0xf000_f000;

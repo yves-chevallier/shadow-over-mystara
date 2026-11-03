@@ -1,7 +1,6 @@
 //! Special attack of the cleric: equipment swap, turning away the undead, prayer skeleton, hold, storm, swarm.
 
 use crate::objects::Enemy;
-use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;
 use super::*;
@@ -96,7 +95,7 @@ pub(super) fn scare_undead(g: &mut Ctx, p: Player) {
         } else {
             2
         };
-        o.set_u8(g.b, Victim::SPELL_MARK, mark);
+        o.set_u8(g.b, Enemy::SPELL_MARK, mark);
     }
 }
 
@@ -207,7 +206,7 @@ pub(super) fn hold_foes(g: &mut Ctx, p: Player) {
             if o.u8(g.b, Obj::ACTIVE) == 0
                 || o.u8(g.b, Obj::FLAGS) & 1 == 0
                 || o.u16(g.b, Enemy::HP) == 0
-                || o.u8(g.b, Victim::BOXES_OFF) != 0
+                || o.u8(g.b, Enemy::BOXES_OFF) != 0
                 || o.u8(g.b, Enemy::REACTION) == 0x9c
                 || o.u32(g.b, Enemy::IMMUNITY) >> 15 & 1 != 0
             {
@@ -215,8 +214,8 @@ pub(super) fn hold_foes(g: &mut Ctx, p: Player) {
             }
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, Enemy::REACTION, 0x9c);
-            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
-            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u8(g.b, Enemy::HIT_BY_KIND, index);
+            o.set_u8(g.b, Enemy::HIT_BY_VARIANT, character);
             o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
             left = left.wrapping_sub(1);
             if left == 0 {

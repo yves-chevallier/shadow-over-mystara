@@ -597,34 +597,4 @@ tables! {
     scenery_glow_frames: data 4 @ 0x17efca;
     /// `effects/g/enemy`: Flying machine (type 48): circle of 32 positions (dx, dy) of its cannons
     flyer_path: data 2 @ 0x1ca4b6 .. 0x1ca536;
-    /// `effects/c/voting`: Vote: palette of the countdown at its end (excerpt of the palette library).
-    vote_timer_palette_end: data 4 @ 0x2531c0 .. 0x2531e0;
-    /// `effects/g/rockets`: Colours of the hero of the fireworks scene (excerpt of the palette library,
-    /// palettes.png).
-    fireworks_palette_hero: data 2 @ 0x253260 .. 0x253280;
-    /// `effects/c/intro`: Creature of the introduction scene (type 61): its palette (excerpt of the palette
-    /// library, palettes.png).
-    swimmer_palette: data 4 @ 0x253440 .. 0x253460;
-    /// `effects/g/rockets`: Colours of the last step of the fireworks scene (excerpt of the palette library).
-    fireworks_palette_last: data 2 @ 0x253460 .. 0x2534a0;
-    /// `effects/c/shops`: Portrait palettes, at the offsets of purse_portrait (excerpt of the palette library,
-    /// palettes.png).
-    purse_portraits: data 4 @ 0x256000 .. 0x2564e0;
-    /// `effects/c/attacks`: Palette of the spark of a spell (excerpt of the palette library, palettes.png).
-    spell_spark_palette: data 4 @ 0x25a6e0 .. 0x25a700;
-    /// `effects/e/gates`: Palette of the curtain of the passage (excerpt of the palette library, palettes.png).
-    gate_curtain_palette: data 4 @ 0x25c4a0 .. 0x25c4c0;
-    /// `effects/d`: Portrait palettes of the result rows, 8 longs per character class (excerpt of the palette
-    /// library, palettes.png).
-    line_portraits: data 4 @ 0x25c4c0 .. 0x25c6c0;
-    /// `effects/f`: Opening of a scene (type of effects_f): its palette (excerpt of the palette library,
-    /// palettes.png).
-    opening_palette: data 4 @ 0x28dca0 .. 0x28dcc0;
-    /// `effects/screen`: Palettes of the player interface elements (excerpt of the palette library, palettes.png):
-    /// two 16-byte blocks per slot of the lists, three sets 0x400 bytes apart.
-    interface_palettes: data 2 @ 0x28ff00 .. 0x290c00;
-    /// `effects/c/voting`: Vote: palette of the countdown (excerpt of the palette library, palettes.png).
-    vote_timer_palette: data 4 @ 0x28ff20 .. 0x28ff40;
-    /// `effects/f`: Start sign: its palette (excerpt of the palette library).
-    start_sign_palette: data 4 @ 0x28ff20 .. 0x28ff40;
 }

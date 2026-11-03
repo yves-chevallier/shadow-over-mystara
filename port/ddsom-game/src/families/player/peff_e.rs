@@ -1,7 +1,6 @@
 //! Player effects (PEFF), fifth series: types 12 (freeze), 13 (blessing) and 14 (reflect).
 //! See `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -488,8 +487,8 @@ mod banish {
         let v = player.u16(x.b, Player::SPELL_KILLS).wrapping_add(2);
         player.set_u16(x.b, Player::SPELL_KILLS, v);
         let monster = Obj(x.u16(TARGET) as i16 as i32 as u32 & 0xff_ffff);
-        let hits = monster.u8(x.b, Victim::HITS_TAKEN).wrapping_add(1);
-        monster.set_u8(x.b, Victim::HITS_TAKEN, hits);
+        let hits = monster.u8(x.b, Enemy::HITS_TAKEN).wrapping_add(1);
+        monster.set_u8(x.b, Enemy::HITS_TAKEN, hits);
         if monster.u8(x.b, Enemy::REACTION) == 0x5c {
             return;
         }
@@ -497,8 +496,8 @@ mod banish {
         monster.set_u8(x.b, Enemy::DISPLAY, 1);
         monster.set_u8(x.b, Enemy::REACTION, 0x5c);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        monster.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
-        monster.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
+        monster.set_u8(x.b, Enemy::HIT_BY_KIND, class_id);
+        monster.set_u8(x.b, Enemy::HIT_BY_VARIANT, variant_id);
         monster.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         monster.set_u8(x.b, Enemy::ATTACKER_FLIP, 0);
         if x.rand_and_b(1) != 0 {
@@ -515,9 +514,9 @@ mod banish {
         if monster.u8(x.b, Enemy::CLASS) != 4 && matches!(monster.u8(x.b, Enemy::KIND), 0 | 0x13) {
             monster.set_u16(x.b, Enemy::HP, 0);
         }
-        if monster.u16(x.b, Enemy::HP) == 0 && monster.u8(x.b, Victim::DEATH_CREDIT) != 0 {
+        if monster.u16(x.b, Enemy::HP) == 0 && monster.u8(x.b, Enemy::DEATH_CREDIT) != 0 {
             player.set_u8(x.b, Player::HOLY, 1);
-            let v = monster.u8(x.b, Victim::DEATH_VALUE);
+            let v = monster.u8(x.b, Enemy::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
         let mut d0 = (player.u8(x.b, Player::INDEX) as u16) << 8;

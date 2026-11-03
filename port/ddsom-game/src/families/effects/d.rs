@@ -550,7 +550,7 @@ impl LineDraw {
         let src = class << 5;
         let dst = line::PALETTES + (mode << 5);
         for k in 0..8 {
-            let v = tables().line_portraits.at32(x.b, src + 4 * k) | 0xf000_f000;
+            let v = crate::palette::library_excerpt("line_portraits", 0x25c4c0, 0x25c6c0, 4).at32(x.b, src + 4 * k) | 0xf000_f000;
             wr32(x.b, dst + 4 * k, v);
         }
         let mut tile = tables().line_portrait_tiles.at16(x.b, 2 * class);

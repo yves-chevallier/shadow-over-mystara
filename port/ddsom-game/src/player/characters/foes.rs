@@ -6,7 +6,6 @@
 //! points (per-level table or fixed value, increased according to equipment) and its life bar is updated.
 
 use crate::objects::Enemy;
-use crate::families::player::records::Victim;
 use crate::machine::Machine;
 use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
@@ -81,7 +80,7 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             if o.u8(g.b, Obj::ACTIVE) == 0
                 || !live
                 || (s.needs_hp && o.u16(g.b, Enemy::HP) == 0)
-                || o.u8(g.b, Victim::BOXES_OFF) != 0
+                || o.u8(g.b, Enemy::BOXES_OFF) != 0
                 || (s.grounded && o.u16(g.b, Obj::Z) != 0)
                 || o.u32(g.b, Enemy::IMMUNITY) >> s.immune_bit & 1 != 0
             {
@@ -89,13 +88,13 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             }
             let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
             p.set_u16(g, Player::SPELL_KILLS, counter);
-            let hits = o.u8(g.b, Victim::HITS_TAKEN).wrapping_add(1);
-            o.set_u8(g.b, Victim::HITS_TAKEN, hits);
+            let hits = o.u8(g.b, Enemy::HITS_TAKEN).wrapping_add(1);
+            o.set_u8(g.b, Enemy::HITS_TAKEN, hits);
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, Obj::FLAGS, 1);
             o.set_u8(g.b, Enemy::REACTION, s.reaction);
-            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
-            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u8(g.b, Enemy::HIT_BY_KIND, index);
+            o.set_u8(g.b, Enemy::HIT_BY_VARIANT, character);
             o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
             if s.random_facing {
                 o.set_u8(g.b, Enemy::ATTACKER_FLIP, 0);
@@ -138,9 +137,9 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             if s.undead_die && o.u8(g.b, Obj::CLASS) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
                 o.set_u16(g.b, Enemy::HP, 0);
             }
-            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Victim::DEATH_CREDIT) != 0 {
+            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Enemy::DEATH_CREDIT) != 0 {
                 p.set_u8(g, Player::HOLY, 1);
-                let loot = o.u8(g.b, Victim::DEATH_VALUE);
+                let loot = o.u8(g.b, Enemy::DEATH_VALUE);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;

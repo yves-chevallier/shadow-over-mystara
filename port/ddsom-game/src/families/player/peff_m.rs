@@ -1,7 +1,6 @@
 //! Player effects (PEFF), thirteenth series: type 34 (the familiar of the cleric's prayer,
 //! `player/spawn.rs::swarm`). See `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -364,7 +363,7 @@ mod pet {
         x.add16(Obj::X, d0);
         x.anim_step();
         if target.u16(x.b, Enemy::STATE_WORD) == 0x200
-            || target.u8(x.b, Victim::GUARD_FLAGS) & 2 != 0
+            || target.u8(x.b, Enemy::GUARD_FLAGS) & 2 != 0
             || target.u8(x.b, Enemy::REACTION) == 0x84
             || target.u8(x.b, Enemy::REACTION) == 0x64
         {
@@ -399,10 +398,10 @@ mod pet {
             target.set_u8(x.b, Enemy::ATTACKER_FLIP, flip);
             let owner = x.u16(f::OWNER);
             target.set_u16(x.b, Enemy::HOLDER, owner);
-            if target.u8(x.b, Enemy::CLASS) == 4 && target.u8(x.b, Victim::DEATH_CREDIT) != 0 {
+            if target.u8(x.b, Enemy::CLASS) == 4 && target.u8(x.b, Enemy::DEATH_CREDIT) != 0 {
                 let player = x.linked(f::OWNER);
                 player.set_u8(x.b, Player::HOLY, 1);
-                let v = target.u8(x.b, Victim::DEATH_VALUE);
+                let v = target.u8(x.b, Enemy::DEATH_VALUE);
                 vars::KILL_FLAG.set(x.b, v);
             }
             die(x);
@@ -420,8 +419,8 @@ mod pet {
             0 => {
                 if x.u8(PHASE) != 0 {
                     let target = x.linked(TARGET);
-                    let n = target.u8(x.b, Victim::BITES).wrapping_sub(1);
-                    target.set_u8(x.b, Victim::BITES, n);
+                    let n = target.u8(x.b, Enemy::BITES).wrapping_sub(1);
+                    target.set_u8(x.b, Enemy::BITES, n);
                 }
                 x.add8(Shot::SUB_STATE, 2);
                 x.set16(Obj::VZ, 0x400);
@@ -470,8 +469,8 @@ mod pet {
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
                     last = Some(o);
                     if o.u16(x.b, Enemy::HP) != 0
-                        && o.u8(x.b, Victim::GUARD_FLAGS) & 2 == 0
-                        && o.u8(x.b, Victim::BITES) < 3
+                        && o.u8(x.b, Enemy::GUARD_FLAGS) & 2 == 0
+                        && o.u8(x.b, Enemy::BITES) < 3
                         && o.u8(x.b, Obj::FLAGS) & 2 == 0
                     {
                         let mut d = 0u32;
@@ -552,7 +551,7 @@ mod pet {
                 if set == 0 {
                     continue;
                 }
-                if bite && (m.u8(x.b, Victim::GUARD_FLAGS) & 2 != 0 || m.u8(x.b, Victim::BITES) >= 3 || m.u8(x.b, Enemy::REACTION) == 0x84) {
+                if bite && (m.u8(x.b, Enemy::GUARD_FLAGS) & 2 != 0 || m.u8(x.b, Enemy::BITES) >= 3 || m.u8(x.b, Enemy::REACTION) == 0x84) {
                     continue;
                 }
                 let boxes = (m.u8(x.b, Enemy::BOX_SET) as u32) << 2;
@@ -595,8 +594,8 @@ mod pet {
         x.set8(FACING_SEEN, own);
         x.set32(Obj::STATE, 0x0206_0204);
         x.set8(TIMER, 5);
-        let hits = m.u8(x.b, Victim::BITES).wrapping_add(1);
-        m.set_u8(x.b, Victim::BITES, hits);
+        let hits = m.u8(x.b, Enemy::BITES).wrapping_add(1);
+        m.set_u8(x.b, Enemy::BITES, hits);
         let owner = x.linked(f::OWNER);
         let class = owner.u8(x.b, Player::LEVEL);
         let (d1, d2) = if class <= 0xe {

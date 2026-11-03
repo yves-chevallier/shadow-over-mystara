@@ -2,7 +2,6 @@ use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
 use crate::ram;
-use crate::families::shell::records::Host;
 use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x170c3e);
@@ -170,7 +169,7 @@ fn hp_dependent<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Base::SUB_STATE) {
         0 => {
             let maker = x.linked(LINK);
-            if maker.u16(x.b, Host::LIFE) != 0 {
+            if maker.u16(x.b, crate::objects::Enemy::HP) != 0 {
                 flash_animate(x);
             } else {
                 x.add8(Base::SUB_STATE, 2);

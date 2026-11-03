@@ -222,6 +222,28 @@ record! {
         resume_word, set_resume_word, RESUME_WORD: u16 @ 0x8a;
         /// AI: row of the draw of `enemy_lib::draw_84`.
         ai_row_8e, set_ai_row_8e, AI_ROW_8E: u8 @ 0x8e;
+        // -- the fields that the players' shots and effects read or write on their victims --
+        /// Non-zero: the object is inert for collisions.
+        boxes_off, set_boxes_off, BOXES_OFF: u8 @ 0x40;
+        /// Class of the last attacker (`Obj::CLASS`) and its variant, set by the hit.
+        hit_by_kind, set_hit_by_kind, HIT_BY_KIND: u8 @ 0x48;
+        hit_by_variant, set_hit_by_variant, HIT_BY_VARIANT: u8 @ 0x4b;
+        /// Mark set by a spell on the monsters it affects (h).
+        spell_mark, set_spell_mark, SPELL_MARK: u8 @ 0x8f;
+        /// Links of a lightning chain attached to the victim (h).
+        chain_links, set_chain_links, CHAIN_LINKS: u8 @ 0x92;
+        /// Non-zero: the death of the victim credits a value (`DEATH_VALUE`) (h).
+        death_credit, set_death_credit, DEATH_CREDIT: u8 @ 0x93;
+        /// Second byte of the immunities (`Enemy::IMMUNITY`): bit 1, not a target of the summoned creatures (h).
+        guard_flags, set_guard_flags, GUARD_FLAGS: u8 @ 0x95;
+        /// Fourth byte of the immunities: bit 1, not a target of the lightning chain (h).
+        chain_guard, set_chain_guard, CHAIN_GUARD: u8 @ 0x97;
+        /// Value credited at its death (h).
+        death_value, set_death_value, DEATH_VALUE: u8 @ 0x9a;
+        /// Bites of the summoned creatures in progress (at most 3) (h).
+        bites, set_bites, BITES: u8 @ 0x9b;
+        /// Chained special hits received.
+        hits_taken, set_hits_taken, HITS_TAKEN: u8 @ 0x9c;
         /// Counter of the reaction steps.
         counter, set_counter, COUNTER: u8 @ 0x90;
         /// Palette to take at the next reaction (bit 7: pending; becomes `PALETTE`, `OWN_PALETTE` set).

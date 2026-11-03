@@ -373,14 +373,4 @@ tables! {
     /// array) by height, while it burns (offset 0) and at its end (offset 0xe), then the lists of (frame, frame data)
     /// longs, one pair per value of `+0x3e`.
     shot9_frames: data 2 @ 0x16d676 .. 0x16da84;
-    /// `eshl_b/shot34`: Four palettes of 8 longs copied to the palette pages (excerpt of the palette library,
-    /// palettes.png).
-    shot34_palettes: data 4 @ 0x2538c0 .. 0x253940;
-    /// `eshl_b/shot17`: Palette of 8 longs copied to 0x91c300 (excerpt of the palette library, palettes.png).
-    shot17_palette: data 4 @ 0x25a660 .. 0x25a680;
-    /// `eshl_c/shot41`: Palette copied (ROM to palette RAM): 8 longs.
-    shot41_palette: data 4 @ 0x25a6e0 .. 0x25a700;
-    /// `sobj`: Palettes copied by the special objects (excerpt of the palette library, palettes.png): scene elements,
-    /// pennants, stage titles and their fades, hint and panel.
-    sobj_palettes: data 4 @ 0x28f340 .. 0x292260;
 }

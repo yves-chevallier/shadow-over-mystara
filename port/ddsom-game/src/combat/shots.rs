@@ -142,7 +142,7 @@ pub(super) fn immune(w: &mut World, e: Obj, bit: u32) -> bool {
     e.u32(w.b, f::IMMUNITY) >> bit & 1 != 0
 }
 
-/// Victim already on the ground (state 4 with reaction 0x60 or 0x88): certain shots do not relaunch it.
+/// Enemy already on the ground (state 4 with reaction 0x60 or 0x88): certain shots do not relaunch it.
 pub(super) fn already_down(w: &mut World, e: Obj) -> bool {
     e.u8(w.b, f::STATE) == 4 && matches!(e.u8(w.b, f::REACTION), 0x60 | 0x88)
 }

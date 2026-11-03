@@ -1,7 +1,6 @@
 //! Spells of the magic-user, continued: storm, rain, witch, curse, wave, portal, summon, wall, drain, sacrifice.
 
 use crate::objects::Enemy;
-use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;
 use super::*;
@@ -565,18 +564,18 @@ pub(super) fn sacrifice(g: &mut Ctx, p: Player) {
     let (index, character) = (p.u8(g, Player::INDEX), p.u8(g, Player::CHARACTER));
     for pool in [&BOSS, &ENEMY] {
         for o in pool.iter() {
-            if o.u8(g.b, Obj::ACTIVE) == 0 || o.u8(g.b, Obj::FLAGS) == 0 || o.u8(g.b, Victim::BOXES_OFF) != 0 {
+            if o.u8(g.b, Obj::ACTIVE) == 0 || o.u8(g.b, Obj::FLAGS) == 0 || o.u8(g.b, Enemy::BOXES_OFF) != 0 {
                 continue;
             }
             let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
             p.set_u16(g, Player::SPELL_KILLS, counter);
-            let hits = o.u8(g.b, Victim::HITS_TAKEN).wrapping_add(1);
-            o.set_u8(g.b, Victim::HITS_TAKEN, hits);
+            let hits = o.u8(g.b, Enemy::HITS_TAKEN).wrapping_add(1);
+            o.set_u8(g.b, Enemy::HITS_TAKEN, hits);
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, Obj::FLAGS, 1);
             o.set_u8(g.b, Enemy::REACTION, 0xa8);
-            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
-            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u8(g.b, Enemy::HIT_BY_KIND, index);
+            o.set_u8(g.b, Enemy::HIT_BY_VARIANT, character);
             o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
             o.set_u8(g.b, Enemy::ATTACKER_FLIP, 0);
             if g.random() & 1 != 0 {
@@ -589,9 +588,9 @@ pub(super) fn sacrifice(g: &mut Ctx, p: Player) {
             } else {
                 o.set_u16(g.b, Enemy::HP, 1);
             }
-            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Victim::DEATH_CREDIT) != 0 {
+            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Enemy::DEATH_CREDIT) != 0 {
                 p.set_u8(g, Player::HOLY, 1);
-                let loot = o.u8(g.b, Victim::DEATH_VALUE);
+                let loot = o.u8(g.b, Enemy::DEATH_VALUE);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | kind as u32;

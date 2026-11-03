@@ -339,7 +339,7 @@ pub(super) fn purse_init<R: Bench>(x: &mut Cx<'_, R>) {
     let class = owner.u8(x.b, Obj::VARIANT) as u32;
     let src = tables().purse_portrait.at16(x.b, 2 * class) as i16 as i32 as u32;
     for k in 0..8 {
-        let v = tables().purse_portraits.at32(x.b, src.wrapping_add(4 * k));
+        let v = crate::palette::library_excerpt("purse_portraits", 0x256000, 0x2564e0, 4).at32(x.b, src.wrapping_add(4 * k));
         let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
         wr32(x.b, dest + 4 * k, v);
     }

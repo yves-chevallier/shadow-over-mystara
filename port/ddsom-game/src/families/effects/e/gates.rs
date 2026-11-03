@@ -223,7 +223,7 @@ pub(super) fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
 /// Substate 2: curtain palette, then two bands of 22 tiles per frame.
 pub(super) fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..8 {
-        let v = tables().gate_curtain_palette.nth32(x.b, k);
+        let v = crate::palette::library_excerpt("gate_curtain_palette", 0x25c4a0, 0x25c4c0, 4).nth32(x.b, k);
         let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
         wr32(x.b, 0x91c7e0 + 4 * k, v);
     }

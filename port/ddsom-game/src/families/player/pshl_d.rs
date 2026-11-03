@@ -1,7 +1,6 @@
 //! Player shots (PSHL), fourth series: types 19 to 24 (chain lightning, projectiles of the elf and the wizard: arrow,
 //! knife, fireball). See `docs/families/joueur.md`.
 
-use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -36,7 +35,7 @@ mod chain {
 
     /// Lifetime of the link (word); 4 when it goes out.
     const LIFE: u32 = 0x42;
-    /// Victim reached (16-bit pointer).
+    /// Enemy reached (16-bit pointer).
     const TARGET: u32 = 0x52;
     /// Value given to the end shard (h).
     const END_SPARK: u32 = 0x54;
@@ -168,8 +167,8 @@ mod chain {
                 x.add8(Obj::STATE, 2);
                 if x.u16(LINK) != 0 {
                     let target = x.linked(LINK);
-                    let n = target.u8(x.b, Victim::CHAIN_LINKS).wrapping_sub(1);
-                    target.set_u8(x.b, Victim::CHAIN_LINKS, n);
+                    let n = target.u8(x.b, Enemy::CHAIN_LINKS).wrapping_sub(1);
+                    target.set_u8(x.b, Enemy::CHAIN_LINKS, n);
                 }
                 return;
             }
@@ -251,16 +250,16 @@ mod chain {
             loop {
                 let o = Obj(a1);
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
-                    let candidate = o.u8(x.b, Victim::CHAIN_GUARD) & 2 == 0
+                    let candidate = o.u8(x.b, Enemy::CHAIN_GUARD) & 2 == 0
                         && o.u16(x.b, Enemy::HP) != 0
                         && o.u8(x.b, Obj::FLAGS) & 2 == 0
                         && o.u8(x.b, Enemy::DOWNED) == 0;
                     if candidate {
-                        let taken = o.u8(x.b, Victim::CHAIN_LINKS);
+                        let taken = o.u8(x.b, Enemy::CHAIN_LINKS);
                         if taken != 0 {
                             let keep = best_priority != 0 && {
                                 let b = Obj(0xff0000 | best_priority as u32);
-                                b.u8(x.b, Victim::CHAIN_LINKS) < taken
+                                b.u8(x.b, Enemy::CHAIN_LINKS) < taken
                             };
                             if !keep {
                                 best_priority = o.0 as u16;
@@ -290,8 +289,8 @@ mod chain {
         x.set16(LINK, chosen);
         if chosen != 0 {
             let target = Obj(chosen as i16 as i32 as u32 & 0xff_ffff);
-            let n = target.u8(x.b, Victim::CHAIN_LINKS).wrapping_add(1);
-            target.set_u8(x.b, Victim::CHAIN_LINKS, n);
+            let n = target.u8(x.b, Enemy::CHAIN_LINKS).wrapping_add(1);
+            target.set_u8(x.b, Enemy::CHAIN_LINKS, n);
         }
     }
 
