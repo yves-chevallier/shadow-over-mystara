@@ -226,20 +226,3 @@ record! {
         anim_variant, set_anim_variant, ANIM_VARIANT: u8 @ 0xbf;
     }
 }
-
-/// A player as seen by the enemies that grab it (the fields of the player record are those of `player::Player`).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Prey(pub Obj);
-
-impl Prey {
-    pub fn at(self, off: u32) -> u32 {
-        self.0.at(off)
-    }
-}
-
-record! {
-    impl Prey {
-        /// Non-zero: the player is held by an enemy (`player::hurt`, reaction 0x32).
-        held, set_held, HELD: u8 @ 0x188;
-    }
-}

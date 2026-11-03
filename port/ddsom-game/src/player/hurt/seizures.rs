@@ -520,8 +520,8 @@ pub(super) fn frozen_end(g: &mut Ctx, p: Player) {
 // ---- reaction 0x32 (0x3b44c): held by an enemy ----------------------------------------------------
 
 /// Enemy holding the player (16-bit pointer) and "held" flag.
-pub(super) const HOLDER: u32 = 0x186;
-pub(super) const HELD: u32 = 0x188;
+pub(super) const HOLDER: u32 = Player::HOLDER_ENEMY;
+pub(super) const HELD: u32 = Player::HELD;
 /// State of the enemy holding its grip.
 pub(super) const HOLDING: u16 = 0x020c;
 

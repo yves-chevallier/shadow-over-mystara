@@ -488,6 +488,9 @@ crate::record::record! {
         aura_c, set_aura_c, AURA_C: u8 @ 0x184;
         /// Hit during the reaction: the reaction is replayed.
         rehit, set_rehit, REHIT: u8 @ 0x185;
+        /// Enemy holding the player (16-bit pointer) and "held" flag (reaction 0x32; read by the enemies that grab).
+        holder_enemy, set_holder_enemy, HOLDER_ENEMY: u16 @ 0x186;
+        held, set_held, HELD: u8 @ 0x188;
         /// The spell is cancelled (by a protection): only the failure spark is played.
         spell_cancelled, set_spell_cancelled, SPELL_CANCELLED: u8 @ 0x189;
         /// Holy pose: the victory animation is 36 instead of 35 (h).

@@ -5,6 +5,7 @@ use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
+use crate::player::Player;
 
 /// End of a move: if nobody is alive any more the creature withdraws, otherwise it sets off again at random.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
@@ -476,7 +477,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if victim.u8(x.b, Enemy::ACTIVE) == 0 {
         return go::strike_10(x);
     }
-    if victim.u8(x.b, Prey::HELD) == 0 {
+    if victim.u8(x.b, Player::HELD) == 0 {
         return go::circle(x);
     }
     if x.u8(f::SUB2) != 0 {

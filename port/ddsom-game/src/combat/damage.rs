@@ -294,7 +294,7 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     if p.u8(w.b, f::VARIANT) >> 1 != 5 {
         return;
     }
-    let loot = e.u8(w.b, Enemy::FLAG_81) as u32;
+    let loot = e.u8(w.b, Enemy::LOOT) as u32;
     if loot == 0 {
         return;
     }
@@ -323,5 +323,5 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     item.set_u16(w.b, f::Y, y.wrapping_sub(1));
     item.set_u16(w.b, 0x18, 0x300);
     item.set_u16(w.b, 0x1a, 0xffd8);
-    e.set_u8(w.b, Enemy::FLAG_81, 0);
+    e.set_u8(w.b, Enemy::LOOT, 0);
 }
