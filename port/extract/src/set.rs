@@ -48,7 +48,7 @@ struct Item {
     rows: Option<usize>,
 }
 
-struct Tables<'a> {
+pub(crate) struct Tables<'a> {
     rom: &'a Program,
     items: Vec<Item>,
     /// Ranges of the palette library read as data (`[start, end)`).
@@ -56,17 +56,22 @@ struct Tables<'a> {
 }
 
 impl<'a> Tables<'a> {
-    fn add(&mut self, name: &str, rom: u32, program: bool, format: &'static str, fields: &'static [&'static str], rows: Option<usize>) {
+    /// An empty set of tables of the program `rom`.
+    pub(crate) fn new(rom: &'a Program) -> Self {
+        Tables { rom, items: Vec::new(), palettes: Vec::new() }
+    }
+
+    pub(crate) fn add(&mut self, name: &str, rom: u32, program: bool, format: &'static str, fields: &'static [&'static str], rows: Option<usize>) {
         self.items.push(Item { name: name.into(), rom, program, format, fields, rows });
     }
 
     /// Table of the data space.
-    fn data(&mut self, name: &str, rom: u32, format: &'static str, rows: Option<usize>) {
+    pub(crate) fn data(&mut self, name: &str, rom: u32, format: &'static str, rows: Option<usize>) {
         self.add(name, rom, false, format, &[], rows);
     }
 
     /// Table of the program space (read PC-relative).
-    fn prog(&mut self, name: &str, rom: u32, format: &'static str, rows: Option<usize>) {
+    pub(crate) fn prog(&mut self, name: &str, rom: u32, format: &'static str, rows: Option<usize>) {
         self.add(name, rom, true, format, &[], rows);
     }
 
@@ -75,7 +80,7 @@ impl<'a> Tables<'a> {
     }
 
     /// The `count` addresses of the table `at`, then an automatic data table of format `format` at each address.
-    fn pointed(&mut self, name: &str, at: u32, program: bool, count: u32, format: &'static str) {
+    pub(crate) fn pointed(&mut self, name: &str, at: u32, program: bool, count: u32, format: &'static str) {
         self.add(name, at, program, "addr", &[], Some(count as usize));
         let targets: BTreeSet<u32> = (0..count).map(|i| self.long(at + 4 * i, program)).collect();
         for t in targets.into_iter().filter(|&t| t < 0x40_0000) {
@@ -84,11 +89,11 @@ impl<'a> Tables<'a> {
     }
 
     /// Palette colors read as data (`n` bytes from `at`).
-    fn palette(&mut self, at: u32, n: u32) {
+    pub(crate) fn palette(&mut self, at: u32, n: u32) {
         self.palettes.push((at, at + n));
     }
 
-    fn finish(mut self) -> Vec<Spec> {
+    pub(crate) fn finish(mut self) -> Vec<Spec> {
         // palette ranges, merged
         self.palettes.sort();
         let mut merged: Vec<(u32, u32)> = Vec::new();
@@ -435,7 +440,7 @@ fn shared(t: &mut Tables) {
 }
 
 pub fn specs(rom: &Program) -> Vec<Spec> {
-    let mut t = Tables { rom, items: Vec::new(), palettes: Vec::new() };
+    let mut t = Tables::new(rom);
     set_a(&mut t);
     set_b(&mut t);
     set_c(&mut t);

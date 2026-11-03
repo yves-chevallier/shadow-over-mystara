@@ -3,15 +3,16 @@
 
 use cps2::Cps2Bus;
 
-use super::tiles::{BLANK, COLUMN};
-use crate::mem::{rd32, wr32};
+use super::tiles::{BLANK_TILE, COLUMN};
+use crate::hw::video::{Cell, Vram, SCRATCH, TEXT};
+use crate::ram::Long;
 use crate::Native;
 
 /// Rectangle of empty cells: `columns` columns of `rows` cells starting at `at`.
 pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
     for col in 0..columns {
         for row in 0..rows {
-            wr32(b, at + col * COLUMN + 4 * row, BLANK);
+            Cell(at + col * COLUMN + 4 * row).put(b, BLANK_TILE, 0);
         }
     }
 }
@@ -19,34 +20,34 @@ pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
 /// 0xf683c: clears the text area of the end screens (48 columns of 22 cells from row 5).
 /// The original leaves D1.w = -1, re-read by the bonus screen as a setting (written out in `bonus.rs`).
 pub fn clear_text(b: &mut Cps2Bus) {
-    const AT: u32 = 0x912014;
+    const AT: u32 = TEXT.at(0x14).0;
     blank_rect(b, AT, 48, 22);
 }
 
 /// 0xf688c: clears the frame of the bonus screen (40 columns of 21 cells from row 6, column 5).
 pub fn clear_bonus_frame(b: &mut Cps2Bus) {
-    blank_rect(b, 0x912298, 40, 21);
+    blank_rect(b, TEXT.at(0x298).0, 40, 21);
 }
 
-/// 0xf617e: copy of a palette page (0x400 bytes).
+/// 0xf617e: copy of a palette page (0x400 bytes, in the graphics RAM).
 pub fn copy_page(b: &mut Cps2Bus, from: u32, to: u32) {
     for i in (0..0x400).step_by(4) {
-        let v = rd32(b, from + i);
-        wr32(b, to + i, v);
+        let v = Vram(from + i).long(b);
+        Vram(to + i).set_long(b, v);
     }
 }
 
 /// 0xfa240: zeroes 0x800 bytes of layer 0x920000.
 pub fn clear_920000(b: &mut Cps2Bus) {
     for i in (0..0x800).step_by(4) {
-        wr32(b, 0x920000 + i, 0);
+        SCRATCH.offset(i).set_long(b, 0);
     }
 }
 
 /// Zeroes `n` longs starting at `at`.
 pub fn clear_longs(b: &mut Cps2Bus, at: u32, n: u32) {
     for k in 0..n {
-        wr32(b, at + 4 * k, 0);
+        Long(at + 4 * k).set(b, 0);
     }
 }
 
@@ -55,6 +56,9 @@ pub mod blocks {
     use crate::mem::A5;
     /// Scene exit block (phase 16), 8 longs (0xf3130).
     pub const EXIT: u32 = A5 - 0x55ca;
+    /// Its state (`+2`, step of 4) and the sub-state of the shared states (`+3`, step of 2).
+    pub const EXIT_STEP: crate::ram::Byte = crate::ram::Byte(EXIT + 2);
+    pub const EXIT_SUB_STEP: crate::ram::Byte = crate::ram::Byte(EXIT + 3);
     /// Shop block, 5 longs (0xf7916).
     pub const SHOP: u32 = A5 - 0x5560;
     /// Transition script variables (shared state 0xf7ecc), 4 longs (0xf7ee0).

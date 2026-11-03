@@ -6,12 +6,13 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog16, rd16, rd8, wr16, wr32};
+use crate::hw::video::{Cell, TEXT};
+use crate::screens::tables;
 
-pub const LAYER: u32 = 0x912000;
-pub const COLUMN: u32 = 0x80;
+pub const LAYER: u32 = TEXT.base;
+pub const COLUMN: u32 = TEXT.column;
 /// Empty cell: tile 0x20 (space), null attributes.
-pub const BLANK: u32 = 0x0020_0000;
+pub const BLANK_TILE: u16 = 0x20;
 
 /// First tiles of digits 0 to 7 and 8, 9 (two rows of 16 tiles further).
 const DIGIT_0: u16 = 472;
@@ -20,20 +21,18 @@ const DIGIT_8: u16 = 496;
 pub const COLON: u16 = 766;
 pub const SECONDS: u16 = 767;
 /// Big digit tiles (words, table read relative to the PC).
-const BIG_DIGITS: u32 = 0xf6e74;
+const BIG_DIGITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6e74);
 
 /// A cell two high: `tile` on top, `tile + 16` below.
 pub fn tall(b: &mut Cps2Bus, at: u32, tile: u16, attr: u16) {
-    wr16(b, at, tile);
-    wr16(b, at + 2, attr);
-    wr16(b, at + 4, tile.wrapping_add(16));
-    wr16(b, at + 6, attr);
+    Cell(at).put(b, tile, attr);
+    Cell(at + 4).put(b, tile.wrapping_add(16), attr);
 }
 
 /// Two empty cells one under the other.
 pub fn blank(b: &mut Cps2Bus, at: u32) {
-    wr32(b, at, BLANK);
-    wr32(b, at + 4, BLANK);
+    Cell(at).put(b, BLANK_TILE, 0);
+    Cell(at + 4).put(b, BLANK_TILE, 0);
 }
 
 /// `n` columns of two empty cells starting at `at`; returns the next column.
@@ -89,10 +88,10 @@ impl Number {
 /// erased, the last always written (0x0f6b40).
 pub fn number6(b: &mut Cps2Bus, at: u32, src: u32, attr: u16) {
     let mut n = Number::new(at, attr);
-    let (high, middle) = (rd8(b, src + 1), rd8(b, src + 2));
+    let (high, middle) = (tables::byte(b, src + 1), tables::byte(b, src + 2));
     n.byte(b, high);
     n.byte(b, middle);
-    let low = rd8(b, src + 3);
+    let low = tables::byte(b, src + 3);
     n.digit(b, low >> 4);
     n.last(b, low);
 }
@@ -114,7 +113,7 @@ pub fn big_digit(b: &mut Cps2Bus, n: &mut Number, d: u8) {
     let d = d & 15;
     if d != 0 || n.lead {
         n.lead = true;
-        let tile = prog16(b, BIG_DIGITS + 2 * d as u32);
+        let tile = BIG_DIGITS.pc_word(b, 2 * d as u32);
         glyph(b, n.at, tile, n.attr);
     }
     n.at += 2 * COLUMN;
@@ -129,13 +128,13 @@ pub fn glyph(b: &mut Cps2Bus, at: u32, tile: u16, attr: u16) {
 /// Text in two-column characters (0x0f6f90): an attributes word then tiles; 0 ends, 0xffff
 /// re-reads attributes, 0xfffe leaves an empty column.
 pub fn glyphs(b: &mut Cps2Bus, mut at: u32, mut src: u32) -> u32 {
-    let mut attr = rd16(b, src);
+    let mut attr = tables::word(b, src);
     src += 2;
     loop {
-        match rd16(b, src) {
+        match tables::word(b, src) {
             0 => return at,
             0xffff => {
-                attr = rd16(b, src + 2);
+                attr = tables::word(b, src + 2);
                 src += 4;
             }
             0xfffe => {
@@ -154,12 +153,10 @@ pub fn glyphs(b: &mut Cps2Bus, mut at: u32, mut src: u32) -> u32 {
 
 /// Column of cells from a word table (tile pairs top/bottom, 0xffff ends), attributes 2 (0x0f7262).
 pub fn label(b: &mut Cps2Bus, mut at: u32, mut src: u32) {
-    while rd16(b, src) != 0xffff {
-        let (top, bottom) = (rd16(b, src), rd16(b, src + 2));
-        wr16(b, at, top);
-        wr16(b, at + 2, 2);
-        wr16(b, at + 4, bottom);
-        wr16(b, at + 6, 2);
+    while tables::word(b, src) != 0xffff {
+        let (top, bottom) = (tables::word(b, src), tables::word(b, src + 2));
+        Cell(at).put(b, top, 2);
+        Cell(at + 4).put(b, bottom, 2);
         src += 4;
         at += COLUMN;
     }

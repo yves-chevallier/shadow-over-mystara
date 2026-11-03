@@ -151,6 +151,20 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    `PlayerFields` de L6 et `Prey` de L8b fusionnées), vues `Shot` et `Victim` des tirs et effets : zone `players` à
    0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral` ; restent 141 constantes d'adresses de tables lues par
    adresse.
+||||||| Stash base
+9. **Lot L11 (écrans)** fait (branche `wt-l11-ecrans`, [fin.md](fin.md) « L11 », « Résultat ») : `modes/`, `hud/`,
+   `service/`, `scene/`, crédits, textes et bulles sans accesseur ROM, sans constante d'adresse ROM, sans décalage
+   littéral ni `A5 + littéral`, 3 `rd*`/`wr*` bruts (contre 1 637) ; nouvelle couche `hw/` (`hw::video`, `hw::io`),
+   `screens/` (`tables`, `vars`, `obj`, `block`), `data/screens.json`, et `GameData` charge `scenes.json`,
+   `misc.json`, `texts.json`. **Réextraire les assets** (`data/screens.json`). Pour les lots suivants : écrire la
+   vidéo par `hw::video` (`Cell`, `palette`, `regs`), lire une donnée désignée par adresse par `screens::tables` (ou
+   la table de sa famille), `screens::vars` pour les caméras et scrolls partagés.
+
+10. **Lot L19 (saisie du nom)** fait (branche `wt-l19-nom`, [fin.md](fin.md) « L19 », [modes.md](modes.md) § 6) : le
+   débordement du nom des anciennes révisions (nom par défaut de six lettres puis lettres en série) n'existe pas dans
+   la nôtre (verrou posé par `0xc9d16` en `0xc9d5c`) ; scénario `scenarios/modes/name_entry_overflow.txt` VALIDE,
+   validation à 309 scénarios. Aucune option `DDSOM_*` ajoutée (décision de l'utilisateur si l'on veut reproduire le
+   bug).
 
 ## Méthode qui marche
 

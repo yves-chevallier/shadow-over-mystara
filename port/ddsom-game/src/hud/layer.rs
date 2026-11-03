@@ -6,13 +6,20 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog16, rd16, wr16, A5};
+use super::var;
+use crate::hw::video::{Cell, TEXT};
+use crate::screens::tables::{self, Rom};
 
-pub const LAYER: u32 = 0x912000;
-pub const COLUMN: u32 = 0x80;
-pub const CELL: u32 = 4;
+pub const LAYER: u32 = TEXT.base;
+pub const COLUMN: u32 = TEXT.column;
+pub const CELL: u32 = TEXT.row;
 /// Empty cell: tile 0x20 (space), zero attributes.
-pub const EMPTY: u32 = 0x0020_0000;
+pub const EMPTY_TILE: u16 = 0x20;
+
+/// Empties the cell at `at`.
+pub fn clear_cell(b: &mut Cps2Bus, at: u32) {
+    Cell(at).put(b, EMPTY_TILE, 0);
+}
 
 /// Brush: a write pointer that advances cell by cell, like `(A1)+` in the original.
 pub struct Brush<'a> {
@@ -27,8 +34,7 @@ impl<'a> Brush<'a> {
 
     /// Writes a cell (tile, attributes) and moves on to the next one in the column.
     pub fn cell(&mut self, tile: u16, attr: u16) {
-        wr16(self.b, self.at, tile);
-        wr16(self.b, self.at + 2, attr);
+        Cell(self.at).put(self.b, tile, attr);
         self.at += CELL;
     }
 
@@ -56,16 +62,16 @@ impl<'a> Brush<'a> {
 /// hence decrypted), one row of 8 words per zone, four positions per layout; the
 /// two-column layout (`A5+0x344` odd) uses the second half of the row.
 pub fn origin(b: &mut Cps2Bus, player: u8, zone: u16) -> u32 {
-    const ORIGINS: u32 = 0x172b4;
-    let narrow = crate::mem::rd8(b, A5 + 0x344) & 1 != 0;
+    const ORIGINS: Rom = Rom::at(0x172b4);
+    let narrow = var::LAYOUT.get(b) & 1 != 0;
     let index = 2 * player as u32 + 16 * zone as u32 + if narrow { 8 } else { 0 };
-    LAYER.wrapping_add(prog16(b, ORIGINS + index) as i16 as i32 as u32)
+    LAYER.wrapping_add(ORIGINS.pc_word(b, index) as i16 as i32 as u32)
 }
 
 /// Series of columns of three cells read from the ROM (`n` columns, three words per column).
 pub fn columns(brush: &mut Brush, table: u32, n: u32, attr: u16) {
     for i in 0..n {
-        let tiles = [0, 1, 2].map(|k| rd16(brush.b, table + 6 * i + 2 * k));
+        let tiles = [0, 1, 2].map(|k| tables::word(brush.b, table + 6 * i + 2 * k));
         brush.column3(tiles, attr);
     }
 }

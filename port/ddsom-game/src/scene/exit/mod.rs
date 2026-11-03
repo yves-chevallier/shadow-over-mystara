@@ -29,12 +29,17 @@ use super::fading;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::dispatch;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::A5;
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::tasks::table::Next;
 use crate::Native;
 use crate::objects::pools;
+
+mod sequences;
+mod custom;
+use sequences::*;
+use custom::*;
 
 /// Scene exit state block (A0 in the original) and its fields.
 const BASE: u32 = A5 - 0x55ca;
@@ -50,9 +55,8 @@ mod blk {
 }
 
 /// ROM tables: sequence number per scene (bytes) and branches (words, relative to the table).
-const SEQUENCE_OF_SCENE: u32 = 0xf3170;
-const SEQUENCE_JUMPS: u32 = 0xf31ea;
-
+const SEQUENCE_OF_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf3170);
+const SEQUENCE_JUMPS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf31ea);
 
 /// Dispatch loops of the object classes, in the order of the reduced update (without the bosses).
 const CLASSES: [&dispatch::Class; 9] = [
@@ -68,18 +72,16 @@ const CLASSES: [&dispatch::Class; 9] = [
 ];
 
 /// Player: fields written when the players leave the screen.
-const WALK_OUT_STATE: u32 = 0x000c_0000;
+const WALK_OUT_STATE: u32 = u32::from_be_bytes([0, 0x0c, 0, 0]);
 const P_STATE_LONG: u32 = 4;
 const WALK_OUT_CLEAR_BYTES: [u32; 3] = [0x66, 0x8a, 0x15c];
 const P_RANK: u32 = 0x7d;
-/// Player longs cleared on leaving (state `+0x24` of each).
-const PLAYER_LONGS: [u32; 4] = [0x602, 0x802, 0xa02, 0xc02];
 
 /// Jumping forbidden (`A5+0x3d`), input lock, animation flags.
-const PAUSE: u32 = 0x3d;
+const PAUSE: Byte = Byte::a5(0x3d);
 const PHASE_ENTRY: u32 = 0x0800_0000;
 const PHASE_ENDING: u32 = 0x1c00_0000;
-const FLAGS: u32 = 0x14;
+const FLAGS: Word = Word::a5(0x14);
 const FLAGS_KEEP: u16 = 0xfff1;
 
 /// Context of a scene exit frame.
@@ -114,16 +116,16 @@ impl<'a> Ex<'a> {
     // --- state block ----------------------------------------------------------------------------
 
     fn b8(&mut self, off: u32) -> u8 {
-        rd8(self.x.b, BASE + off)
+        Obj(BASE).u8(self.x.b, off)
     }
     fn set_b8(&mut self, off: u32, v: u8) {
-        wr8(self.x.b, BASE + off, v)
+        Obj(BASE).set_u8(self.x.b, off, v)
     }
     fn b16(&mut self, off: u32) -> u16 {
-        rd16(self.x.b, BASE + off)
+        Obj(BASE).u16(self.x.b, off)
     }
     fn set_b16(&mut self, off: u32, v: u16) {
-        wr16(self.x.b, BASE + off, v)
+        Obj(BASE).set_u16(self.x.b, off, v)
     }
     fn next(&mut self) {
         let step = self.b8(blk::STEP).wrapping_add(4);
@@ -154,7 +156,7 @@ impl<'a> Ex<'a> {
     }
     fn message_done(&mut self) -> bool {
         let m = self.object(blk::MESSAGE);
-        m.u8(self.x.b, 0x22) != 0
+        m.u8(self.x.b, crate::screens::obj::MESSAGE_DONE) != 0
     }
     /// Object designated by a block word (`movea.w`: sign-extended address).
     fn object(&mut self, off: u32) -> Obj {
@@ -167,17 +169,17 @@ impl<'a> Ex<'a> {
         let mut n = 0u8;
         for k in 0..4 {
             let p = PLAYERS + k * PLAYER_STRIDE;
-            if rd8(self.x.b, p + player::ACTIVE) == 0 || rd16(self.x.b, p + player::HEALTH) == 0 {
+            if Obj(p).u8(self.x.b, player::ACTIVE) == 0 || Obj(p).u16(self.x.b, player::HEALTH) == 0 {
                 continue;
             }
-            wr8(self.x.b, p + player::ACTIVE, 1);
-            wr32(self.x.b, p + P_STATE_LONG, WALK_OUT_STATE);
+            Obj(p).set_u8(self.x.b, player::ACTIVE, 1);
+            Obj(p).set_u32(self.x.b, P_STATE_LONG, WALK_OUT_STATE);
             if rank {
-                wr8(self.x.b, p + P_RANK, n);
+                Obj(p).set_u8(self.x.b, P_RANK, n);
                 n += 1;
             }
             for off in WALK_OUT_CLEAR_BYTES {
-                wr8(self.x.b, p + off, 0);
+                Obj(p).set_u8(self.x.b, off, 0);
             }
         }
         // Original glitch: the rank count left in D5 is re-read by the handlers of the next frame (leftover D5 of the
@@ -188,8 +190,8 @@ impl<'a> Ex<'a> {
     }
     /// Start of the exit: the pause is lifted, the buttons released, the players walk out.
     fn start_walk_out(&mut self, rank: bool) {
-        self.x.set_v8(PAUSE, 0);
-        self.x.set_v8(var::INPUT_LOCK, 0);
+        PAUSE.set(self.x.b, 0);
+        var::INPUT_LOCK.set(self.x.b, 0);
         crate::inputs::clear_inputs(self.x.b);
         self.release_players(rank);
     }
@@ -197,9 +199,9 @@ impl<'a> Ex<'a> {
     fn all_in_state(&mut self, state: u8) -> bool {
         (0..4).all(|k| {
             let p = PLAYERS + k * PLAYER_STRIDE;
-            rd8(self.x.b, p + player::ACTIVE) == 0
-                || rd16(self.x.b, p + player::HEALTH) == 0
-                || rd8(self.x.b, p + player::STATE) == state
+            Obj(p).u8(self.x.b, player::ACTIVE) == 0
+                || Obj(p).u16(self.x.b, player::HEALTH) == 0
+                || Obj(p).u8(self.x.b, player::STATE) == state
         })
     }
 
@@ -360,6 +362,7 @@ struct Sequence {
 
 use Update::{Full, NoCollisions, Nothing, Reduced, World};
 use St::Idle;
+use crate::ram::{Byte, Word};
 
 /// The shared states of the exit sequences, at their original address.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -403,19 +406,18 @@ pub fn phase_16(b: &mut Cps2Bus) -> bool {
 fn init(ex: &mut Ex) {
     let state = ex.b8(blk::STATE).wrapping_add(2);
     ex.set_b8(blk::STATE, state);
-    wr8(ex.x.b, A5 - 0x5b8e, 0);
-    ex.x.set_v8(var::PLAYERS_FROZEN, 1);
-    let scene = ex.x.v8(var::SCENE) as u32;
-    let sequence = ex.x.b.fetch16((SEQUENCE_OF_SCENE + scene) & !1);
-    let sequence = if scene & 1 == 0 { (sequence >> 8) as u8 } else { sequence as u8 };
+    crate::hud::var::FROZEN.set(ex.x.b, 0);
+    var::PLAYERS_FROZEN.set(ex.x.b, 1);
+    let scene = var::SCENE.get(ex.x.b) as u32;
+    let sequence = SEQUENCE_OF_SCENE.pc_byte(ex.x.b, scene);
     ex.set_b8(blk::SEQUENCE, sequence);
 }
 
 /// State 2: the chosen sequence.
 fn run_sequence(ex: &mut Ex) {
     let number = ex.b8(blk::SEQUENCE) as u32;
-    let jump = ex.x.prog16(SEQUENCE_JUMPS + number);
-    ex.entry = SEQUENCE_JUMPS + jump as u32;
+    let jump = SEQUENCE_JUMPS.pc_word(ex.x.b, number);
+    ex.entry = SEQUENCE_JUMPS.addr() + jump as u32;
     let (sequence, dispatcher) = match number as u8 / 2 {
         // sequence 27 becomes 29 when `A5+0x66` is set; otherwise its dispatch follows this test (10 bytes)
         27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
@@ -477,7 +479,7 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
 /// End of frame: except at the final state, world update.
 fn finish_frame(ex: &mut Ex, sequence: &Sequence) {
     let step = match ex.a0 {
-        Some(a0) => rd8(ex.x.b, a0.wrapping_add(blk::STEP)),
+        Some(a0) => Obj(a0).u8(ex.x.b, blk::STEP),
         None => ex.b8(blk::STEP),
     };
     if step == sequence.last {
@@ -543,7 +545,7 @@ fn run_state(ex: &mut Ex, state: St) {
         St::FadeScript { timer } => {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
-            ex.fade(2, fading::RISE);
+            ex.fade(2, fading::RISE.0);
             ex.clear_text();
         }
         St::PlayersThen { state, timer } => {
@@ -581,33 +583,33 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         crate::palette::no_brightness(ex.x.b);
     }
     if let Some(w) = leave.clear_word {
-        wr16(ex.x.b, w, 0);
+        Word(w).set(ex.x.b, 0);
     }
-    for off in PLAYER_LONGS {
-        wr32(ex.x.b, A5 + off, 0);
+    for k in 0..4 {
+        Obj(crate::ram::PLAYERS.nth(k).0).set_u32(ex.x.b, crate::objects::Obj::PREV, 0);
     }
     crate::sprites::clear_lists(ex.x.b);
     if leave.clear_flags {
-        let flags = ex.x.v16(FLAGS) & FLAGS_KEEP;
-        ex.x.set_v16(FLAGS, flags);
+        let flags = FLAGS.get(ex.x.b) & FLAGS_KEEP;
+        FLAGS.set(ex.x.b, flags);
     }
     match leave.next_scene {
         NextScene::Same => {}
         NextScene::Plus1 => {
-            let scene = ex.x.v8(var::SCENE).wrapping_add(1);
-            ex.x.set_v8(var::SCENE, scene);
+            let scene = var::SCENE.get(ex.x.b).wrapping_add(1);
+            var::SCENE.set(ex.x.b, scene);
         }
         NextScene::Plus1UnlessLate => {
-            let scene = ex.x.v8(var::SCENE).wrapping_add(1);
-            ex.x.set_v8(var::SCENE, scene);
+            let scene = var::SCENE.get(ex.x.b).wrapping_add(1);
+            var::SCENE.set(ex.x.b, scene);
             if ex.x.v16(0x54) > 0x1500 {
-                ex.x.set_v8(var::SCENE, 10);
+                var::SCENE.set(ex.x.b, 10);
             }
         }
-        NextScene::Fixed(scene) => ex.x.set_v8(var::SCENE, scene),
+        NextScene::Fixed(scene) => var::SCENE.set(ex.x.b, scene),
         NextScene::FromBlock => {
             let scene = ex.b8(blk::NEXT_SCENE);
-            ex.x.set_v8(var::SCENE, scene);
+            var::SCENE.set(ex.x.b, scene);
         }
     }
     ex.x.set_v32(var::PHASE, leave.phase);
@@ -705,811 +707,11 @@ fn dispatch_tail(x: &mut Ctx, index: u8) {
 
 pub const NATIVES: &[Native] = &[];
 
-// ---------------------------------------------------------------------------------------------
-// The sequences (index = sequence number / 2; see `docs/scenes.md` for the scenes)
-
-/// Final state without clearing the flags, 8-frame yield, only the final command afterwards.
-const L_SILENT: Leave = Leave { clear_flags: false, frames: 8, tail: Tail::Command, ..LEAVE };
-
-static SEQ_0: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq0_start),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1, ..LEAVE }),
-    ],
-};
-static SEQ_1: Sequence = Sequence {
-    update: Reduced,
-    last: 24,
-    states: &[
-        St::Custom(walk_out_now),
-        St::Custom(seq1_clear),
-        Idle,
-        BONUS,
-        Idle,
-        BLACKOUT,
-        St::Leave(Leave { clear_word: Some(scratch(0xa53a)), ..LEAVE }),
-    ],
-};
-static SEQ_2: Sequence = Sequence {
-    update: Full,
-    last: 40,
-    states: &[
-        St::Custom(seq2_start),
-        St::Custom(seq2_wait_exit),
-        St::Custom(seq2_message_done),
-        St::Custom(seq2_boss_state),
-        St::Custom(seq2_countdown),
-        St::TimerWait,
-        TALLY,
-        BONUS,
-        CHARACTERS,
-        BLACKOUT,
-        St::Leave(LEAVE),
-    ],
-};
-/// Common model (sequences 3, 8, 11, 12): frame, exit, shared states, departure.
-static SEQ_3: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(LEAVE)] };
-static SEQ_4: Sequence = Sequence {
-    update: Full,
-    last: 40,
-    states: &[
-        CLEAR,
-        St::WalkWait { timer: Some(144) },
-        St::Custom(seq4_probe),
-        St::Custom(seq4_effect),
-        St::Custom(message_then_next),
-        TALLY,
-        BONUS,
-        CHARACTERS,
-        SHOP,
-        BLACKOUT,
-        St::Leave(LEAVE),
-    ],
-};
-static SEQ_5: Sequence = Sequence {
-    update: World,
-    last: 8,
-    states: &[
-        St::Clear { timer: Some(32) },
-        St::Custom(walk_with_effect),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1UnlessLate, ..LEAVE }),
-    ],
-};
-/// Sequence 6 (scene 7): like sequence 0, with sound command 0xe0a82(4).
-static SEQ_6: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq6_start),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1, ..LEAVE }),
-    ],
-};
-static SEQ_7: Sequence = Sequence {
-    update: World,
-    last: 8,
-    states: &[
-        St::Clear { timer: Some(32) },
-        St::Custom(walk_with_effect),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1, ..LEAVE }),
-    ],
-};
-static SEQ_9: Sequence = Sequence {
-    update: Full,
-    last: 24,
-    states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, BLACKOUT, St::Leave(Leave { frames: 2, tail: Tail::Twice, ..LEAVE })],
-};
-static SEQ_10: Sequence = Sequence {
-    update: NoCollisions,
-    last: 36,
-    states: &[
-        St::Custom(seq10_clear),
-        St::Custom(seq10_walk),
-        St::PlayersThen { state: 10, timer: Some(112) },
-        Idle,
-        St::TimerWait,
-        TALLY,
-        BONUS,
-        CHARACTERS,
-        BLACKOUT,
-        St::Leave(LEAVE),
-    ],
-};
-static SEQ_13: Sequence = Sequence {
-    update: Full,
-    last: 32,
-    states: &[
-        CLEAR,
-        WALK,
-        TALLY,
-        St::FadeScript { timer: 60 },
-        Idle,
-        St::PlayersThen { state: 16, timer: None },
-        BONUS,
-        CHARACTERS,
-        leave_to(106),
-    ],
-};
-static SEQ_14: Sequence = Sequence {
-    update: Full,
-    last: 44,
-    states: &[
-        CLEAR,
-        St::WalkWait { timer: Some(96) },
-        TALLY,
-        St::FadeScript { timer: 60 },
-        St::Custom(seq14_wait_players),
-        St::Custom(seq14_message_done),
-        St::Custom(seq14_countdown),
-        St::Custom(seq14_message_done_wait),
-        St::TimerWait,
-        BONUS,
-        CHARACTERS,
-        leave_to(27),
-    ],
-};
-static SEQ_15: Sequence = Sequence {
-    update: Full,
-    last: 36,
-    states: &[
-        St::Custom(seq15_clear),
-        WALK,
-        TALLY,
-        St::Custom(seq15_fade),
-        Idle,
-        BLACKOUT,
-        BONUS,
-        CHARACTERS,
-        SHOP,
-        St::Leave(LEAVE),
-    ],
-};
-static SEQ_16: Sequence = Sequence {
-    update: NoCollisions,
-    last: 24,
-    states: &[St::Custom(seq16_start), BLACKOUT, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(LEAVE)],
-};
-static SEQ_17: Sequence = Sequence {
-    update: Full,
-    last: 28,
-    states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
-};
-static SEQ_18: Sequence =
-    Sequence { update: Full, last: 24, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, BLACKOUT, St::Leave(LEAVE)] };
-static SEQ_19: Sequence = Sequence {
-    update: NoCollisions,
-    last: 24,
-    states: &[St::Clear { timer: Some(32) }, WALK, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
-};
-/// Sequence 20 (scenes 35 and 111): players leave after 48 more frames, fade, scene 33.
-static SEQ_20: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq20_walk),
-        St::Custom(fade_out_world),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Fixed(33), ..LEAVE }),
-    ],
-};
-static SEQ_21: Sequence = Sequence {
-    update: NoCollisions,
-    last: 12,
-    states: &[
-        St::Custom(seq21_start),
-        St::Custom(seq21_route),
-        St::Leave(Leave { wait_fade: WaitFade::Nothing, next_scene: NextScene::FromBlock, ..LEAVE }),
-    ],
-};
-static SEQ_22: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(L_SILENT)] };
-static SEQ_23: Sequence = Sequence {
-    update: NoCollisions,
-    last: 8,
-    states: &[
-        St::Clear { timer: Some(128) },
-        St::Custom(seq23_walk),
-        St::Leave(Leave { wait_fade: WaitFade::InputsWorld, next_scene: NextScene::Fixed(44), ..LEAVE }),
-    ],
-};
-static SEQ_25: Sequence = Sequence {
-    update: Full,
-    last: 36,
-    states: &[CLEAR, WALK, TALLY, St::Custom(seq25_route), St::TimerWait, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(L_SILENT)],
-};
-static SEQ_26: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BLACKOUT, BONUS, CHARACTERS, SHOP, leave_to(38)] };
-/// Sequence 27 (scene 54), when `A5+0x66` is zero: tally, bonus, scene 55.
-static SEQ_27: Sequence =
-    Sequence { update: Full, last: 16, states: &[St::Custom(seq27_clear), WALK, TALLY, BONUS, leave_to(55)] };
-static SEQ_28: Sequence =
-    Sequence { update: Full, last: 24, states: &[St::Custom(seq28_clear), WALK, TALLY, BONUS, CHARACTERS, SHOP, leave_to(59)] };
-/// Sequence 29 (scene 59, and 54 when `A5+0x66` is set): exit and fade, next scene.
-static SEQ_29: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq29_start),
-        St::Custom(seq29_walk),
-        St::Leave(Leave { wait_fade: WaitFade::InputsWorld, next_scene: NextScene::Plus1, ..LEAVE }),
-    ],
-};
-static SEQ_30: Sequence = Sequence {
-    update: Full,
-    last: 52,
-    states: &[
-        CLEAR,
-        St::WalkWait { timer: Some(96) },
-        TALLY,
-        St::FadeScript { timer: 60 },
-        St::PlayersThen { state: 12, timer: Some(64) },
-        St::Custom(seq30_message_79),
-        St::Custom(seq30_message_done),
-        St::Custom(seq30_effect),
-        St::Custom(seq30_players_wait),
-        St::TimerWait,
-        BONUS,
-        CHARACTERS,
-        SHOP,
-        leave_to(65),
-    ],
-};
-/// Sequence 31 (scene 65): fade after 192 frames, next scene without black palettes or sound.
-static SEQ_31: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq31_start),
-        St::Custom(fade_out_world),
-        St::Leave(Leave {
-            wait_fade: WaitFade::World,
-            black: false,
-            clear_flags: false,
-            next_scene: NextScene::Plus1,
-            tail: Tail::Jump,
-            ..LEAVE
-        }),
-    ],
-};
-static SEQ_32: Sequence = Sequence {
-    update: Full,
-    last: 24,
-    states: &[St::Custom(seq32_clear), WALK, TALLY, BONUS, St::Custom(seq32_route), CHARACTERS, leave_to(105)],
-};
-/// Sequence 33 (scene 67): players leave and fade, scene 38.
-static SEQ_33: Sequence = Sequence {
-    update: Nothing,
-    last: 0xff,
-    states: &[
-        St::Custom(seq33_start),
-        St::Custom(seq33_walk),
-        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Fixed(38), tail: Tail::Sound, ..LEAVE }),
-    ],
-};
-static SEQ_34: Sequence = Sequence {
-    update: NoCollisions,
-    last: 28,
-    states: &[
-        St::Clear { timer: Some(4) },
-        WALK,
-        SHOP,
-        BONUS,
-        CHARACTERS,
-        SHOP,
-        BLACKOUT,
-        St::Leave(Leave { tail: Tail::Sound, ..LEAVE }),
-    ],
-};
-static SEQ_35: Sequence = Sequence {
-    update: Full,
-    last: 20,
-    states: &[
-        St::Custom(seq35_clear),
-        St::Custom(seq35_walk),
-        BLACKOUT,
-        TALLY,
-        St::Custom(seq35_fade),
-        St::Custom(seq35_message),
-        St::Custom(seq35_boss),
-        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(crate::sound::CMD_9B), ..LEAVE }),
-    ],
-};
-
-/// Rewritten sequence of index `index`; `None`: ceded to the original.
-fn sequence(index: u8) -> Option<&'static Sequence> {
-    Some(match index {
-        0 => &SEQ_0,
-        1 => &SEQ_1,
-        2 => &SEQ_2,
-        3 | 8 | 11 | 12 => &SEQ_3,
-        4 => &SEQ_4,
-        5 => &SEQ_5,
-        6 => &SEQ_6,
-        7 => &SEQ_7,
-        9 => &SEQ_9,
-        10 => &SEQ_10,
-        13 => &SEQ_13,
-        14 => &SEQ_14,
-        15 => &SEQ_15,
-        16 => &SEQ_16,
-        17 => &SEQ_17,
-        18 => &SEQ_18,
-        19 => &SEQ_19,
-        20 => &SEQ_20,
-        21 => &SEQ_21,
-        22 | 24 => &SEQ_22,
-        23 => &SEQ_23,
-        25 => &SEQ_25,
-        26 => &SEQ_26,
-        28 => &SEQ_28,
-        29 => &SEQ_29,
-        30 => &SEQ_30,
-        31 => &SEQ_31,
-        32 => &SEQ_32,
-        33 => &SEQ_33,
-        34 => &SEQ_34,
-        35 => &SEQ_35,
-        _ => return None,
-    })
-}
-
-// ---------------------------------------------------------------------------------------------
-// Custom states
-
-/// Sequence 0 (the most common): players leave, fade.
-fn seq0_start(ex: &mut Ex) {
-    ex.next();
-    ex.fade(2, fading::DESCENT);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    ex.x.world();
-}
-
-/// Sequence 6: like `seq0_start`, with sound command 0xe0a82(4).
-fn seq6_start(ex: &mut Ex) {
-    ex.next();
-    ex.fade(2, fading::DESCENT);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
-    ex.x.world();
-}
-
-/// Sequence 20: players leave at the end of the timer (48 more frames); full update.
-fn seq20_walk(ex: &mut Ex) {
-    walk_wait(ex, Some(48));
-    run_update(ex, Update::Full);
-}
-
-/// Sequences 20 and 31: exit fade at the end of the timer; the world goes on.
-fn fade_out_world(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.fade(2, fading::DESCENT);
-    }
-    ex.x.world();
-}
-
-/// Sequence 27: camera, timer + 90, transition variables and shop block cleared.
-fn seq27_clear(ex: &mut Ex) {
-    ex.next();
-    ex.x.set_v16(0x51e, 4);
-    let t = ex.b16(blk::TIMER).wrapping_add(90);
-    ex.set_b16(blk::TIMER, t);
-    ex.reset_transition();
-    ex.reset_shop();
-}
-
-/// Sequence 29: timer + 80, transition variables cleared, then the wait in the same frame.
-fn seq29_start(ex: &mut Ex) {
-    ex.next();
-    let t = ex.b16(blk::TIMER).wrapping_add(80);
-    ex.set_b16(blk::TIMER, t);
-    ex.reset_transition();
-    seq29_walk(ex);
-}
-
-/// Sequence 29: at the end of the timer, players leave and the fade starts; full update.
-fn seq29_walk(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.start_walk_out(false);
-        ex.fade(2, fading::DESCENT);
-    }
-    run_update(ex, Update::Full);
-}
-
-/// Sequence 31: timer 192, inputs released.
-fn seq31_start(ex: &mut Ex) {
-    ex.next();
-    ex.set_b16(blk::TIMER, 192);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    ex.x.world();
-}
-
-/// Sequence 33: transition variables and shop block cleared, then the wait in the same frame.
-fn seq33_start(ex: &mut Ex) {
-    ex.next();
-    ex.reset_transition();
-    ex.reset_shop();
-    seq33_walk(ex);
-}
-
-/// Sequence 33: at the end of the timer, exit fade then players leave.
-fn seq33_walk(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.x.set_v8(PAUSE, 0);
-        ex.x.set_v8(var::INPUT_LOCK, 0);
-        crate::inputs::clear_inputs(ex.x.b);
-        ex.fade(2, fading::DESCENT);
-        ex.release_players(false);
-    }
-    ex.x.world();
-}
-
-/// Sequence 10: transition variables cleared, timer 128.
-fn seq10_clear(ex: &mut Ex) {
-    ex.next();
-    ex.set_b16(blk::TIMER, 128);
-    ex.reset_transition();
-}
-
-/// Sequence 32: depending on the route (`A5+0x5c`), the exit or the bonus screen 0xf6492.
-fn seq32_route(ex: &mut Ex) {
-    if ex.x.v8(0x5c) != 0 {
-        ex.set_step(24);
-        if let Some(St::Leave(leave)) = SEQ_32.states.get(6) {
-            do_leave(ex, leave);
-        }
-    } else {
-        ex.set_step(20);
-        redispatch(ex, &SEQ_32);
-    }
-}
-
-/// Sequence 1: players leave immediately.
-fn walk_out_now(ex: &mut Ex) {
-    ex.next();
-    ex.start_walk_out(false);
-}
-
-/// Sequence 1: transition variables cleared, then event 0xdc5fe(1).
-fn seq1_clear(ex: &mut Ex) {
-    ex.next();
-    ex.reset_transition();
-    crate::families::creators::scene_object(ex.x.b, 1);
-}
-
-/// Sequence 2: the timer (word) is decremented once, then the players leave if there are any.
-fn seq2_start(ex: &mut Ex) {
-    // the timer (word) starts at 0: it is decremented as long as it stays positive
-    let left = ex.b16(blk::TIMER).wrapping_sub(1);
-    ex.set_b16(blk::TIMER, left);
-    if left as i16 >= 0 || ex.x.v8(var::PLAYERS) == 0 {
-        return;
-    }
-    ex.next();
-    ex.start_walk_out(false);
-}
-
-/// Sequence 2: waits for all players to be in exit state 0xc0c00, then dialogue 7.
-fn seq2_wait_exit(ex: &mut Ex) {
-    ex.reset_transition();
-    for k in 0..4 {
-        let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(ex.x.b, p) != 0 && rd16(ex.x.b, p + player::HEALTH) != 0 && crate::mem::rd32(ex.x.b, p + P_STATE_LONG) != 0x000c_0c00 {
-            return;
-        }
-    }
-    ex.next();
-    ex.message(7);
-}
-
-/// Sequence 2: message done, the boss of object `+0x10` goes to state 0x04020a00.
-fn seq2_message_done(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        let o = ex.object(blk::OBJECT);
-        wr32(ex.x.b, o.0 + 4, 0x0402_0a00);
-        ex.set_b16(blk::TIMER, 240);
-    }
-}
-
-fn seq2_boss_state(ex: &mut Ex) {
-    let o = ex.object(blk::OBJECT);
-    if o.u8(ex.x.b, 4) == 6 {
-        ex.next();
-        ex.set_b16(blk::TIMER, 160);
-    }
-}
-
-fn seq2_countdown(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.set_b16(blk::TIMER, 128);
-        crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 30);
-        crate::sound::play_global(ex.x.b, crate::sound::CMD_98);
-    }
-}
-
-/// Sequence 4: after the exit, an effect appears; if a player is in state 4 or 5, dialogue 33.
-fn seq4_probe(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    for k in 0..4 {
-        let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(ex.x.b, p) != 0 && rd16(ex.x.b, p + player::HEALTH) != 0 {
-            let character = rd8(ex.x.b, p + 3);
-            if character == 4 || character == 5 {
-                ex.next();
-                ex.message(33);
-                return;
-            }
-        }
-    }
-    let effect = ex.x.spawn(&pools::EFFCT, 0x59);
-    ex.set_b16(blk::EFFECT, effect.0 as u16);
-}
-
-fn seq4_effect(ex: &mut Ex) {
-    let e = ex.object(blk::EFFECT);
-    if e.u8(ex.x.b, 5) == 2 {
-        ex.next();
-        ex.message(33);
-    }
-}
-
-fn message_then_next(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-    }
-}
-
-/// Sequences 5 and 7: players leave, effect `A5+0x46` receives 0x20000 at `+0x58`, exit fade.
-fn walk_with_effect(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    ex.x.set_v8(PAUSE, 0);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    ex.set_b16(blk::TIMER, 144);
-    ex.release_players(false);
-    let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
-    wr32(ex.x.b, effect.0 + 0x58, 0x2_0000);
-    ex.fade(1, fading::DESCENT);
-}
-
-/// Sequence 10: players receive their rank then 0xd5f12.
-fn seq10_walk(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    ex.start_walk_out(true);
-    crate::families::set_residue::clear_columns(ex.x.b);
-}
-
-/// Sequence 14: waits for state 12 of the players, then dialogue 35.
-fn seq14_wait_players(ex: &mut Ex) {
-    if ex.all_in_state(12) {
-        ex.next();
-        ex.message(35);
-    }
-}
-
-fn seq14_message_done(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        ex.set_b16(blk::TIMER, 256);
-        crate::video::clear_layer1_start(ex.x.b);
-    }
-}
-
-fn seq14_countdown(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.message(36);
-        crate::sound::play_global(ex.x.b, crate::sound::CMD_89_89);
-    }
-}
-
-fn seq14_message_done_wait(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        ex.set_b16(blk::TIMER, 288);
-    }
-}
-
-/// Sequence 15: clears the temporary variable A5-0x65ac, resets transition and shop.
-fn seq15_clear(ex: &mut Ex) {
-    ex.next();
-    ex.x.wr16(scratch(0x9a54), 0);
-    ex.reset_transition();
-    ex.reset_shop();
-}
-
-/// Sequence 15: fade, fade script, event 0xdc5fe(3).
-fn seq15_fade(ex: &mut Ex) {
-    ex.next();
-    ex.fade(2, fading::RISE);
-    ex.clear_text();
-    crate::families::creators::scene_object(ex.x.b, 3);
-}
-
-/// Sequence 16: transition and shop cleared, players leave.
-fn seq16_start(ex: &mut Ex) {
-    ex.next();
-    ex.reset_transition();
-    ex.reset_shop();
-    ex.start_walk_out(false);
-}
-
-/// Sequence 21: players leave, dialogue 70; the next scene depends on the result.
-fn seq21_start(ex: &mut Ex) {
-    ex.next();
-    ex.x.set_v8(PAUSE, 0);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    ex.reset_transition();
-    ex.reset_shop();
-    ex.message(70);
-    ex.release_players(false);
-}
-
-/// Sequence 21: the finished message gives an index (`+0x23`) into a table of next scenes.
-fn seq21_route(ex: &mut Ex) {
-    const NEXT_SCENES: u32 = 0xf4a0c;
-    let m = ex.object(blk::MESSAGE);
-    if m.u8(ex.x.b, 0x22) != 0 {
-        ex.next();
-        let index = m.u8(ex.x.b, 0x23) as u32;
-        let scene = ex.x.prog16((NEXT_SCENES + index) & !1);
-        let scene = if (NEXT_SCENES + index) & 1 == 0 { (scene >> 8) as u8 } else { scene as u8 };
-        ex.set_b8(blk::NEXT_SCENE, scene);
-        ex.fade(1, fading::DESCENT);
-    }
-}
-
-/// Sequence 23: players leave then exit fade.
-fn seq23_walk(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    ex.start_walk_out(false);
-    ex.fade(2, fading::DESCENT);
-}
-
-/// Sequence 25: depending on the route (`A5+0x5c`), jumps to state 20 (bonus screen) or fades.
-fn seq25_route(ex: &mut Ex) {
-    if ex.x.v8(0x5c) == 0 {
-        ex.set_step(20);
-        return redispatch(ex, &SEQ_25);
-    }
-    ex.next();
-    ex.set_b16(blk::TIMER, 128);
-    ex.fade(2, fading::RISE);
-    ex.clear_text();
-}
-
-/// Sequence 28: like `Clear`, the timer increases by 90.
-fn seq28_clear(ex: &mut Ex) {
-    ex.next();
-    let t = ex.b16(blk::TIMER).wrapping_add(90);
-    ex.set_b16(blk::TIMER, t);
-    ex.reset_transition();
-    ex.reset_shop();
-}
-
-/// Sequence 30: series of dialogues (79, 80) around an effect 75 and the exit.
-fn seq30_message_79(ex: &mut Ex) {
-    if ex.countdown() {
-        ex.next();
-        ex.message(79);
-    }
-}
-
-fn seq30_message_done(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        ex.set_b16(blk::TIMER, 80);
-    }
-}
-
-fn seq30_effect(ex: &mut Ex) {
-    if ex.b16(blk::TIMER) == 32 {
-        let e = ex.x.spawn(&pools::EFFCT, 75);
-        e.set_u8(ex.x.b, Obj::VARIANT, 1);
-        crate::sound::play_global(ex.x.b, crate::sound::CMD_38E);
-    }
-    if ex.countdown() {
-        ex.next();
-        ex.message(80);
-    }
-}
-
-fn seq30_players_wait(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        let players = ex.x.v8(var::PLAYERS) as u32;
-        let t = ex.x.prog16(0xf5542 + 2 * players);
-        ex.set_b16(blk::TIMER, t);
-    }
-}
-
-/// Sequence 32: clears, draws; if the route is taken (`A5+0x5c`) jumps to state 12.
-fn seq32_clear(ex: &mut Ex) {
-    ex.next();
-    ex.reset_transition();
-    ex.reset_shop();
-    if ex.x.v8(0x5c) != 0 {
-        ex.set_step(12);
-        return redispatch(ex, &SEQ_32);
-    }
-    walk_wait(ex, None);
-}
-
-/// Sequence 35: transition variables cleared, then players leave after the wait.
-fn seq35_clear(ex: &mut Ex) {
-    ex.next();
-    ex.reset_transition();
-    seq35_walk(ex);
-}
-
-fn seq35_walk(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    ex.x.set_v8(PAUSE, 0);
-    ex.x.wr16(scratch(0xaa84), 0x1400);
-    ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
-    ex.release_players(false);
-}
-
-fn seq35_fade(ex: &mut Ex) {
-    ex.next();
-    ex.set_b16(blk::TIMER, 64);
-    ex.fade(2, fading::RISE);
-    ex.clear_text();
-    crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
-}
-
-fn seq35_message(ex: &mut Ex) {
-    if !ex.countdown() {
-        return;
-    }
-    ex.next();
-    ex.message(88);
-    // Original glitch: the failure is not tested, the A1 left by the allocation is stored
-    let set = crate::families::creators::set_15_pure(ex.x.b, 24).unwrap_or_else(|a1| a1);
-    ex.set_b16(blk::OBJECT, set.0 as u16);
-    crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 0x7fff);
-    crate::sound::play_global(ex.x.b, crate::sound::CMD_9A);
-}
-
-fn seq35_boss(ex: &mut Ex) {
-    if ex.message_done() {
-        ex.next();
-        let o = ex.object(blk::OBJECT);
-        o.set_u8(ex.x.b, 4, 4);
-        ex.x.set_v16(0x544, 1);
-    }
-}
-
 /// Shared state 0xf792e (end-of-level screen): after the message, 0xf7b62 picks the continuation from byte `+0xc` of
 /// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside
 /// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
 /// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
-pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
+pub const SHARED_NEXT_ENTRY: crate::data::RomAddr = crate::data::RomAddr(0xf7b62);
 
 #[cfg(test)]
 mod tests {

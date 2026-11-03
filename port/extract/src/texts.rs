@@ -190,9 +190,24 @@ fn bad(msg: String) -> io::Error {
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let rom = Program::load(roms)?;
+    let t = texts(&rom)?;
+    let followed = t.texts.iter().filter(|d| !d.scanned).count();
+    eprintln!(
+        "texts: {} descriptors ({} by the code, {} by search), {} tables, {} balloon names",
+        t.texts.len(),
+        followed,
+        t.texts.len() - followed,
+        t.tables.len(),
+        t.popups.strings.len()
+    );
+    json::save(path, &t, 2)
+}
+
+/// The texts of the program ROM (`texts.json`): descriptors, descriptor tables, balloon names, `@`-terminated names.
+pub fn texts(rom: &Program) -> io::Result<Texts> {
     let mut found = BTreeMap::new();
     for &(at, kind) in SEEDS {
-        if !run(&rom, at, kind, &mut found) {
+        if !run(rom, at, kind, &mut found) {
             return Err(bad(format!("unreadable text at {at:#x}")));
         }
     }
@@ -207,14 +222,13 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             })
             .collect();
         for &e in &entries {
-            if !run(&rom, e, kind, &mut found) {
+            if !run(rom, e, kind, &mut found) {
                 return Err(bad(format!("table {at:#x}: unreadable text at {e:#x}")));
             }
         }
         tables.push(TextTable { rom: at, program, offsets, entries });
     }
-    let followed = found.len();
-    scan(&rom, &mut found);
+    scan(rom, &mut found);
     // no overlap
     let texts: Vec<TextDesc> = found.into_values().collect();
     for w in texts.windows(2) {
@@ -243,17 +257,9 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         p += 1;
         strings.push(encode(&bytes));
     }
-    eprintln!(
-        "texts: {} descriptors ({} by the code, {} by search), {} tables, {} balloon names",
-        texts.len(),
-        followed,
-        texts.len() - followed,
-        tables.len(),
-        strings.len()
-    );
     let popups = PopupNames { table: POPUP_TABLE, offsets, strings_rom, strings };
-    let names = NAMES.iter().map(|&(table, program, n)| names(&rom, table, program, n)).collect();
-    json::save(path, &Texts { texts, tables, popups, names }, 2)
+    let names = NAMES.iter().map(|&(table, program, n)| names(rom, table, program, n)).collect();
+    Ok(Texts { texts, tables, popups, names })
 }
 
 /// Names designated by a table: all those of the region, from the first designated to the end of the last.

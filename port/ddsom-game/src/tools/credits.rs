@@ -13,7 +13,7 @@ pub const TEST_NATIVES: &[Native] = &[Native {
     name: "credits_start_line",
     run: crate::Body::WithCpu(|c, b| {
         let (a0, service) = (c.a[0], c.d[1] as u8);
-        line_start(b, a0, service);
+        line_start(b, CoinSlot(a0), service);
         crate::tools::frames::rts(c, b);
     }),
     touches_sound: false,

@@ -15,13 +15,19 @@
 
 use super::{Flow, Sequence};
 use crate::families::effects_creators::{end_screen, or_rest};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::hw::video::{palette, regs, Vram, SCROLL2};
+use crate::scene::fading;
+use crate::screens::tables::{self, Rom};
+use crate::screens::vars as sv;
 use crate::objects::pools;
 use crate::scene::Ctx;
 use crate::video::{clear_layer, Layer};
 use crate::Native;
+use crate::ram::{Long, Word};
+use crate::objects::Obj;
+use crate::screens::obj;
 
-const STATE: u32 = 0xff_2b10;
+pub(super) const STATE: u32 = 0xff_2b10;
 mod f {
     pub const STEP: u32 = 0;
     pub const TIMER: u32 = 4;
@@ -29,17 +35,27 @@ mod f {
     pub const MARK: u32 = 0xa;
 }
 /// Background scroll (long, 16.16) and second plane.
-const SCROLL: u32 = 0xff_2b1c;
-const SCROLL_2: u32 = 0xff_2b20;
-/// Table of the four players (16 bytes each: score and state).
-const SCORES: u32 = A5 - 0x5b18;
-const FRAME_COUNT: u32 = A5 + 0x7e68;
-const VIDEO: u32 = A5 + 0x14;
-const CPS_REG_4: u32 = 0x400004;
-
-
-/// Return from the step at `0xfc584`: A0 goes back to the mode machine block.
-const RETURN: u32 = 0xfc584;
+const SCROLL: Long = Long(0xff_2b1c);
+const SCROLL_2: Long = Long(0xff_2b20);
+/// Table of the four players (16 bytes each: score and state; byte `+14`: the player named an entry, h).
+const SCORES: u32 = 0xff_24e8;
+const NAMED: u32 = 14;
+/// Entry of a player of the score table: played (byte `+0`), score (two longs, `+0`).
+const PLAYED: u32 = 0;
+const SCORE: u32 = 0;
+const FRAME_COUNT: Word = Word::a5(0x7e68);
+const VIDEO: Word = Word::a5(0x14);
+/// Rank of a score cartridge (`+0x42`).
+const RANK: u32 = 0x42;
+/// Ranking text: one setting byte per line, ended by a negative byte.
+const RANKING_TEXT: Rom = Rom::at(0xfc938);
+/// Palettes of the screen: library palettes and the ranking palette (`0xfc6d8`), and where they go.
+const PALETTES: [(Vram, Rom); 4] = [
+    (palette(0, 0x1f0), Rom::at(0x291f00)),
+    (palette(0, 0x170), Rom::at(0xfc6d8)),
+    (palette(0, 0), Rom::at(0x292260)),
+    (palette(0, 0x1e0), Rom::at(0x2537c0)),
+];
 
 /// Screen of sub-mode `sub`, if it is rewritten here.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
@@ -47,7 +63,7 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
 }
 
 fn post_game(x: &mut Ctx) -> Flow {
-    let step = rd8(x.b, STATE + f::STEP);
+    let step = Obj(STATE).u8(x.b, f::STEP);
     x.push_return(Step::Return);
     match step {
         0 => s0_prepare(x),
@@ -63,72 +79,72 @@ fn post_game(x: &mut Ctx) -> Flow {
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        Return = RETURN => |_| Flow::Done,
-        S0Video = S0_VIDEO => |x| {
-            wr16(x.b, CPS_REG_4, 0x1355);
-            wr16(x.b, VIDEO, 0x24c0);
+        Return = 0xfc584 => |_| Flow::Done,
+        S0Video = 0xfc5cc => |x| {
+            regs::OBJECT_OUTPUT.set(x.b, 0x1355);
+            VIDEO.set(x.b, 0x24c0);
             x.wait(1, Step::S0Palettes)
         },
-        S0Palettes = S0_PALETTES => |x| {
+        S0Palettes = 0xfc5e2 => |x| {
             clear_layers(x);
             crate::palette::load_scene_page(x.b, 1);
             crate::palette::load_palette_page(x.b, 2, 83);
             crate::palette::load_palette_page(x.b, 2, 83);
-            wr8(x.b, A5 + 0x34, 0);
+            crate::ram::SCENE.set(x.b, 0);
             crate::palette::load_scene_palettes_of(x.b, 89);
             // four palette blocks, from ROM to the palette table
-            for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
+            for (dst, src) in PALETTES {
                 for i in 0..8 {
-                    let w = rd32(x.b, src + 4 * i);
-                    wr32(x.b, dst + 4 * i, w);
+                    let w = src.long(x.b, 4 * i);
+                    dst.offset(4 * i).set_long(x.b, w);
                 }
             }
-            wr8(x.b, A5 + 0x48e, 0xf);
+            fading::PAGES.set(x.b, 0xf);
             crate::palette::full_brightness(x.b);
-            for off in [0x506u32, 0x50a, 0x556, 0x4b6, 0x4ba] {
-                wr16(x.b, A5 + off, 0);
+            for v in [sv::CAMERA_X, sv::CAMERA_Y, sv::CAMERA_2_X, Word(sv::SCROLL_1.0), Word(sv::SCROLL_2.0)] {
+                v.set(x.b, 0);
             }
-            wr16(x.b, A5 + 0x55a, 0x701);
-            wr32(x.b, SCROLL, 0x0701_0000);
-            wr8(x.b, A5 + 0x36, 1);
+            sv::CAMERA_2_Y.set(x.b, 0x701);
+            SCROLL.set(x.b, 0x0701_0000);
+            crate::ram::CAMERA_ALT_ACTIVE.set(x.b, 1);
             x.wait(4, Step::S0Tiles)
         },
-        S0Tiles = S0_TILES => |x| {
-            let end = crate::video::load_grid(x.b, crate::video::Grid::Layer2, 197, 0x917000);
+        S0Tiles = 0xfc6a8 => |x| {
+            let end = crate::video::load_grid(x.b, crate::video::Grid::Layer2, 197, SCROLL2.0 + 0x3000);
             crate::video::load_grid(x.b, crate::video::Grid::Layer2, 198, end.destination);
-            wr16(x.b, VIDEO, 0x24ce);
-            wr16(x.b, STATE + f::MARK, 0x728);
-            wr32(x.b, STATE + f::TEXT, 0xfc938);
+            VIDEO.set(x.b, 0x24ce);
+            Obj(STATE).set_u16(x.b, f::MARK, 0x728);
+            Obj(STATE).set_u32(x.b, f::TEXT, RANKING_TEXT.addr());
             Flow::Done
         },
-        SaFaded = SA_FADED => |x| {
+        SaFaded = 0xfc8a8 => |x| {
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
             reset_objects(x);
             x.wait(1, Step::SaVideo)
         },
-        SaVideo = SA_VIDEO => |x| {
-            wr16(x.b, VIDEO, 0x12c0);
+        SaVideo = 0xfc8ce => |x| {
+            VIDEO.set(x.b, 0x12c0);
             x.wait(4, Step::SaCleared)
         },
-        SaCleared = SA_CLEARED => |x| {
+        SaCleared = 0xfc8dc => |x| {
             clear_layers(x);
-            wr8(x.b, super::mode::SUB, 0);
-            wr16(x.b, super::mode::STEP, 0);
-            wr8(x.b, A5 + 0x36, 0);
-            for off in [0x4bau32, 0x50a, 0x55a] {
-                wr16(x.b, A5 + off, 0);
+            super::mode::SUB.set(x.b, 0);
+            super::mode::STEP_WORD.set(x.b, 0);
+            crate::ram::CAMERA_ALT_ACTIVE.set(x.b, 0);
+            for v in [Word(sv::SCROLL_2.0), sv::CAMERA_Y, sv::CAMERA_2_Y] {
+                v.set(x.b, 0);
             }
             crate::families::small::startup_done(x.b, false);
             crate::families::items::clear_picked_up(x.b);
-            wr8(x.b, A5 + 0x30, 0);
+            crate::ram::GAME.set(x.b, 0);
             Flow::Done
         },
     }
 }
 
 fn next_step(x: &mut Ctx) {
-    let s = rd8(x.b, STATE).wrapping_add(2);
-    wr8(x.b, STATE, s);
+    let s = Obj(STATE).u8(x.b, f::STEP).wrapping_add(2);
+    Obj(STATE).set_u8(x.b, f::STEP, s);
 }
 
 /// The three cleared layers.
@@ -166,7 +182,7 @@ struct Speed {
 fn speed(x: &mut Ctx) -> Speed {
     let mut buttons = 0;
     for k in 0..4 {
-        buttons |= rd8(x.b, A5 + k);
+        buttons |= sv::buttons(k).get(x.b);
     }
     let top_buttons = buttons & 0xf0;
     Speed { speed: if top_buttons == 0 { 0x10000 } else { 0x4000 }, top_buttons }
@@ -175,58 +191,55 @@ fn speed(x: &mut Ctx) -> Speed {
 /// Advances the background scroll by one frame; camera 2 follows it.
 fn scroll(x: &mut Ctx) -> Speed {
     let v = speed(x);
-    let s = rd32(x.b, SCROLL).wrapping_sub(v.speed);
-    wr32(x.b, SCROLL, s);
-    wr16(x.b, A5 + 0x55a, (s >> 16) as u16);
+    let s = SCROLL.get(x.b).wrapping_sub(v.speed);
+    SCROLL.set(x.b, s);
+    sv::CAMERA_2_Y.set(x.b, (s >> 16) as u16);
     v
 }
 
 fn s0_prepare(x: &mut Ctx) -> Flow {
     next_step(x);
-    wr16(x.b, STATE + f::TIMER, 300);
+    Obj(STATE).set_u16(x.b, f::TIMER, 300);
     crate::sound::play_global(x.b, crate::sound::CMD_27_B);
     reset_objects(x);
     x.wait(1, Step::S0Video)
 }
-const S0_VIDEO: u32 = 0xfc5cc;
-const S0_PALETTES: u32 = 0xfc5e2;
-const S0_TILES: u32 = 0xfc6a8;
 
 /// Step 2: the ranking scrolls; every 40 pixel lines, the next text lines
 /// are added. When the text ends (negative byte), next step.
 fn s2_scroll(x: &mut Ctx) -> Flow {
     render(x);
     scroll(x);
-    let d0 = rd16(x.b, STATE + f::MARK).wrapping_sub(rd16(x.b, A5 + 0x55a));
+    let d0 = Obj(STATE).u16(x.b, f::MARK).wrapping_sub(sv::CAMERA_2_Y.get(x.b));
     if d0 as u8 != 40 {
         return Flow::Done;
     }
-    let camera = rd16(x.b, A5 + 0x55a);
-    wr16(x.b, STATE + f::MARK, camera);
-    let mut a4 = rd32(x.b, STATE + f::TEXT);
+    let camera = sv::CAMERA_2_Y.get(x.b);
+    Obj(STATE).set_u16(x.b, f::MARK, camera);
+    let mut a4 = Obj(STATE).u32(x.b, f::TEXT);
     for counter in (0..6u8).rev() {
-        if rd8(x.b, a4) & 0x80 != 0 {
+        if tables::byte(x.b, a4) & 0x80 != 0 {
             next_step(x);
             return Flow::Done;
         }
         // 0x517ba: a ranking line (variant = counter), its setting is the next byte of the text, which
         // only advances if the effect is created
-        let setting = rd8(x.b, a4);
+        let setting = tables::byte(x.b, a4);
         if crate::effects_aids::effect_44(x.b, counter, setting).is_some() {
             a4 += 1;
         }
     }
-    if rd8(x.b, a4) & 0x80 != 0 {
+    if tables::byte(x.b, a4) & 0x80 != 0 {
         next_step(x);
         return Flow::Done;
     }
-    wr32(x.b, STATE + f::TEXT, a4);
+    Obj(STATE).set_u32(x.b, f::TEXT, a4);
     Flow::Done
 }
 
 /// Step 4: the score cartridges (one object per player who played), after ten game frames.
 fn s4_scores(x: &mut Ctx) -> Flow {
-    if (rd16(x.b, FRAME_COUNT) as i16) < 10 {
+    if (FRAME_COUNT.get(x.b) as i16) < 10 {
         return Flow::Done;
     }
     render(x);
@@ -240,24 +253,24 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     let mut rank = 3u8;
     let mut a4 = SCORES;
     for counter in (0..4u8).rev() {
-        if rd32(x.b, a4) != 0 || rd32(x.b, a4 + 4) != 0 {
+        if Obj(a4).u32(x.b, SCORE) != 0 || Obj(a4).u32(x.b, SCORE + 4) != 0 {
             let o = end_screen(x.b, 5, counter);
             let o = or_rest(x.b, o);
-            wr8(x.b, o.0 + 0x42, rank);
+            o.set_u8(x.b, RANK, rank);
             rank = rank.wrapping_sub(1);
-            wr32(x.b, o.0 + 0x4c, a4);
+            o.set_u32(x.b, obj::SIGNAL, a4);
         }
         a4 += 0x10;
     }
     let mut rank = 3u8;
     a4 = SCORES;
     for counter in (0..4u8).rev() {
-        if rd8(x.b, a4) != 0 {
-            if rd8(x.b, a4 + 14) != 0 {
+        if Obj(a4).u8(x.b, PLAYED) != 0 {
+            if Obj(a4).u8(x.b, NAMED) != 0 {
                 let o = end_screen(x.b, 9, counter);
                 let o = or_rest(x.b, o);
-                wr8(x.b, o.0 + 0x42, rank);
-                wr32(x.b, o.0 + 0x4c, a4);
+                o.set_u8(x.b, RANK, rank);
+                o.set_u32(x.b, obj::SIGNAL, a4);
             }
             rank = rank.wrapping_sub(1);
         }
@@ -270,12 +283,12 @@ fn s4_scores(x: &mut Ctx) -> Flow {
 fn s6_scenery(x: &mut Ctx) -> Flow {
     render(x);
     scroll(x);
-    if rd16(x.b, A5 + 0x55a) != 1064 {
+    if sv::CAMERA_2_Y.get(x.b) != 1064 {
         return Flow::Done;
     }
     next_step(x);
-    wr32(x.b, SCROLL_2, 0x0108_0000);
-    wr16(x.b, A5 + 0x4ba, 264);
+    SCROLL_2.set(x.b, 0x0108_0000);
+    Word(sv::SCROLL_2.0).set(x.b, 264);
     Flow::Done
 }
 
@@ -283,14 +296,14 @@ fn s6_scenery(x: &mut Ctx) -> Flow {
 fn s8_scenery(x: &mut Ctx) -> Flow {
     render(x);
     let speed = scroll(x).speed;
-    let v = rd32(x.b, SCROLL_2).wrapping_sub(speed);
-    wr32(x.b, SCROLL_2, v);
-    wr16(x.b, A5 + 0x4ba, (v >> 16) as u16);
-    if rd16(x.b, A5 + 0x55a) != 832 {
+    let v = SCROLL_2.get(x.b).wrapping_sub(speed);
+    SCROLL_2.set(x.b, v);
+    Word(sv::SCROLL_2.0).set(x.b, (v >> 16) as u16);
+    if sv::CAMERA_2_Y.get(x.b) != 832 {
         return Flow::Done;
     }
     next_step(x);
-    wr16(x.b, STATE + f::TIMER, 300);
+    Obj(STATE).set_u16(x.b, f::TIMER, 300);
     Flow::Done
 }
 
@@ -298,24 +311,21 @@ fn s8_scenery(x: &mut Ctx) -> Flow {
 fn sa_leave(x: &mut Ctx) -> Flow {
     let mut buttons = 0;
     for k in 0..4 {
-        buttons |= rd8(x.b, A5 + 0xc + k);
+        buttons |= sv::pressed(k).get(x.b);
     }
     if buttons & 0xf0 != 0 {
-        wr16(x.b, STATE + f::TIMER, 1);
+        Obj(STATE).set_u16(x.b, f::TIMER, 1);
     }
-    let left = rd16(x.b, STATE + f::TIMER).wrapping_sub(1);
-    wr16(x.b, STATE + f::TIMER, left);
+    let left = Obj(STATE).u16(x.b, f::TIMER).wrapping_sub(1);
+    Obj(STATE).set_u16(x.b, f::TIMER, left);
     if left != 0 {
         render(x);
         return Flow::Done;
     }
     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
-    wr8(x.b, A5 + 0x48e, 0xf);
-    wr16(x.b, A5 + 0x490, 3);
+    fading::PAGES.set(x.b, 0xf);
+    fading::DELAY.set(x.b, 3);
     x.subroutine(crate::tasks::fading::descent, Step::SaFaded)
 }
-const SA_FADED: u32 = 0xfc8a8;
-const SA_VIDEO: u32 = 0xfc8ce;
-const SA_CLEARED: u32 = 0xfc8dc;
 
 pub const NATIVES: &[Native] = &[];

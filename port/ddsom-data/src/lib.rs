@@ -43,6 +43,12 @@ use std::sync::OnceLock;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct RomAddr(pub u32);
 
+impl From<RomAddr> for u32 {
+    fn from(a: RomAddr) -> u32 {
+        a.0
+    }
+}
+
 impl RomAddr {
     /// The address `n` bytes further (wrapping like the 68000 address arithmetic).
     pub fn offset(self, n: i32) -> RomAddr {
@@ -66,6 +72,14 @@ pub struct GameData {
     pub set: DataFile,
     /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
     pub dialogs: DataFile,
+    /// Tables of the scene sequences (entry, exit, tally, shop, bonus...: `scene/` of the game).
+    pub scenes: DataFile,
+    /// Demonstration scripts and recorded inputs, viewer names, credits text (`modes/demo` of the game).
+    pub misc: DataFile,
+    /// Texts of the character layer, descriptor tables, balloon names, `@`-terminated names.
+    pub texts: Texts,
+    /// The other tables of the screens: interface panels, mode screens, service menu, credits (docs/fin.md, L11).
+    pub screens: DataFile,
     /// Tables of the players read by name or address (`player/`, `combat/`, `families/player/`; docs/fin.md, L10).
     pub player_tables: PlayerTables,
     /// Per-character tables of the players (`data/players.json`) and combat reaction tables (`data/combat.json`).
@@ -75,7 +89,7 @@ pub struct GameData {
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 12] = [
+    pub const FILES: [&'static str; 16] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -85,6 +99,10 @@ impl GameData {
         "sprites/tables.json",
         "data/set.json",
         "data/dialogs.json",
+        "data/scenes.json",
+        "data/misc.json",
+        "texts.json",
+        "data/screens.json",
         "data/player_tables.json",
         "data/players.json",
         "data/combat.json",
@@ -102,9 +120,13 @@ impl GameData {
             sprite_tables: SpriteTables::load(&dir.join(Self::FILES[6]))?,
             set: DataFile::load(&dir.join(Self::FILES[7]))?,
             dialogs: DataFile::load(&dir.join(Self::FILES[8]))?,
-            player_tables: PlayerTables::load(&dir.join(Self::FILES[9]))?,
-            players: DataFile::load(&dir.join(Self::FILES[10]))?,
-            combat: DataFile::load(&dir.join(Self::FILES[11]))?,
+            scenes: DataFile::load(&dir.join(Self::FILES[9]))?,
+            misc: DataFile::load(&dir.join(Self::FILES[10]))?,
+            texts: Texts::load(&dir.join(Self::FILES[11]))?,
+            screens: DataFile::load(&dir.join(Self::FILES[12]))?,
+            player_tables: PlayerTables::load(&dir.join(Self::FILES[13]))?,
+            players: DataFile::load(&dir.join(Self::FILES[14]))?,
+            combat: DataFile::load(&dir.join(Self::FILES[15]))?,
         })
     }
 }

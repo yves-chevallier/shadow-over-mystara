@@ -42,7 +42,7 @@ ZONES = [
     ("enemies", r"families/(enemy[^/]*(/.*)?|reactions(\.rs|/.*))$"),
     ("bosses", r"families/boss[^/]*(/.*)?$"),
     ("players", r"^(player/|families/player/|combat/|combat\.rs$)"),
-    ("screens", r"^(modes/|hud/|service/|scene/|credits[^/]*\.rs$|text\.rs$|popups\.rs$)"),
+    ("screens", r"^(modes/|hud/|service/|scene/|screens/|credits[^/]*\.rs$|text\.rs$|popups\.rs$)"),
     ("families_common", r"^families/(cx|mod|small|creators)\.rs$"),
     ("engine", r""),
 ]

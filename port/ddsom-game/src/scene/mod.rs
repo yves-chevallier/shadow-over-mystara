@@ -29,35 +29,35 @@ pub mod transition;
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::A5;
+use crate::ram::{Byte, Long, Word};
 use crate::objects::{pools, Obj};
 use crate::Native;
 
 /// Work RAM variables (offsets from A5) shared by the scene sequences.
 pub mod var {
+    use crate::ram::Byte;
     /// Game phase (byte, step of 4), step (byte), sub-step (word, step of 2).
     pub const PHASE: u32 = 0x2c;
-    pub const STEP: u32 = 0x2d;
+    pub const STEP: Byte = Byte::a5(0x2d);
     pub const SUB: u32 = 0x2e;
     /// Number of players in the game (alive at scene entry).
-    pub const PLAYERS: u32 = 0x35;
+    pub const PLAYERS: Byte = Byte::a5(0x35);
     /// Scene number (byte).
-    pub const SCENE: u32 = 0x34;
+    pub const SCENE: Byte = Byte::a5(0x34);
     /// Non-zero byte: the scene is in transition, the world waits.
-    pub const HOLD: u32 = 0x33;
+    pub const HOLD: Byte = Byte::a5(0x33);
     /// Non-zero byte: the players no longer respond to commands.
-    pub const PLAYERS_FROZEN: u32 = 0x4a;
+    pub const PLAYERS_FROZEN: Byte = Byte::a5(0x4a);
     /// Mask of locked buttons (read by the input copy).
-    pub const INPUT_LOCK: u32 = 0x43;
+    pub const INPUT_LOCK: Byte = Byte::a5(0x43);
     /// Palette fade: page mask, number of steps left, delay between steps.
     /// Main camera and alternate camera (chosen if `USE_ALT_CAMERA` is non-zero).
-    pub const CAMERA: u32 = 0x4fe;
-    pub const ALT_CAMERA: u32 = 0x54e;
-    pub const USE_ALT_CAMERA: u32 = 0x36;
+    pub const USE_ALT_CAMERA: Byte = Byte::a5(0x36);
 }
 
 /// Player records: four of 0x200 bytes.
-pub const PLAYERS: u32 = A5 + 0x5de;
+pub const PLAYERS: u32 = crate::ram::PLAYERS.base;
 pub const PLAYER_STRIDE: u32 = 0x200;
 /// Player fields read by the sequences.
 pub mod player {
@@ -87,16 +87,16 @@ pub mod fading {
 
     /// Tasks: full rise and descent, descent and rise by the state's number of steps, fade to white,
     /// per-component fade from white to the palettes.
-    pub const RISE: u32 = 0x14ba;
-    pub const DESCENT: u32 = 0x14d0;
-    pub const DESCENT_STEP: u32 = 0x14de;
-    pub const RISE_STEP: u32 = 0x14c8;
-    pub const TO_WHITE: u32 = 0x1ccf8;
-    pub const FROM_WHITE: u32 = 0x1ced4;
+    pub const RISE: crate::data::RomAddr = crate::data::RomAddr(0x14ba);
+    pub const DESCENT: crate::data::RomAddr = crate::data::RomAddr(0x14d0);
+    pub const DESCENT_STEP: crate::data::RomAddr = crate::data::RomAddr(0x14de);
+    pub const RISE_STEP: crate::data::RomAddr = crate::data::RomAddr(0x14c8);
+    pub const TO_WHITE: crate::data::RomAddr = crate::data::RomAddr(0x1ccf8);
+    pub const FROM_WHITE: crate::data::RomAddr = crate::data::RomAddr(0x1ced4);
 
     /// Creates the fade task `entry` in slot 0x10 (`jsr 0x9b6`).
-    pub fn launch(b: &mut cps2::Cps2Bus, entry: u32) {
-        crate::kernel::create_task(b, 0x10, entry);
+    pub fn launch(b: &mut cps2::Cps2Bus, entry: impl Into<u32>) {
+        crate::kernel::create_task(b, 0x10, entry.into());
     }
 }
 
@@ -117,41 +117,24 @@ impl<'a> Ctx<'a> {
     // --- work RAM variables ---------------------------------------------------------
 
     pub fn v8(&mut self, off: u32) -> u8 {
-        rd8(self.b, A5 + off)
+        Byte(A5.wrapping_add(off)).get(self.b)
     }
     pub fn v16(&mut self, off: u32) -> u16 {
-        rd16(self.b, A5 + off)
+        Word(A5.wrapping_add(off)).get(self.b)
     }
     pub fn set_v8(&mut self, off: u32, v: u8) {
-        wr8(self.b, A5 + off, v)
+        Byte(A5.wrapping_add(off)).set(self.b, v)
     }
     pub fn set_v16(&mut self, off: u32, v: u16) {
-        wr16(self.b, A5 + off, v)
+        Word(A5.wrapping_add(off)).set(self.b, v)
     }
     pub fn set_v32(&mut self, off: u32, v: u32) {
-        wr32(self.b, A5 + off, v)
+        Long(A5.wrapping_add(off)).set(self.b, v)
     }
-    /// Word or long at an absolute address (temporary variables, ROM tables as data).
-    pub fn rd16(&mut self, addr: u32) -> u16 {
-        rd16(self.b, addr)
-    }
-    pub fn rd32(&mut self, addr: u32) -> u32 {
-        rd32(self.b, addr)
-    }
-    pub fn rd8(&mut self, addr: u32) -> u8 {
-        rd8(self.b, addr)
-    }
-    pub fn wr16(&mut self, addr: u32, v: u16) {
-        wr16(self.b, addr, v)
-    }
-    /// Program-space word (table addressed relative to the PC in the original).
+    /// Program-space word (table addressed relative to the PC in the original), for the phase table of the game
+    /// task (`tasks/game.rs`).
     pub fn prog16(&mut self, addr: u32) -> u16 {
         self.b.fetch16(addr)
-    }
-    /// Program-space byte.
-    pub fn prog8(&mut self, addr: u32) -> u8 {
-        let word = self.b.fetch16(addr & !1);
-        if addr & 1 == 0 { (word >> 8) as u8 } else { word as u8 }
     }
 
     // --- steps ----------------------------------------------------------------------------------
@@ -171,20 +154,20 @@ impl<'a> Ctx<'a> {
     /// End of the sequence: next phase, steps reset to zero, no more lock.
     pub fn end_scene(&mut self) {
         self.leave_phase();
-        self.set_v8(var::HOLD, 0);
-        self.set_v8(var::PLAYERS_FROZEN, 0);
+        var::HOLD.set(self.b, 0);
+        var::PLAYERS_FROZEN.set(self.b, 0);
     }
     /// Next phase (`A5+0x2c` += 4), step and sub-step to zero.
     pub fn leave_phase(&mut self) {
         let phase = self.v8(var::PHASE).wrapping_add(4);
         self.set_v8(var::PHASE, phase);
-        self.set_v8(var::STEP, 0);
+        var::STEP.set(self.b, 0);
         self.set_v16(var::SUB, 0);
     }
     /// Start of a sequence: the scene and the players are locked.
     pub fn lock(&mut self) {
-        self.set_v8(var::HOLD, 1);
-        self.set_v8(var::PLAYERS_FROZEN, 1);
+        var::HOLD.set(self.b, 1);
+        var::PLAYERS_FROZEN.set(self.b, 1);
     }
 
     /// End of a sequence frame: world update (0x1c86e), then sprite list (0x1de96). No
@@ -216,8 +199,8 @@ impl<'a> Ctx<'a> {
 
     /// Takes one frame off the timer (word); true when it reaches zero.
     pub fn tick(&mut self, timer: u32) -> bool {
-        let left = self.rd16(timer).wrapping_sub(1);
-        self.wr16(timer, left);
+        let left = Word(timer).get(self.b).wrapping_sub(1);
+        Word(timer).set(self.b, left);
         left == 0
     }
 
@@ -228,14 +211,14 @@ impl<'a> Ctx<'a> {
         fading::DELAY.set(self.b, 2);
         fading::PAGES.set(self.b, 15);
         crate::palette::no_brightness(self.b);
-        self.start_fade_task(crate::scene::fading::RISE);
+        self.start_fade_task(crate::scene::fading::RISE.0);
     }
     /// Variant: fade one level per step (`A5+0x48f` = 1), without going through black.
     pub fn fade_in_stepped(&mut self) {
         fading::DELAY.set(self.b, 2);
         fading::PAGES.set(self.b, 15);
         fading::STEP.set(self.b, 1);
-        self.start_fade_task(crate::scene::fading::FROM_WHITE);
+        self.start_fade_task(crate::scene::fading::FROM_WHITE.0);
     }
     fn start_fade_task(&mut self, entry: u32) {
         crate::kernel::create_task(self.b, 0x10, entry);
@@ -258,15 +241,15 @@ impl<'a> Ctx<'a> {
     /// Message finished (byte `+0x22` non-zero)?
     pub fn message_done(&mut self, slot: u32) -> bool {
         let o = self.load_obj(slot);
-        o.u8(self.b, 0x22) != 0
+        o.u8(self.b, crate::screens::obj::MESSAGE_DONE) != 0
     }
 
     /// Stores an object as 16 bits (`movea.w`/`move.w An` of the original).
     pub fn store_obj(&mut self, slot: u32, o: Obj) {
-        self.wr16(slot, o.0 as u16);
+        Word(slot).set(self.b, o.0 as u16);
     }
     pub fn load_obj(&mut self, slot: u32) -> Obj {
-        Obj(self.rd16(slot) as i16 as i32 as u32 & 0xff_ffff)
+        Obj(Word(slot).get(self.b) as i16 as i32 as u32 & 0xff_ffff)
     }
 
     // --- players ---------------------------------------------------------------------------------
@@ -276,8 +259,8 @@ impl<'a> Ctx<'a> {
     pub fn players_in_state(&mut self, state: u8) -> bool {
         (0..4u32).all(|k| {
             let p = PLAYERS + k * PLAYER_STRIDE;
-            let alive = rd8(self.b, p + player::ACTIVE) != 0 && rd16(self.b, p + player::HEALTH) != 0;
-            !alive || rd8(self.b, p + player::STATE) == state
+            let alive = Obj(p).u8(self.b, player::ACTIVE) != 0 && Obj(p).u16(self.b, player::HEALTH) != 0;
+            !alive || Obj(p).u8(self.b, player::STATE) == state
         })
     }
 }

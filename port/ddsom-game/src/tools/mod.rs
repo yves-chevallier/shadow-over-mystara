@@ -605,8 +605,8 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
 fn patches() -> Vec<cps2::Patch> {
     let mut v = vec![
         cps2::Patch { entry: crate::player::scripted::END_BY_SCENE_ENTRY.0, apply: player::scripted::patch_end_by_scene },
-        cps2::Patch { entry: crate::scene::exit::SHARED_NEXT_ENTRY, apply: scene::exit::patch_shared_next },
-        cps2::Patch { entry: crate::service::memory::CHECK, apply: service::patch_instant_check },
+        cps2::Patch { entry: crate::scene::exit::SHARED_NEXT_ENTRY.0, apply: scene::exit::patch_shared_next },
+        cps2::Patch { entry: crate::service::memory::CHECK.0, apply: service::patch_instant_check },
     ];
     v.extend(sprites::EMPTY_FRAME_PATCHES);
     v

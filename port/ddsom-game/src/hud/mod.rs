@@ -40,51 +40,58 @@ mod status;
 
 pub use slot::forget_displayed;
 
+use crate::credits::CoinSlot;
+use crate::screens::tables::Rom;
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::A5;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
+use crate::ram::Byte;
+use crate::objects::Obj;
 
 /// Work RAM variables (absolute addresses or offsets from A5).
 pub mod var {
+    use crate::ram::Byte;
     /// Start buttons: current state and previous state (one bit per player).
-    pub const START_NOW: u32 = 0x04;
-    pub const START_BEFORE: u32 = 0x0a;
+    pub const START_NOW: Byte = Byte::a5(0x04);
+    pub const START_BEFORE: Byte = Byte::a5(0x0a);
     /// Inputs per player (4 bytes) and rising edges (`+0x0c`, 4 bytes).
     pub const INPUT: u32 = 0x00;
     pub const PRESSED: u32 = 0x0c;
     /// Coin slot mode (0 to 11): selects the coin counter of a slot.
-    pub const COIN_MODE: u32 = 0x1d;
+    pub const COIN_MODE: Byte = Byte::a5(0x1d);
     /// Price of a game in coins.
-    pub const PRICE: u32 = 0x1e;
+    pub const PRICE: Byte = Byte::a5(0x1e);
     /// Two-credit game.
-    pub const PRICE_TWO: u32 = 0x457;
+    pub const PRICE_TWO: Byte = Byte::a5(0x457);
     /// "Continue" mode: credits are used to resume a game.
-    pub const CONTINUE_MODE: u32 = 0x25;
+    pub const CONTINUE_MODE: Byte = Byte::a5(0x25);
     /// Continue allowed.
-    pub const CONTINUE_ALLOWED: u32 = 0x23;
-    pub const GAME_ON: u32 = 0x30;
-    pub const PHASE: u32 = 0x2c;
-    pub const STEP: u32 = 0x2d;
+    pub const CONTINUE_ALLOWED: Byte = Byte::a5(0x23);
+    pub const GAME_ON: Byte = Byte::a5(0x30);
+    pub const PHASE: Byte = Byte::a5(0x2c);
+    pub const STEP: Byte = Byte::a5(0x2d);
     /// Display mode of the panels (see the module).
-    pub const DISPLAY: u32 = 0x3c;
+    pub const DISPLAY: Byte = Byte::a5(0x3c);
     /// Pause: one bit per player.
-    pub const PAUSE: u32 = 0x4a;
+    pub const PAUSE: Byte = Byte::a5(0x4a);
     /// Settings byte (bit 5: second set of texts).
-    pub const SETTINGS: u32 = 0x6d;
+    pub const SETTINGS: Byte = Byte::a5(0x6d);
+    /// Non-zero in front of a boss (h): the frames of players 3 and 4 start one row lower.
+    pub const BOSS_ROW: Byte = Byte::a5(0x50);
+    /// Language of the texts (word: non-zero, the second set of tables).
+    pub const LANGUAGE: crate::ram::Word = crate::ram::Word::a5(0x70);
     /// Layout: number of slots = 4 - value; bit 0: narrow columns.
-    pub const LAYOUT: u32 = 0x344;
-    /// First panel record, first player, first coin counter.
+    pub const LAYOUT: Byte = Byte::a5(0x344);
+    /// First panel record (0x50 bytes each).
     pub const PANELS: u32 = 0x30e;
-    pub const PLAYERS: u32 = 0x5de;
-    pub const COINS: u32 = 0x44e;
     /// Last display mode processed, and last pause value (task variables).
-    pub const SEEN_DISPLAY: u32 = 0xff_0f06;
-    pub const SEEN_PAUSE: u32 = 0xff_0f07;
+    pub const SEEN_DISPLAY: Byte = Byte(0xff_0f06);
+    pub const SEEN_PAUSE: Byte = Byte(0xff_0f07);
     /// Frozen screen (A5-0x5b8e): the banners are not cleared.
-    pub const FROZEN: u32 = 0xff_2472;
+    pub const FROZEN: Byte = Byte(0xff_2472);
 }
 
 /// Fields of a panel (0x50-byte record).
@@ -119,6 +126,8 @@ pub mod panel {
     pub const STEP: u32 = 0x2c;
     pub const SUBSTEP: u32 = 0x2d;
     pub const DELAY_2E: u32 = 0x2e;
+    /// Byte cleared at the task entry (h: unused).
+    pub const BYTE_30: u32 = 0x30;
     pub const LAST_MODE: u32 = 0x31;
     /// Frames elapsed in the state (long).
     pub const FRAMES: u32 = 0x32;
@@ -145,6 +154,19 @@ pub mod player {
     pub const SCORE: u32 = 0x110;
     pub const MONEY: u32 = 0x114;
     pub const ITEMS: u32 = 0x118;
+    /// Low byte of the score: its last two digits.
+    pub const SCORE_LOW: u32 = SCORE + 3;
+    /// Selection rows (16 bytes per family), then the row of each entry.
+    pub const SELECTIONS: u32 = 0x120;
+    pub const SELECTION_ROWS: u32 = 0x150;
+    /// Selections held, and selection family (2: none).
+    pub const SELECTION_COUNT: u32 = 0x15c;
+    pub const SELECTION_KIND: u32 = 0x15d;
+    /// Name: eight letters.
+    pub const NAME: u32 = 0x160;
+    /// Speed class, and a setting given to character 5 (h).
+    pub const SPEED_CLASS: u32 = 0x162;
+    pub const SETTING_16B: u32 = 0x16b;
 }
 
 /// The three records of a slot.
@@ -152,50 +174,50 @@ pub mod player {
 pub struct Slot {
     pub panel: u32,
     pub player: u32,
-    pub coins: u32,
+    pub coins: CoinSlot,
 }
 
 impl Slot {
     pub fn new(k: u32) -> Slot {
         Slot {
             panel: A5 + var::PANELS + panel::SIZE * k,
-            player: A5 + var::PLAYERS + player::SIZE * k,
-            coins: A5 + var::COINS + 0x10 * k,
+            player: crate::ram::PLAYERS.nth(k).0,
+            coins: CoinSlot::nth(k),
         }
     }
 
     /// Byte, word, long of the panel.
     pub fn p8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
-        rd8(b, self.panel + off)
+        Obj(self.panel).u8(b, off)
     }
     pub fn p16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
-        rd16(b, self.panel + off)
+        Obj(self.panel).u16(b, off)
     }
     pub fn p32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
-        rd32(b, self.panel + off)
+        Obj(self.panel).u32(b, off)
     }
     pub fn set_p8(&self, b: &mut Cps2Bus, off: u32, v: u8) {
-        wr8(b, self.panel + off, v)
+        Obj(self.panel).set_u8(b, off, v)
     }
     pub fn set_p16(&self, b: &mut Cps2Bus, off: u32, v: u16) {
-        wr16(b, self.panel + off, v)
+        Obj(self.panel).set_u16(b, off, v)
     }
     pub fn set_p32(&self, b: &mut Cps2Bus, off: u32, v: u32) {
-        wr32(b, self.panel + off, v)
+        Obj(self.panel).set_u32(b, off, v)
     }
 
     /// Byte, word, long of the player.
     pub fn g8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
-        rd8(b, self.player + off)
+        Obj(self.player).u8(b, off)
     }
     pub fn g16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
-        rd16(b, self.player + off)
+        Obj(self.player).u16(b, off)
     }
     pub fn g32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
-        rd32(b, self.player + off)
+        Obj(self.player).u32(b, off)
     }
     pub fn set_g8(&self, b: &mut Cps2Bus, off: u32, v: u8) {
-        wr8(b, self.player + off, v)
+        Obj(self.player).set_u8(b, off, v)
     }
 
     /// Player number.
@@ -204,29 +226,21 @@ impl Slot {
     }
 }
 
-/// Work RAM byte at an offset from A5.
-pub fn v8(b: &mut Cps2Bus, off: u32) -> u8 {
-    rd8(b, A5 + off)
-}
 
 /// The slots updated according to the layout: 4, 3, then always at least 2.
 fn slot_count(b: &mut Cps2Bus) -> u32 {
-    match v8(b, var::LAYOUT) as i8 {
+    match var::LAYOUT.get(b) as i8 {
         0 => 4,
         1 => 3,
         _ => 2,
     }
 }
 
-/// Addresses of the original (task resume).
-mod at {
-    /// Task entry, and resume of the wait for the game start.
-    /// Layout per cabinet type (`A5+0x20`), PC-relative byte table.
-    pub const LAYOUTS: u32 = 0x15164;
-}
+/// Layout per cabinet type (`A5+0x20`), PC-relative byte table.
+const LAYOUTS: Rom = Rom::at(0x15164);
 
 /// Cabinet type (number of players, h): selects the layout.
-const CABINET: u32 = 0x20;
+const CABINET: Byte = Byte::a5(0x20);
 
 crate::steps! {
     /// Task steps (the top of the loop, `0x15178`, is never a resume: the entry chains into it).
@@ -243,23 +257,24 @@ crate::steps! {
 /// wait for the game start.
 fn entry(x: &mut Ctx) -> Flow {
     for k in 0..4 {
-        let at = A5 + var::PANELS + k * panel::SIZE;
-        wr32(x.b, at, 0);
-        wr32(x.b, at + 4, 0);
-        for off in [panel::STEP, panel::SUBSTEP, 0x30] {
-            wr8(x.b, at + off, 0);
+        let at = Obj(A5 + var::PANELS + k * panel::SIZE);
+        at.set_u32(x.b, panel::INDEX, 0);
+        at.set_u32(x.b, panel::STATE, 0);
+        for off in [panel::STEP, panel::SUBSTEP, panel::BYTE_30] {
+            at.set_u8(x.b, off, 0);
         }
-        wr32(x.b, at + panel::FRAMES, 0);
+        at.set_u32(x.b, panel::FRAMES, 0);
     }
-    wr32(x.b, 0xff_0eca, 0);
-    wr8(x.b, 0xff_0ec6, 0);
-    wr8(x.b, var::SEEN_DISPLAY, 0x80);
-    wr8(x.b, 0xff_0f08, 0);
-    x.set_v8(0x5f, 1);
-    let pause = x.v8(var::PAUSE);
-    wr8(x.b, var::SEEN_PAUSE, pause);
+    let over = Obj(status::over::RECORD);
+    over.set_u32(x.b, status::over::STATE, 0);
+    over.set_u8(x.b, status::over::ACTIVE, 0);
+    var::SEEN_DISPLAY.set(x.b, 0x80);
+    status::line::SEEN_VALUE.set(x.b, 0);
+    status::line::ON.set(x.b, 1);
+    let pause = var::PAUSE.get(x.b);
+    var::SEEN_PAUSE.set(x.b, pause);
     for k in 1..4 {
-        x.set_v8(var::PANELS + k * panel::SIZE + panel::INDEX, k as u8);
+        Slot::new(k).set_p8(x.b, panel::INDEX, k as u8);
     }
     crate::tasks::one_frame(x, Step::Starting)
 }
@@ -267,14 +282,14 @@ fn entry(x: &mut Ctx) -> Flow {
 /// 0x15146: layout according to the cabinet; outside the game, panels displayed in layout 0; in the game, wait for
 /// phase 4 (character choice) before the first update.
 fn starting(x: &mut Ctx) -> Flow {
-    let cabinet = x.v8(CABINET);
-    let layout = x.prog8(at::LAYOUTS + cabinet as u32);
-    x.set_v8(var::LAYOUT, layout);
-    if x.v8(var::GAME_ON) == 0 {
-        x.set_v8(var::DISPLAY, 1);
-        x.set_v8(var::LAYOUT, 0);
+    let cabinet = CABINET.get(x.b);
+    let layout = LAYOUTS.pc_byte(x.b, cabinet as u32);
+    var::LAYOUT.set(x.b, layout);
+    if var::GAME_ON.get(x.b) == 0 {
+        var::DISPLAY.set(x.b, 1);
+        var::LAYOUT.set(x.b, 0);
         slot::forget_displayed(x.b);
-    } else if (x.v8(var::PHASE) as i8) < 4 {
+    } else if (var::PHASE.get(x.b) as i8) < 4 {
         return crate::tasks::one_frame(x, Step::Starting);
     }
     tour(x)
@@ -291,24 +306,24 @@ pub const FORGET_DISPLAYED: Native = Native {
 
 /// One turn of the task: panel update according to the display mode, services, then cession.
 fn tour(x: &mut Ctx) -> Flow {
-    let mode = x.v8(var::DISPLAY);
-    let seen = rd8(x.b, var::SEEN_DISPLAY);
+    let mode = var::DISPLAY.get(x.b);
+    let seen = var::SEEN_DISPLAY.get(x.b);
     if (mode as i8) < 0 {
         if mode != seen {
-            wr8(x.b, var::SEEN_DISPLAY, mode);
+            var::SEEN_DISPLAY.set(x.b, mode);
             draw::clear_panels(x.b);
         }
     } else {
         if mode != seen {
             slot::forget_displayed(x.b);
         }
-        wr8(x.b, var::SEEN_DISPLAY, mode);
+        var::SEEN_DISPLAY.set(x.b, mode);
         for k in 0..slot_count(x.b) {
             slot::step(x, Slot::new(k));
         }
         status::status_line(x.b);
-        let pause = x.v8(var::PAUSE);
-        wr8(x.b, var::SEEN_PAUSE, pause);
+        let pause = var::PAUSE.get(x.b);
+        var::SEEN_PAUSE.set(x.b, pause);
         status::countdown(x);
     }
     // 0x19b2a, 0x19b9c: the pending events credited to the players' counters

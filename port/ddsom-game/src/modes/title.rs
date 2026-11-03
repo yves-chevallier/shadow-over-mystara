@@ -6,16 +6,19 @@
 //! Waits within a step (object pool full, fade in progress) yield one frame to
 //! the scheduler and resume at a Rust step (`steps!`).
 
+use crate::hw::video::{palette, regs, SCRATCH, SCROLL2, SCROLL3, TEXT};
+use crate::ram::Long;
+use crate::screens::tables::{self, Rom};
 use super::{mode, Block, Flow, Sequence};
 use crate::scene::fading;
 use crate::effects_aids::scenery_6;
 use crate::families::creators::set_15_pure;
 use crate::palette::{load_palette_set, load_palette_page};
 use crate::video::{load_grid, clear_layer, Layer, Grid};
-use crate::mem::{rd16, rd8, rd32, wr16, wr32, wr8};
 use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
+use crate::screens::obj;
 
 /// Fields of the state block (offsets from `mode::BASE`).
 mod f {
@@ -35,18 +38,19 @@ mod f {
 
 /// Work RAM variables (offsets from A5).
 mod var {
+    use crate::ram::{Byte, Word};
     pub const VIDEO_FLAGS: u32 = 0x12;
     pub const LAYERS: u32 = 0x14;
-    pub const REGION: u32 = 0x70;
-    pub const SCREEN_TYPE: u32 = 0x36;
-    pub const SCROLL_1_X: u32 = 0x4b6;
-    pub const SCROLL_2_Y: u32 = 0x4ba;
-    pub const CAMERA_X: u32 = 0x506;
-    pub const CAMERA_Y: u32 = 0x50a;
-    pub const CAMERA_2_X: u32 = 0x556;
-    pub const CAMERA_2_Y: u32 = 0x55a;
-    pub const CPS_COPY: u32 = 0x534;
-    pub const GAUGE_SKIP: u32 = 0x7fb2;
+    pub const REGION: Word = Word::a5(0x70);
+    pub const SCREEN_TYPE: Byte = Byte::a5(0x36);
+    pub const SCROLL_1_X: Word = Word::a5(0x4b6);
+    pub const SCROLL_2_Y: Word = Word::a5(0x4ba);
+    pub const CAMERA_X: Word = Word::a5(0x506);
+    pub const CAMERA_Y: Word = Word::a5(0x50a);
+    pub const CAMERA_2_X: Word = Word::a5(0x556);
+    pub const CAMERA_2_Y: Word = Word::a5(0x55a);
+    pub const CPS_COPY: Word = Word::a5(0x534);
+    pub const GAUGE_SKIP: Word = Word::a5(0x7fb2);
 }
 
 /// Sounds and fade tasks of the titles.
@@ -59,13 +63,13 @@ const LAYER_BITS: u16 = 0xe;
 const FADE_PAGES_ALL: u8 = 0xf;
 /// Palette of the title screens.
 const TITLE_PALETTE: u16 = 0x53;
-const GFX_PLANE_1: u32 = 0x914000;
-const GFX_PLANE_2: u32 = 0x917000;
-const GFX_PLANE_1_START: u32 = 0x912000;
-const GFX_TABLE_B: u32 = 0x91b800;
-const CPS_REG_VIDEO: u32 = 0x804122;
-const CPS_REG_SCROLL: u32 = 0x804108;
-const SPRITE_CLEAR_AREA: u32 = 0x920000;
+const GFX_PLANE_1: u32 = SCROLL2.0;
+const GFX_PLANE_2: u32 = SCROLL2.0 + 0x3000;
+const GFX_PLANE_1_START: u32 = TEXT.base;
+const GFX_TABLE_B: u32 = SCROLL3.0 + 0x3800;
+/// Rights notice, and the pointers to its second line per region.
+const RIGHTS_TEXT: Rom = Rom::at(0xfacc4);
+const RIGHTS_BY_REGION: Rom = Rom::at(0xfad92);
 
 /// Screen of sub-mode `sub`, if it is rewritten here.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
@@ -156,14 +160,13 @@ fn t00_reset(x: &mut Ctx) -> Flow {
     x.set_v16(var::LAYERS, 0x12c0);
     x.wait(4, Step::T00Load)
 }
-const T00_LOAD: u32 = 0xfa2fe;
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        T00Load = T00_LOAD => |x| {
-            x.set_v16(var::CAMERA_Y, 0x300);
+        T00Load = 0xfa2fe => |x| {
+            var::CAMERA_Y.set(x.b, 0x300);
             for off in [var::CAMERA_X, var::SCROLL_1_X, var::SCROLL_2_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
-                x.set_v16(off, 0);
+                off.set(x.b, 0);
             }
             load_title_palette(x);
             load_palette_page(x.b, 1, 2);
@@ -173,7 +176,7 @@ crate::steps! {
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Step::T00Fade)
         },
-        T00Fade = T00_FADE => |x| {
+        T00Fade = 0xfa384 => |x| {
             x.set_m8(f::TIMER, 30);
             x.set_m8(f::CUE_INDEX, 0);
             x.set_m8(0xd, 6);
@@ -183,36 +186,36 @@ crate::steps! {
             fade_setup(x, 3, FADE_PAGES_ALL);
             crate::tasks::fading::rise(x)
         },
-        T06Object = T06_OBJECT => t06_object,
-        T06Retry = T06_RETRY => t06_object,
-        T08Next = T08_NEXT => |x| {
+        T06Object = 0xfa472 => t06_object,
+        T06Retry = 0xfa486 => t06_object,
+        T08Next = 0xfa4bc => |x| {
             x.next_step();
             x.set_v16(var::LAYERS, 0x12ce);
-            x.set_v16(var::CAMERA_Y, 0x300);
+            var::CAMERA_Y.set(x.b, 0x300);
             x.set_m16(f::TIMER, 60);
             x.render();
             Flow::Done
         },
-        T0aRetry = T0A_RETRY => |x| {
+        T0aRetry = 0xfa4fc => |x| {
             // `bra 0xfa4e8`: retries without raising the flag again
             let Ok(set) = set_15_pure(x.b, 1) else {
                 return x.wait(1, Step::T0aRetry);
             };
-            wr32(x.b, set.0 + 0x4c, mode::BASE);
+            set.set_u32(x.b, obj::SIGNAL, mode::BASE);
             x.next_step();
             Flow::Done
         },
-        T10Object = T10_OBJECT => t10_object,
-        T10Retry = T10_RETRY => t10_object,
-        T12Scenery = T12_SCENERY => |x| {
+        T10Object = 0xfa56e => t10_object,
+        T10Retry = 0xfa582 => t10_object,
+        T12Scenery = 0xfa5ba => |x| {
             x.set_m8(f::CUE, 2);
             x.render();
             x.set_v16(var::LAYERS, 0x12ce);
             x.set_m16(f::TIMER, 60);
-            x.set_v16(var::CAMERA_Y, 0x70);
-            x.set_v16(var::CAMERA_X, 0);
-            x.set_v16(var::SCROLL_1_X, 0);
-            x.set_v16(var::SCROLL_2_Y, 0);
+            var::CAMERA_Y.set(x.b, 0x70);
+            var::CAMERA_X.set(x.b, 0);
+            var::SCROLL_1_X.set(x.b, 0);
+            var::SCROLL_2_Y.set(x.b, 0);
             let mut tile = 480u16;
             let mut destination = GFX_PLANE_1;
             for _ in 0..4 {
@@ -223,9 +226,9 @@ crate::steps! {
             x.set_v16(var::LAYERS, 0x09ce);
             x.wait(1, Step::T12Fade)
         },
-        T12Fade = T12_FADE => |x| {
+        T12Fade = 0xfa620 => |x| {
             fade_setup(x, 3, FADE_PAGES_ALL);
-            start_fade_task(x, crate::scene::fading::RISE);
+            start_fade_task(x, crate::scene::fading::RISE.0);
             x.next_step();
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
@@ -235,109 +238,108 @@ crate::steps! {
             x.set_m16(f::OBJECT, set.0 as u16);
             Flow::Done
         },
-        T18Retry = T18_RETRY => t18_object,
-        T18Loop = T18_LOOP => |x| {
+        T18Retry = 0xfa722 => t18_object,
+        T18Loop = 0xfa746 => |x| {
             x.push_return(Step::T18After);
             t18_sub(x)
         },
-        T18After = T18_AFTER => |x| {
+        T18After = 0xfa74a => |x| {
             x.render();
             let link = x.m16(f::DONE);
             let o = link as i16 as i32 as u32 & 0xff_ffff;
-            if rd8(x.b, o) != 0 {
+            if Obj(o).u8(x.b, Obj::ACTIVE) != 0 {
                 return x.wait(1, Step::T18Loop);
             }
             x.next_step();
             x.set_m16(f::TIMER, 60);
             Flow::Done
         },
-        T18SubRetry = T18_SUB_RETRY => |x| {
+        T18SubRetry = 0xfa77c => |x| {
             // `bra 0xfa762`
             t18_sub(x)
         },
-        T1aRetry = T1A_RETRY => t1a_object,
-        T1cText = T1C_TEXT => |x| {
+        T1aRetry = 0xfa7fc => t1a_object,
+        T1cText = 0xfa88e => |x| {
             x.render();
             crate::tasks::prompt::launch(x.b);
             x.set_m16(f::TIMER, 300);
-            crate::text::print(x.b, 0xfacc4);
-            let region = x.v16(var::REGION);
+            crate::text::print(x.b, RIGHTS_TEXT.addr());
+            let region = var::REGION.get(x.b);
             let index = region.wrapping_add(region) as i16 as i32 as u32;
-            let text = rd32(x.b, 0xfad92u32.wrapping_add(index));
+            let text = RIGHTS_BY_REGION.long(x.b, index);
             crate::text::print(x.b, text);
             Flow::Done
         },
-        T1eWait = T1E_FADED => |x| leave_wait(x, Step::T1eWait, Step::T1eCleared, false),
-        T1eCleared = T1E_CLEARED => |x| {
+        T1eWait = 0xfa90e => |x| leave_wait(x, Step::T1eWait, Step::T1eCleared, false),
+        T1eCleared = 0xfa94e => |x| {
             crate::tasks::prompt::stop(x.b);
             clear_layer(x.b, Layer::One);
             clear_layer(x.b, Layer::Two);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Step::T1eDone)
         },
-        T1eDone = T1E_DONE => |x| {
+        T1eDone = 0xfa96e => |x| {
             x.set_m16(f::TIMER, 300);
             // `jmp 0x1a60a`
             load_palette_page(x.b, 1, 1);
             Flow::Done
         },
-        S02Load = S02_LOAD => |x| {
-            x.set_v8(var::SCREEN_TYPE, 1);
+        S02Load = 0xfaf5c => |x| {
+            var::SCREEN_TYPE.set(x.b, 1);
             load_title_palette(x);
             load_palette_set(x.b, 1);
             fade_setup(x, 3, 13);
             crate::palette::full_brightness(x.b);
             x.or16(var::VIDEO_FLAGS, 1);
             let flags = x.v16(var::VIDEO_FLAGS);
-            wr16(x.b, CPS_REG_VIDEO, flags);
-            wr16(x.b, CPS_REG_SCROLL, 0x9200);
-            x.set_v16(var::CPS_COPY, 0x9200);
-            x.set_v16(var::GAUGE_SKIP, 0);
+            regs::VIDEO_CONTROL.set(x.b, flags);
+            regs::ROW_SCROLL_BASE.set(x.b, 0x9200);
+            var::CPS_COPY.set(x.b, 0x9200);
+            var::GAUGE_SKIP.set(x.b, 0);
             clear_sprite_area(x);
             two_blocks(x, Grid::Layer2, 454, GFX_PLANE_2);
             two_blocks(x, Grid::Layer3, 368, GFX_TABLE_B);
             s02_object(x)
         },
-        S02Retry = S02_RETRY => |x| {
+        S02Retry = 0xfaff8 => |x| {
             s02_object(x)
         },
-        S02Show = S02_SHOW => |x| {
+        S02Show = 0xfb012 => |x| {
             x.or16(var::LAYERS, LAYER_BITS);
             x.next_step();
-            x.set_v16(var::SCROLL_2_Y, 0);
+            var::SCROLL_2_Y.set(x.b, 0);
             let _ = set_15_pure(x.b, 2);
             x.wait(1, Step::S02Palette)
         },
-        S02Palette = S02_PALETTE => |x| {
+        S02Palette = 0xfb030 => |x| {
             crate::palette::load_scene_page(x.b, 1);
             fading::PAGES.set(x.b, 2);
             crate::palette::full_brightness(x.b);
             Flow::Done
         },
-        S04Retry = S04_RETRY => s04_object,
-        S04Show = S04_SHOW => |x| {
+        S04Retry = 0xfb064 => s04_object,
+        S04Show = 0xfb088 => |x| {
             x.render();
             two_blocks(x, Grid::Blocks4x4, 7, GFX_PLANE_1_START);
             Flow::Done
         },
-        S08Wait = S08_WAIT => |x| leave_wait(x, Step::S08Wait, Step::S08Cleared, true),
-        S08Cleared = S08_CLEARED => |x| {
+        S08Wait = 0xfb106 => |x| leave_wait(x, Step::S08Wait, Step::S08Cleared, true),
+        S08Cleared = 0xfb152 => |x| {
             for layer in [Layer::One, Layer::Two, Layer::Three] {
                 clear_layer(x.b, layer);
             }
-            x.set_v16(var::GAUGE_SKIP, 0);
+            var::GAUGE_SKIP.set(x.b, 0);
             clear_sprite_area(x);
             load_palette_page(x.b, 1, 1);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Step::S08Done)
         },
-        S08Done = S08_DONE => |x| {
+        S08Done = 0xfb182 => |x| {
             x.set_m16(f::TIMER, 300);
             Flow::Done
         },
     }
 }
-const T00_FADE: u32 = 0xfa384;
 
 /// Step 2: launches the title objects one after another, at intervals given by a table.
 fn t02_cue(x: &mut Ctx) -> Flow {
@@ -352,10 +354,10 @@ fn t02_cue(x: &mut Ctx) -> Flow {
         return Flow::Done;
     };
     let index = x.m8(f::CUE_INDEX);
-    wr8(x.b, obj + 0x2f, index);
-    wr32(x.b, obj + 0x4c, mode::BASE);
+    Obj(obj).set_u8(x.b, obj::INDEX, index);
+    Obj(obj).set_u32(x.b, obj::SIGNAL, mode::BASE);
     x.set_m8(f::CUE_INDEX, index.wrapping_add(1));
-    let delay = x.prog8(T02_DELAYS + index as u32);
+    let delay = T02_DELAYS.pc_byte(x.b, index as u32);
     x.set_m8(f::TIMER, delay);
     if delay & 0x80 == 0 {
         return Flow::Done;
@@ -364,7 +366,7 @@ fn t02_cue(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 /// Delays (frames) between appearances, in the original code; 0xff ends.
-const T02_DELAYS: u32 = 0xfa42e;
+const T02_DELAYS: Rom = Rom::at(0xfa42e);
 
 /// Step 4: waits for the objects to finish (`+0xd` zero), then fades to black.
 fn t04_fade_out(x: &mut Ctx) -> Flow {
@@ -379,24 +381,22 @@ fn t04_fade_out(x: &mut Ctx) -> Flow {
 
 /// Step 6: next background; creates the variant 7 object (waits if the pool is full).
 fn t06_start(x: &mut Ctx) -> Flow {
-    x.set_v16(var::CAMERA_Y, 0);
+    var::CAMERA_Y.set(x.b, 0);
     x.set_m8(f::CUE, 1);
     x.render();
     x.and16(var::LAYERS, !LAYER_BITS);
     x.wait(4, Step::T06Object)
 }
-const T06_OBJECT: u32 = 0xfa472;
 fn t06_object(x: &mut Ctx) -> Flow {
     let Ok(Obj(o)) = scenery_6(x.b, 7) else {
         return x.wait(1, Step::T06Retry);
     };
     x.set_m8(f::DONE, 1);
-    wr32(x.b, o + 0x4c, mode::BASE);
-    wr8(x.b, o + 0x2f, 0);
+    Obj(o).set_u32(x.b, obj::SIGNAL, mode::BASE);
+    Obj(o).set_u8(x.b, obj::INDEX, 0);
     x.next_step();
     Flow::Done
 }
-const T06_RETRY: u32 = 0xfa486;
 
 /// Step 8: waits for the object to finish, white flash.
 fn t08_wait_flash(x: &mut Ctx) -> Flow {
@@ -408,7 +408,6 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
     crate::palette::full_brightness(x.b);
     x.wait(4, Step::T08Next)
 }
-const T08_NEXT: u32 = 0xfa4bc;
 
 /// Step 10: after 60 frames, creates the variant 1 SET object (waits if the pool is full).
 fn t0a_wait(x: &mut Ctx) -> Flow {
@@ -425,11 +424,10 @@ fn t0a_object(x: &mut Ctx) -> Flow {
     let Ok(Obj(set)) = set_15_pure(x.b, 1) else {
         return x.wait(1, Step::T0aRetry);
     };
-    wr32(x.b, set + 0x4c, mode::BASE);
+    Obj(set).set_u32(x.b, obj::SIGNAL, mode::BASE);
     x.next_step();
     Flow::Done
 }
-const T0A_RETRY: u32 = 0xfa4fc;
 
 /// Step 12: waits for the object, then starts the fade to black (task).
 fn t0c_fade_task(x: &mut Ctx) -> Flow {
@@ -439,7 +437,7 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fading::DESCENT);
+    start_fade_task(x, crate::scene::fading::DESCENT.0);
     Flow::Done
 }
 
@@ -455,24 +453,22 @@ fn t0e_wait_fade(x: &mut Ctx) -> Flow {
 
 /// Step 16: second part of the title: camera at 512, variant 7 object (waits if full).
 fn t10_start(x: &mut Ctx) -> Flow {
-    x.set_v16(var::CAMERA_X, 0x200);
+    var::CAMERA_X.set(x.b, 0x200);
     x.set_m8(f::CUE, 0xff);
     x.render();
     x.and16(var::LAYERS, !LAYER_BITS);
     x.wait(4, Step::T10Object)
 }
-const T10_OBJECT: u32 = 0xfa56e;
 fn t10_object(x: &mut Ctx) -> Flow {
     let Ok(Obj(o)) = scenery_6(x.b, 7) else {
         return x.wait(1, Step::T10Retry);
     };
     x.set_m8(f::DONE, 1);
-    wr32(x.b, o + 0x4c, mode::BASE);
-    wr8(x.b, o + 0x2f, 1);
+    Obj(o).set_u32(x.b, obj::SIGNAL, mode::BASE);
+    Obj(o).set_u8(x.b, obj::INDEX, 1);
     x.next_step();
     Flow::Done
 }
-const T10_RETRY: u32 = 0xfa582;
 
 /// Step 18: white flash, then loads the lower terrain (four strips of two tile blocks).
 fn t12_wait(x: &mut Ctx) -> Flow {
@@ -484,8 +480,6 @@ fn t12_wait(x: &mut Ctx) -> Flow {
     crate::palette::full_brightness(x.b);
     x.wait(4, Step::T12Scenery)
 }
-const T12_SCENERY: u32 = 0xfa5ba;
-const T12_FADE: u32 = 0xfa620;
 
 /// Step 20: waits 60 frames, then starts animation 3.
 fn t14_wait(x: &mut Ctx) -> Flow {
@@ -509,14 +503,15 @@ fn t16_slide(x: &mut Ctx) -> Flow {
         x.set_m16(f::SPEED, speed);
     }
     let delta = (((speed as u32) << 16) as i32) >> 8;
-    for off in [var::CAMERA_Y, var::CAMERA_2_Y] {
-        let v = rd32(x.b, crate::mem::A5 + off).wrapping_add(delta as u32);
-        wr32(x.b, crate::mem::A5 + off, v);
+    for v in [var::CAMERA_Y, var::CAMERA_2_Y] {
+        let v = Long(v.0);
+        let moved = v.get(x.b).wrapping_add(delta as u32);
+        v.set(x.b, moved);
     }
-    if x.v16(var::CAMERA_Y) < 0x300 {
+    if var::CAMERA_Y.get(x.b) < 0x300 {
         return Flow::Done;
     }
-    x.set_v16(var::CAMERA_Y, 0x300);
+    var::CAMERA_Y.set(x.b, 0x300);
     x.next_step();
     x.set_m16(f::TIMER, 30);
     Flow::Done
@@ -531,11 +526,12 @@ fn t18_palette(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     // four 32-byte blocks from ROM to the palette table
-    let mut src = LOGO_PALETTE;
-    for dst in [0x91c2e0u32, 0x91c300, 0x91c360, 0x91c3e0] {
+    let mut src = LOGO_PALETTE.addr();
+    for color in [0x170u32, 0x180, 0x1b0, 0x1f0] {
+        let dst = palette(0, color);
         for i in 0..8 {
-            let v = rd32(x.b, src + 4 * i);
-            wr32(x.b, dst + 4 * i, v);
+            let v = tables::long(x.b, src + 4 * i);
+            dst.offset(4 * i).set_long(x.b, v);
         }
         src += 32;
     }
@@ -545,19 +541,16 @@ fn t18_palette(x: &mut Ctx) -> Flow {
 }
 fn t18_object(x: &mut Ctx) -> Flow {
     let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::T18Retry) };
-    wr8(x.b, o, 1);
-    wr8(x.b, o + 2, 4);
-    wr8(x.b, o + 3, 0x34);
+    Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+    Obj(o).set_u8(x.b, Obj::KIND, 4);
+    Obj(o).set_u8(x.b, Obj::VARIANT, 0x34);
     x.set_m16(f::DONE, o as u16);
     x.set_m16(f::TIMER, 80);
     x.wait(1, Step::T18Loop)
 }
 /// Logo palette: four consecutive 32-byte blocks in ROM.
-const LOGO_PALETTE: u32 = 0x2538c0;
-const T18_RETRY: u32 = 0xfa722;
-const T18_LOOP: u32 = 0xfa746;
-const T18_AFTER: u32 = 0xfa74a;
-/// Subroutine `0xfa762` (called by `bsr`, returns at `T18_AFTER`): after 80 frames, creates the
+const LOGO_PALETTE: Rom = Rom::at(0x2538c0);
+/// Subroutine `0xfa762` (called by `bsr`, returns at `Step::T18After`): after 80 frames, creates the
 /// text object and runs the original's script.
 fn t18_sub(x: &mut Ctx) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
@@ -570,21 +563,20 @@ fn t18_sub(x: &mut Ctx) -> Flow {
 }
 fn t18_text_object(x: &mut Ctx) -> Flow {
     let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return x.wait(1, Step::T18SubRetry) };
-    wr8(x.b, o, 1);
-    wr8(x.b, o + 2, 0);
-    wr8(x.b, o + 3, 0xf0);
-    wr8(x.b, o + 0x2f, 0);
-    wr32(x.b, o + 8, 0);
-    wr16(x.b, o + 0xc, 0x3f0);
-    wr32(x.b, o + 0x10, 1);
+    Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+    Obj(o).set_u8(x.b, Obj::KIND, 0);
+    Obj(o).set_u8(x.b, Obj::VARIANT, 0xf0);
+    Obj(o).set_u8(x.b, obj::INDEX, 0);
+    Obj(o).set_u32(x.b, Obj::X, 0);
+    Obj(o).set_u16(x.b, Obj::Z, 0x3f0);
+    Obj(o).set_u32(x.b, Obj::Y, 1);
     let target = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    wr32(x.b, target + 4, 0x0600_0000);
-    x.set_v16(var::SCROLL_2_Y, 0);
+    Obj(target).set_u32(x.b, Obj::STATE, 0x0600_0000);
+    var::SCROLL_2_Y.set(x.b, 0);
     x.set_v16(var::LAYERS, 0x12ce);
     crate::sound::play_global(x.b, ext::OBJECT_LAUNCH);
     Flow::Done
 }
-const T18_SUB_RETRY: u32 = 0xfa77c;
 
 /// Step 26: after 60 frames, clears the planes and creates the logo object (variant 66).
 fn t1a_wait(x: &mut Ctx) -> Flow {
@@ -601,21 +593,20 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
 }
 fn t1a_object(x: &mut Ctx) -> Flow {
     let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::T1aRetry) };
-    wr8(x.b, o, 1);
-    wr8(x.b, o + 2, 0);
-    wr8(x.b, o + 3, 0x42);
-    wr8(x.b, o + 0x2f, 3);
+    Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+    Obj(o).set_u8(x.b, Obj::KIND, 0);
+    Obj(o).set_u8(x.b, Obj::VARIANT, 0x42);
+    Obj(o).set_u8(x.b, obj::INDEX, 3);
     x.set_m16(f::OBJECT, o as u16);
     Flow::Done
 }
-const T1A_RETRY: u32 = 0xfa7fc;
 
 /// Step 28: waits for the logo object to reach state 6, then creates the texts (3 objects) and displays
 /// the rights notice according to the region.
 fn t1c_wait_logo(x: &mut Ctx) -> Flow {
     x.render();
     let o = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    if rd8(x.b, o + 4) != 6 {
+    if Obj(o).u8(x.b, Obj::STATE) != 6 {
         return Flow::Done;
     }
     x.next_step();
@@ -625,31 +616,29 @@ fn t1c_wait_logo(x: &mut Ctx) -> Flow {
 pub fn title_text(x: &mut Ctx) -> Flow {
     // three variants (0xe6, 0xe5, 0xe4, low byte first) placed from the active camera and the table
     // of offsets 0xfa8bc
-    const OFFSETS: u32 = 0xfa8bc;
-    let camera = crate::mem::A5 + if x.v8(var::SCREEN_TYPE) != 0 { 0x54e } else { 0x4fe };
+    const OFFSETS: Rom = Rom::at(0xfa8bc);
+    let (camera_x, camera_y) = if var::SCREEN_TYPE.get(x.b) != 0 { (var::CAMERA_2_X, var::CAMERA_2_Y) } else { (var::CAMERA_X, var::CAMERA_Y) };
     let mut variants = 0x00e4_e5e6u32;
     for k in 0..3 {
         let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
-        wr8(x.b, o, 1);
-        wr8(x.b, o + 2, 0);
-        wr8(x.b, o + 3, variants as u8);
+        Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+        Obj(o).set_u8(x.b, Obj::KIND, 0);
+        Obj(o).set_u8(x.b, Obj::VARIANT, variants as u8);
         variants >>= 8;
-        let (px, py) = (rd16(x.b, camera + 8), rd16(x.b, camera + 12));
-        let (dx, dy) = (rd16(x.b, OFFSETS + 4 * k), rd16(x.b, OFFSETS + 4 * k + 2));
-        wr16(x.b, o + 8, px.wrapping_add(dx));
-        wr16(x.b, o + 12, py.wrapping_add(dy));
-        wr32(x.b, o + 0x10, 0);
+        let (px, py) = (camera_x.get(x.b), camera_y.get(x.b));
+        let (dx, dy) = (OFFSETS.word(x.b, 4 * k), OFFSETS.word(x.b, 4 * k + 2));
+        Obj(o).set_u16(x.b, Obj::X, px.wrapping_add(dx));
+        Obj(o).set_u16(x.b, Obj::Z, py.wrapping_add(dy));
+        Obj(o).set_u32(x.b, Obj::Y, 0);
     }
     x.wait(1, Step::T1cText)
 }
-const T1C_TEXT: u32 = 0xfa88e;
 
 /// Step 30: after 300 frames, fade to black (task), clears everything and moves to the next sub-mode.
 fn t1e_end(x: &mut Ctx) -> Flow {
     x.render();
     leave_screen(x, Step::T1eWait)
 }
-const T1E_FADED: u32 = 0xfa90e;
 
 /// End of screen common to both titles: 300-frame timer, next sub-mode, fade
 /// to black by the task, then cleanup in three phases.
@@ -659,13 +648,13 @@ fn leave_screen(x: &mut Ctx, loop_resume: Step) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    let s = rd8(x.b, mode::SUB).wrapping_add(2);
-    wr8(x.b, mode::SUB, s);
-    wr8(x.b, mode::BASE + f::STEP, 0);
+    let s = mode::SUB.get(x.b).wrapping_add(2);
+    mode::SUB.set(x.b, s);
+    Obj(mode::BASE).set_u8(x.b, f::STEP, 0);
     fading::STEP.set(x.b, 1);
     fading::DELAY.set(x.b, 4);
     fading::PAGES.set(x.b, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fading::DESCENT);
+    start_fade_task(x, crate::scene::fading::DESCENT.0);
     x.wait(1, loop_resume)
 }
 
@@ -684,14 +673,12 @@ fn leave_wait(x: &mut Ctx, loop_resume: Step, cleared: Step, second_title: bool)
     unlink_and_clear_lists(x);
     crate::video::clear_objects(x.b);
     if second_title {
-        x.set_v8(var::SCREEN_TYPE, 0);
+        var::SCREEN_TYPE.set(x.b, 0);
         x.and16(var::VIDEO_FLAGS, !1);
     }
     x.and16(var::LAYERS, !LAYER_BITS);
     x.wait(16, cleared)
 }
-const T1E_CLEARED: u32 = 0xfa94e;
-const T1E_DONE: u32 = 0xfa96e;
 
 // ---------------------------------------------------------------------------------------------
 // Sous-mode 12 : second titre
@@ -720,29 +707,25 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
 fn s02_setup(x: &mut Ctx) -> Flow {
     x.set_v16(var::LAYERS, 0x12c2);
     for off in [var::CAMERA_X, var::CAMERA_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
-        x.set_v32(off, 0);
+        Long(off.0).set(x.b, 0);
     }
     x.wait(4, Step::S02Load)
 }
-const S02_LOAD: u32 = 0xfaf5c;
 fn s02_object(x: &mut Ctx) -> Flow {
     let Ok(Obj(o)) = scenery_6(x.b, 9) else {
         return x.wait(1, Step::S02Retry);
     };
     x.set_m8(f::CUE, 0);
-    wr32(x.b, o + 0x4c, mode::BASE);
+    Obj(o).set_u32(x.b, obj::SIGNAL, mode::BASE);
     x.set_m16(f::DONE, o as u16);
     x.render();
     x.wait(2, Step::S02Show)
 }
-const S02_RETRY: u32 = 0xfaff8;
-const S02_SHOW: u32 = 0xfb012;
-const S02_PALETTE: u32 = 0xfb030;
 
 /// Clears the 512-byte sprite area (`0xfb18a`).
 fn clear_sprite_area(x: &mut Ctx) {
     for i in 0..128 {
-        wr32(x.b, SPRITE_CLEAR_AREA + 4 * i, 0);
+        SCRATCH.offset(4 * i).set_long(x.b, 0);
     }
 }
 
@@ -757,29 +740,24 @@ fn s04_wait_object(x: &mut Ctx) -> Flow {
 }
 fn s04_object(x: &mut Ctx) -> Flow {
     let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::S04Retry) };
-    wr8(x.b, o, 1);
-    wr8(x.b, o + 2, 0);
-    wr8(x.b, o + 3, 0x44);
-    wr8(x.b, o + 0x2f, 3);
+    Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+    Obj(o).set_u8(x.b, Obj::KIND, 0);
+    Obj(o).set_u8(x.b, Obj::VARIANT, 0x44);
+    Obj(o).set_u8(x.b, obj::INDEX, 3);
     x.set_m16(f::OBJECT, o as u16);
     x.wait(1, Step::S04Show)
 }
-const S04_RETRY: u32 = 0xfb064;
-const S04_SHOW: u32 = 0xfb088;
 
 /// Step 6: waits for the logo object to be at state 6, then rights text (like title 1).
 fn s06_wait_logo(x: &mut Ctx) -> Flow {
     x.render();
     let o = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    if rd8(x.b, o + 4) != 6 {
+    if Obj(o).u8(x.b, Obj::STATE) != 6 {
         return Flow::Done;
     }
     x.next_step();
     title_text(x)
 }
 
-const S08_WAIT: u32 = 0xfb106;
-const S08_CLEARED: u32 = 0xfb152;
-const S08_DONE: u32 = 0xfb182;
 
 pub const NATIVES: &[Native] = &[];

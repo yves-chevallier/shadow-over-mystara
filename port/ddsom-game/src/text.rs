@@ -8,12 +8,16 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd8, wr16};
+use crate::hw::video::{Cell, TEXT};
+use crate::objects::Obj;
+use crate::screens::tables;
 
-const LAYER: u32 = 0x912000;
-const ROW: u32 = 4;
-const COLUMN: u32 = 0x80;
+const LAYER: u32 = TEXT.base;
+const ROW: u32 = TEXT.row;
+const COLUMN: u32 = TEXT.column;
 const BLANK: u16 = 0x20;
+/// Palette of an object (`+0x2b`), taken by the blocks whose attributes are negative.
+const OBJECT_PALETTE: u32 = 0x2b;
 
 /// Sequential reader of the descriptor pointed to by A4.
 struct Script<'a> {
@@ -23,12 +27,12 @@ struct Script<'a> {
 
 impl Script<'_> {
     fn byte(&mut self) -> u8 {
-        let v = rd8(self.b, self.at);
+        let v = tables::byte(self.b, self.at);
         self.at += 1;
         v
     }
     fn word(&mut self) -> u16 {
-        let v = rd16(self.b, self.at);
+        let v = tables::word(self.b, self.at);
         self.at += 2;
         v
     }
@@ -51,8 +55,7 @@ fn cell(col: u8, row: u8) -> u32 {
 }
 
 fn put(b: &mut Cps2Bus, at: u32, code: u16, attr: u16) {
-    wr16(b, at, code);
-    wr16(b, at + 2, attr);
+    Cell(at).put(b, code, attr);
 }
 
 /// The three variants of the simple text.
@@ -165,8 +168,8 @@ pub fn print_tall_at(b: &mut Cps2Bus, descriptor: u32, col: u8, row: u8) -> u32 
 /// below with the attributes of the descriptor (negative: palette `+0x2b` of object A0) for 0x0f38;
 /// empty block (tile 0x2fc, attributes 0) for 0x0f4a.
 pub(crate) fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
-    let attr = rd16(b, descriptor + 2);
-    let attr = if attr & 0x8000 != 0 { rd8(b, object + 0x2b) as u16 } else { attr };
+    let attr = tables::word(b, descriptor + 2);
+    let attr = if attr & 0x8000 != 0 { Obj(object).u8(b, OBJECT_PALETTE) as u16 } else { attr };
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
     s.word();
@@ -241,7 +244,7 @@ pub(crate) fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
     let col = s.byte();
     let row = s.byte();
     let width = s.byte();
-    let height = rd8(s.b, s.at);
+    let height = tables::byte(s.b, s.at);
     let end = s.at;
     clear_cells(b, col, row, width, height);
     (end, height)

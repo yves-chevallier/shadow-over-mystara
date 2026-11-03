@@ -269,6 +269,21 @@ l'objet ; `box_byte` pour une boîte de collision désignée par adresse, dans `
 * Le tir ESHL 5 lit `sprites/tables.json` (`shot5`, `frame_lists`), désormais chargé dans `GameData`
   (`sprite_tables`).
 
+## Tables des écrans : `data/screens.json`
+
+Tables lues par les écrans (`modes/`, `hud/`, `service/`, `scene/`, `credits*.rs`, `popups.rs`, lot L11 de
+[fin.md](fin.md)) que `data/scenes.json`, `data/misc.json` et `texts.json` ne décrivent pas : colonnes de tuiles du
+HUD (`hud_columns`, 0x3f54c2-0x3f6c08), lettres, portraits et palettes des panneaux, présentation des démonstrations,
+écran de sélection, fin, classement (`ranking_palette`, 0xfc6d8, `ranking_text`), scripts d'apparition des scènes
+(`spawn_script@…`, une table exacte par script), réponses et textes des transitions, menu de service, et les octets
+que somme le test ROM du menu (`rom_test@…`, un par 0xfff octets). Même format que `data/set.json` (`DataFile`) ;
+déclarations dans `extract/src/screens.rs` (constructeur de tables de `set.rs`, `pointed`, palettes).
+
+`GameData` charge aussi `data/scenes.json`, `data/misc.json` et `texts.json` (`scenes`, `misc`, `texts`) : le jeu lit
+toutes ces données par adresse dans `screens/tables.rs` (`byte`, `word`, `long` et leurs jumeaux `pc_*` pour l'espace
+programme ; `Rom` désigne une table ou un texte par son adresse d'origine). Une adresse de la RAM passe par le bus
+(certaines routines lisent l'une ou l'autre) ; hors des tables, le résidu (`Missing`, table `"screens"`).
+
 ## Tables des joueurs : `data/player_tables.json`
 
 Tables du noyau des joueurs, des personnages, des cinématiques, des réactions aux coups, des contacts et des tirs et

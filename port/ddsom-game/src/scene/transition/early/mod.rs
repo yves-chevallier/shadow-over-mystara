@@ -3,6 +3,11 @@
 use super::*;
 use crate::scene::fading;
 
+mod timed;
+use timed::*;
+use crate::screens::obj;
+pub use timed::{scene_11, scene_13};
+
 /// Engine routines specific to these scripts.
 mod ext {
     /// Music and ambient sounds of the interludes.
@@ -56,7 +61,7 @@ crate::steps! {
             clear_layer(x.b, Layer::Two);
             clear_layer(x.b, Layer::Three);
             reset_pools(x);
-            let scene = get8(x, var::MESSAGE);
+            let scene = VARS_BLOCK.get8(x.b, var::MESSAGE);
             finish(x, scene)
         },
         S5Retry = 0xf84e8 => s5_message,
@@ -73,7 +78,7 @@ crate::steps! {
         S5TextHidden = 0xf855a => |x| {
             clear_layer(x.b, Layer::Two);
             scroll_text(x, 0xf858a);
-            set16(x, var::TIMER, 120);
+            VARS_BLOCK.set16(x.b, var::TIMER, 120);
             sprites_next_frame(x, Step::S5TextShown)
         },
         S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, crate::tasks::fading::rise, At(Step::S5TextFadedIn.into())),
@@ -92,17 +97,17 @@ crate::steps! {
         },
         S4Shown = 0xf87c2 => |x| {
             // palette of page 7 (eight longs, `movem.l`: the registers keep the data)
-            const FROM: u32 = 0x292260;
-            const TO: u32 = 0x91c1e0;
+            const FROM: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x292260);
+            const TO: crate::hw::video::Vram = crate::hw::video::palette(0, 0xf0);
             for k in 0..8 {
-                let v = rd32(x.b, FROM + 4 * k);
-                wr32(x.b, TO + 4 * k, v);
+                let v = FROM.long(x.b, 4 * k);
+                TO.offset(4 * k).set_long(x.b, v);
             }
             scroll_text(x, 0xf8810);
-            set16(x, var::TIMER, 120);
+            VARS_BLOCK.set16(x.b, var::TIMER, 120);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::no_brightness(x.b);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
             Flow::Done
         },
         S4TextGone = 0xf890e => |x| hide_layers(x, At(Step::S4Hidden.into())),
@@ -117,7 +122,7 @@ crate::steps! {
             let end = tiles(x, TB, 0x20d, SCROLL_2);
             tiles(x, TB, 0x20e, end);
             scroll_text(x, 0xf8986);
-            set16(x, var::TIMER, 60);
+            VARS_BLOCK.set16(x.b, var::TIMER, 60);
             sprites_next_frame(x, Step::S4SecondDrawn)
         },
         S4SecondDrawn = 0xf897c => |x| {
@@ -138,7 +143,7 @@ crate::steps! {
         S4Retry92 = 0xf8acc => s4_message_92,
         S4RetryWizard = 0xf8aea => s4_wizard,
         S4SecondFaded = 0xf8b1c => |x| {
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S4SecondClear)
         },
@@ -151,14 +156,14 @@ crate::steps! {
             home_camera_1(x, At(Step::S4SecondHomed.into()))
         },
         S4SecondHomed = 0xf8b3e => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             s4_second_object(x)
         },
         S4RetryObject = 0xf8b56 => s4_second_object,
         S4Scenery = 0xf8b64 => |x| {
             // terrain in eight plane 2 tile blocks (the third with D4 = 0)
-            for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
-                (174, 0x916800), (174, 0x916c00)]
+            for (n, at) in [(206, crate::hw::video::SCROLL2.offset(0x3000).0), (173, crate::hw::video::SCROLL2.offset(0x3400).0), (175, crate::hw::video::SCROLL2.offset(0x3800).0), (175, crate::hw::video::SCROLL2.offset(0x3c00).0), (172, crate::hw::video::SCROLL2.offset(0x2000).0), (205, crate::hw::video::SCROLL2.offset(0x2400).0),
+                (174, crate::hw::video::SCROLL2.offset(0x2800).0), (174, crate::hw::video::SCROLL2.offset(0x2c00).0)]
             {
                 tiles(x, TB, n, at);
             }
@@ -169,11 +174,11 @@ crate::steps! {
             crate::families::small::background_2_on(x.b);
             x.set_v8(0x36, 1);
             x.set_v16(a5::LAYERS, 0x138e);
-            wr16(x.b, 0x400004, 0x3155);
+            crate::hw::video::regs::OBJECT_OUTPUT.set(x.b, 0x3155);
             show_layers(x, At(Step::S4SceneryShown.into()))
         },
         S4SceneryShown = 0xf8c2c => |x| {
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE.0);
             s4_fading_in(x)
         },
         S4FadingIn = 0xf8c44 => |x| yield_frames(x, 1, At(Step::S4FadingInNext.into())),
@@ -189,7 +194,7 @@ crate::steps! {
             if fading::STEP.get(x.b) != 0 {
                 return s4_fading_out(x);
             }
-            set8(x, var::SIGNAL, 1);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
             world(x);
             sprites_next_frame(x, Step::S4FadedOut)
         },
@@ -206,7 +211,7 @@ crate::steps! {
             yield_frames(x, 1, At(Step::S11Shown.into()))
         },
         S11Shown = 0xf8d7a => |x| {
-            set16(x, var::TIMER, 10);
+            VARS_BLOCK.set16(x.b, var::TIMER, 10);
             fading::DELAY.set(x.b, 4);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::tasks::fading::rise(x)
@@ -214,7 +219,7 @@ crate::steps! {
         S11Retry17 = 0xf8db4 => s11_message_17,
         S11Retry18 = 0xf8e48 => s11_message_18,
         S11Faded = 0xf8e6a => |x| {
-            set8(x, var::SIGNAL, 1);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
             world(x);
             sprites_next_frame(x, Step::S11DrawnOut)
         },
@@ -261,13 +266,13 @@ crate::steps! {
             fading::PAGES.set(x.b, SCENE_PAGES);
             fading::DELAY.set(x.b, 4);
             fading::STEP.set(x.b, 1);
-            start_task(x, crate::scene::fading::RISE);
+            start_task(x, crate::scene::fading::RISE.0);
             Flow::Done
         },
         S13OutFaded = 0xf90cc => |x| yield_frames(x, 30, At(Step::S13OutScenery.into())),
         S13OutScenery = 0xf90d4 => s13_out_scenery,
         S13OutSceneryDrawn = 0xf911c => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             s13_set_9(x)
         },
         S13Retry9 = 0xf9134 => s13_set_9,
@@ -303,7 +308,7 @@ crate::steps! {
         S13Faded = 0xf938a => |x| hide_layers(x, At(Step::S13End.into())),
         S13End = 0xf938e => |x| {
             clear_layer(x.b, Layer::Two);
-            let scene = get8(x, var::FLAG);
+            let scene = VARS_BLOCK.get8(x.b, var::FLAG);
             finish(x, scene)
         },
     }
@@ -357,7 +362,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             Flow::Done
         }
         10 | 12 => {
-            let n = if get8(x, var::STATE) == 10 { 12 } else { 13 };
+            let n = if VARS_BLOCK.get8(x.b, var::STATE) == 10 { 12 } else { 13 };
             if message_done(x) && try_message(x, n) {
                 next(x);
             }
@@ -368,7 +373,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             let scene = answer(x, 0xf847c);
-            set8(x, var::MESSAGE, scene);
+            VARS_BLOCK.set8(x.b, var::MESSAGE, scene);
             sound(x, 0);
             fade(x, ALL_PAGES, crate::tasks::fading::descent, At(Step::S2Faded.into()))
         }
@@ -386,7 +391,7 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
             crate::sound::play_global(x.b, ext::MUSIC_B);
             let end = tiles(x, TB, 0x218, SCROLL_2);
             tiles(x, TB, 0x219, end);
-            set16(x, var::TIMER, 60);
+            VARS_BLOCK.set16(x.b, var::TIMER, 60);
             show_and_fade_in(x, Caller)
         }
         2 => {
@@ -449,13 +454,13 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             if any_button(x) {
-                set16(x, var::TIMER, 0);
+                VARS_BLOCK.set16(x.b, var::TIMER, 0);
             }
-            if get16(x, var::TIMER) != 0 {
+            if VARS_BLOCK.get16(x.b, var::TIMER) != 0 {
                 return Flow::Done;
             }
             next(x);
-            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
+            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             Flow::Done
         }
         4 => {
@@ -468,7 +473,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
         }
         6 => {
             if any_button(x) {
-                set16(x, var::TIMER, 1);
+                VARS_BLOCK.set16(x.b, var::TIMER, 1);
             }
             if tick(x) && try_message(x, 15) {
                 next(x);
@@ -493,7 +498,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             sound(x, 0);
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             s4_fading_out(x)
         }
         _ => Flow::Done,
@@ -502,8 +507,8 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
 
 /// The timer counts down; every four frames, camera 1 advances by one pixel.
 fn drift(x: &mut Ctx) {
-    let t = get16(x, var::TIMER).wrapping_sub(1);
-    set16(x, var::TIMER, t);
+    let t = VARS_BLOCK.get16(x.b, var::TIMER).wrapping_sub(1);
+    VARS_BLOCK.set16(x.b, var::TIMER, t);
     if t & 3 == 0 {
         let cam = x.v16(a5::CAM1_X).wrapping_add(1);
         set_camera(x, a5::CAM1_X, cam);
@@ -512,16 +517,16 @@ fn drift(x: &mut Ctx) {
 
 fn s4_message_92(x: &mut Ctx) -> Flow {
     or_yield!(message(x, 92, Step::S4Retry92));
-    set8(x, var::SIGNAL, 0);
+    VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
     s4_wizard(x)
 }
 /// System object 0, placed (subtype 2, X 144, Y 188).
 fn s4_wizard(x: &mut Ctx) -> Flow {
     let Some(o) = system_object(x, 0, Step::S4RetryWizard) else { return Flow::Yield };
-    wr8(x.b, o.0 + 0x2f, 2);
-    wr16(x.b, o.0 + 8, 144);
-    wr16(x.b, o.0 + 0x10, 0);
-    wr16(x.b, o.0 + 0xc, 188);
+    o.set_u8(x.b, obj::INDEX, 2);
+    o.set_u16(x.b, Obj::X, 144);
+    o.set_u16(x.b, Obj::Y, 0);
+    o.set_u16(x.b, Obj::Z, 188);
     next(x);
     Flow::Done
 }
@@ -547,289 +552,6 @@ fn s4_message_16(x: &mut Ctx) -> Flow {
 fn s4_fading_out(x: &mut Ctx) -> Flow {
     world(x);
     sprites_next_frame(x, Step::S4FadingOut)
-}
-
-// ---------------------------------------------------------------------------------------------
-// Scene 11 (if time remains): system object 2, dialogues 17 and 18; then scene 13
-
-pub fn scene_11(x: &mut Ctx) -> Flow {
-    match dispatch(x, var::STATE, 0xf8ce4) {
-        0 => {
-            if x.v8(a5::CLOCK) == 0 {
-                return finish(x, 13);
-            }
-            next(x);
-            crate::sound::play_global(x.b, ext::MUSIC_C);
-            set_camera(x, a5::CAM1_X, 288);
-            let end = tiles(x, TB, 0x214, 0x917400);
-            tiles(x, TB, 0x215, end);
-            let end = tiles(x, TB2, 0x152, SCROLL_3);
-            tiles(x, TB2, 0x153, end);
-            s11_object(x)
-        }
-        2 => {
-            if !tick(x) {
-                return Flow::Done;
-            }
-            set16(x, var::TIMER, 60);
-            s11_message_17(x)
-        }
-        4 => {
-            if get8(x, var::FLAG) != 0 && message_done(x) {
-                set8(x, var::FLAG, 0);
-                set16(x, var::TIMER, 1);
-            }
-            if tick(x) {
-                set16(x, var::TIMER, 120);
-                set8(x, var::SIGNAL, 1);
-                next(x);
-            }
-            Flow::Done
-        }
-        6 => {
-            if get8(x, var::FLAG) != 0 && message_done(x) {
-                set8(x, var::FLAG, 0);
-            }
-            if get16(x, var::TIMER) != 0 {
-                if !tick(x) {
-                    return Flow::Done;
-                }
-                set8(x, var::SIGNAL, 0);
-            }
-            let busy = get8(x, var::SIGNAL).wrapping_add(get8(x, var::FLAG));
-            if busy != 0 {
-                return Flow::Done;
-            }
-            s11_message_18(x)
-        }
-        8 => {
-            if !message_done(x) {
-                return Flow::Done;
-            }
-            sound(x, 0);
-            fade(x, SCENE_PAGES, crate::tasks::fading::descent, At(Step::S11Faded.into()))
-        }
-        _ => Flow::Done,
-    }
-}
-fn s11_object(x: &mut Ctx) -> Flow {
-    if system_object(x, 2, Step::S11RetryObject).is_none() {
-        return Flow::Yield;
-    }
-    set8(x, var::SIGNAL, 0);
-    world(x);
-    sprites_next_frame(x, Step::S11Drawn)
-}
-fn s11_message_17(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 17, Step::S11Retry17));
-    next(x);
-    set8(x, var::FLAG, 1);
-    Flow::Done
-}
-fn s11_message_18(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 18, Step::S11Retry18));
-    next(x);
-    Flow::Done
-}
-
-// ---------------------------------------------------------------------------------------------
-// Scene 13: by remaining time, SET objects 10 and 11 or 9; dialogue 30 then a choice (dialogues 136 to 138)
-// that sets the next scene (tables 0xf92e4, 0xf932e, 0xf937a; 14 if no player is in the expected state)
-
-pub fn scene_13(x: &mut Ctx) -> Flow {
-    match dispatch(x, var::STATE, 0xf8e9e) {
-        0 => {
-            next(x);
-            crate::sound::play_global(x.b, ext::MUSIC_D);
-            let end = tiles(x, TB2, 0x154, SCROLL_3);
-            tiles(x, TB2, 0x155, end);
-            s13_object(x)
-        }
-        2 => {
-            if get8(x, var::SIGNAL) != 0 {
-                set8(x, var::SIGNAL, 0);
-                next(x);
-                set8(x, var::SUB, 0);
-            }
-            Flow::Done
-        }
-        4 if x.v16(a5::CLOCK) != 0 => s13_time_left(x),
-        4 => s13_time_out(x),
-        6 => {
-            world(x);
-            sprites_next_frame(x, Step::S13Closing)
-        }
-        8 => {
-            if !message_done(x) {
-                return Flow::Done;
-            }
-            next(x);
-            set8(x, var::SUB, 0);
-            s13_route(x);
-            Flow::Done
-        }
-        10 => match dispatch(x, var::FLAG, 0xf9294) {
-            0 => choice(x, 138, 0xf92a8, 0xf92e4),
-            2 => choice(x, 136, 0xf92f2, 0xf932e),
-            6 => choice(x, 137, 0xf933e, 0xf937a),
-            _ => {
-                next(x);
-                set8(x, var::FLAG, 14);
-                Flow::Done
-            }
-        },
-        12 => fade(x, SCENE_PAGES, crate::tasks::fading::descent, At(Step::S13Faded.into())),
-        _ => Flow::Done,
-    }
-}
-fn s13_object(x: &mut Ctx) -> Flow {
-    if system_object(x, 3, Step::S13RetryObject).is_none() {
-        return Flow::Yield;
-    }
-    set8(x, var::SIGNAL, 0);
-    world(x);
-    sprites_next_frame(x, Step::S13Drawn)
-}
-
-/// Time remaining: SET object 10, fade, new terrain and SET object 11; the object signals its end (`+8`).
-fn s13_time_left(x: &mut Ctx) -> Flow {
-    match dispatch(x, var::SUB, 0xf8f4e) {
-        0 => {
-            if try_set_object(x, 10).is_some() {
-                next_sub(x);
-                fading::STEP.set(x.b, 1);
-                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
-            }
-            Flow::Done
-        }
-        2 => {
-            if fading::STEP.get(x.b) != 0 {
-                return Flow::Done;
-            }
-            set8(x, var::SIGNAL, 0xff);
-            world(x);
-            sprites_next_frame(x, Step::S13LeftDrawn)
-        }
-        4 => {
-            if fading::STEP.get(x.b) == 0 {
-                set8(x, var::SIGNAL, 1);
-                next_sub(x);
-            }
-            Flow::Done
-        }
-        6 => {
-            if get8(x, var::SIGNAL) == 2 {
-                next_sub(x);
-            }
-            Flow::Done
-        }
-        8 => s13_leave(x),
-        _ => Flow::Done,
-    }
-}
-/// End of the interlude when the object has signalled (`+8` negative): fade to black.
-fn s13_leave(x: &mut Ctx) -> Flow {
-    if (get8(x, var::SIGNAL) as i8) >= 0 {
-        return Flow::Done;
-    }
-    next(x);
-    set8(x, var::SUB, 0);
-    fade(x, SCENE_PAGES, crate::tasks::fading::descent, Caller)
-}
-fn s13_set_11(x: &mut Ctx) -> Flow {
-    or_yield!(set_object(x, 11, Step::S13Retry11));
-    next_sub(x);
-    world(x);
-    sprites_next_frame(x, Step::S13Set11Drawn)
-}
-
-/// Time elapsed: per-component fade, other terrain, SET object 9, then fade to fixed palettes.
-fn s13_time_out(x: &mut Ctx) -> Flow {
-    match dispatch(x, var::SUB, 0xf90a6) {
-        0 => {
-            sound(x, 0);
-            next_sub(x);
-            fading::DELAY.set(x.b, 1);
-            fading::PAGES.set(x.b, SCENE_PAGES);
-            goto(x, crate::tasks::fading::to_white, At(Step::S13OutFaded.into()))
-        }
-        2 => s13_out_scenery(x),
-        4 => {
-            if get8(x, var::SIGNAL) == 0 {
-                return Flow::Done;
-            }
-            set8(x, var::SIGNAL, 0);
-            world(x);
-            sprites_next_frame(x, Step::S13OutDrawn)
-        }
-        6 => s13_leave(x),
-        _ => Flow::Done,
-    }
-}
-fn s13_out_scenery(x: &mut Ctx) -> Flow {
-    next_sub(x);
-    let end = tiles(x, TB, 0x22a, SCROLL_2);
-    tiles(x, TB, 0x22b, end);
-    let end = tiles(x, TB2, 0x164, SCROLL_3);
-    tiles(x, TB2, 0x165, end);
-    set8(x, var::SIGNAL, 0xff);
-    world(x);
-    sprites_next_frame(x, Step::S13OutSceneryDrawn)
-}
-fn s13_set_9(x: &mut Ctx) -> Flow {
-    or_yield!(set_object(x, 9, Step::S13Retry9));
-    Flow::Done
-}
-
-fn s13_message_30(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 30, Step::S13Retry30));
-    next(x);
-    Flow::Done
-}
-
-/// State 8: the question to ask (`+6`) depends on the players: 0 if a player in the game (state `+4` < 4) is in
-/// posture 4 or 5 (`+3`), 4 otherwise; plus 2 if time remains.
-fn s13_route(x: &mut Ctx) {
-    let mut route = 0u8;
-    let mut found = false;
-    for k in 0..4u32 {
-        let p = A5 + a5::PLAYERS + k * 0x200;
-        if rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4 {
-            let pose = (rd8(x.b, p + 3) >> 1).wrapping_sub(2);
-            if pose == 0 {
-                found = true;
-                break;
-            }
-        }
-    }
-    if !found {
-        route += 4;
-    }
-    if x.v16(a5::CLOCK) != 0 {
-        route += 2;
-    }
-    set8(x, var::FLAG, route);
-}
-
-/// Question `n`, then the next scene according to the answer (table `answers`).
-fn choice(x: &mut Ctx, n: u16, table: u32, answers: u32) -> Flow {
-    match dispatch(x, var::SUB, table) {
-        0 => {
-            if let Some(o) = crate::families::creators::scene_set(x.b, n as u8) {
-                next_sub(x);
-                store_message(x, o);
-            }
-        }
-        _ => {
-            if message_done(x) {
-                let scene = answer(x, answers);
-                set8(x, var::FLAG, scene);
-                next(x);
-                set8(x, var::SUB, 0);
-            }
-        }
-    }
-    Flow::Done
 }
 
 pub const NATIVES: &[Native] = &[];
