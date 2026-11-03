@@ -15,8 +15,8 @@ use crate::objects::Current;
 use crate::player::tables::{player_data, byte, long, Aligned};
 
 const SFX_BITE: crate::sound::Sound = crate::sound::CMD_16C;
-const ANIMS: u32 = 0x1bc346;
-const SPEEDS: u32 = 0x1c7836;
+const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc346);
+const SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c7836);
 /// Table of collision box frames (one pointer per box set).
 const FRAMES: u32 = 0x11bffa;
 /// Boxes of the familiar: to engage, to bite.
@@ -108,12 +108,12 @@ mod pet {
         let rank = x.u8(Obj::VARIANT);
         x.set8(Obj::VY, rank);
         x.set8(Shot::ATTACK_POWER, 0xau8.wrapping_sub(rank));
-        x.set32(Obj::SPEED_TABLE, SPEEDS);
+        x.set32(Obj::SPEED_TABLE, SPEEDS.0);
         pose(x);
         let class = owner.u8(x.b, Player::LEVEL);
         let life = if class <= 0xe { 0x2d0 } else { 0x348 };
         x.set16(LIFE, life);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -140,7 +140,7 @@ mod pet {
             x.add32(Obj::Y, 2);
             anim = step.wrapping_add(x.u8(Obj::VARIANT));
         }
-        x.anim(ANIMS, anim as u32);
+        x.anim(ANIMS.0, anim as u32);
     }
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -173,7 +173,7 @@ mod pet {
                 x.move_xyz();
                 if (x.u16(Obj::VZ) as i16) <= 0 {
                     x.add8(Shot::STEP, 2);
-                    x.anim(ANIMS, 7);
+                    x.anim(ANIMS.0, 7);
                 }
             }
             _ => {
@@ -198,7 +198,7 @@ mod pet {
             return true;
         }
         if x.u8(Shot::STEP) == 0 {
-            x.anim(ANIMS, 9);
+            x.anim(ANIMS.0, 9);
             find_target(x);
             if x.u16(TARGET) != 0 {
                 x.add8(Shot::STEP, 2);
@@ -282,7 +282,7 @@ mod pet {
             let angle = crate::aids::direction_to(x.b, x.o, target);
             x.set8(Obj::SPEED_INDEX, angle);
             flip_by_angle(x);
-            x.anim(ANIMS, 0xa);
+            x.anim(ANIMS.0, 0xa);
             return true;
         }
         let target = x.linked(TARGET);
@@ -304,7 +304,7 @@ mod pet {
             return true;
         }
         if find_hit(x) {
-            x.anim(ANIMS, 0xc);
+            x.anim(ANIMS.0, 0xc);
             return true;
         }
         x.anim_step();
@@ -312,7 +312,7 @@ mod pet {
         x.move_z();
         if (x.u16(Obj::VZ) as i16) < 0 {
             x.add8(Shot::SUB_STEP, 2);
-            x.anim(ANIMS, 0xb);
+            x.anim(ANIMS.0, 0xb);
         }
         true
     }
@@ -324,7 +324,7 @@ mod pet {
             return true;
         }
         if find_hit(x) {
-            x.anim(ANIMS, 0xd);
+            x.anim(ANIMS.0, 0xd);
             return true;
         }
         x.anim_step();
@@ -429,7 +429,7 @@ mod pet {
                 x.set16(Obj::AX, 0);
                 let dx = signed(0x200, x.u8(f::FLIP) != 0);
                 x.set16(Obj::VX, dx);
-                x.anim(ANIMS, 0xe);
+                x.anim(ANIMS.0, 0xe);
             }
             2 => {
                 x.anim_step();

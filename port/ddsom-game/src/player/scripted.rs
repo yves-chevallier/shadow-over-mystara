@@ -169,17 +169,17 @@ pub fn update(g: &mut Ctx, p: Player) {
 // ---- end cinematic ------------------------------------------------------------------------
 
 /// Start of the original dispatch of the end cinematic (indexed by scene).
-pub const END_BY_SCENE_ENTRY: u32 = 0x23f40;
+pub const END_BY_SCENE_ENTRY: crate::data::RomAddr = crate::data::RomAddr(0x23f40);
 /// Last scene of the table 0x23f4e; beyond it (demo scenes 109 to 114), the original reads code as
 /// addresses and jumps at random (scene 110 ends up at animation 0x1a32 with the registers left by the
 /// previous routine, hence sprite pieces written by tens of thousands). These scenes have no
 /// cinematic: the inactive routine 0x24102.
 pub(crate) const LAST_END_SCENE: u32 = 108;
-pub(crate) const NO_END: u32 = 0x24102;
+pub(crate) const NO_END: crate::data::RomAddr = crate::data::RomAddr(0x24102);
 
 fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     if scene > LAST_END_SCENE {
-        NO_END
+        NO_END.0
     } else {
         player_data().scripted_end_by_scene.long_at(g.b, 4 * scene)
     }

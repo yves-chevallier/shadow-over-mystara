@@ -14,8 +14,8 @@ use crate::objects::Obj;
 use crate::objects::Current;
 use crate::player::tables::{player_data, byte, long, Aligned};
 
-const ANIMS: u32 = 0x1bc9b6;
-const SPEEDS: u32 = 0x1c7836;
+const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc9b6);
+const SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c7836);
 const FRAMES: u32 = 0x11bffa;
 /// Palette copied into the graphics RAM at creation (8 longs, read in the clear).
 const PALETTE_SOURCE: u32 = 0x5036a;
@@ -88,7 +88,7 @@ mod guardian {
         x.set8(STRIKES, 0);
         x.set8(Shot::ATTACK_POWER, 0xa);
         x.set8(ATTACK_DELAY, 0x3c);
-        x.set32(Obj::SPEED_TABLE, SPEEDS);
+        x.set32(Obj::SPEED_TABLE, SPEEDS.0);
         x.set16(Obj::VZ, 0x400);
         x.set16(Obj::AZ, -0x40i16 as u16);
         x.set16(Obj::AX, 0);
@@ -109,7 +109,7 @@ mod guardian {
         x.set16(Obj::VX, vx);
         x.set8(Obj::SPEED_INDEX, angle);
         x.set16(LIFE, 0x4b0);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -157,7 +157,7 @@ mod guardian {
                     x.add8(Shot::STEP, 2);
                     x.set8(Shot::OWN_PALETTE, 1);
                     x.set8(Shot::PALETTE, 0xc);
-                    x.anim(ANIMS, 6);
+                    x.anim(ANIMS.0, 6);
                 } else if x.u8(TIMER) & 1 != 0 {
                     dust(x);
                 }
@@ -168,14 +168,14 @@ mod guardian {
                 if (x.u16(Obj::Z) as i16) <= 0 {
                     x.add8(Shot::STEP, 2);
                     x.set32(Obj::Z, 0);
-                    x.anim(ANIMS, 5);
+                    x.anim(ANIMS.0, 5);
                 }
             }
             _ => {
                 if x.anim_step() {
                     x.add8(Shot::SUB_STATE, 2);
                     x.set8(Shot::STEP, 0);
-                    x.anim(ANIMS, 1);
+                    x.anim(ANIMS.0, 1);
                 }
             }
         }
@@ -200,7 +200,7 @@ mod guardian {
             return flip_turn(x);
         }
         if x.u8(Shot::STEP) == 0 {
-            x.anim(ANIMS, 3);
+            x.anim(ANIMS.0, 3);
             find_target(x);
             if x.u16(TARGET) != 0 {
                 x.add8(Shot::STEP, 2);
@@ -247,7 +247,7 @@ mod guardian {
         let f = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, f);
         x.set8(STRIKES, 0);
-        x.anim(ANIMS, 3);
+        x.anim(ANIMS.0, 3);
     }
 
     // --- substate 4: wandering without a target ---------------------------------------------------------------------
@@ -288,7 +288,7 @@ mod guardian {
         match x.u8(Shot::SUB_STEP) {
             0 => {
                 x.add8(Shot::SUB_STEP, 2);
-                x.anim(ANIMS, 4);
+                x.anim(ANIMS.0, 4);
             }
             2 => {
                 if !x.anim_step() {
@@ -318,7 +318,7 @@ mod guardian {
                 }
                 x.set16(Obj::AX, vy);
                 x.add8(Shot::SUB_STEP, 2);
-                x.anim(ANIMS, 5);
+                x.anim(ANIMS.0, 5);
             }
             _ => {
                 x.add8(TIMER, 0xff);
@@ -377,7 +377,7 @@ mod guardian {
         if x.u8(TIMER) == 0 {
             x.add8(Shot::SUB_STATE, 2);
             x.set8(Shot::OWN_PALETTE, 0);
-            x.anim(ANIMS, 0);
+            x.anim(ANIMS.0, 0);
         } else if x.u8(TIMER) & 1 != 0 {
             dust(x);
         }
@@ -432,7 +432,7 @@ mod guardian {
         let want: u8 = if (angle as i8) > 0x10 { 0 } else { 0x20 };
         if want != x.u8(f::FLIP) {
             x.set8(STRIKES, 1);
-            x.anim(ANIMS, 2);
+            x.anim(ANIMS.0, 2);
         }
     }
 

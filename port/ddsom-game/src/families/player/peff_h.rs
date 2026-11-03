@@ -34,7 +34,7 @@ mod shower {
     /// Blinking phase.
     const BLINK: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bb4c0;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb4c0);
     const OFFSETS_A: u32 = 0x4dd84;
     const OFFSETS_B: u32 = 0x4de22;
     const OFFSETS_C: u32 = 0x4deac;
@@ -48,7 +48,7 @@ mod shower {
             0 if !child => {
                 x.add8(Obj::STATE, 2);
                 place(x, OFFSETS_A, true);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             0 => {
@@ -58,7 +58,7 @@ mod shower {
                 } else {
                     place(x, OFFSETS_C, false);
                 }
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
                 x.reinsert();
             }
             2 if !child => {
@@ -141,7 +141,7 @@ mod strike {
     /// Step of the player's move when the strike was created.
     const MOVE_STEP: u32 = 0x59;
 
-    const ANIMS: u32 = 0x1bb5ea;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb5ea);
     const FRAMES: u32 = 0x11bffa;
     const POWER_BOSS: u32 = 0x1043b4;
     const POWER_ENEMY: u32 = 0x104396;
@@ -157,7 +157,7 @@ mod strike {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, 0x7c);
                 x.set16(Shot::Y_FRACTION, 0x4000);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             0 => {
@@ -171,7 +171,7 @@ mod strike {
                     x.set16(Shot::Y_FRACTION, 0xc000);
                 }
                 let n = x.u8(Shot::SETTING) as u32 + 1;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 if !child => {
@@ -189,7 +189,7 @@ mod strike {
                         x.add8(Shot::SUB_STATE, 2);
                         x.set_bit(Obj::FLAGS, 1, false);
                         let n = x.u8(Shot::SETTING) as u32 + 3;
-                        return x.anim(ANIMS, n);
+                        return x.anim(ANIMS.0, n);
                     }
                     x.set_bit(Obj::FLAGS, 1, true);
                     let timer = owner.u16(x.b, Player::ACTION_TIMER) & 1;
@@ -304,7 +304,7 @@ mod ring {
     /// Phase of the ring (h).
     const PHASE: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x1bb80a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb80a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -337,7 +337,7 @@ mod ring {
                 }
                 x.add16(Obj::Y, 0xffff);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 if !child => {
@@ -401,7 +401,7 @@ mod moon {
     /// Phase of the moon (h).
     const PHASE: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bb8f4;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb8f4);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -420,7 +420,7 @@ mod moon {
                 x.add16(Obj::Y, dy);
                 x.add16(Shot::Y_FRACTION, dp);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {
@@ -428,7 +428,7 @@ mod moon {
                 let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, Player::STEP) == 6 {
                     x.add8(Obj::STATE, 2);
-                    return x.anim(ANIMS, if child { 5 } else { 4 });
+                    return x.anim(ANIMS.0, if child { 5 } else { 4 });
                 }
                 if !child {
                     x.add16(FRAMES, 1);
@@ -484,7 +484,7 @@ mod moon {
 mod aura {
     use super::*;
 
-    const ANIMS: u32 = 0x1bbc9a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bbc9a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -507,7 +507,7 @@ mod aura {
                 x.add16(Obj::Z, dz);
                 x.add16(Obj::Y, 0xffff);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {

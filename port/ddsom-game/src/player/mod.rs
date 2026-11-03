@@ -168,7 +168,7 @@ pub const NATIVES: &[Native] = &[
 ];
 
 /// First player record (offset from A5) and stride between two players.
-pub const PLAYER_BASE: u32 = 0x5de;
+pub const PLAYER_BASE: u32 = crate::ram::PLAYERS.base - A5;
 pub const PLAYER_STRIDE: u32 = 0x200;
 pub const PLAYER_COUNT: u32 = 4;
 

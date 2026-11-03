@@ -34,8 +34,8 @@ mod orbit {
     /// Orbiting shots of the bearer (h).
     const ORBITS: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x15b346;
-    const SPEEDS: u32 = 0x1c89b6;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15b346);
+    const SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c89b6);
     const SFX: crate::sound::Sound = crate::sound::CMD_33A_43A;
     const TURN_TABLE: u32 = 0x52b32;
 
@@ -87,7 +87,7 @@ mod orbit {
         x.set8(f::POWER, p1);
         x.set8(f::POWER2, p2);
         x.set_bit(Obj::FLAGS, 1, true);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         crate::sound::play(x.b, SFX, x.o);
     }
 
@@ -108,7 +108,7 @@ mod orbit {
             x.add8(Shot::SUB_STATE, 2);
             x.set8(Shot::STEP, 0);
             x.set16(Shot::OWN_PALETTE, 0x100);
-            x.anim(ANIMS, 1);
+            x.anim(ANIMS.0, 1);
         }
     }
 
@@ -118,7 +118,7 @@ mod orbit {
             0 => {
                 x.add8(Shot::STEP, 2);
                 x.set8(Shot::SUB_STEP, 0);
-                x.set32(Obj::SPEED_TABLE, SPEEDS);
+                x.set32(Obj::SPEED_TABLE, SPEEDS.0);
                 x.set8(Obj::SPEED_INDEX, 0x18);
                 x.set8(ARC_ROW, 0);
                 x.set8(Shot::SETTING, 0);
@@ -204,7 +204,7 @@ mod orbit {
         let next = x.u8(ARC_ROW).wrapping_add(2) & 0xf;
         x.set8(ARC_ROW, next);
         let anim = byte(x.b, at + 1);
-        x.anim_start(ANIMS, (anim as u32) as u16);
+        x.anim_start(ANIMS.0, (anim as u32) as u16);
     }
 }
 
@@ -222,7 +222,7 @@ mod fountain {
     /// Countdown of the screen flash (word).
     const FLASH_TIMER: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x15cb54;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15cb54);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53a16) {
@@ -256,7 +256,7 @@ mod fountain {
         let n = 0x45;
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.move_xy();
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -278,7 +278,7 @@ mod fountain {
         }
         x.add16(Obj::X, dx);
         x.add16(Obj::Y, 0xffff);
-        x.anim(ANIMS, 3);
+        x.anim(ANIMS.0, 3);
         x.set16(FLASH_TIMER, 6);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
@@ -292,7 +292,7 @@ mod fountain {
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
         x.add16(Obj::Y, 1);
-        x.anim(ANIMS, 4);
+        x.anim(ANIMS.0, 4);
         x.reinsert();
     }
 
@@ -306,7 +306,7 @@ mod fountain {
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
         x.add16(Obj::Y, 1);
-        x.anim(ANIMS, 5);
+        x.anim(ANIMS.0, 5);
         x.reinsert();
     }
 
@@ -328,7 +328,7 @@ mod fountain {
         let n = 0x4a;
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.move_xy();
-        x.anim(ANIMS, 3);
+        x.anim(ANIMS.0, 3);
         x.set16(FLASH_TIMER, 6);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
@@ -350,7 +350,7 @@ mod fountain {
                     play = step == 2;
                 }
                 if play {
-                    x.anim(ANIMS, step as u32);
+                    x.anim(ANIMS.0, step as u32);
                     return;
                 }
                 x.add8(Shot::SUB_STATE, 2);

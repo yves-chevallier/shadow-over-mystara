@@ -25,7 +25,7 @@ pub mod rom {
     /// Sound of a used item.
     pub const SOUND_ITEM: crate::sound::Sound = crate::sound::ITEM;
     /// End of the auras after the red magic.
-    pub const SPELL_RESET_AURA: u32 = 0x37882;
+    pub const SPELL_RESET_AURA: crate::data::RomAddr = crate::data::RomAddr(0x37882);
 }
 
 /// Character peculiarities.

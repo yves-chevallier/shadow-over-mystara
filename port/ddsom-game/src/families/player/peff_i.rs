@@ -14,7 +14,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::player::tables::{player_data, Aligned, Read};
 
-const SPEEDS: u32 = 0x1c89b6;
+const SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c89b6);
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -36,7 +36,7 @@ mod storm {
     /// Parent cloud (16-bit pointer).
     const PARENT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bbe14;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bbe14);
     const SFX_RUMBLE: crate::sound::Sound = crate::sound::CMD_188;
     const SFX_BOLT: crate::sound::Sound = crate::sound::CMD_189;
     const SFX_BEGIN: crate::sound::Sound = crate::sound::CMD_18A;
@@ -66,7 +66,7 @@ mod storm {
         x.add16(Obj::Z, 0x20);
         x.add16(Obj::Y, 2);
         x.set16(TIMER, 0x20);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -90,7 +90,7 @@ mod storm {
         x.set16(Obj::AZ, vz);
         x.set16(Obj::VZ, 0);
         let anim = x.rand_and(1) + 1;
-        x.anim(ANIMS, anim);
+        x.anim(ANIMS.0, anim);
     }
 
     fn init_spark<R: Bench>(x: &mut Cx<'_, R>) {
@@ -106,12 +106,12 @@ mod storm {
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, dy);
-        x.set32(Obj::SPEED_TABLE, SPEEDS);
+        x.set32(Obj::SPEED_TABLE, SPEEDS.0);
         x.set16(TIMER, 2);
         let angle = x.u8(Shot::SETTING).wrapping_shl(3) & 0x1f;
         x.set8(Obj::SPEED_INDEX, angle);
         let n = x.u8(Shot::SETTING) as u32;
-        x.anim(ANIMS, n);
+        x.anim(ANIMS.0, n);
         x.reinsert();
     }
 
@@ -327,7 +327,7 @@ mod whirl {
     /// Blinking phase.
     const BLINK: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x1bbfda;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bbfda);
     const SFX_START: crate::sound::Sound = crate::sound::CMD_187;
     const SFX_LOOP: crate::sound::Sound = crate::sound::CMD_173_C;
     const KIND: u8 = 0x1f;
@@ -400,7 +400,7 @@ mod whirl {
         let vz = x.u16(Obj::VZ).wrapping_neg();
         x.set16(Obj::VZ, vz);
         let angle = x.u8(Obj::SPEED_INDEX) as u32;
-        x.anim(ANIMS, angle);
+        x.anim(ANIMS.0, angle);
         x.reinsert();
     }
 
@@ -415,7 +415,7 @@ mod whirl {
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::sound::play(x.b, SFX_LOOP, x.o);
-                x.anim(ANIMS, 0x20);
+                x.anim(ANIMS.0, 0x20);
                 return x.reinsert();
             }
             // the whirlwind forms: one satellite per frame
@@ -517,7 +517,7 @@ mod target {
     /// Lifetime (word).
     const TIMER: u32 = 0x58;
 
-    const ANIMS: u32 = 0x1bc23e;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc23e);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4f034) {
@@ -541,7 +541,7 @@ mod target {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {

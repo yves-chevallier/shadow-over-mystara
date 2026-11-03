@@ -52,7 +52,7 @@ mod marker {
     /// Carrier followed by the marker (16-bit pointer).
     const CARRIER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15ad38;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15ad38);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51c72) {
@@ -62,7 +62,7 @@ mod marker {
                 x.set8(f::BOX_SET, 6);
                 let kind = carrier.u8(x.b, Obj::KIND) as u32;
                 x.copy_pos(carrier);
-                x.anim(ANIMS, kind);
+                x.anim(ANIMS.0, kind);
                 x.set32(Obj::FRAME, 0);
                 x.reinsert();
             }
@@ -99,8 +99,8 @@ mod marker {
 mod thrown {
     use super::*;
 
-    const ANIMS_A: u32 = 0x15ae8a;
-    const ANIMS_B: u32 = 0x15c552;
+    const ANIMS_A: crate::data::RomAddr = crate::data::RomAddr(0x15ae8a);
+    const ANIMS_B: crate::data::RomAddr = crate::data::RomAddr(0x15c552);
     const SFX_START: crate::sound::Sound = crate::sound::CMD_11C_21C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -155,7 +155,7 @@ mod thrown {
                         let step: u8 = if (x.u16(Obj::VX) as i16) < 0 { 0xff } else { 1 };
                         let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step);
                         x.set8(Obj::SPEED_INDEX, angle);
-                        x.anim(ANIMS_A, (angle & 7) as u32);
+                        x.anim(ANIMS_A.0, (angle & 7) as u32);
                     }
                     x.move_xz();
                     if (x.u16(Obj::Z) as i16) >= 0 {
@@ -183,7 +183,7 @@ mod thrown {
     /// Animation from angle `+0x2d` (`0x51f48`).
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         let angle = (x.u8(Obj::SPEED_INDEX) & 7) as u32;
-        let set = if x.u8(Obj::KIND) == 1 { ANIMS_A } else { ANIMS_B };
+        let set = if x.u8(Obj::KIND) == 1 { ANIMS_A.0 } else { ANIMS_B.0 };
         x.anim_start(set, angle as u16);
     }
 }
@@ -288,7 +288,7 @@ mod arc {
     /// Countdown of the arc (h).
     const TIMER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15af62;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15af62);
     const SFX_BURST: crate::sound::Sound = crate::sound::CMD_125_225;
     const SFX_MID: crate::sound::Sound = crate::sound::CMD_12E_22E;
 
@@ -316,7 +316,7 @@ mod arc {
                 }
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 active(x);
             }
@@ -335,7 +335,7 @@ mod arc {
                 x.add8(Shot::SUB_STATE, 2);
                 x.set32(Obj::Z, 0);
                 x.set16(TIMER, 0x50);
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
                 crate::sound::play(x.b, SFX_BURST, x.o);
             }
             2 => {
@@ -346,7 +346,7 @@ mod arc {
                 if x.u16(TIMER) == 0 {
                     x.add8(Shot::SUB_STATE, 2);
                     x.set16(TIMER, 0x50);
-                    x.anim(ANIMS, 2);
+                    x.anim(ANIMS.0, 2);
                 }
                 x.anim_step();
             }
@@ -378,7 +378,7 @@ mod bouncer {
     /// Frames drawn in front (`Obj::ACTIVE` = 2) after a bounce (h).
     const FRONT_TIMER: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x15b0a2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15b0a2);
     const SFX_START: crate::sound::Sound = crate::sound::CMD_11D_21D;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -409,7 +409,7 @@ mod bouncer {
                 }
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 active(x);
             }
@@ -485,7 +485,7 @@ mod bouncer {
             x.move_xz();
             return;
         }
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
     }
 }
 
@@ -499,7 +499,7 @@ mod burst {
     /// Countdown of the screen flash.
     const FLASH_TIMER: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x15b13c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15b13c);
     const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_168_B;
     const SFX_LEFT: crate::sound::Sound = crate::sound::CMD_168_C;
     const SFX_FLAME: crate::sound::Sound = crate::sound::CMD_169;
@@ -519,7 +519,7 @@ mod burst {
                     let v = x.u32(Obj::VX).wrapping_neg();
                     x.set32(Obj::VX, v);
                 }
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 if (x.u16(Obj::VX) as i16) < 0 {
                     crate::sound::play(x.b, SFX_LEFT, x.o);
                 } else {
@@ -574,7 +574,7 @@ mod burst {
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
         crate::sound::play(x.b, SFX_FLAME, x.o);
         x.reinsert();
     }

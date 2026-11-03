@@ -51,7 +51,7 @@ mod meteors {
     /// Parent shower (16-bit pointer).
     const PARENT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bc790;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc790);
     const PALETTE: u32 = 0x25a780;
     const SFX: crate::sound::Sound = crate::sound::CMD_191;
     const KIND: u8 = 0x28;
@@ -67,7 +67,7 @@ mod meteors {
                 x.add16(Obj::Z, 0);
                 x.add16(Obj::Y, 1);
                 x.set16(TIMER, 0x510);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             0 => {
@@ -83,7 +83,7 @@ mod meteors {
                 *x.c.d2() = dx as u32;
                 let dz = (x.rand_and(0x7f) as u16).wrapping_sub(0x3f);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
                 x.reinsert();
             }
             2 if !child => {
@@ -152,7 +152,7 @@ mod lamp {
     /// Step of the player's move when the lamp was created.
     const MOVE_STEP: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x1be8b8;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1be8b8);
     const PALETTE_A: u32 = 0x25b200;
     const PALETTE_B: u32 = 0x25a780;
     const SFX: crate::sound::Sound = crate::sound::CMD_195;
@@ -165,7 +165,7 @@ mod lamp {
                 x.copy_pos(owner);
                 x.add16(Obj::Z, 0x40);
                 x.add16(Obj::Y, 0xffff);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 crate::sound::play(x.b, SFX, x.o);
                 active(x);
             }

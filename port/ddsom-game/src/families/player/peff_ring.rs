@@ -17,8 +17,8 @@ use crate::objects::Current;
 use crate::player::tables::{player_data, pc16, pc32, byte, word, Read};
 
 /// Icon animation sets: normal, alternate palette.
-const ICONS: u32 = 0x1aef78;
-const ICONS_ALT: u32 = 0x1b21c2;
+const ICONS: crate::data::RomAddr = crate::data::RomAddr(0x1aef78);
+const ICONS_ALT: crate::data::RomAddr = crate::data::RomAddr(0x1b21c2);
 
 /// Fields of the parents and the children.
 mod g {
@@ -175,7 +175,7 @@ mod ring0 {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
         let count = if x.u8(Obj::SPEED_INDEX) != 0 { 0xa } else { count };
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT.0 } else { ICONS.0 };
         x.anim_start(set, (((item << 4) + count) & 0xffff) as u16);
     }
 
@@ -417,7 +417,7 @@ mod ring1 {
                 stock as u32
             })
         };
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT.0 } else { ICONS.0 };
         x.anim_start(set, ((d0 + d1) & 0xffff) as u16);
     }
 

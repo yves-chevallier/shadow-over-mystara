@@ -18,14 +18,14 @@ mod halo {
     use super::*;
 
     const OFFSETS: u32 = 0x4a93a;
-    const ANIMS: u32 = 0x1b540c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b540c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4a88e) {
             0 => {
                 x.add8(Obj::STATE, 2);
                 place(x);
-                x.anim_start(ANIMS, 0);
+                x.anim_start(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -65,7 +65,7 @@ mod slash {
     /// Step of the player's move when the trail was created.
     const MOVE_STEP: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1b5590;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b5590);
     const OFFSETS_A: u32 = 0x4aa90;
     const OFFSETS_B: u32 = 0x4ab2a;
 
@@ -82,11 +82,11 @@ mod slash {
         let owner = x.linked(f::OWNER);
         if x.u8(Obj::VARIANT) == 0 {
             let n = (x.u8(Shot::SETTING) as u32) as u16;
-            x.anim_start(ANIMS, n);
+            x.anim_start(ANIMS.0, n);
             return;
         }
         follow(x, owner, OFFSETS_A);
-        x.anim_start(ANIMS, 3);
+        x.anim_start(ANIMS.0, 3);
     }
 
     /// Places the trail in front of the player (offset according to its variant, inverted according to its facing).
@@ -130,7 +130,7 @@ mod cure {
     /// Step of the palette cycle (0..7).
     const PALETTE_STEP: u32 = 0x5f;
 
-    const ANIMS: u32 = 0x1b56da;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b56da);
     const OFFSETS_PRAYER: u32 = 0x4acb2;
     const OFFSETS_PLAYER: u32 = 0x4ad38;
     const OFFSETS_SPARK: u32 = 0x4ade0;
@@ -172,7 +172,7 @@ mod cure {
             crate::sound::play(x.b, SFX_PRAYER_B, x.o);
         }
         let n = (x.u8(Shot::SETTING) as u32) as u16;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS.0, n);
     }
 
     fn init_spark<R: Bench>(x: &mut Cx<'_, R>) {
@@ -193,7 +193,7 @@ mod cure {
         x.set8(TIMER, t);
         let r = x.rand_and(1);
         x.set8(Shot::SETTING, r as u8);
-        x.anim_start(ANIMS, (r + 2) as u16);
+        x.anim_start(ANIMS.0, (r + 2) as u16);
     }
 
     /// Potion: the effect is placed on the player who drinks (the healer itself, or the first active player).
@@ -230,7 +230,7 @@ mod cure {
             x.add16(Obj::Y, 0xffff);
             x.set16(Shot::Y_FRACTION, 0x8000);
         }
-        x.anim_start(ANIMS, 0);
+        x.anim_start(ANIMS.0, 0);
         crate::sound::play(x.b, SFX_PRAYER, x.o);
     }
 
@@ -294,7 +294,7 @@ mod holy {
     /// Script of the shakes (long: address).
     const SCRIPT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1b598c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b598c);
     const SFX_START: crate::sound::Sound = crate::sound::CMD_192;
     const SFX_BURST_A: crate::sound::Sound = crate::sound::CMD_193;
     const SFX_BURST_B: crate::sound::Sound = crate::sound::CMD_188;
@@ -330,7 +330,7 @@ mod holy {
         x.add16(Obj::X, dx as u16);
         x.add16(Obj::Z, 0x7a);
         x.add16(Obj::Y, 0xffff);
-        x.anim_start(ANIMS, 0);
+        x.anim_start(ANIMS.0, 0);
         crate::sound::play(x.b, SFX_START, x.o);
     }
 
@@ -342,7 +342,7 @@ mod holy {
         *x.c.d2() = dy as u32;
         x.add16(Obj::Y, dy);
         let anim = x.u8(Shot::SETTING) as u32 + 1;
-        x.anim_start(ANIMS, anim as u16);
+        x.anim_start(ANIMS.0, anim as u16);
     }
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -392,7 +392,7 @@ mod holy {
         x.add8(Shot::SUB_STATE, 2);
         x.set16(TIMER, 0x50);
         x.set16(Obj::Z, 8);
-        x.anim_start(ANIMS, 0);
+        x.anim_start(ANIMS.0, 0);
         crate::families::small::peff_5_pair(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
         crate::sound::play(x.b, SFX_BURST_A, x.o);
         crate::sound::play(x.b, SFX_BURST_B, x.o);

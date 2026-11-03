@@ -36,7 +36,7 @@ mod jet {
     /// Delay before the jet starts (word).
     const DELAY: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15c698;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c698);
     const SFX: crate::sound::Sound = crate::sound::CMD_13C_23C;
     const KIND: u8 = 0xc;
 
@@ -65,7 +65,7 @@ mod jet {
                 }
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 active(x);
             }
@@ -73,7 +73,7 @@ mod jet {
                 x.add16(DELAY, 0xffff);
                 if x.u16(DELAY) == 0 {
                     x.add8(Obj::STATE, 2);
-                    x.anim(ANIMS, 1);
+                    x.anim(ANIMS.0, 1);
                     x.reinsert();
                     crate::sound::play(x.b, SFX, x.o);
                 }
@@ -122,7 +122,7 @@ mod jet {
 mod item {
     use super::*;
 
-    const ANIMS: u32 = 0x15b0a2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15b0a2);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x5329e) {
@@ -145,7 +145,7 @@ mod item {
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -169,7 +169,7 @@ mod flame {
     /// Lifetime countdown (h).
     const TIMER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15c7a6;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c7a6);
     const SFX: crate::sound::Sound = crate::sound::CMD_14E_24E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -183,7 +183,7 @@ mod flame {
                 x.set8(f::BOX_SET, 6);
                 x.set8(f::POWER, 6);
                 x.set8(f::POWER2, 6);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 crate::sound::play(x.b, SFX, x.o);
             }
@@ -207,7 +207,7 @@ mod volley {
     /// Lifetime of the shot (by class).
     const LIFE: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15c85a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c85a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x534e4) {
@@ -240,7 +240,7 @@ mod volley {
                 let class = owner.u8(x.b, Player::LEVEL) as u32;
                 let life = player_data().volley_lifetimes.at8(x.b, class);
                 x.set8(LIFE, life);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -272,7 +272,7 @@ mod star {
     /// Phase of the star (h).
     const PHASE: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x15c8a2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c8a2);
     const SFX: crate::sound::Sound = crate::sound::CMD_14F_24F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -290,7 +290,7 @@ mod star {
                 x.set8(f::BOX_SET, 6);
                 x.set8(f::POWER, 6);
                 x.set8(f::POWER2, 6);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 if x.u8(Obj::VARIANT) == 0 {
                     crate::sound::play(x.b, SFX, x.o);
@@ -325,7 +325,7 @@ mod stone {
     /// Countdown of the current phase (word).
     const TIMER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15c90a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c90a);
     const SFX: crate::sound::Sound = crate::sound::CMD_169;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -348,7 +348,7 @@ mod stone {
                     x.set16(Obj::VX, vx.wrapping_neg());
                 }
                 x.add16(Obj::X, dx);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => match x.u8(Shot::SUB_STATE) {
@@ -362,7 +362,7 @@ mod stone {
                     x.set32(Obj::Z, 0);
                     x.set16(TIMER, 4);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 8);
-                    x.anim(ANIMS, 1);
+                    x.anim(ANIMS.0, 1);
                     crate::sound::play(x.b, SFX, x.o);
                 }
                 2 => {

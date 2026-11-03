@@ -20,7 +20,7 @@ mod hail {
     /// Set when the hailstone lands; read by its parent (h).
     const LANDED: u32 = 0x5a;
 
-    const ANIMS: u32 = 0x1b609a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b609a);
     const KIND: u8 = 0xb;
     /// Wait duration before the fall: `+0x58` (byte), table turn: `+0x59`.
     const TIMER: u32 = 0x58;
@@ -96,7 +96,7 @@ mod hail {
         place(x);
         let r = x.rand_mask(3);
         x.set8(PHASE, r as u8);
-        x.anim_start(ANIMS, r);
+        x.anim_start(ANIMS.0, r);
     }
 
     /// `0x4bae6`: speed table from `+0x58`.
@@ -145,7 +145,7 @@ mod hail {
             if x.u32(Obj::Z) == 0x300000 {
                 let r = x.rand_mask(3) + 4;
                 x.set8(PHASE, r as u8);
-                x.anim_start(ANIMS, r);
+                x.anim_start(ANIMS.0, r);
             }
             if x.u16(Obj::Z) <= 0x58 {
                 return x.reinsert();
@@ -155,7 +155,7 @@ mod hail {
         x.add8(Obj::STATE, 2);
         x.set8(TIMER, 0x20);
         select_table(x);
-        x.anim_start(ANIMS, 9);
+        x.anim_start(ANIMS.0, 9);
         x.reinsert();
     }
 
@@ -185,7 +185,7 @@ mod spark {
     /// Countdown (word).
     const TIMER: u32 = 0x58;
 
-    const ANIMS: u32 = 0x1bc298;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc298);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Obj::STATE) {
@@ -225,7 +225,7 @@ mod spark {
             x.set16(Obj::VX, vx.wrapping_neg());
         }
         let n = x.rand_mask(1);
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS.0, n);
         x.reinsert();
     }
 
@@ -265,7 +265,7 @@ mod witch {
     /// Rank of the shard (from its parent).
     const RANK: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x1bb058;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb058);
     const KIND: u8 = 0x14;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -295,7 +295,7 @@ mod witch {
         x.copy_pos(owner);
         x.add16(Obj::Z, 0x60);
         x.add16(Obj::Y, 1);
-        x.anim_start(ANIMS, 0);
+        x.anim_start(ANIMS.0, 0);
         crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_BLUE);
         x.reinsert();
     }
@@ -325,7 +325,7 @@ mod witch {
         let jitter = x.rand_mask(3);
         x.add16(Obj::X, jitter + base);
         let anim = x.rand_mask(1) + 1;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS.0, anim);
         x.reinsert();
     }
 

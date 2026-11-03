@@ -80,12 +80,12 @@ pub mod rom {
     /// Sound associated with the spark of `item_spark`.
     pub const SPARK_SOUND: crate::sound::Sound = crate::sound::CMD_18C;
     /// Creation of a player effect (PEFF pool) of the type given by D0, according to the weapon.
-    pub const SPAWN_EFFECT: u32 = 0x4c58e;
+    pub const SPAWN_EFFECT: crate::data::RomAddr = crate::data::RomAddr(0x4c58e);
     /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
     pub const SCREEN_TASK_SLOT: u32 = 0x10;
     /// Programs of the spell's screen tasks: darken and restore.
-    pub const DIM_TASK: u32 = 0x153e;
-    pub const UNDIM_TASK: u32 = 0x1536;
+    pub const DIM_TASK: crate::data::RomAddr = crate::data::RomAddr(0x153e);
+    pub const UNDIM_TASK: crate::data::RomAddr = crate::data::RomAddr(0x1536);
 }
 
 /// ROM tables (PC-relative in the original).
@@ -351,7 +351,7 @@ fn screen_task(g: &mut Ctx, mode: u16, program: u32, fade: bool) {
 /// 0x3f926: the spell begins, the screen darkens.
 pub fn dim_screen(g: &mut Ctx, _p: Player) {
     cov!();
-    screen_task(g, 1, rom::DIM_TASK, true);
+    screen_task(g, 1, rom::DIM_TASK.0, true);
 }
 
 /// 0x3f954: the spell is over, the screen is restored.
@@ -363,7 +363,7 @@ pub fn undim_screen(g: &mut Ctx, p: Player) {
 /// Restores the screen with mode `mode`: the magic-user's code (0x48772) passes 1 instead of 2.
 pub fn undim_screen_mode(g: &mut Ctx, _p: Player, mode: u16) {
     cov!();
-    screen_task(g, mode, rom::UNDIM_TASK, false);
+    screen_task(g, mode, rom::UNDIM_TASK.0, false);
 }
 
 /// Start of a spell (next action step): game pause (`A5+0x3d`), spell indicator (`A5+0x4a`),

@@ -13,7 +13,7 @@ pub(crate) fn patch_end_by_scene(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
         return false;
     }
     c.d[0] = scene << 2 & 0xffff;
-    c.a[1] = NO_END;
-    c.pc = NO_END;
+    c.a[1] = NO_END.0;
+    c.pc = NO_END.0;
     true
 }

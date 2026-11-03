@@ -31,8 +31,8 @@ mod slot_icon {
     const SLOT_A: u32 = 0x4cae2;
     const PLAYER_B: u32 = 0x4caae;
     const SLOT_B: u32 = 0x4caca;
-    const ICONS: u32 = 0x1b7726;
-    const ICONS_ALT: u32 = 0x1b8204;
+    const ICONS: crate::data::RomAddr = crate::data::RomAddr(0x1b7726);
+    const ICONS_ALT: crate::data::RomAddr = crate::data::RomAddr(0x1b8204);
     /// Resting place of the icon (X, Y) and state: `+0x52`, `+0x54`, `+0x56` (0 moving, 1 taken, negative waiting).
     const HOME: u32 = 0x52;
     const TAKEN: u32 = 0x56;
@@ -88,7 +88,7 @@ mod slot_icon {
         let at = slot(x);
         let item = at.u8(x.b, Player::INVENTORY) as u32;
         let count = at.u8(x.b, Player::QUANTITIES) as u32;
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT.0 } else { ICONS.0 };
         x.anim_start(set, (((item << 4) + count) & 0xffff) as u16);
     }
 
@@ -115,7 +115,7 @@ mod slot_icon {
         }
         x.set8(Shot::HIT_FLAGS, item);
         x.set8(COUNT, count);
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT.0 } else { ICONS.0 };
         x.anim_start(set, ((((item as u32) << 4) + count as u32) & 0xffff) as u16);
     }
 

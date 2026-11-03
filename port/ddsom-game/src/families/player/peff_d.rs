@@ -44,7 +44,7 @@ mod beam {
     /// Original glitch: `+0x15e` read on the effect, past its 0x60 bytes (the special kind is a field of the player record).
     const FOLLOWING_SPECIAL_KIND: u32 = 0x15e;
 
-    const ANIMS: u32 = 0x1b5ab8;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b5ab8);
     const OFFSETS: u32 = 0x4b2dc;
     const SFX: crate::sound::Sound = crate::sound::CMD_170;
 
@@ -82,7 +82,7 @@ mod beam {
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, 0x58);
         x.add16(Obj::Y, 0xffff);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
     }
 
     fn init_tip<R: Bench>(x: &mut Cx<'_, R>) {
@@ -105,7 +105,7 @@ mod beam {
             x.add16(Obj::Z, dz);
             x.add32(Obj::Y, 0xffff_0000);
         }
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
         crate::sound::play(x.b, SFX, x.o);
     }
 }
@@ -115,7 +115,7 @@ mod beam {
 mod spark {
     use super::*;
 
-    const ANIMS: u32 = 0x1b5bc2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b5bc2);
     const OFFSETS_A: u32 = 0x4b43c;
     const OFFSETS_B: u32 = 0x4b4ae;
 
@@ -154,7 +154,7 @@ mod spark {
         x.add16(Obj::Z, dz);
         x.add32(Obj::Y, depth);
         let n = x.u8(Shot::SETTING) as u32;
-        x.anim(ANIMS, n);
+        x.anim(ANIMS.0, n);
     }
 
     fn init_b<R: Bench>(x: &mut Cx<'_, R>) {
@@ -169,7 +169,7 @@ mod spark {
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, 1);
-        x.anim(ANIMS, 2);
+        x.anim(ANIMS.0, 2);
     }
 }
 
@@ -216,7 +216,7 @@ mod ray {
     /// Phase of the ray (h).
     const PHASE: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x1b5db2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b5db2);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -262,7 +262,7 @@ mod ray {
         x.add16(Obj::Z, dz);
         x.add32(Obj::Y, depth);
         let n = x.u8(Shot::SETTING) as u32;
-        x.anim(ANIMS, n);
+        x.anim(ANIMS.0, n);
     }
 
     fn init_generator<R: Bench>(x: &mut Cx<'_, R>) {
@@ -301,7 +301,7 @@ mod ray {
 mod impact {
     use super::*;
 
-    const ANIMS: u32 = 0x1b5ecc;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b5ecc);
     const OFFSETS: u32 = 0x4b83e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -344,7 +344,7 @@ mod impact {
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, 0xffff);
         let n = x.u8(Obj::VARIANT) as u32;
-        x.anim(ANIMS, n);
+        x.anim(ANIMS.0, n);
     }
 }
 

@@ -20,7 +20,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod leap {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc60a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc60a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fc28) {
@@ -40,7 +40,7 @@ mod leap {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {
@@ -70,7 +70,7 @@ mod leap {
 mod swap {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc6b0;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc6b0);
     const OFFSETS_A: u32 = 0x4fdd4;
     const OFFSETS_B: u32 = 0x4fdec;
     const SFX: crate::sound::Sound = crate::sound::VOICE_BY_D4;
@@ -89,7 +89,7 @@ mod swap {
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 let voice = owner.u8(x.b, Player::WEAPON_A) as u32;
                 crate::sound::play_with(x.b, SFX, crate::sound::Source { object: Some(x.o), a1: None, d4: Some(voice) });
                 x.reinsert();
@@ -112,14 +112,14 @@ mod dash {
     /// Strike kind of the player when the effect was created.
     const SUBACTION: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bc6f4;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc6f4);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fe46) {
             0 => {
                 x.add8(Obj::STATE, 2);
                 pose(x);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -156,7 +156,7 @@ mod dash {
 mod chip {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc77c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc77c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ff2c) {
@@ -173,7 +173,7 @@ mod chip {
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -257,7 +257,7 @@ mod rain {
     /// Lifetime (word).
     const TIMER: u32 = 0x5a;
 
-    const ANIMS: u32 = 0x1be8b8;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1be8b8);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51ae4) {
@@ -275,7 +275,7 @@ mod rain {
                 x.set16(DELAY, delay);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Y, 0x100);
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
             }
             2 => {
                 x.add16(TIMER, 0xffff);
@@ -288,7 +288,7 @@ mod rain {
                     let r = x.rand_and(3) * 2;
                     let d = player_data().rain_delays.word_at(x.b, r);
                     x.set16(DELAY, d);
-                    x.anim(ANIMS, 1);
+                    x.anim(ANIMS.0, 1);
                     if (x.u16(TIMER) as i16) < 0 {
                         x.add8(Obj::STATE, 2);
                     }

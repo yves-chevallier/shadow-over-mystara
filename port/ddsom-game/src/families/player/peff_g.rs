@@ -25,7 +25,7 @@ mod hit_spark {
     /// Blinking phase.
     const BLINK: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x1bb146;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb146);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -47,7 +47,7 @@ mod hit_spark {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 if !child => {
@@ -82,7 +82,7 @@ mod prayer {
     /// Lifetime (word).
     const TIMER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1bb240;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb240);
     const KIND: u8 = 0x16;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -127,7 +127,7 @@ mod prayer {
         let class = owner.u8(x.b, Player::LEVEL) as u32;
         let life = player_data().prayer_durations.word_at(x.b, class * 2);
         x.set16(TIMER, life);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -149,7 +149,7 @@ mod prayer {
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x43);
         x.move_by_table_xy();
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
         x.reinsert();
     }
 
@@ -162,7 +162,7 @@ mod prayer {
         x.add16(Obj::X, 0);
         x.add16(Obj::Z, 0x37);
         x.add16(Obj::Y, 0xffff);
-        x.anim(ANIMS, 3);
+        x.anim(ANIMS.0, 3);
         x.reinsert();
     }
 
@@ -197,7 +197,7 @@ mod prayer {
             x.add16(TIMER, 0xffff);
             if x.u16(TIMER) == 0 {
                 x.add8(Shot::SUB_STATE, 2);
-                x.anim(ANIMS, 2);
+                x.anim(ANIMS.0, 2);
             }
             x.anim_step();
             x.move_by_table_xy();
@@ -219,7 +219,7 @@ mod glow {
     /// Gesture of the player when the glow was created.
     const GESTURE: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x1bb402;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb402);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Obj::STATE) {
@@ -235,7 +235,7 @@ mod glow {
                 x.add16(Obj::Z, dz);
                 x.add16(Obj::Y, 0xffff);
                 let n = x.u8(Obj::VARIANT) as u32;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {

@@ -12,7 +12,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::player::tables::{player_data, byte, word, Aligned};
 
-const ANIMS: u32 = 0x1c40c6;
+const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1c40c6);
 /// Position of the icon per player (X, Y): two versions according to `A5+0x20` (1: one-player screen).
 const PLAYER_SPOTS_A: u32 = 0x4d792;
 const PLAYER_SPOTS_B: u32 = 0x4d782;
@@ -56,7 +56,7 @@ mod coins {
                 let dy = word(x.b, table + row + 2);
                 x.set16(Obj::X, cx.wrapping_add(dx));
                 x.set16(Obj::Y, cy.wrapping_add(dy));
-                x.anim(ANIMS, 0x2b);
+                x.anim(ANIMS.0, 0x2b);
                 x.reinsert();
             }
             2 => {
@@ -93,7 +93,7 @@ mod coins {
         }
         if x.u8(Obj::AX) == 0 {
             x.set8(Obj::AX, 1);
-            return x.anim(ANIMS, 0x2c);
+            return x.anim(ANIMS.0, 0x2c);
         }
         if x.u8(AX_LOW) == 0 {
             return;
@@ -106,7 +106,7 @@ mod coins {
             return;
         }
         x.set8(Obj::AX, 0);
-        x.anim(ANIMS, 0x2b);
+        x.anim(ANIMS.0, 0x2b);
     }
 
     /// `0x4d81c`: the linked player (`+0x1a`) hands back the equipment of its slot `+3`.

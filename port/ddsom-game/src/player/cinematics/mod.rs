@@ -81,8 +81,8 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     g.jumped = super::Jumped { index: step, offset };
     match steps.iter().find(|s| s.0 == at) {
         Some(&(_, f)) => f(g, p),
-        None if at == IDLE => {}
-        None if at == STRAY_HEX_DUMP => stray_hex_dump(g, offset),
+        None if at == IDLE.0 => {}
+        None if at == STRAY_HEX_DUMP.0 => stray_hex_dump(g, offset),
         // no native at the addresses of these step tables: the game without 68000 already stopped there
         // (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
         None => unreachable!("cinematic step {at:06x} not rewritten"),
@@ -90,16 +90,16 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
 }
 
 /// Common final step (a simple RTS).
-const IDLE: u32 = 0x2434c;
+const IDLE: crate::data::RomAddr = crate::data::RomAddr(0x2434c);
 
 /// Step outside the table: routine 0x24aba has only three steps, but a player arriving in the cinematic with action
 /// 0x10 (scenario `covb_region_2`) makes the jump read the word 0x6702 of its code, which leads into the middle of the
 /// hexadecimal display routine of the TEST menu (0x2b1d0), after loading its two parameters.
-const STRAY_HEX_DUMP: u32 = 0x2b1da;
+const STRAY_HEX_DUMP: crate::data::RomAddr = crate::data::RomAddr(0x2b1da);
 
 /// Routine of the end cinematic whose table the stray jump leaves: the end dispatch (0x23f40) jumps to it with its
 /// address in A1, which the hexadecimal display then takes as its destination.
-const STRAY_ROUTINE: u32 = 0x24aba;
+const STRAY_ROUTINE: crate::data::RomAddr = crate::data::RomAddr(0x24aba);
 /// High word of D1 at the stray jump: the marker of the players' charge gauge (`game::G_PLAYER`, D1 of 0xb3e),
 /// which the player loop and the dispatches (`move.w`) leave in place.
 const STRAY_D1_HIGH: u32 = 0x50_0000;
@@ -109,7 +109,7 @@ const STRAY_D1_HIGH: u32 = 0x50_0000;
 /// A1 is the address of the routine 0x24aba, and the value D1 is the offset read in the table under the high word left
 /// by the gauge.
 fn stray_hex_dump(g: &mut Ctx, offset: u16) {
-    let (mut a1, mut d1) = (STRAY_ROUTINE, STRAY_D1_HIGH | offset as u32);
+    let (mut a1, mut d1) = (STRAY_ROUTINE.0, STRAY_D1_HIGH | offset as u32);
     for _ in 0..8 {
         for _ in 0..5 {
             let digit = d1 & 0xf;

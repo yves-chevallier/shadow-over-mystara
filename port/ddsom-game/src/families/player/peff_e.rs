@@ -44,7 +44,7 @@ mod ice {
     /// Parent effect (16-bit pointer).
     const PARENT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1b6350;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b6350);
     const OFFSETS: u32 = 0x4bd0e;
     const SFX: crate::sound::Sound = crate::sound::CMD_165_265;
     const CROWN_A: u32 = 0x4c140;
@@ -85,7 +85,7 @@ mod ice {
                 x.set8(TIMER, r.wrapping_add(1));
                 let n = 0x2b;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 // a halo (variant 1) follows the shard
                 if let Some(o) = x.alloc(&pools::PEFF) {
                     o.set_u8(x.b, Obj::ACTIVE, 1);
@@ -183,7 +183,7 @@ mod ice {
                 let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 x.add16(Obj::Y, 0xffff);
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
             }
             2 => {
                 x.anim_step();
@@ -272,7 +272,7 @@ mod ice {
                     x.set8(Obj::STATE, 4);
                 }
                 let n = x.rand_and(1) + 2;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
             }
             2 => {
                 if x.anim_step() {
@@ -298,7 +298,7 @@ mod ice {
                 let dx = player_data().ice_spread.word_at(x.b, k);
                 let dx = signed(dx, x.u8(f::FLIP) == 0);
                 x.add16(Obj::X, dx);
-                x.anim(ANIMS, 4);
+                x.anim(ANIMS.0, 4);
             }
             2 => {
                 if x.anim_step() {
@@ -325,7 +325,7 @@ mod ice {
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 5);
+                x.anim(ANIMS.0, 5);
             }
             2 => {
                 x.anim_step();
@@ -351,7 +351,7 @@ mod blessing {
     use super::*;
 
     const OFFSETS: u32 = 0x4c226;
-    const ANIMS: u32 = 0x1b670a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b670a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c1c4) {
@@ -365,7 +365,7 @@ mod blessing {
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, (v & 1) as u32);
+                x.anim(ANIMS.0, (v & 1) as u32);
             }
             2 => {
                 let owner = x.linked(f::OWNER);
@@ -395,7 +395,7 @@ mod banish {
     /// Target of the banishment (16-bit pointer).
     const TARGET: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x1b67f2;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b67f2);
     const SFX: crate::sound::Sound = crate::sound::CMD_18E;
     const POWER_TABLE: u32 = 0x1042e2;
     const POWER_TABLE_BOSS: u32 = 0x104300;
@@ -410,7 +410,7 @@ mod banish {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, 0x5e);
                 x.add16(Obj::Y, 0xffff);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
             }
             0 => init_beam(x),
             2 if !child => {
@@ -454,7 +454,7 @@ mod banish {
         }
         let anim = frame & 0xff00 | (frame as u8).wrapping_add(k) as u16;
         let n = anim;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS.0, n);
         if k == 0 {
             crate::sound::play(x.b, SFX, x.o);
         }

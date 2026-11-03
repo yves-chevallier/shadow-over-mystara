@@ -52,8 +52,8 @@ mod chain {
     const LINK: u32 = 0x5c;
 
     const LINKS: u32 = 0xff204c;
-    const SPEEDS: u32 = 0x1c89b6;
-    const ANIMS: u32 = 0x15cdb6;
+    const SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c89b6);
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15cdb6);
     const SFX_END: crate::sound::Sound = crate::sound::CMD_162_262;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -97,7 +97,7 @@ mod chain {
         }
         x.add16(Obj::X, dx);
         x.set8(Shot::BLOW_ID, 2);
-        x.set32(Obj::SPEED_TABLE, SPEEDS);
+        x.set32(Obj::SPEED_TABLE, SPEEDS.0);
         x.set32(ANGLES, 0xffff_ffff);
         // four sparks, sorted by address then chained
         let mut sparks = [0u16; 4];
@@ -122,7 +122,7 @@ mod chain {
             previous = *s;
         }
         find_target(x, 0);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
@@ -336,7 +336,7 @@ mod wall {
     /// Countdown of the current phase.
     const TIMER: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15d00c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15d00c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x542fc) {
@@ -363,7 +363,7 @@ mod wall {
                 x.set8(f::POWER, p1);
                 x.set8(f::POWER2, p2);
                 let anim = player_data().wall_pick.at8(x.b, class);
-                x.anim(ANIMS, anim as u32);
+                x.anim(ANIMS.0, anim as u32);
                 x.reinsert();
             }
             2 => {
@@ -407,7 +407,7 @@ mod wall {
 mod knife {
     use super::*;
 
-    const ANIMS: u32 = 0x15d0b0;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15d0b0);
     const SFX_HIT: crate::sound::Sound = crate::sound::CMD_12F_22F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -437,7 +437,7 @@ mod knife {
                 }
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
-                x.anim(ANIMS, 1);
+                x.anim(ANIMS.0, 1);
                 x.reinsert();
             }
             2 => {
@@ -464,7 +464,7 @@ mod fireball {
     /// Parent fireball (16-bit pointer).
     const PARENT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15d15e;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15d15e);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -495,7 +495,7 @@ mod fireball {
                 let p2 = players("magic_damage/4").at8(x.b, 30 + class);
                 x.set8(f::POWER, p1);
                 x.set8(f::POWER2, p2);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             0 => {
@@ -511,14 +511,14 @@ mod fireball {
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
-                x.anim(ANIMS, 2);
+                x.anim(ANIMS.0, 2);
                 x.reinsert();
             }
             2 if !child => {
                 if x.u8(Shot::SUB_STATE) == 0 {
                     if x.anim_step() {
                         x.add8(Shot::SUB_STATE, 2);
-                        x.anim(ANIMS, 1);
+                        x.anim(ANIMS.0, 1);
                     }
                 } else {
                     x.move_xz();
@@ -559,7 +559,7 @@ mod fireball {
 mod bolt {
     use super::*;
 
-    const ANIMS: u32 = 0x15d3fa;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15d3fa);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x54728) {
@@ -587,7 +587,7 @@ mod bolt {
                     x.add16(Obj::Z, dz);
                     x.add32(Obj::Y, 0xfffe_8000);
                 }
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
@@ -607,7 +607,7 @@ mod spark {
     /// Parent shot (16-bit pointer).
     const PARENT: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15ad38;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15ad38);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x548ae) {
@@ -617,7 +617,7 @@ mod spark {
                 let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 let n = 0x1du32.wrapping_add(x.u8(Obj::VARIANT) as u32) & 0xff;
-                x.anim(ANIMS, n);
+                x.anim(ANIMS.0, n);
                 x.set32(Obj::FRAME, 0);
                 x.reinsert();
             }

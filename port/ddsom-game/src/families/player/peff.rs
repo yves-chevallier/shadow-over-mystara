@@ -21,8 +21,8 @@ mod badge {
 
     /// Animation bytes per `+0x2f` (RAM).
     const ANIM_BYTES: u32 = 0xff2478;
-    const ANIMS: u32 = 0x1bcbbe;
-    const ANIMS_ALT: u32 = 0x1bcd5a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bcbbe);
+    const ANIMS_ALT: crate::data::RomAddr = crate::data::RomAddr(0x1bcd5a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Obj::STATE) {
@@ -45,7 +45,7 @@ mod badge {
         let byte = byte(x.b, ANIM_BYTES + which);
         x.set8(ANIM_BYTE, byte);
         let n = (which * 2 + byte as u32) & 0xffff;
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT } else { ANIMS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT.0 } else { ANIMS.0 };
         x.anim_start(set, n as u16);
         x.reinsert();
     }
@@ -70,7 +70,7 @@ mod shop {
     /// Per scene (from 0x45): (offset, width) in X and in depth of the two zones (words, in the clear).
     const ZONES_A: u32 = 0x51306;
     const ZONES_B: u32 = 0x51376;
-    const ANIMS: u32 = 0x1c03a6;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
     const FIRST_SCENE: u16 = 0x45;
     /// Four registered players (words, 0 = absent).
     const PLAYERS: u32 = 0xff2aa4;
@@ -107,7 +107,7 @@ mod shop {
         let b = player_data().shop_scripts_b.long_at(x.b, index);
         x.set32(SCRIPT_B, b);
         let variant = x.u8(Obj::VARIANT) as u32;
-        x.anim(ANIMS, variant);
+        x.anim(ANIMS.0, variant);
         x.reinsert();
     }
 

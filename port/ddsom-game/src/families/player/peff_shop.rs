@@ -80,8 +80,8 @@ mod item {
     const PURCHASE_INDEX: u32 = 0x58;
     const ITEM: u32 = 0x59;
     const OWN_MESSAGE: u32 = 0x5a;
-    const ANIMS: u32 = 0x1980e4;
-    const ANIMS_ALT: u32 = 0x1980fc;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1980e4);
+    const ANIMS_ALT: crate::data::RomAddr = crate::data::RomAddr(0x1980fc);
     /// Variants 0 and 7: offered only if the shop has them (bytes in A5).
     const OFFER_0: u32 = A5 - 0x553f;
     const OFFER_7: u32 = A5 - 0x5540;
@@ -137,7 +137,7 @@ mod item {
         let purchase = player_data().item_purchases.word_at(x.b, 2 * v);
         x.set16(PURCHASE_INDEX, purchase);
         let anim = player_data().item_animations.word_at(x.b, 2 * v);
-        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT } else { ANIMS };
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT.0 } else { ANIMS.0 };
         x.anim_start(set, anim);
         x.reinsert();
     }

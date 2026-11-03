@@ -27,7 +27,7 @@ mod ground {
     /// Non-zero while the effect hits (h).
     const ACTIVE_HIT: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x15b5fe;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15b5fe);
     const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_164_B;
     const SFX_LEFT: crate::sound::Sound = crate::sound::CMD_164_C;
 
@@ -49,7 +49,7 @@ mod ground {
                     if owner.u8(x.b, Player::LEVEL) > 0x14 {
                         anim = anim.wrapping_add(5);
                     }
-                    x.anim(ANIMS, anim as u32);
+                    x.anim(ANIMS.0, anim as u32);
                 }
                 colors(x);
                 x.anim_step();
@@ -86,7 +86,7 @@ mod ground {
         x.set8(LEVEL_SHOWN, spell);
         pose(x);
         let anim = if owner.u8(x.b, Player::LEVEL) > 0x14 { 0xb } else { 0xa };
-        x.anim(ANIMS, anim);
+        x.anim(ANIMS.0, anim);
         if owner.u8(x.b, f::FLIP) != 0 {
             crate::sound::play(x.b, SFX_RIGHT, x.o);
         } else {
@@ -109,7 +109,7 @@ mod ground {
         x.set8(f::POWER, p1);
         x.set8(f::POWER2, p2);
         pose(x);
-        x.anim(ANIMS, 0);
+        x.anim(ANIMS.0, 0);
         x.set32(Obj::FRAME, 0);
     }
 
@@ -165,7 +165,7 @@ mod shadow {
     /// Rank of the shadow (countdown before it moves) (h).
     const RANK: u32 = 0x5c;
 
-    const ANIMS: u32 = 0x15c4a8;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x15c4a8);
     const SFX_FALL: crate::sound::Sound = crate::sound::CMD_13A_23A;
     const SFX_STRIKE: crate::sound::Sound = crate::sound::CMD_13C_23C;
 
@@ -211,7 +211,7 @@ mod shadow {
         x.set16(Obj::AZ, -0x30i16 as u16);
         let v = x.u8(Obj::VARIANT) as u32;
         let pick = player_data().shadow_pick.at8(x.b, v);
-        x.anim(ANIMS, pick as u32);
+        x.anim(ANIMS.0, pick as u32);
     }
 
     fn init_throw<R: Bench>(x: &mut Cx<'_, R>) {
@@ -231,7 +231,7 @@ mod shadow {
             let v = x.u16(Obj::VX);
             x.set16(Obj::VX, v.wrapping_neg());
         }
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
     }
 
     fn init_wait<R: Bench>(x: &mut Cx<'_, R>) {
@@ -242,7 +242,7 @@ mod shadow {
         x.add8(Obj::STATE, 2);
         x.set8(f::POWER, 0xc);
         x.set8(f::POWER2, 0xc);
-        x.anim(ANIMS, 3);
+        x.anim(ANIMS.0, 3);
         crate::sound::play(x.b, SFX_STRIKE, x.o);
     }
 
@@ -256,7 +256,7 @@ mod shadow {
             x.set8(f::POWER, 0xc);
             x.set8(f::POWER2, 0xc);
             x.set32(Obj::Z, 0);
-            x.anim(ANIMS, 3);
+            x.anim(ANIMS.0, 3);
             if x.u8(Obj::VARIANT) == 0 {
                 crate::sound::play(x.b, SFX_FALL, x.o);
             }

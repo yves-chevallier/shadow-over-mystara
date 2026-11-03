@@ -27,16 +27,16 @@ const RECOGNIZERS: u32 = 0x1a0;
 /// Gate variants: address of the first of the three `move.l PC@(..),(A5-...)` of the original code;
 /// the three data longs are 0x16, 0x1a and 0x1e bytes further.
 mod gates {
-    pub const BLOCKED: u32 = 0xf19c2;
-    pub const HOLDING: u32 = 0xf19e2;
-    pub const SUBACTION_A: u32 = 0xf1a02;
-    pub const RUNNING: u32 = 0xf1a22;
-    pub const SUBACTION_16: u32 = 0xf1a42;
-    pub const SUBACTION_C: u32 = 0xf1a62;
-    pub const SUBACTION_1E: u32 = 0xf1a82;
-    pub const STATE_1200: u32 = 0xf1aa2;
-    pub const STATE_1000: u32 = 0xf1ac2;
-    pub const FROZEN: u32 = 0xf1b02;
+    pub const BLOCKED: crate::data::RomAddr = crate::data::RomAddr(0xf19c2);
+    pub const HOLDING: crate::data::RomAddr = crate::data::RomAddr(0xf19e2);
+    pub const SUBACTION_A: crate::data::RomAddr = crate::data::RomAddr(0xf1a02);
+    pub const RUNNING: crate::data::RomAddr = crate::data::RomAddr(0xf1a22);
+    pub const SUBACTION_16: crate::data::RomAddr = crate::data::RomAddr(0xf1a42);
+    pub const SUBACTION_C: crate::data::RomAddr = crate::data::RomAddr(0xf1a62);
+    pub const SUBACTION_1E: crate::data::RomAddr = crate::data::RomAddr(0xf1a82);
+    pub const STATE_1200: crate::data::RomAddr = crate::data::RomAddr(0xf1aa2);
+    pub const STATE_1000: crate::data::RomAddr = crate::data::RomAddr(0xf1ac2);
+    pub const FROZEN: crate::data::RomAddr = crate::data::RomAddr(0xf1b02);
 }
 
 /// Sequence tables (code bytes, read as data).
@@ -171,10 +171,10 @@ fn select_gates(g: &mut Ctx, p: Player) {
     cov!();
     use gates::*;
     if ram::PAUSE.get(g.b) != 0 || p.u8(g, Player::SUB) != 0 {
-        return set_gates(g, BLOCKED);
+        return set_gates(g, BLOCKED.0);
     }
     if ram::FROZEN.get(g.b) != 0 {
-        return set_gates(g, FROZEN);
+        return set_gates(g, FROZEN.0);
     }
     let action = p.u8(g, Player::ACTION);
     if p.u16(g, Player::HP) == 0
@@ -184,23 +184,23 @@ fn select_gates(g: &mut Ctx, p: Player) {
         || p.u8(g, Player::SUBACTION) == 0x18
         || p.state(g) & !0xff == 0x0200_2000
     {
-        return set_gates(g, BLOCKED);
+        return set_gates(g, BLOCKED.0);
     }
     match p.state(g) & !0xff {
-        0x0200_0600 => return set_gates(g, RUNNING),
-        0x0200_1000 => return set_gates(g, STATE_1000),
-        0x0200_1200 => return set_gates(g, STATE_1200),
+        0x0200_0600 => return set_gates(g, RUNNING.0),
+        0x0200_1000 => return set_gates(g, STATE_1000.0),
+        0x0200_1200 => return set_gates(g, STATE_1200.0),
         _ => {}
     }
     match p.u8(g, Player::SUBACTION) {
-        0x16 => return set_gates(g, SUBACTION_16),
-        0x1e | 0x1a => return set_gates(g, SUBACTION_1E),
-        0xc => return set_gates(g, SUBACTION_C),
-        0xa => return set_gates(g, SUBACTION_A),
+        0x16 => return set_gates(g, SUBACTION_16.0),
+        0x1e | 0x1a => return set_gates(g, SUBACTION_1E.0),
+        0xc => return set_gates(g, SUBACTION_C.0),
+        0xa => return set_gates(g, SUBACTION_A.0),
         _ => {}
     }
     if p.u8(g, Player::SPECIAL_ACTIVE) != 0 {
-        return set_gates(g, HOLDING);
+        return set_gates(g, HOLDING.0);
     }
     clear_gates(g);
 }

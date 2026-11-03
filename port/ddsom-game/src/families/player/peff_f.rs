@@ -29,7 +29,7 @@ mod trail {
     /// Index of the color (0..5).
     const COLOR: u32 = 0x5e;
 
-    const ANIMS: u32 = 0x1b6eda;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b6eda);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c5cc) {
@@ -44,7 +44,7 @@ mod trail {
                 let d3 = place(x);
                 let rank = (x.u8(Shot::SETTING) as u32) << 3;
                 let anim = (d3 as u32).wrapping_add(rank) & 0xffff;
-                x.anim(ANIMS, anim);
+                x.anim(ANIMS.0, anim);
                 cycle(x);
                 x.reinsert();
             }
@@ -118,7 +118,7 @@ mod bubble {
     /// Lifetime (word).
     const TIMER: u32 = 0x58;
 
-    const ANIMS: u32 = 0x1b758c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b758c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c956) {
@@ -127,7 +127,7 @@ mod bubble {
                 x.set16(TIMER, 0x12c);
                 let owner = x.linked(f::OWNER);
                 let kind = owner.u8(x.b, Player::INDEX) as u32;
-                x.anim(ANIMS, kind);
+                x.anim(ANIMS.0, kind);
             }
             2 => {
                 x.add16(TIMER, 0xffff);
@@ -164,7 +164,7 @@ mod storm {
     /// Countdown (h).
     const TIMER: u32 = 0x58;
 
-    const ANIMS: u32 = 0x1ba964;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1ba964);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ccd8) {
@@ -178,7 +178,7 @@ mod storm {
                 };
                 x.set16(Obj::X, cx.wrapping_add(0xc0));
                 x.set16(Obj::Z, cy.wrapping_add(0x100));
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 let me = x.o;
                 crate::families::small::pshl_stones(&mut OnBench(&mut x.c), x.b, me);
                 x.reinsert();
@@ -233,7 +233,7 @@ mod flash {
     /// Step of the player's move when the effect was created.
     const MOVE_STEP: u32 = 0x5d;
 
-    const ANIMS: u32 = 0x1baa5c;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1baa5c);
     const SFX_BODY: crate::sound::Sound = crate::sound::CMD_182;
     const SFX_CORNER: crate::sound::Sound = crate::sound::CMD_183_283;
 
@@ -242,7 +242,7 @@ mod flash {
         match x.state(0x4ce1a) {
             0 if !child => {
                 x.add8(Obj::STATE, 2);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 crate::sound::play(x.b, SFX_BODY, x.o);
             }
@@ -275,7 +275,7 @@ mod flash {
         let delay = player_data().flash_delays.word_at(x.b, 2 * k);
         x.set16(DELAY, delay);
         let anim = if k > 1 { 2 } else { 1 };
-        x.anim(ANIMS, anim);
+        x.anim(ANIMS.0, anim);
     }
 
     fn body<R: Bench>(x: &mut Cx<'_, R>) {
@@ -342,7 +342,7 @@ mod flash {
             x.set16(DELAY, 0x18);
             x.set_bit(Obj::FLAGS, 1, true);
             let anim = if x.u8(Shot::SETTING) > 1 { 2 } else { 1 };
-            x.anim(ANIMS, anim);
+            x.anim(ANIMS.0, anim);
         } else {
             if x.u8(BLINK) != 0 {
                 x.add8(BLINK, 0xff);

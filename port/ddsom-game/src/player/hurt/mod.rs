@@ -476,7 +476,7 @@ const STEP_TABLES: &[(u32, u32)] = &[
 ];
 
 /// Empty step (a simple RTS), shared by several reactions.
-const IDLE_STEP: u32 = 0x3a1a6;
+const IDLE_STEP: crate::data::RomAddr = crate::data::RomAddr(0x3a1a6);
 
 /// Runs the original routine at `addr`, rewritten if possible.
 pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
@@ -485,7 +485,7 @@ pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
         f(g, p);
     } else if let Some(&(_, table)) = STEP_TABLES.iter().find(|t| t.0 == addr) {
         jump(g, p, table);
-    } else if addr != IDLE_STEP {
+    } else if addr != IDLE_STEP.0 {
         // no native at the addresses of these tables: the game without 68000 already stopped there
         // (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
         unreachable!("reaction step {addr:06x} not rewritten (tables 0x3a0f4, 0x3b820 and their step tables)");
