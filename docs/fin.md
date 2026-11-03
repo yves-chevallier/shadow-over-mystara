@@ -867,7 +867,10 @@ libre.
   * Mesures (`measure_end.py`, zone `enemies`) : 102 → 107 fichiers, 32 859 → 33 188 lignes, accesseurs ROM
     135 → 0, décalages littéraux 1 132 → 0, `A5 + littéral` 14 → 0, constantes d'adresses ROM 180 → 0,
     `rd*`/`wr*` 8 (façades), plus gros fichier 1 051 → 793 (`enemy_beetle.rs`).
-  * Validation : VALIDATION_L8B
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; final (après fusion de main 6038d49, L6 et L7) :
+    308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1
+    DDSOM_COV=1 DDSOM_LONG=1` ; résidu 0 sur les scénarios `scenarios/enemy/` (41) et `modes/attract` ; tests
+    `extract`, `ddsom-assets`, `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans `tools`.
   * Pour les lots suivants : les boss lisent encore leurs tables de réactions eux-mêmes (`x.prog32(REACTIONS +
     code)`) : `tables::reactions(clé).at32(x.b, code)` ou `reaction_routine` ; `Prey` et `Enemy` sont à fusionner
     avec la fiche de joueur (L10) et la vue `Host` de `shell/records.rs` (L7) ; les champs d'IA d'`Enemy`
