@@ -10,8 +10,8 @@ use crate::machine::Machine;
 
 /// 0x882ae: pause, appearance, jump, landing, first fight.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x882ba, f::SUB2) {
-        0x882c4 => {
+    match x.u8(f::SUB2) {
+        0 => {
             if sub16(x, TIMER, 1).pl() {
                 return;
             }
@@ -19,7 +19,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x3c);
             lib::shake_54(x, 0x3e);
         }
-        0x882e0 => {
+        2 => {
             if sub16(x, TIMER, 1).pl() {
                 return;
             }
@@ -28,7 +28,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             lib::sound(x, crate::sound::CMD_349);
             body(x, 5);
         }
-        0x88308 => {
+        4 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
                 x.set16(0x18, (-0x80i16) as u16);
@@ -38,7 +38,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(0x38, 0);
         }
-        0x88330 => {
+        6 => {
             if x.move_xz().gt() {
                 return;
             }
@@ -72,10 +72,10 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, super::WAIT);
         return;
     }
-    match dispatch(x, 0x883cc, f::SUB2) {
-        0x883d6 => walk(x),
-        0x8863a => turn(x),
-        0x88692 => stop(x),
+    match x.u8(f::SUB2) {
+        0 | 8 => walk(x),
+        2 => turn(x),
+        4 => stop(x),
         _ => approach(x),
     }
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
@@ -226,8 +226,8 @@ fn stop<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88702 : approche lente de l'adversaire.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x8870e, f::SUB3) {
-        0x8875a => {
+    match x.u8(f::SUB3) {
+        2 => {
             if sub16(x, TIMER, 1).mi() {
                 x.set32(f::STATE, 0x0202_0000);
                 return;
@@ -246,7 +246,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         t => {
-            if t == 0x8871c {
+            if t == 0 {
                 x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x28);
             } else {
@@ -286,8 +286,8 @@ pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8921e: the boss gets up after a fall.
 pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x8922c, f::SUB2) {
-        0x89232 => {
+    match x.u8(f::SUB2) {
+        0 => {
             x.add8(f::SUB2, 2);
             x.set16(HITS, 0);
             x.set8(0x86, 0);
@@ -298,7 +298,7 @@ pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_bit(0x1, 1, true);
             body(x, 5);
         }
-        0x89266 => {
+        2 => {
             if sub16(x, TIMER, 1).pl() {
                 return;
             }

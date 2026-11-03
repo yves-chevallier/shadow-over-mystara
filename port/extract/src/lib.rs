@@ -4,6 +4,7 @@
 //! The library has no 68000: only the `remainder` category (feature `full`, the program) decodes the original code
 //! to tell its bytes from the data.
 
+pub mod bosses;
 pub mod combat;
 pub mod data;
 pub mod dialogs;

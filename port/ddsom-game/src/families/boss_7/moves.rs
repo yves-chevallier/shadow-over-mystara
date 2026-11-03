@@ -8,9 +8,6 @@ use super::attacks::{leap_rest, leap_start};
 use super::*;
 use crate::objects::Current;
 
-fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    dispatch(x, table, f::SUB3)
-}
 
 /// 0x8699e: the boss fades out (common start of the dodges).
 fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
@@ -70,36 +67,37 @@ fn jump_away<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x868a4 (`+5` = 6).
 pub(super) fn group6<R: Bench>(x: &mut Cx<'_, R>) {
-    let table = if dispatch(x, 0x868b2, f::SUB2) == 0x868ba { 0x868c8 } else { 0x868de };
-    match step(x, table) {
-        0x8699e => fade_out(x),
-        0x869c6 => back_off(x),
-        0x86a4e => jump_away(x),
-        0x86a06 => fade_in(x),
+    // two jump tables of steps: 0x868c8 for `+6` = 0 or 4 (backing off), 0x868de otherwise (jumping away)
+    let backing = matches!(x.u8(f::SUB2), 0 | 4);
+    match x.u8(f::SUB3) {
+        0 => fade_out(x),
+        2 if backing => back_off(x),
+        2 => jump_away(x),
+        4 => fade_in(x),
         _ => finish(x, FIGHT),
     }
 }
 
 /// 0x868e6 (`+5` = 8).
 pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x868f4, f::SUB2) {
-        0x868fe => short_walk(x),
-        0x86988 => match step(x, 0x86996) {
-            0x8699e => fade_out(x),
-            0x869c6 => back_off(x),
-            0x86a06 => fade_in(x),
+    match x.u8(f::SUB2) {
+        0 => short_walk(x),
+        2 => match x.u8(f::SUB3) {
+            0 => fade_out(x),
+            2 => back_off(x),
+            4 => fade_in(x),
             _ => finish(x, 0x0204_0a00),
         },
-        0x86a38 => match step(x, 0x86a46) {
-            0x8699e => fade_out(x),
-            0x86a4e => jump_away(x),
-            0x86a06 => fade_in(x),
+        4 | 8 => match x.u8(f::SUB3) {
+            0 => fade_out(x),
+            2 => jump_away(x),
+            4 => fade_in(x),
             _ => finish(x, FIGHT),
         },
         // backward leap: the steps of the attack leap, but it ends on combat (0x86a7c)
-        _ => match step(x, 0x86a9e) {
-            0x86aaa => leap_start(x, 0x400),
-            0x86a7c => finish(x, FIGHT),
+        _ => match x.u8(f::SUB3) {
+            0 => leap_start(x, 0x400),
+            0xa => finish(x, FIGHT),
             t => leap_rest(x, t),
         },
     }
@@ -107,8 +105,8 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x868fe (`+6` = 0): a few steps in place (0x14 frames) while watching the opponent.
 fn short_walk<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x8690c) {
-        0x86950 => {
+    match x.u8(f::SUB3) {
+        2 => {
             if timer_done(x) {
                 x.set32(f::STATE, FIGHT);
                 return;
@@ -123,7 +121,7 @@ fn short_walk<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_step();
         }
         t => {
-            if t == 0x8691a {
+            if t == 0 {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x14);
             } else {

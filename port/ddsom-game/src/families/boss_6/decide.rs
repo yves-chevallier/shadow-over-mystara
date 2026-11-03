@@ -88,11 +88,6 @@ pub(super) fn attack_8_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     set_state(x, 0, ATTACK_8);
 }
 
-/// Target of a jump table of words relative to its start.
-fn target<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
-    (table as i32 + x.rom16(table + index) as i16 as i32) as u32
-}
-
 /// Applies the state change whose original address is `routine`.
 fn apply<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
     match routine {
@@ -117,26 +112,24 @@ fn apply<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
 // --- tirages ------------------------------------------------------------------------------------
 
 pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {
-    let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x85614 + level);
+    let v = per_rank(x, "boss_6/walk_delays");
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x85634 + level);
+    let v = per_rank(x, "boss_6/walk_delays_slow");
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0x1f;
-    let v = x.rom8(0x85678 + r);
+    let v = byte(x, "boss_6/walk_steps", r);
     x.set8(WALK_STEPS, v);
 }
 
 pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0x1f;
-    let v = x.rom8(0x85698 + r);
+    let v = byte(x, "boss_6/walk_steps_slow", r);
     x.set8(WALK_STEPS, v);
 }
 
@@ -151,8 +144,7 @@ pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u
 /// 0x856f2: a player is very close ahead.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0xf;
-    let pick = x.rom8(0x85708 + r);
-    let t = target(x, 0x85718, pick as u32);
+    let t = decide(x, "boss_6/close_picks", r, "boss_6/close_jumps");
     apply(x, t);
 }
 
@@ -160,15 +152,14 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
-    let routine = target(x, 0x85734, (2 * phase) as u32);
-    let table = match routine {
-        0x8573a => 0x85752,
-        0x85740 => 0x85762,
-        0x85746 => 0x85772,
-        t => unreachable!("boss 6: target {t:x}"),
+    // jump table 0x85734 (three entries, by phase): each routine draws in its own pick table
+    let picks = match phase {
+        0 => "boss_6/front_picks_0",
+        1 => "boss_6/front_picks_1",
+        2 => "boss_6/front_picks_2",
+        _ => bad_index(2 * phase as u32),
     };
-    let pick = x.rom8(table + r);
-    let t = target(x, 0x85782, pick as u32);
+    let t = decide(x, picks, r, "boss_6/front_jumps");
     apply(x, t);
 }
 
@@ -176,10 +167,11 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = (x.random() as u32) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
-    // the six routines read the same byte table
-    let _ = target(x, 0x857ac, index);
-    let pick = x.rom8(0x857e2 + r);
-    let t = target(x, 0x857f2, pick as u32);
+    // the jump table 0x857ac (six entries, by side and phase) leads to six routines that draw in the same pick table
+    if index >= 12 {
+        bad_index(index);
+    }
+    let t = decide(x, "boss_6/mid_picks", r, "boss_6/mid_jumps");
     apply(x, t);
 }
 
@@ -187,14 +179,14 @@ pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = (x.random() as u32) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
-    let routine = target(x, 0x8581a, index);
-    // six routines: the first two read 0x85850, the next two 0x85860, the last two 0x85870
-    let table = match routine {
-        0x85826 | 0x8582c => 0x85850,
-        0x85832 | 0x85838 => 0x85860,
-        _ => 0x85870,
+    // the jump table 0x8581a (six entries, by side and phase) leads to six routines: the first two draw in the first
+    // pick table, the next two in the second, the last two in the third
+    let picks = match index / 2 {
+        0 | 1 => "boss_6/far_picks_0",
+        2 | 3 => "boss_6/far_picks_1",
+        4 | 5 => "boss_6/far_picks_2",
+        _ => bad_index(index),
     };
-    let pick = x.rom8(table + r);
-    let t = target(x, 0x85880, pick as u32);
+    let t = decide(x, picks, r, "boss_6/far_jumps");
     apply(x, t);
 }

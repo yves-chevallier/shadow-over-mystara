@@ -7,16 +7,19 @@ use super::*;
 use crate::objects::Current;
 use crate::machine::Machine;
 
+/// Table of reaction routines, indexed by the hit code `+0x49` (longs, all common).
+const REACTIONS: u32 = 0x86c3a;
+
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_ACK, 0);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
-        match dispatch(x, 0x86bda, f::SUB) {
-            0x86be6 => reaction(x),
-            0x86ce6 => thrown(x),
-            0x86e10 => fall(x),
-            0x86ed8 => death(x),
+        match x.u8(f::SUB) {
+            0 => reaction(x),
+            2 => thrown(x),
+            4 => fall(x),
+            6 => death(x),
             _ => x.set32(f::STATE, FIGHT),
         }
     }
@@ -24,9 +27,6 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    dispatch(x, table, f::SUB2)
-}
 
 fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
@@ -45,9 +45,8 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         return death(x);
     }
     sub16(x, IDLE_WAIT, 1);
-    let code = x.u8(REACTION) as u32;
-    // routines communes seulement (table 0x86c3a)
-    let routine = x.prog32(0x86c3a + code);
+    // common routines only (table 0x86c3a)
+    let routine = reaction_routine(x, REACTIONS);
     run_reaction(x, routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {
         addq8(x, f::FREEZE, 1);
@@ -60,8 +59,8 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
-    match step(x, 0x86cfa) {
-        0x86d00 => {
+    match x.u8(f::SUB2) {
+        0 => {
             x.add8(f::SUB2, 2);
             key(x, 0x1e);
             lib::set_68(x);
@@ -78,7 +77,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             }
             body(x, 9);
         }
-        0x86d4c => {
+        2 => {
             let v = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, v);
             if v == 0 {
@@ -94,7 +93,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            let mask = x.prog32(0x86dd6 + ((n as u16) << 2) as u32);
+            let mask = long(x, "boss_7/counter_masks", ((n as u16) << 2) as u32);
             // D5 = the mask (leftover)
             *x.c.d5() = mask;
             let rng = x.random();
@@ -125,14 +124,14 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86e10: fall, wait on the ground, getting up (stepping aside if a player is too close).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x86e1c) {
-        0x86e26 => {
+    match x.u8(f::SUB2) {
+        0 => {
             x.add8(f::SUB2, 2);
             lib::behaviour_by_kind(x);
             x.set16(0xc, 0);
             body(x, 8);
         }
-        0x86e42 => {
+        2 => {
             if paused(x) {
                 return;
             }
@@ -145,7 +144,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x86, 0);
             x.set8(REACTION, 0);
         }
-        0x86e66 => {
+        4 => {
             if paused(x) || !x.anim_step() {
                 return;
             }
@@ -156,7 +155,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_bit(0x1, 1, true);
             body(x, 5);
         }
-        0x86e9c => {
+        6 => {
             if paused(x) {
                 return;
             }
@@ -178,9 +177,8 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86ed8: death (throw, landing in the dust, end of stage).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
-    // `move.w (tbl,PC,D0w),D0w ; jmp (tbl,PC,D0w)`: here the offset replaces D0 (D1 is not touched)
-    let i = x.u8(f::SUB2) as u32;
-    let off = x.rom16(0x86ee6 + i);
+    // jump table 0x86ee6 (four steps)
+    let i = x.u8(f::SUB2);
     match i {
         0 => {
             x.add8(f::SUB2, 2);
@@ -235,6 +233,6 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
         }
         6 => {}
         // table 0x86ee6 has only four entries (see docs/code-mort.md)
-        _ => unreachable!("boss 7: death step {i:#x} outside table ({off:#x})"),
+        _ => bad_index(i),
     }
 }

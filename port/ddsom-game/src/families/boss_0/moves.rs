@@ -614,7 +614,7 @@ fn triple_strike<R: Bench>(x: &mut Cx<'_, R>) {
             let mut players = var::PLAYERS_ALIVE.get(x.b);
             players = players.saturating_sub(1);
             let i = level.wrapping_add(players as u16);
-            let n = x.rom8(0x7a1ca + i as u32);
+            let n = byte(x, "boss_0/combo_counts", i as u32);
             x.set8(COMBO, n);
         }
         4 => {

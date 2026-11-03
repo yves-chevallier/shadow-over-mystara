@@ -48,8 +48,6 @@ const HANDLER: u32 = 0x8341c;
 const SET_BODY: u32 = 0x175da6;
 const SET_ATTACK: u32 = 0x175dc4;
 const SET_FALL: u32 = 0x175e0c;
-/// Table of (X, Y) vectors per angle (32 × 4 bytes), walked through during the whirlwind.
-const SPIN_VECTORS: u32 = 0x1c94b6;
 
 /// Entry: the game does not go through the pause hook.
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -154,10 +152,10 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0x0 => intro(x),
         0x4 => stroll(x),
-        0x8 => dash(x, 0x8369c),
+        0x8 => dash(x, "boss_5/dash_speeds"),
         0xc => seize(x),
         0x10 => simple_attack(x),
-        0x14 => dash(x, 0x836fa),
+        0x14 => dash(x, "boss_5/dash_speeds_b"),
         0x18 => chase(x),
         _ => {}
     }
@@ -224,7 +222,7 @@ fn stroll<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 4);
             let i = level_index(x);
-            let n = x.rom16(0x8362e + i);
+            let n = word(x, "boss_5/stroll_times", i);
             x.set16(COUNT, n);
             if x.u8(ANIM_SET) != 0 || x.u8(ANIM_N) != 0 {
                 return body(x, 0);
@@ -248,12 +246,12 @@ fn stroll_step<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +5 = 8 and 0x14: movement ---------------------------------------------------------------
 
 /// `table`: speeds (words) per difficulty level.
-fn dash<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 4);
             let i = level_index(x);
-            let n = x.rom16(table + i);
+            let n = word(x, table, i);
             x.select_speed(&crate::objects::motion::SPEEDS_B, n);
             if x.u8(f::FLIP) != 0 {
                 let v = x.u16(0x14).wrapping_neg();
@@ -487,7 +485,7 @@ fn chase_stop<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- choice of the next action (0x83e3e) ----------------------------------------------------------
 
-/// Group `+5` and angle from the target's position: rows of table 0x83f4e (2 bytes per entry:
+/// Group `+5` and angle from the target's position: rows of the table `boss_5/next_actions` (2 bytes per entry:
 /// angle and group, duration and half-turn).
 fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BITING, 0);
@@ -529,11 +527,11 @@ fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
         0xf0
     };
     row += (x.random() as u32) & 0xe;
-    let a = x.rom8(0x83f4e + row);
+    let a = byte(x, "boss_5/next_actions", row);
     x.set8(Obj::SPEED_INDEX, (a << 1) & 0x1e);
     x.set8(f::SUB, (a & 0xf0) >> 2);
     x.set16(f::SUB2, 0);
-    let b = x.rom8(0x83f4f + row);
+    let b = byte(x, "boss_5/next_actions", row + 1);
     x.set8(STEPS, b);
     if b & 0x80 != 0 {
         let v = x.u8(f::FLIP) ^ 0x20;
@@ -695,7 +693,8 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Whirlwind step (0x83da8): movement through the vector table of angle `+0x2d`.
+/// Whirlwind step (0x83da8): movement through the circle of the whirls (`tables::circle`: X and depth offsets per
+/// angle `+0x2d`).
 fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0xc, 0x20000);
     if (x.u16(0xc) as i16) >= 0x40 {
@@ -711,11 +710,11 @@ fn spin<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let i = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
-    let vx = x.data16(SPIN_VECTORS + i).wrapping_add(x.u16(0x16));
+    let vx = tables::circle(x.b, i).wrapping_add(x.u16(0x16));
     x.set16(0x14, vx);
     let dx = ((vx as u32) << 16) as i32 >> 8;
     x.add32(0x8, dx as u32);
-    let vy = x.data16(SPIN_VECTORS + i + 2).wrapping_add(x.u16(0x1e));
+    let vy = tables::circle(x.b, i + 2).wrapping_add(x.u16(0x1e));
     x.set16(0x1c, vy);
     let dy = ((vy as u32) << 16) as i32 >> 8;
     x.add32(0x10, dy as u32);

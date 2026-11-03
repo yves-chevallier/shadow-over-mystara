@@ -47,8 +47,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     // The original indexes the table by D0.w of which only the low byte is set: the high byte comes from the `moveq #0`
     // of
     // the group dispatch, or from the index returned by 0xfe5a (at most (32 + type) × 4 < 0x100): it is zero.
-    let code = x.u8(0x49) as u32;
-    let routine = x.prog32(REACTIONS + code);
+    let routine = reaction_routine(x, REACTIONS);
     run_reaction(x, routine);
 }
 
@@ -100,7 +99,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             let r = rand_and(x, 0xf);
-            let k = x.rom8(0x80cf6 + r);
+            let k = byte(x, "boss_3/counter_steps", r);
             x.set8(f::SUB2, k);
             x.set16(f::STATE, 0x0204);
             x.set8(0x7, 0);

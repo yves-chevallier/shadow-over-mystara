@@ -11,7 +11,8 @@ use crate::families::cx::Bench;
 
 pub use super::cx::Cx;
 pub use super::enemy_common::*;
-use crate::mem::{prog16, prog32, A5};
+pub(crate) use super::effects::bad_index;
+use crate::mem::A5;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
@@ -160,10 +161,39 @@ pub fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
-/// Word of the PC-relative jump table `base` for byte index `i`: address of the chosen routine
-/// (`move.w (base,PC,Di),Di ; jmp (base,PC,Di)`).
-pub fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
-    base.wrapping_add(x.rom16(base + i) as i16 as u32)
+/// Entry at byte offset `i` of the relative jump table `name` of `data/enemies.json` (`move.w (base,PC,Di),Di ; jmp
+/// (base,PC,Di)`): the address of the chosen routine, the key of the state stub that the boss runs.
+pub fn jump_target<R: Bench>(x: &mut Cx<'_, R>, name: &str, i: u32) -> u32 {
+    let t = tables::table(name);
+    t.rom.wrapping_add(t.at16(x.b, i) as i16 as u32)
+}
+
+/// A decision of the bosses: byte `r` of the pick table `picks`, then the entry it designates in the jump table
+/// `jumps` (see [`jump_target`]).
+pub fn decide<R: Bench>(x: &mut Cx<'_, R>, picks: &str, r: u32, jumps: &str) -> u32 {
+    let i = tables::table(picks).at8(x.b, r) as u32;
+    jump_target(x, jumps, i)
+}
+
+/// Byte at offset `i` of the table `name`.
+pub fn byte<R: Bench>(x: &mut Cx<'_, R>, name: &str, i: u32) -> u8 {
+    tables::table(name).at8(x.b, i)
+}
+
+/// Word at byte offset `i` of the table `name`.
+pub fn word<R: Bench>(x: &mut Cx<'_, R>, name: &str, i: u32) -> u16 {
+    tables::table(name).at16(x.b, i)
+}
+
+/// Long at byte offset `i` of the table `name`.
+pub fn long<R: Bench>(x: &mut Cx<'_, R>, name: &str, i: u32) -> u32 {
+    tables::table(name).at32(x.b, i)
+}
+
+/// Byte of the table `name` for the difficulty level (`RANK`, one byte per level).
+pub fn per_rank<R: Bench>(x: &mut Cx<'_, R>, name: &str) -> u8 {
+    let level = var::RANK.get(x.b) as u32;
+    byte(x, name, level)
 }
 
 /// Ordinate of the camera in use.
@@ -189,15 +219,13 @@ pub fn set_abs8<R: Bench>(x: &mut Cx<'_, R>, addr: u32, v: u8) {
 
 // --- common subroutines called by the original boss code -------------------------
 
-/// Boss registered as an obstacle for the other objects (word, 0 / positive = none).
-const BODY: u32 = A5 - 0x5fb2;
-/// Body shapes (`+0xa4` of the boss): relative jump table (1 = 0x818e6, 2 = 0x819e2).
-const BODY_SHAPES: u32 = 0x81ad4;
+/// Boss registered as an obstacle for the other objects (word, RAM address; 0 / positive = none).
+const BODY: crate::ram::Word = crate::ram::Word(A5 - 0x5fb2);
 
 /// 0x81aa4: pushes the object out of the registered boss's body, if that boss is active, of class 3 and has a
 /// non-zero shape (the shape, `boss_3::body`, moves the object in X). True if the object was moved.
 pub fn push_out_of_boss<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let body = x.data16(BODY);
+    let body = BODY.get(x.b);
     if (body as i16) >= 0 {
         return false;
     }
@@ -205,23 +233,21 @@ pub fn push_out_of_boss<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if boss.u8(x.b, 0) == 0 || boss.u8(x.b, 2) != 3 {
         return false;
     }
-    let shape = boss.u8(x.b, 0xa4) as u16;
+    let shape = boss.u8(x.b, 0xa4);
     if shape == 0 {
         return false;
     }
-    let off = prog16(x.b, BODY_SHAPES + 2 * shape as u32);
-    let routine = BODY_SHAPES.wrapping_add(off as i16 as u32);
-    super::boss_3::body::push(x.b, boss, x.o, routine)
+    super::boss_3::body::push(x.b, boss, x.o, shape)
 }
 
 /// Vertical oscillation (by `+0x33`): long offsets added to the height `+0xc`, in one direction
 /// then the other depending on the countdown `+0xa8` (period 72 frames, reversal at 36).
-const BOB_OFFSETS: u32 = 0x833e4;
+const BOB_OFFSETS: &str = "boss/bob_offsets";
 
 /// 0x833b6: one step of a boss's vertical oscillation.
 pub fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
-    let mut d = prog32(x.b, BOB_OFFSETS + i);
+    let mut d = long(x, BOB_OFFSETS, i);
     if x.u16(0xa8) as i16 <= 36 {
         d = d.wrapping_neg();
     }

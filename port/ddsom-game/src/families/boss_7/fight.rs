@@ -10,7 +10,7 @@ use crate::machine::Machine;
 
 /// 0x85d08: `+6` = 0, fall and landing; `+6` = 2, attract pose.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
-    if dispatch(x, 0x85d16, f::SUB2) == 0x85d1a {
+    if x.u8(f::SUB2) == 0 {
         arrival(x)
     } else {
         pose(x)
@@ -19,14 +19,14 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x85d1a: the boss appears, falls, lands in a cloud of dust, then takes its guard.
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x85d28, f::SUB3) {
-        0x85d30 => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             lib::sound(x, crate::sound::CMD_349);
             x.set_bit(0x1, 1, false);
             body(x, 0xe);
         }
-        0x85d4e => {
+        2 => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 x.set16(0x18, (-0x80i16) as u16);
@@ -35,7 +35,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(0x16, 0);
             }
         }
-        0x85d72 => {
+        4 => {
             if x.move_xz().gt() {
                 return;
             }
@@ -62,7 +62,6 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x85dd6: attract pose (animation 0, restarted only if the key changes).
 fn pose<R: Bench>(x: &mut Cx<'_, R>) {
-    dispatch(x, 0x85de4, f::SUB3);
     x.set8(VULNERABLE, 0);
     x.set8(ANIM_KIND, 0);
     setb(x, 2, 0);
@@ -82,10 +81,10 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, WAIT);
         return;
     }
-    match dispatch(x, 0x85e4a, f::SUB2) {
-        0x860b8 => turn(x),
-        0x86110 => stop(x),
-        0x86180 => approach(x),
+    match x.u8(f::SUB2) {
+        2 => turn(x),
+        4 => stop(x),
+        6 => approach(x),
         _ => walk(x),
     }
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
@@ -238,8 +237,8 @@ fn stop<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86180 : approche lente de l'adversaire.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x8618c, f::SUB3) {
-        0x861d8 => {
+    match x.u8(f::SUB3) {
+        2 => {
             if timer_done(x) {
                 x.set32(f::STATE, FIGHT);
                 return;
@@ -258,7 +257,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         t => {
-            if t == 0x8619a {
+            if t == 0 {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x28);
             } else {
@@ -298,8 +297,8 @@ pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86b32: the boss gets up, invisible for a moment, then counterattacks (attack 10).
 pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x86b40, f::SUB2) {
-        0x86b46 => {
+    match x.u8(f::SUB2) {
+        0 => {
             x.add8(f::SUB2, 2);
             x.set16(HITS, 0);
             x.set8(0x86, 0);
@@ -309,7 +308,7 @@ pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_bit(0x1, 1, true);
             body(x, 5);
         }
-        0x86b74 => {
+        2 => {
             if timer_done(x) {
                 x.add8(f::SUB2, 2);
                 x.set_bit(0x1, 1, false);

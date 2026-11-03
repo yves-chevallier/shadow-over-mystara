@@ -190,62 +190,56 @@ fn difficulty<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     var::RANK.get(x.b) as u32
 }
 
-/// Byte of the table with one entry per difficulty.
-fn per_level<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let d = difficulty(x);
-    x.data8(table + d)
-}
-
 /// Byte drawn (`mask`) from the difficulty's table, whose address is in the table of longs `lists`.
-fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
+fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: &str, mask: u32) -> u8 {
     let d = difficulty(x);
-    let at = x.data32(lists + 4 * d);
+    let at = long(x, lists, 4 * d);
     let r = rand_and(x, mask);
-    x.data8(at + r)
+    tables::held8(x.b, at + r)
 }
 
 /// 0x8c9ee: crew lost before blinking.
 fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = per_level(x, 0x8ca02).wrapping_sub(1);
+    let n = per_rank(x, "boss_9/lives").wrapping_sub(1);
     x.set8(LIVES, n);
 }
 
 /// 0x8c9ba: wait before the shot.
 fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = per_level(x, 0x8c9ce).wrapping_add(5);
+    let n = per_rank(x, "boss_9/shot_waits").wrapping_add(5);
     x.set8(COUNT, n);
 }
 
 /// 0x8c420: rushes allowed.
 fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = per_level(x, 0x8c430);
+    let n = per_rank(x, "boss_9/dashes");
     x.set8(DASHES, n);
 }
 
 /// 0x8beca: passes before a stop.
 fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = draw(x, 0x8bef0, 0x1f).wrapping_sub(1);
+    let n = draw(x, "boss_9/passes", 0x1f).wrapping_sub(1);
     x.set8(PASSES, n);
 }
 
 /// 0x8c450 : bombardements.
 fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = draw(x, 0x8c476, 0xf).wrapping_sub(1);
+    let n = draw(x, "boss_9/bombs", 0xf).wrapping_sub(1);
     x.set8(BOMBS, n);
 }
 
 /// 0x8c576: stops.
 fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = draw(x, 0x8c598, 0xf);
+    let n = draw(x, "boss_9/stops", 0xf);
     x.set8(STOPS, n);
 }
 
 /// 0x8bc0c: wait before setting off again, according to the number of players, the difficulty and the crew.
 fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
-    let list = x.data32(0x8bc3e + 4 * players);
+    let list = long(x, "boss_9/waits", 4 * players);
     let d = difficulty(x);
-    let mut n = x.data8(list + d).wrapping_add(0xf);
+    let mut n = tables::held8(x.b, list + d).wrapping_add(0xf);
     if (x.u8(CREW_COUNT) as i8) >= 8 {
         n = n.wrapping_add(0xf);
     }
@@ -255,9 +249,9 @@ fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x8bcd2: X position of the stop, drawn in front of the vehicle.
 fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     let d = difficulty(x);
-    let list = (x.rom16(0x8bd08 + 4 * d) as u32) << 16 | x.rom16(0x8bd08 + 4 * d + 2) as u32;
+    let list = long(x, "boss_9/stop_xs", 4 * d);
     let r = rand_and(x, 0x1f);
-    let k = x.data8(list + r) as u16;
+    let k = tables::held8(x.b, list + r) as u16;
     let cam = x.a5_u16(CAM_X);
     let goal = if x.u8(f::FLIP) != 0 { cam.wrapping_add(k) } else { cam.wrapping_add(0x180).wrapping_sub(k) };
     x.set16(STOP_X, goal);
@@ -278,14 +272,14 @@ fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
             2
         }
     };
-    let z = x.data16(0x8bec4 + 2 * lane);
+    let z = word(x, "boss_9/lanes", 2 * lane);
     x.set16(0x10, z);
 }
 
 /// 0x8c988: new target (0x424e or 0x44ee, at random).
 fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let k = x.data8(0x8c9aa + r);
+    let k = byte(x, "boss_9/retargets", r);
     if k == 0 {
         lib::pick_target(x);
     } else {
@@ -325,10 +319,10 @@ fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let i = x.u8(CREW_COUNT) as u32 * 2;
-    let table = if hard { 0x8c092 } else { 0x8c0ba };
-    let mut vx = x.rom16(table + i);
-    let mut vz = x.rom16(table + 2 + i);
-    let gait = x.rom8(table + 5 + i);
+    let table = if hard { "boss_9/speeds_hard" } else { "boss_9/speeds" };
+    let mut vx = word(x, table, i);
+    let mut vz = word(x, table, 2 + i);
+    let gait = byte(x, table, 5 + i);
     *x.c.d2() = gait as u32;
     if x.u8(f::FLIP) == 0 {
         vx = vx.wrapping_neg();
@@ -345,9 +339,9 @@ fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
-    let list = x.data32(0x8c20c + 4 * players);
+    let list = long(x, "boss_9/dash_chances", 4 * players);
     let d = difficulty(x);
-    let chances = x.data32(list + 4 * d);
+    let chances = tables::held32(x.b, list + 4 * d);
     *x.c.d2() = chances;
     let r = rand_and(x, 0x1f);
     if chances >> r & 1 == 0 {
@@ -415,10 +409,7 @@ fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
 /// 0x8c698 / 0x8c6a0: firing stop drawn by difficulty (`base`: 2 close target, 0xe target in range).
 fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     *x.c.d2() = base as u32;
-    let level = (var::RANK.get(x.b) >> 1) << 5;
-    let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
-    let r = rand_and(x, 0x1f);
-    let k = x.data8(at + r).wrapping_add(base);
+    let k = rank_byte(x, "boss_9/halts").wrapping_add(base);
     x.set8(f::SUB2, k);
     x.set16(f::STATE, 0x0204);
     x.set8(0x7, 0);

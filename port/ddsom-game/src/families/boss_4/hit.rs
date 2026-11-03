@@ -48,8 +48,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
             return death(x);
         }
     }
-    let code = x.u8(0x49) as u32;
-    let routine = x.prog32(REACTIONS + code);
+    let routine = reaction_routine(x, REACTIONS);
     if routine == SHAKE_REACTION {
         shake(x)
     } else {

@@ -104,14 +104,6 @@ fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     }
 }
 
-/// Jump through a relative table (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexed by the object's byte `idx`:
-/// returns the arrival address. D0 receives the byte (after a `moveq 0,D0`), D1w the offset.
-fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
-    let i = x.u8(idx) as u32;
-    let off = x.rom16(table + i);
-    table.wrapping_add(off as i16 as i32 as u32)
-}
-
 /// Animation key `kind` (`+0xa2`, copied to `+0xa3`).
 fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
@@ -132,10 +124,10 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(f::TARGET) == 0 {
             lib::pick_target(x);
         }
-        match dispatch(x, 0x85a76, f::STATE) {
-            0x85a80 => init(x),
-            0x85bd0 => active(x),
-            0x86baa => hit::run(x),
+        match x.u8(f::STATE) {
+            0 => init(x),
+            2 => active(x),
+            4 => hit::run(x),
             _ => x.free(&pools::BOSS),
         }
         if x.u8(0) == 0 {
@@ -251,17 +243,17 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
-        match dispatch(x, 0x85cc8, f::SUB) {
-            0x85d08 => fight::intro(x),
-            0x85e18 => fight::fight(x),
-            0x8622a => attacks::run(x),
-            0x868a4 => moves::group6(x),
-            0x868e6 => moves::group8(x),
-            0x86af6 => fight::wait(x),
-            0x85ce8 => x.set32(f::STATE, FIGHT),
-            0x86b32 => fight::stand_up(x),
+        match x.u8(f::SUB) {
+            0 => fight::intro(x),
+            2 => fight::fight(x),
+            4 => attacks::run(x),
+            6 => moves::group6(x),
+            8 => moves::group8(x),
+            0xa => fight::wait(x),
+            0xc => x.set32(f::STATE, FIGHT),
+            0xe => fight::stand_up(x),
             // the table has only these eight entries (`+5` even, from 0 to 14; see docs/code-mort.md)
-            t => unreachable!("boss 7: group {:#x} outside table ({t:#x})", x.u8(f::SUB)),
+            g => bad_index(g),
         }
         if (x.u8(PHASE_TIMER) as i8) > 0 {
             sub8(x, PHASE_TIMER, 1);
@@ -294,7 +286,7 @@ fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0000);
     let rng = x.random();
     let i = rng as u32 & 0xf;
-    let attack = x.rom8(0x85cd8 + i);
+    let attack = byte(x, "boss_7/idle_attacks", i);
     x.set8(f::SUB2, attack);
 }
 

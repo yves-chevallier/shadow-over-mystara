@@ -127,19 +127,9 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>, k: u32) {
     lib::debris(x, k);
 }
 
-/// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
-fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
-    sub16(x, off, 1).le()
-}
-
 /// The boss's target (`movea.w (0x50,A0),A1`).
 fn target_obj<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     load_target(x)
-}
-
-/// Word of the PC-relative jump table `base` for index `i`: address of the chosen routine.
-fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
-    base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -358,8 +348,7 @@ fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
 /// 0x7c0ba: target in the wide box, draw in table 0x7c0d0.
 fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let i = x.rom8(0x7c0d0 + r) as u32;
-    let at = jump_target(x, 0x7c0e0, i);
+    let at = decide(x, "boss_1/wide_picks", r, "boss_1/wide_jumps");
     go(x, at)
 }
 
@@ -367,39 +356,30 @@ fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
 fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
-    let table = [0x7c11a, 0x7c12a, 0x7c13a][phase as usize % 3];
-    let i = x.rom8(table + r) as u32;
-    let at = jump_target(x, 0x7c14a, i);
+    let picks = ["boss_1/close_picks_0", "boss_1/close_picks_1", "boss_1/close_picks_2"][phase as usize % 3];
+    let at = decide(x, picks, r, "boss_1/close_jumps");
     go(x, at)
 }
 
 /// 0x7c14e and 0x7c1cc: the AI chose gesture `g` (1 or 2); draw in the phase's table.
-fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32) {
+fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, picks: [&str; 6], jumps: &str) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32;
     let i = (g as i32 - 1 + 2 * phase) as usize;
-    let k = x.rom8(tables[i.min(5)] + r) as u32;
-    let at = jump_target(x, jumps, k);
+    let at = decide(x, picks[i.min(5)], r, jumps);
     go(x, at)
 }
 
 /// 0x7c14e: near box (-0x70).
 fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
-    from_gesture(x, g, [0x7c1a8, 0x7c1a8, 0x7c1b8, 0x7c1b8, 0x7c1b8, 0x7c1b8], 0x7c1c8)
+    let (a, b) = ("boss_1/near_picks_0", "boss_1/near_picks_1");
+    from_gesture(x, g, [a, a, b, b, b, b], "boss_1/near_jumps")
 }
 
 /// 0x7c1cc: far box (-0xe0).
 fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
-    from_gesture(x, g, [0x7c226, 0x7c226, 0x7c226, 0x7c226, 0x7c236, 0x7c236], 0x7c246)
-}
-
-/// 0x7c080 / 0x7c09e: target in the box and gesture chosen by the AI (0x1047a), or nothing.
-fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
-    if !lib::target_in_box(x, d0, d1, d2) {
-        return None;
-    }
-    let turn = lib::turn_decision(x);
-    (turn != lib::Turn::None).then_some(turn as u32)
+    let (a, b) = ("boss_1/far_picks_0", "boss_1/far_picks_1");
+    from_gesture(x, g, [a, a, a, a, b, b], "boss_1/far_jumps")
 }
 
 /// 0x7c47c: number of hits in the chain, according to difficulty and number of players.
@@ -408,7 +388,7 @@ fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
     players = players.saturating_sub(1);
     let i = level.wrapping_add(players);
-    let n = x.rom8(0x7c49a + i as u32);
+    let n = byte(x, "boss_1/combo_counts", i as u32);
     x.set8(COMBO, n);
 }
 
@@ -420,23 +400,23 @@ fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.add8(GRAB_TRIES, 1);
     let r = rand_and(x, 0xf);
     let tries = x.u8(GRAB_TRIES) as u32;
-    let mask = x.rom16(0x7c534 + 2 * tries);
+    let mask = word(x, "boss_1/split_leap_masks", 2 * tries);
     mask >> r & 1 != 0
 }
 
 /// 0x7c01c / 0x7c02e: number of leaps in the walk, drawn from table `table`.
-fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let r = rand_and(x, 0x1f);
-    let n = x.rom8(table + r);
+    let n = byte(x, table, r);
     x.set8(WALK_STEPS, n);
 }
 
 /// 0x7c396 / 0x7c3b0: aimed point near the target (offsets drawn from `table`, `mask` + 1 entries), on the
 /// boss's side; the angle toward that point (0x137e) becomes the direction.
-fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
+fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: &str, mask: u32) {
     let i = rand_and(x, mask) * 4;
-    let dx = x.rom16(table + i);
-    let dz = x.rom16(table + i + 2);
+    let dx = word(x, table, i);
+    let dz = word(x, table, i + 2);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | dz as u32;
     let t = target_obj(x);
     let tx = t.u16(x.b, 0x8);

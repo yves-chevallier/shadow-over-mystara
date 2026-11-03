@@ -47,7 +47,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Step forward at the key frames (`+0x33`): offset read from table `table` (PC-relative), toward the front.
-fn key_step<R: Bench>(x: &mut Cx<'_, R>, table: u32, clear: bool) {
+fn key_step<R: Bench>(x: &mut Cx<'_, R>, table: &str, clear: bool) {
     let key = x.u8(f::KEY_FRAME) as u32;
     if clear {
         if key == 0 {
@@ -55,7 +55,7 @@ fn key_step<R: Bench>(x: &mut Cx<'_, R>, table: u32, clear: bool) {
         }
         x.set8(f::KEY_FRAME, 0);
     }
-    let d = x.rom8(table + key) as i8 as i16 as u16;
+    let d = byte(x, table, key) as i8 as i16 as u16;
     if d == 0 {
         return;
     }
@@ -69,7 +69,7 @@ fn claw<R: Bench>(x: &mut Cx<'_, R>) {
         return swing(x, 3);
     }
     if !lib::step(x) {
-        return key_step(x, 0x7fdea, true);
+        return key_step(x, "boss_3/claw_steps", true);
     }
     after_attack(x)
 }
@@ -90,7 +90,7 @@ fn double_claw<R: Bench>(x: &mut Cx<'_, R>) {
         0 => swing(x, 3),
         2 => {
             if !lib::step(x) {
-                return key_step(x, 0x7fdea, true);
+                return key_step(x, "boss_3/claw_steps", true);
             }
             next7(x);
             x.set8(0x44, 0);
@@ -102,7 +102,7 @@ fn double_claw<R: Bench>(x: &mut Cx<'_, R>) {
             if lib::step(x) {
                 return after_attack(x);
             }
-            key_step(x, 0x7fdbc, false)
+            key_step(x, "boss_3/second_claw_steps", false)
         }
     }
 }

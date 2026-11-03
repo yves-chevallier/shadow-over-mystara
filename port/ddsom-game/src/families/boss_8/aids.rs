@@ -116,8 +116,8 @@ pub(super) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 pub(super) fn random_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let i = rng & 0x7c;
-    let px = x.rom16(0x8a384 + i as u32);
-    let py = x.rom16(0x8a386 + i as u32);
+    let px = word(x, "boss_8/spots", i as u32);
+    let py = word(x, "boss_8/spots", i as u32 + 2);
     x.set16(0x8, px);
     x.set16(0x10, py);
 }
@@ -126,7 +126,7 @@ pub(super) fn random_spot<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn random_sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let i = rng & 0xe;
-    let mut d = x.rom16(0x8a422 + i as u32);
+    let mut d = word(x, "boss_8/sidesteps", i as u32);
     if x.u8(f::FLIP) != 0 {
         d = d.wrapping_neg();
     }
@@ -194,15 +194,15 @@ pub(super) fn dodge_spot<R: Bench>(x: &mut Cx<'_, R>) {
         (true, false) => 8,
         (true, true) => 0xc,
     };
-    let table = x.prog32(0x8a6cc + d6);
+    let table = long(x, "boss_8/dodge_spots", d6);
     let rng = x.random();
     let i = ((rng) & 3) << 3;
     let a = table.wrapping_add(i as u32);
-    let dx = x.data16(a);
+    let dx = tables::held16(x.b, a);
     x.add16(0x8, dx);
-    let dy = x.data16(a + 2);
+    let dy = tables::held16(x.b, a + 2);
     x.add16(0x10, dy);
-    let side = x.data8(a + 4);
+    let side = tables::held8(x.b, a + 4);
     x.set8(f::FLIP, side);
     clamp(x)
 }
@@ -212,10 +212,10 @@ pub(super) fn dodge_spot<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, front: bool) {
     let slow = x.u8(SLOW) != 0;
     let table = match (front, slow) {
-        (true, false) => 0x89866,
-        (true, true) => 0x89c66,
-        (false, false) => 0x89a66,
-        (false, true) => 0x89e66,
+        (true, false) => "boss_8/front_attacks",
+        (true, true) => "boss_8/front_attacks_slow",
+        (false, false) => "boss_8/back_attacks",
+        (false, true) => "boss_8/back_attacks_slow",
     };
     pick_row(x, table, 0x204);
     if slow && x.u8(f::SUB2) == 4 {
@@ -229,14 +229,8 @@ pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, front: bool) {
 
 /// Picks a 32-byte row of `table` according to the difficulty, draws a step from it and moves to state `state` (word
 /// `+4`).
-fn pick_row<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
-    // D0.w = difficulty / 2 (the `moveq #0,D0` of one of the callers does not change the low word)
-    let level = var::RANK.get(x.b);
-    let row = ((level >> 1) << 5) as i16 as i32 as u32;
-    let a4 = table.wrapping_add(row);
-    let rng = x.random();
-    let i = rng & 0x1f;
-    let step = x.data8(a4 + i as u32);
+fn pick_row<R: Bench>(x: &mut Cx<'_, R>, table: &str, state: u16) {
+    let step = rank_byte(x, table);
     x.set8(f::SUB2, step);
     x.set16(f::STATE, state);
     x.set8(f::SUB3, 0);
@@ -250,5 +244,5 @@ pub(super) fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, 0x0202_0000);
         return;
     }
-    pick_row(x, 0x8a0c6, 0x208);
+    pick_row(x, "boss_8/follow_ups", 0x208);
 }

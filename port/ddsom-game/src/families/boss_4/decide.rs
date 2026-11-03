@@ -109,16 +109,9 @@ fn enter<R: Bench>(x: &mut Cx<'_, R>, target: u32) {
     }
 }
 
-/// `move.w (tbl,PC,Dn),Dn ; jmp (tbl,PC,Dn)`: arrival address for index `i` (word of `D0` updated).
-fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u16) -> u32 {
-    let off = x.rom16(table + i as u32);
-    table.wrapping_add(off as i16 as i32 as u32)
-}
-
-/// Draws `r` (0 to 15), reads the jump index in `bytes`, then enters the state designated by table `jumps`.
-fn roll<R: Bench>(x: &mut Cx<'_, R>, r: u32, bytes: u32, jumps: u32) {
-    let k = x.rom8(bytes + r);
-    let t = jump(x, jumps, k as u16);
+/// Draw `r` (0 to 15) in the pick table `picks`, then enters the state designated by the jump table `jumps`.
+fn roll<R: Bench>(x: &mut Cx<'_, R>, r: u32, picks: &str, jumps: &str) {
+    let t = decide(x, picks, r, jumps);
     enter(x, t)
 }
 
@@ -130,7 +123,7 @@ fn phase<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
 /// 0x830ce: the target is in the wide box (0x7ef4): table 0x830e4 (a single choice, the backward leap).
 pub(super) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    roll(x, r, 0x830e4, 0x830f4);
+    roll(x, r, "boss_4/wide_picks", "boss_4/wide_jumps");
 }
 
 /// 0x830f6: the target is very close (0xb5e0): depending on the phase, tables 0x8312e, 0x8313e, 0x8314e.
@@ -138,8 +131,8 @@ pub(super) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let p = phase(x).wrapping_add(phase(x));
     setw(x, 1, p);
-    let bytes = [0x8312e, 0x8313e, 0x8314e][p as usize / 2];
-    roll(x, r, bytes, 0x8315e);
+    let picks = ["boss_4/close_picks_0", "boss_4/close_picks_1", "boss_4/close_picks_2"][p as usize / 2];
+    roll(x, r, picks, "boss_4/close_jumps");
 }
 
 /// 0x83164 (near box, `near`) and 0x831f6 (far box): depending on the phase and the AI's gesture `gesture` (1 or 2).
@@ -150,10 +143,12 @@ pub(super) fn from_ai<R: Bench>(x: &mut Cx<'_, R>, gesture: u16, near: bool) {
     setw(x, 1, p.wrapping_mul(4));
     let row = (gesture.wrapping_sub(1).wrapping_mul(2)).wrapping_add(p.wrapping_mul(4));
     setw(x, 2, row);
-    let (bytes, jumps): ([u32; 6], u32) = if near {
-        ([0x831be, 0x831de, 0x831be, 0x831de, 0x831ce, 0x831de], 0x831ee)
+    let (picks, jumps): ([&str; 6], &str) = if near {
+        let (a, b, c) = ("boss_4/near_picks_0", "boss_4/near_picks_1", "boss_4/near_picks_2");
+        ([a, c, a, c, b, c], "boss_4/near_jumps")
     } else {
-        ([0x83250, 0x83250, 0x83260, 0x83260, 0x83270, 0x83270], 0x83280)
+        let (a, b, c) = ("boss_4/far_picks_0", "boss_4/far_picks_1", "boss_4/far_picks_2");
+        ([a, a, b, b, c, c], "boss_4/far_jumps")
     };
-    roll(x, r, bytes[row as usize / 2], jumps);
+    roll(x, r, picks[row as usize / 2], jumps);
 }

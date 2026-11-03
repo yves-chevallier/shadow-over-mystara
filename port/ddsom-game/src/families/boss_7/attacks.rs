@@ -13,26 +13,23 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    dispatch(x, table, f::SUB3)
-}
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x86238, f::SUB2) {
-        0x8624a => slash(x),
-        0x86296 => combo(x),
-        0x86334 => throw_knives(x),
-        0x86400 => plunge(x),
-        0x864f2 => charge(x),
-        0x86620 => leap(x),
-        0x8673c => rain(x),
+    match x.u8(f::SUB2) {
+        0 => slash(x),
+        2 => combo(x),
+        4 | 8 => throw_knives(x),
+        6 => plunge(x),
+        0xa => charge(x),
+        0xc => leap(x),
+        0xe => rain(x),
         _ => vanish(x),
     }
 }
 
 /// 0x8624a (`+6` = 0): a single hit.
 fn slash<R: Bench>(x: &mut Cx<'_, R>) {
-    if step(x, 0x86258) == 0x8625c {
+    if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
         x.set8(0x45, 5);
         x.set8(0x44, 0x44);
@@ -45,14 +42,14 @@ fn slash<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86296 (`+6` = 2): three-beat hit (the boss only strikes at the key frames `+0x33`).
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x862a4) {
-        0x862ac => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             key(x, 0xb);
             x.set8(PHASE_TIMER, 0x1e);
             strike(x, 1);
         }
-        0x862d0 => {
+        2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
@@ -61,7 +58,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.anim_step();
         }
-        0x862f2 => {
+        4 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(VULNERABLE, 0);
                 addq8(x, f::SUB3, 2);
@@ -131,10 +128,10 @@ fn volley_next<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
 
 /// 0x86334 (`+6` = 4, 8): volley of knives, one toward each player.
 fn throw_knives<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x86342) {
-        0x8634a => volley_start(x, 0xc, false),
-        0x8637e => volley_fire(x, aids::pick_new),
-        0x863cc => {
+    match x.u8(f::SUB3) {
+        0 => volley_start(x, 0xc, false),
+        2 => volley_fire(x, aids::pick_new),
+        4 => {
             volley_next(x, aids::pick_new);
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
@@ -147,10 +144,10 @@ fn throw_knives<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8673c (`+6` = 14): rain of projectiles, repeated as long as `+0xaa` allows.
 fn rain<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x8674a) {
-        0x86752 => volley_start(x, 0x11, true),
-        0x86780 => volley_fire(x, aids::pick_any),
-        0x867ce => {
+    match x.u8(f::SUB3) {
+        0 => volley_start(x, 0x11, true),
+        2 => volley_fire(x, aids::pick_any),
+        4 => {
             volley_next(x, aids::pick_any);
             if !timer_done(x) {
                 return;
@@ -169,8 +166,8 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x86400 (`+6` = 6): plunging hit on the target's retained position.
 fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x8640e) {
-        0x86414 => {
+    match x.u8(f::SUB3) {
+        0 => {
             if x.u16(f::TARGET) == 0 {
                 return;
             }
@@ -182,7 +179,7 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             key(x, 0xd);
             strike(x, 2);
         }
-        0x8644a => {
+        2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
@@ -196,8 +193,8 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x864f2 (`+6` = 10): lateral charge with puffs of dust, then stop.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x86500) {
-        0x8650a => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 4);
             x.set8(0x45, 5);
@@ -205,7 +202,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             key(x, 0xf);
             strike(x, 7);
         }
-        0x8653a => {
+        2 => {
             if x.u8(f::KEY_FRAME) == 0 {
                 x.anim_step();
                 return;
@@ -221,7 +218,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x14, d0 as u16);
             x.set16(0x16, d1 as u16);
         }
-        0x86574 => {
+        4 => {
             dust(x, 0);
             x.move_x();
             if x.anim_step() {
@@ -230,7 +227,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 strike(x, 8);
             }
         }
-        0x865ba => {
+        6 => {
             dust(x, 1);
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
@@ -266,8 +263,8 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
 
 /// 0x86620 (`+6` = 12): forward leap with fall, landing and burst of effects.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x8662e) {
-        0x8663a => leap_start(x, -0x400),
+    match x.u8(f::SUB3) {
+        0 => leap_start(x, -0x400),
         t => leap_rest(x, t),
     }
 }
@@ -290,16 +287,16 @@ pub(super) fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
 }
 
 /// Common steps of the leap (0x86686, 0x8669c, 0x866c2, 0x8670c, 0x86728).
-pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
-    match t {
-        0x86686 => {
+pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
+    match step {
+        2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(VULNERABLE, 0);
             }
             x.anim_step();
         }
-        0x8669c => {
+        4 => {
             x.move_xz();
             if (x.u16(0x18) as i16) <= -0x300 {
                 x.set16(0x1a, (-0x98i16) as u16);
@@ -308,7 +305,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
             }
             x.anim_step();
         }
-        0x866c2 => {
+        6 => {
             if x.move_xz().gt() {
                 x.anim_step();
                 return;
@@ -323,7 +320,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
             x.set16(TIMER, 0x14);
             strike(x, 0xa);
         }
-        0x8670c => {
+        8 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 strike(x, 5);
@@ -340,15 +337,15 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
 
 /// 0x8681a (`+6` = 16): disappearance, sidestep, reappearance.
 fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x86828) {
-        0x86830 => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             x.set8(0, 2);
             key(x, 0x12);
             lib::sound(x, crate::sound::CMD_349);
             body(x, 4);
         }
-        0x86858 => {
+        2 => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 aids::random_sidestep(x);
@@ -357,7 +354,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
                 body(x, 5);
             }
         }
-        0x86886 => {
+        4 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);

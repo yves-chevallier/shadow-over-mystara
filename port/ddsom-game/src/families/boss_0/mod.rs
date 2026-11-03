@@ -302,16 +302,14 @@ fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
 /// 0x7a8d2: target at short range: draw in table 0x7a8e8.
 fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let i = x.rom8(0x7a8e8 + r) as u32;
-    let at = jump_target(x, 0x7a8f8, i);
+    let at = decide(x, "boss_0/close_picks", r, "boss_0/close_jumps");
     go(x, at)
 }
 
 /// 0x7a8fa: target ahead (run box); the three routines of phase `+0xaa` read the same table 0x7a932.
 fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let i = x.rom8(0x7a932 + r) as u32;
-    let at = jump_target(x, 0x7a942, i);
+    let at = decide(x, "boss_0/front_picks", r, "boss_0/front_jumps");
     go(x, at)
 }
 
@@ -319,15 +317,14 @@ fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
 /// half, gesture 1) or 0x7a9ce.
 fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
-    let table = if x.u8(3) == 0 {
-        0x7a9ae
+    let picks = if x.u8(3) == 0 {
+        "boss_0/near_picks_0"
     } else if g == 1 {
-        0x7a9be
+        "boss_0/near_picks_1"
     } else {
-        0x7a9ce
+        "boss_0/near_picks_2"
     };
-    let i = x.rom8(table + r) as u32;
-    let at = jump_target(x, 0x7a9de, i);
+    let at = decide(x, picks, r, "boss_0/near_jumps");
     go(x, at)
 }
 
@@ -336,34 +333,29 @@ fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let index = g.wrapping_sub(1).wrapping_mul(2).wrapping_add(phase.wrapping_mul(4));
-    let first = if x.u8(3) == 0 { 0x7aa16 } else { 0x7aa22 };
-    let entry = jump_target(x, first, index);
-    // each entry reads a byte from its 16-byte table, which is used as an index into table 0x7aac8
-    let table = match entry {
-        0x7aa2e | 0x7aa36 | 0x7aa3e | 0x7aa46 => 0x7aa88,
-        0x7aa4e | 0x7aa56 => 0x7aa98,
-        0x7aa5e | 0x7aa64 | 0x7aa6a | 0x7aa70 => 0x7aaa8,
-        0x7aa76 | 0x7aa7c => 0x7aab8,
-        _ => panic!("boss 0: unknown entry {entry:#x}"),
+    // the jump tables 0x7aa16 (main half) and 0x7aa22 (second half), six entries each (by gesture and phase), lead to
+    // routines that each draw in one of four pick tables
+    let picks = if x.u8(3) == 0 {
+        [0, 0, 0, 0, 1, 1]
+    } else {
+        [2, 2, 2, 2, 3, 3]
     };
-    let i = x.rom8(table + r) as u32;
-    let at = jump_target(x, 0x7aac8, i);
+    let k = *picks.get(index as usize / 2).unwrap_or_else(|| bad_index(index));
+    let at = decide(x, ["boss_0/far_picks_0", "boss_0/far_picks_1", "boss_0/far_picks_2", "boss_0/far_picks_3"][k], r,
+        "boss_0/far_jumps");
     go(x, at)
 }
 
 /// 0x7a7a4 and 0x7a7b0: delay between two run steps, depending on difficulty.
 fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
-    let level = var::RANK.get(x.b) as u32;
-    let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
-    let d = x.rom8(table + level);
+    let d = per_rank(x, if kind == 3 { "boss_0/walk_delays_back" } else { "boss_0/walk_delays" });
     x.set8(WALK_DELAY, d);
 }
 
 /// 0x7a7fc and 0x7a80e: number of run steps, drawn from the direction table.
 fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let r = rand_and(x, 0x1f);
-    let table = if kind == 3 { 0x7a840 } else { 0x7a820 };
-    let n = x.rom8(table + r);
+    let n = byte(x, if kind == 3 { "boss_0/walk_steps_back" } else { "boss_0/walk_steps" }, r);
     x.set8(WALK_STEPS, n);
 }
 

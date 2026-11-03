@@ -13,9 +13,6 @@ fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_LAST, kind);
 }
 
-fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    dispatch(x, table, f::SUB3)
-}
 
 /// 0x89030: the boss fades out (common start of the dodges).
 fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
@@ -51,10 +48,11 @@ fn reappear<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88f36 (`+5` = 6).
 pub(super) fn group6<R: Bench>(x: &mut Cx<'_, R>) {
-    let table = if dispatch(x, 0x88f44, f::SUB2) == 0x88f4c { 0x88f5a } else { 0x88f70 };
-    match step(x, table) {
-        0x89030 => fade_out(x),
-        0x8905a => {
+    // two jump tables of steps: 0x88f5a for `+6` = 0 or 4 (sidestep), 0x88f70 otherwise
+    let sidestep = matches!(x.u8(f::SUB2), 0 | 4);
+    match x.u8(f::SUB3) {
+        0 => fade_out(x),
+        2 if sidestep => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 let mut d = (-0x80i16) as u16;
@@ -66,25 +64,25 @@ pub(super) fn group6<R: Bench>(x: &mut Cx<'_, R>) {
                 reappear(x);
             }
         }
-        0x890de => {
+        2 => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 aids::dodge_spot(x);
                 reappear(x);
             }
         }
-        0x8909a => fade_in(x),
+        4 => fade_in(x),
         _ => finish(x, 0x0202_0000),
     }
 }
 
 /// 0x88f78 (`+5` = 8).
 pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x88f86, f::SUB2) {
-        0x88f90 => rest(x),
-        0x8901a => match step(x, 0x89028) {
-            0x89030 => fade_out(x),
-            0x8905a => {
+    match x.u8(f::SUB2) {
+        0 => rest(x),
+        2 => match x.u8(f::SUB3) {
+            0 => fade_out(x),
+            2 => {
                 if x.anim_step() {
                     addq8(x, f::SUB3, 2);
                     let mut d = (-0x80i16) as u16;
@@ -96,29 +94,29 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
                     reappear(x);
                 }
             }
-            0x8909a => fade_in(x),
+            4 => fade_in(x),
             _ => finish(x, 0x0204_0a00),
         },
-        0x890c8 => match step(x, 0x890d6) {
-            0x89030 => fade_out(x),
-            0x890de => {
+        4 => match x.u8(f::SUB3) {
+            0 => fade_out(x),
+            2 => {
                 if x.anim_step() {
                     addq8(x, f::SUB3, 2);
                     aids::dodge_spot(x);
                     reappear(x);
                 }
             }
-            0x8909a => fade_in(x),
+            4 => fade_in(x),
             _ => finish(x, 0x0202_0000),
         },
-        0x89120 => match step(x, 0x8912e) {
-            0x8913a => leap_start(x, 0x400, 0x10, 9),
-            0x8910c => finish(x, 0x0202_0000),
+        6 => match x.u8(f::SUB3) {
+            0 => leap_start(x, 0x400, 0x10, 9),
+            0xa => finish(x, 0x0202_0000),
             t => leap_rest(x, t),
         },
-        _ => match step(x, 0x89194) {
-            0x89030 => fade_out(x),
-            0x8919c => {
+        _ => match x.u8(f::SUB3) {
+            0 => fade_out(x),
+            2 => {
                 if x.anim_step() {
                     addq8(x, f::SUB3, 2);
                     aids::random_spot(x);
@@ -130,7 +128,7 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
                     reappear(x);
                 }
             }
-            0x8909a => fade_in(x),
+            4 => fade_in(x),
             _ => finish(x, 0x0202_0000),
         },
     }
@@ -138,8 +136,8 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88f90 (`+6` = 0 of group 8): standing wait, then return to combat.
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x88f9e, f::SUB3) {
-        0x88fe2 => {
+    match x.u8(f::SUB3) {
+        2 => {
             if sub16(x, TIMER, 1).mi() {
                 x.set32(f::STATE, 0x0202_0000);
                 return;
@@ -154,7 +152,7 @@ fn rest<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_step();
         }
         t => {
-            if t == 0x88fac {
+            if t == 0 {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x14);
             } else {

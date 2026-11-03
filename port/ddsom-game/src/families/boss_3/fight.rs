@@ -381,8 +381,8 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- group 6: round, group 8: takeoff -------------------------------------------------------------
 
-/// Waypoints of the patrol, per quarter of the screen (words X, Z, bytes angle and direction; PC-relative).
-const ROUND_POINTS: u32 = 0x81876;
+/// Waypoints of the patrol, per quarter of the screen (words X, Z, bytes angle and direction).
+const ROUND_POINTS: &str = "boss_3/round_points";
 
 /// 0x806b4: patrol (`+6` = 0, 2), takeoff jump (4); with no player alive, wait.
 pub(super) fn round<R: Bench>(x: &mut Cx<'_, R>) {
@@ -411,13 +411,13 @@ fn pick_round_point<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         (true, false) => 0xc,
         (true, true) => 0x12,
     };
-    let gx = x.rom16(ROUND_POINTS + quarter).wrapping_add(cam.u16(x.b, 0x8));
+    let gx = word(x, ROUND_POINTS, quarter).wrapping_add(cam.u16(x.b, 0x8));
     x.set16(GOAL_X, gx);
-    let gz = x.rom16(ROUND_POINTS + 2 + quarter).wrapping_add(cam.u16(x.b, 0xc));
+    let gz = word(x, ROUND_POINTS, 2 + quarter).wrapping_add(cam.u16(x.b, 0xc));
     x.set16(GOAL_Z, gz);
-    let angle = x.rom8(ROUND_POINTS + 4 + quarter);
+    let angle = byte(x, ROUND_POINTS, 4 + quarter);
     x.set8(Obj::SPEED_INDEX, angle);
-    let turn = x.rom8(ROUND_POINTS + 5 + quarter);
+    let turn = byte(x, ROUND_POINTS, 5 + quarter);
     x.set8(GOAL_TURN, turn);
     turn != 0
 }

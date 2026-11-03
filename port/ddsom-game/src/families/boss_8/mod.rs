@@ -97,14 +97,6 @@ fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     }
 }
 
-/// Jump through a relative table (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexed by the object's byte `idx`:
-/// returns the arrival address.
-fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
-    let i = x.u8(idx) as u32;
-    let off = x.rom16(table + i);
-    table.wrapping_add(off as i16 as i32 as u32)
-}
-
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
@@ -225,17 +217,17 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
-        let t = dispatch(x, 0x881aa, f::SUB);
-        match t {
-            0x882ae => fight::intro(x),
-            0x8839a => fight::fight(x),
-            0x887ac => attacks::run(x),
-            0x88f36 => moves::group6(x),
-            0x88f78 => moves::group8(x),
-            0x891e2 => fight::wait(x),
-            0x882a4 => x.set32(f::STATE, 0x0202_0000),
-            0x8921e => fight::stand_up(x),
-            t => unreachable!("boss 8: group {t:x}"),
+        // jump table 0x881aa: eight groups
+        match x.u8(f::SUB) {
+            0 => fight::intro(x),
+            2 => fight::fight(x),
+            4 => attacks::run(x),
+            6 => moves::group6(x),
+            8 => moves::group8(x),
+            0xa => fight::wait(x),
+            0xc => x.set32(f::STATE, 0x0202_0000),
+            0xe => fight::stand_up(x),
+            g => bad_index(g),
         }
         if (x.u8(PHASE_TIMER) as i8) > 0 {
             sub8(x, PHASE_TIMER, 1);
@@ -269,7 +261,7 @@ fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0000);
     let rng = x.random();
     let i = rng as u32 & 0xf;
-    let step = x.rom8(0x88294 + i);
+    let step = byte(x, "boss_8/idle_attacks", i);
     x.set8(f::SUB2, step);
 }
 

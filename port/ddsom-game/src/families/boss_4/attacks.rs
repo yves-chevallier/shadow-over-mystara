@@ -335,7 +335,7 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
-            let v = x.prog32(0x82852 + i);
+            let v = long(x, "boss_4/rise_steps", i);
             x.add32(0xc, v);
             lib::step(x);
         }
@@ -365,7 +365,7 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.set8(BREATH, 6);
-            breath_shot(x, 0x8295c, None);
+            breath_shot(x, "boss_4/breath_angles", None);
         }
         8 => {
             flap(x);
@@ -402,7 +402,7 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// One jet of the breath (ESHL 0x32, variant `variant`): its angle follows table `angles` (16 notches, flipped
 /// when the boss faces left). False if the pool is full.
-fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> bool {
+fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: &str, variant: Option<u8>) -> bool {
     let Some(s) = x.alloc(&pools::ESHL) else { return false };
     s.set_u8(x.b, 0, 1);
     s.set_u8(x.b, 2, 0x32);
@@ -411,7 +411,7 @@ fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) ->
     }
     s.set_u16(x.b, f::CREATOR, x.o.0 as u16);
     let i = x.u8(BREATH_STEP) as u32;
-    let mut a = x.rom8(angles + i);
+    let mut a = byte(x, angles, i);
     let side = x.u8(f::FLIP);
     s.set_u8(x.b, f::FLIP, side);
     if side != 0 {
@@ -495,7 +495,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.set8(BREATH, 3);
-            if !breath_shot(x, 0x82ba2, Some(1)) {
+            if !breath_shot(x, "boss_4/air_breath_angles", Some(1)) {
                 lib::step(x);
             }
         }

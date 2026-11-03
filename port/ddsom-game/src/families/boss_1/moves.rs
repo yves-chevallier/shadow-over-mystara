@@ -8,8 +8,8 @@ use crate::objects::Obj;
 // --- group 0: arrival ------------------------------------------------------------------------
 
 /// Speeds (X, Y) of the eight jumps of the crossing, and the animation of each.
-const CROSSING_SPEEDS: u32 = 0x7af94;
-const CROSSING_ANIMS: u32 = 0x7afb4;
+const CROSSING_SPEEDS: &str = "boss_1/crossing_speeds";
+const CROSSING_ANIMS: &str = "boss_1/crossing_anims";
 
 /// 0x7ae5a: the boss crosses the screen in eight jumps (in cutscene), disappears, then falls from the top of the
 /// screen.
@@ -158,14 +158,14 @@ fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
     }
     // index `(d8,PC,D0.w)`: quadruple computed on a word, sign-extended
     let i = x.u16(TIMER).wrapping_mul(4) as i16 as i32 as u32;
-    let vx = x.rom16(CROSSING_SPEEDS.wrapping_add(i));
+    let vx = word(x, CROSSING_SPEEDS, i);
     x.set16(0x14, vx);
-    let vy = x.rom16(CROSSING_SPEEDS.wrapping_add(i).wrapping_add(2));
+    let vy = word(x, CROSSING_SPEEDS, i.wrapping_add(2));
     x.set16(0x18, vy);
     let side = if (vx as i16) < 0 { 0 } else { 0x20 };
     x.set8(f::FLIP, side);
     let t = x.u16(TIMER).wrapping_mul(2) as i16 as i32 as u32;
-    let n = x.rom16(CROSSING_ANIMS.wrapping_add(t));
+    let n = word(x, CROSSING_ANIMS, t);
     body(x, n as u32);
 }
 
@@ -246,17 +246,17 @@ fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     match x.u8(0x7) {
         0 => {
             if second {
-                draw_steps(x, 0x7c060);
+                draw_steps(x, "boss_1/walk_steps_second");
                 if !pick_target(x) {
                     return idle_alone(x);
                 }
-                aim_near_target(x, 0x7c400, 3);
+                aim_near_target(x, "boss_1/hop_marks", 3);
                 kind(x, 3);
             } else {
                 if !pick_target(x) {
                     return idle_alone(x);
                 }
-                draw_steps(x, 0x7c040);
+                draw_steps(x, "boss_1/walk_steps");
                 kind(x, 2);
             }
             hop(x)
@@ -321,7 +321,7 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x7, 2);
     x.set16(0x16, 0);
     x.set16(0x1e, 0);
-    aim_near_target(x, 0x7c410, 7);
+    aim_near_target(x, "boss_1/leap_marks", 7);
     speed(x, 0x17);
     x.set16(0x18, 0x500);
     x.set16(0x1a, (-0x70i16) as u16);
@@ -698,7 +698,7 @@ pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 // --- group 12: a grabbed player ---------------------------------------------------------------
 
 /// Time between two bites, depending on the phase.
-const BITE_DELAYS: u32 = 0x7bb3e;
+const BITE_DELAYS: &str = "boss_1/bite_delays";
 
 /// 0x7ba50: the grabbed player (`+0x50`) is held (0xfda2) and bitten (4 HP) until released.
 pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
@@ -742,7 +742,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
                     return release(x);
                 }
                 let phase = x.u8(PHASE) as u32;
-                let d = x.rom16(BITE_DELAYS + phase * 2);
+                let d = word(x, BITE_DELAYS, phase * 2);
                 x.set16(TIMER2, d);
             }
             lib::step(x);

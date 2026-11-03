@@ -25,26 +25,23 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x887ba, f::SUB2) {
-        0x887ce => slash(x),
-        0x88e0e => lunge(x, true),
-        0x888ac => throw_knives(x),
-        0x8881a => combo(x),
-        0x88a64 => charge(x),
-        0x88b92 => leap(x),
-        0x88cae => rain(x),
-        0x88d86 => vanish(x),
+    match x.u8(f::SUB2) {
+        0 => slash(x),
+        2 => lunge(x, true),
+        4 | 6 => throw_knives(x),
+        8 => combo(x),
+        0xa => charge(x),
+        0xc => leap(x),
+        0xe => rain(x),
+        0x10 => vanish(x),
         _ => lunge(x, false),
     }
 }
 
-fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    dispatch(x, table, f::SUB3)
-}
 
 /// 0x887ce (`+6` = 0): a single hit.
 fn slash<R: Bench>(x: &mut Cx<'_, R>) {
-    if step(x, 0x887dc) == 0x887e0 {
+    if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
         x.set8(0x45, 5);
         x.set8(0x44, 0x44);
@@ -57,14 +54,14 @@ fn slash<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8881a (`+6` = 8): three-beat hit (the boss only strikes at the key frames `+0x33`).
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x88828) {
-        0x88830 => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             key(x, 0xb);
             x.set8(PHASE_TIMER, 0x1e);
             strike(x, 1);
         }
-        0x88854 => {
+        2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
@@ -72,7 +69,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.anim_step();
         }
-        0x88870 => {
+        4 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(VULNERABLE, 1);
                 addq8(x, f::SUB3, 2);
@@ -138,14 +135,14 @@ fn volley_next<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
 }
 
 fn throw_knives<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x888ba) {
-        0x888c2 => volley_start(x, 0xc, false),
-        0x888f6 => {
+    match x.u8(f::SUB3) {
+        0 => volley_start(x, 0xc, false),
+        2 => {
             if x.anim_step() {
                 volley_fire(x, aids::pick_new);
             }
         }
-        0x8893e => {
+        4 => {
             volley_next(x, aids::pick_new);
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
@@ -158,14 +155,14 @@ fn throw_knives<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88cae (`+6` = 14): rain of projectiles, repeated until `+0xaa` is exhausted.
 fn rain<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x88cbc) {
-        0x88cc4 => volley_start(x, 0x11, true),
-        0x88cf2 => {
+    match x.u8(f::SUB3) {
+        0 => volley_start(x, 0x11, true),
+        2 => {
             if x.anim_step() {
                 volley_fire(x, aids::pick_any);
             }
         }
-        0x88d3a => {
+        4 => {
             volley_next(x, aids::pick_any);
             if !timer_done(x) {
                 return;
@@ -184,8 +181,8 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88a64 (`+6` = 10): lateral charge with puffs of dust, then stop.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x88a72) {
-        0x88a7c => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 0xa);
             x.set8(0x45, 5);
@@ -193,7 +190,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             key(x, 0xf);
             strike(x, 7);
         }
-        0x88aac => {
+        2 => {
             if x.u8(f::KEY_FRAME) == 0 {
                 x.anim_step();
                 return;
@@ -209,7 +206,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x14, d0 as u16);
             x.set16(0x16, d1 as u16);
         }
-        0x88ae6 => {
+        4 => {
             dust(x);
             x.move_x();
             if x.anim_step() {
@@ -218,7 +215,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 strike(x, 8);
             }
         }
-        0x88b2c => {
+        6 => {
             dust(x);
             if sub16(x, TIMER, 1).mi() {
                 addq8(x, f::SUB3, 2);
@@ -254,8 +251,8 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88b92 (`+6` = 12): leap with fall, landing and burst of effects.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
-    match dispatch(x, 0x88ba0, f::SUB3) {
-        0x88bac => leap_start(x, -0x400, 0x10, 9),
+    match x.u8(f::SUB3) {
+        0 => leap_start(x, -0x400, 0x10, 9),
         t => leap_rest(x, t),
     }
 }
@@ -278,16 +275,16 @@ pub(super) fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8, anim: u
 }
 
 /// Common steps of the leap (0x88bf8, 0x88c0e, 0x88c34, 0x88c7e, 0x88c9a).
-pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
-    match t {
-        0x88bf8 => {
+pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
+    match step {
+        2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(VULNERABLE, 0);
             }
             x.anim_step();
         }
-        0x88c0e => {
+        4 => {
             x.move_xz();
             if !Fl::sub16(x.u16(0x18), 0xfd00).gt() || true {
                 // cmpi.w #-0x300,(0x18,A0) ; bgt: the vertical momentum shrinks
@@ -299,7 +296,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
             }
             x.anim_step();
         }
-        0x88c34 => {
+        6 => {
             if x.move_xz().gt() {
                 x.anim_step();
                 return;
@@ -314,7 +311,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
             x.set16(TIMER, 0x14);
             strike(x, 0xa);
         }
-        0x88c7e => {
+        8 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 strike(x, 5);
@@ -331,15 +328,15 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
 
 /// 0x88d86 (`+6` = 16): disappearance, reappearance beside.
 fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
-    match step(x, 0x88d94) {
-        0x88d9c => {
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 0x10);
             key(x, 0x12);
             lib::sound(x, crate::sound::CMD_349);
             body(x, 4);
         }
-        0x88dc6 => {
+        2 => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 aids::random_sidestep(x);
@@ -348,7 +345,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
                 body(x, 5);
             }
         }
-        0x88df4 => {
+        4 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);
@@ -361,15 +358,15 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x88e0e (`+6` = 2, `first`) and 0x88e50 (`+6` = 18): forward leap then hit (0xa4e84 receives D4).
 fn lunge<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
-    let t = step(x, if first { 0x88e1c } else { 0x88e5e });
-    match t {
-        0x88e66 => {
+    // jump tables of steps 0x88e1c (`first`) and 0x88e5e: they differ only by the second step
+    match x.u8(f::SUB3) {
+        0 => {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 0xa);
             key(x, 0x13);
             strike(x, 0xc);
         }
-        0x88e24 | 0x88e8a => {
+        2 => {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x20);
@@ -379,7 +376,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
                 strike(x, 0xd);
             }
         }
-        0x88eb6 => {
+        4 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 strike(x, 0xe);

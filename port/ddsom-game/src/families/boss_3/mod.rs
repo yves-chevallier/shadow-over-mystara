@@ -162,7 +162,7 @@ fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 /// 0x816f8: has the boss just changed HP threshold (`+0xa2`, table 0x81712)?
 fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
-    let w = x.rom8(0x81712 + n);
+    let w = byte(x, "boss_3/wounds", n);
     let changed = w != x.u8(FLYING);
     if changed {
         x.set8(FLYING, w);
@@ -170,13 +170,10 @@ fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     changed
 }
 
-/// Draw of an attack from a table of 32 bytes per difficulty level (read as data, from `table`):
-/// `+6` = the attack, `+4..+5` = active / attacks, `+7` = 0.
-fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
-    let level = (var::RANK.get(x.b) >> 1) << 5;
-    let at = table.wrapping_add(level as i16 as u32);
-    let r = rand_and(x, 0x1f);
-    let k = x.data8(at.wrapping_add(r));
+/// Draw of an attack from a table of 32 bytes per difficulty level: `+6` = the attack, `+4..+5` = active / attacks,
+/// `+7` = 0.
+fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
+    let k = rank_byte(x, table);
     x.set8(f::SUB2, k);
     x.set16(f::STATE, 0x0204);
     x.set8(0x7, 0);
@@ -185,11 +182,11 @@ fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
 /// 0x80e1c / 0x80e22: attack drawn for a nearby target (`far`: at a distance); when wounded, the wounded table.
 fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
     let table = if x.u8(FLYING) != 0 {
-        0x81262
+        "boss_3/wounded_attacks"
     } else if far {
-        0x81062
+        "boss_3/far_attacks"
     } else {
-        0x80e62
+        "boss_3/near_attacks"
     };
     draw_attack(x, table)
 }
@@ -206,7 +203,7 @@ fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
         return x.set32(f::STATE, 0x0202_0a00);
     }
     if close {
-        return draw_attack(x, 0x814f8);
+        return draw_attack(x, "boss_3/follow_ups");
     }
     x.set32(f::STATE, 0x0202_0400);
 }
@@ -317,7 +314,7 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     let r = (x.random() as u32) & 0xf;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     // index `(d8,PC,D1.w)`: sign-extended word
-    let mask = x.rom16(0x81b1a_u32.wrapping_add(level as i16 as i32 as u32));
+    let mask = word(x, "boss_3/counter_masks", level as i16 as i32 as u32);
     if mask >> r & 1 != 0 {
         x.set8(INVULNERABLE, 8);
         x.set32(f::STATE, 0x0204_1800);

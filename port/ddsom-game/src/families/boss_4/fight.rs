@@ -165,9 +165,10 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if x.u8(0x7) != 0 {
         return walking(x);
     }
-    let (steps, delay, k) = if slow { (0x83074, 0x83010, 3) } else { (0x83054, 0x82ff0, 2) };
+    let (steps, delay, k) =
+        if slow { ("boss_4/walk_steps_slow", "boss_4/walk_delays_slow", 3) } else { ("boss_4/walk_steps", "boss_4/walk_delays", 2) };
     let r = rand_and(x, 0x1f);
-    let n = x.rom8(steps + r);
+    let n = byte(x, steps, r);
     x.set8(WALK_STEPS, n);
     set_delay(x, delay);
     x.set8(ANIM_KIND, k);
@@ -188,9 +189,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
 }
 
 /// Delay between two steps, depending on difficulty (ROM table `table`).
-fn set_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
-    let level = var::RANK.get(x.b);
-    let d = x.rom8(table + level as u32);
+fn set_delay<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
+    let d = per_rank(x, table);
     x.set8(WALK_DELAY, d);
 }
 
@@ -208,7 +208,7 @@ fn walking<R: Bench>(x: &mut Cx<'_, R>) {
         }
         aim(x);
         let slow = x.u8(ANIM_KIND) == 3;
-        set_delay(x, if slow { 0x83010 } else { 0x82ff0 });
+        set_delay(x, if slow { "boss_4/walk_delays_slow" } else { "boss_4/walk_delays" });
         return walk_select(x);
     }
     if off_screen(x) {

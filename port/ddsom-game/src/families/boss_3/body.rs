@@ -9,16 +9,15 @@ use cps2::Cps2Bus;
 
 use super::*;
 use crate::families::cx::Bench;
-use crate::mem::rd16;
 
-/// A shape: slices (bytes, PC-relative) and rows (height, half-depth, push; data).
+/// A shape: its tables of slices (row per 16-pixel slice of distance) and rows (height, half-depth, push).
 struct Shape {
-    slices: u32,
-    rows: u32,
+    slices: &'static str,
+    rows: &'static str,
 }
 
-const FRONT: Shape = Shape { slices: 0x81950, rows: 0x81970 };
-const SIDE: Shape = Shape { slices: 0x81a44, rows: 0x81a64 };
+const FRONT: Shape = Shape { slices: "boss_3/front_slices", rows: "boss_3/front_rows" };
+const SIDE: Shape = Shape { slices: "boss_3/side_slices", rows: "boss_3/side_rows" };
 
 /// 0x81916 / 0x81a0a: push for object `other` at distance `d` from boss `me`, 0 outside the shape (object height
 /// above the slice, or too far in depth).
@@ -26,18 +25,19 @@ fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> 
     if (d as i16) >= 0x200 {
         return 0;
     }
-    let slice = crate::mem::prog8(b, shape.slices + (d >> 4) as u32) as u32;
-    let row = shape.rows + (slice << 3);
-    let height = rd16(b, row);
+    let slice = tables::table(shape.slices).at8(b, (d >> 4) as u32) as u32;
+    let rows = tables::table(shape.rows);
+    let row = slice << 3;
+    let height = rows.at16(b, row);
     if (height as i16) < other.u16(b, 0xc) as i16 {
         return 0;
     }
-    let depth = rd16(b, row + 2);
+    let depth = rows.at16(b, row + 2);
     let mut dz = other.u16(b, 0x10).wrapping_sub(me.u16(b, 0x10));
     if (dz as i16) < 0 {
         dz = dz.wrapping_neg();
     }
-    if dz as i16 >= depth as i16 { 0 } else { rd16(b, row + 4) }
+    if dz as i16 >= depth as i16 { 0 } else { rows.at16(b, row + 4) }
 }
 
 /// 0x818e6: shape 1: object `other` in front of boss `me` (up to 0x20 behind it) is pushed forward.
@@ -102,12 +102,12 @@ pub(super) fn push_players<R: Bench>(x: &mut Cx<'_, R>, shape: u8) {
     }
 }
 
-/// Body shape `routine` (0x818e6 front, 0x819e2 sideways) applied to object `other` by boss `me`; true if
-/// the object was pushed (for 0x81aa4 of `boss_common`).
-pub fn push(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
-    match routine {
-        0x818e6 => shove_front(b, me, other),
-        0x819e2 => shove_side(b, me, other),
-        _ => unreachable!("boss 3 body shape at {routine:#x}: table 0x81ad4 only has 0x818e6 and 0x819e2"),
+/// Body shape `shape` (1 front, 0x818e6; 2 sideways, 0x819e2) applied to object `other` by boss `me`; true if the
+/// object was pushed (for 0x81aa4 of `boss_common`, which jumps through the table 0x81ad4 of the two shapes).
+pub fn push(b: &mut Cps2Bus, me: Obj, other: Obj, shape: u8) -> bool {
+    match shape {
+        1 => shove_front(b, me, other),
+        2 => shove_side(b, me, other),
+        _ => bad_index(shape),
     }
 }
