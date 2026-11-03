@@ -35,8 +35,7 @@
 //! scheduler to the next ([`Snapshot`]), the frame is finished. Safety cap: at most [`NATIVES_CAP`]
 //! points per frame (counted in [`summary`]).
 
-use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use cps2::{Cps2Bus, StepCap};
@@ -123,10 +122,20 @@ struct Image {
     snapshot: Option<Snapshot>,
 }
 
+/// The last natives run, oldest first from `next` (a ring).
+#[derive(Clone, Copy)]
+struct Last {
+    natives: [Option<&'static Native>; LAST_NATIVES],
+    next: usize,
+}
+
+/// Natives kept for the diagnostic of a stop.
+const LAST_NATIVES: usize = 8;
+
 thread_local! {
     static IMAGE: RefCell<Image> = RefCell::new(Image { number: u64::MAX, ..Image::default() });
     /// Last natives run (diagnosing a stop).
-    static LAST: RefCell<VecDeque<&'static Native>> = const { RefCell::new(VecDeque::new()) };
+    static LAST: Cell<Last> = const { Cell::new(Last { natives: [None; LAST_NATIVES], next: 0 }) };
 }
 
 /// Processor work during a line (`cps2::Machine::line_work`). The cap on game steps is only read for
@@ -146,12 +155,13 @@ pub fn line(b: &mut Cps2Bus, cap: Option<&mut StepCap>) {
     loop {
         // a top-level point: no cession in progress
         crate::tasks::forget_cession();
-        let point = crate::kernel::point(b);
+        // the point and the interrupt mask, read in the task table once (before startup: reset, all masked)
+        let (point, mask) = read(b).map_or((Point::Reset, crate::kernel::MASK_ALL), |t| (t.point, t.interrupt_mask));
         if poison_stack && !point.startup() {
             poison_stacks(b);
         }
         let level = b.irq_level();
-        if point != Point::Interruption && level > crate::kernel::interrupt_mask(b) {
+        if point != Point::Interruption && level > mask {
             crate::kernel::interrupt(b, point);
             continue;
         }
@@ -272,12 +282,11 @@ fn frame_done(b: &Cps2Bus, point: Point) -> bool {
 /// Notes the native about to run (handler of a dispatch table), for diagnosing a stop (`DDSOM_SANS_TRACE=frame`:
 /// each native of the frame).
 pub(crate) fn note(b: &Cps2Bus, n: &'static Native) {
-    LAST.with(|d| {
-        let mut d = d.borrow_mut();
-        if d.len() == 8 {
-            d.pop_front();
-        }
-        d.push_back(n);
+    LAST.with(|last| {
+        let mut l = last.get();
+        l.natives[l.next] = Some(n);
+        l.next = (l.next + 1) % LAST_NATIVES;
+        last.set(l);
     });
     if trace(b) {
         eprintln!("{}:{} {:06x} {} mask={}", b.frame, b.scanline, n.entry, n.name, crate::kernel::interrupt_mask(b));
@@ -305,7 +314,11 @@ fn stop(b: &mut Cps2Bus, cause: String) -> ! {
         m += &format!(" ; task {k} ({:?}, {:?}) ; frames [{}]", e.task, e.state, frames.join(" "));
     }
     m += &format!(" ; interrupt mask {}", crate::kernel::interrupt_mask(b));
-    let last = LAST.with(|d| d.borrow().iter().map(|n| format!("{}@{:x}", n.name, n.entry)).collect::<Vec<_>>());
+    let l = LAST.with(Cell::get);
+    let last: Vec<String> = (0..LAST_NATIVES)
+        .filter_map(|k| l.natives[(l.next + k) % LAST_NATIVES])
+        .map(|n| format!("{}@{:x}", n.name, n.entry))
+        .collect();
     m += &format!(" ; last natives: {}", last.join(" "));
     #[cfg(feature = "tools")]
     if let Some((site, routine)) = crate::call_site() {
