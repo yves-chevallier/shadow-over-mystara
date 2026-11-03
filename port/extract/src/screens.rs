@@ -138,6 +138,16 @@ fn service(t: &mut Tables) {
     t.prog("service_card_modes_4", 0x2c008, "u8", Some(4));
     t.prog("service_card_modes", 0x2c00c, "u8", Some(4));
     t.prog("service_ram_patterns", 0x2d0ce, "x16", Some(4));
+    t.data("service_secret_enable", 0xc0, "x16", Some(1));
+    // cells of the bits of the input test (one long per bit)
+    for at in [0x2a9f4, 0x2a9f8, 0x2a9fc, 0x2aa0c, 0x2aa9c] {
+        t.data(&format!("service_bit_cells@{at:#x}"), at, "x32", None);
+    }
+    // texts of the settings (one fixed-width text per value) and labels of the memory test
+    for (at, len) in [(0x2c042, 32 * 0x13), (0x2c314, 26 * 12), (0x2c4e8, 8 * 2), (0x2c590, 16 * 2), (0x2c610, 0x60), (0x2c71a, 16 * 15), (0x2c862, 20 * 8)] {
+        t.data(&format!("service_setting_texts@{at:#x}"), at, "u8", Some(len));
+    }
+    t.data("service_memory_labels", 0x2d27c, "u8", Some(30));
 }
 
 /// Spawn scripts of the scenes (`scene/script.rs`): the table of one long per scene, then each script up to and

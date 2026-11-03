@@ -454,3 +454,22 @@ la réécriture) est retiré, le comportement est documenté dans `families/enem
   d'arrivée (scénario `scene_end/end_01`) ; la table `item_scene_guide_animations_arrival` va jusqu'à 0xdcbdc.
 
 Les deux cas apparaissent dans le résidu de la validation (une lecture chacun) avant l'extension des tables.
+
+## Lot L11 (écrans ; wt-l11-ecrans)
+
+### Noms d'adresses jamais utilisés (`modes/mod.rs`, `mod sub`)
+
+* **Code** : le module `modes::sub` nommait six routines du moteur appelées par les écrans d'origine (0xc58, 0xca8,
+  0xcc8, 0xce8 : effacements de la VRAM ; 0x1a67e : palette ; 0x26d4 : bloc de tuiles). Ce n'étaient que des
+  constantes : les écrans appellent les fonctions Rust (`video::clear_objects`, `clear_layer`, `palette::…`,
+  `video::load_grid`).
+* **Pourquoi jamais atteint** : aucune référence dans le jeu ni les outils (le compilateur ne les signalait pas car
+  le module était public).
+* **Décision** : retirées ; les adresses restent dans les commentaires des fonctions Rust.
+* **Nature** : doublon sans intérêt.
+
+### Enregistreur de démonstrations du kit de développement (`modes/demo/recorder.rs`), gardé
+
+* Avec le bit 15 du réglage `A5+0x7fd0`, la remise à zéro de l'enregistreur (0xe0538) prépare un enregistrement des
+  entrées dans la RAM de la carte de développement (0x930000, absente d'une borne : les écritures s'y perdent).
+  Comportement de jeu réel mais inatteignable sur une borne ; gardé en Rust, désormais par `hw::io::DevRam`.
