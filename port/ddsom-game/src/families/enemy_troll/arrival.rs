@@ -20,15 +20,15 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
-        let n = x.u8(TIMER).wrapping_sub(1);
-        x.set8(TIMER, n);
+        let n = x.u8(Troll::TIMER).wrapping_sub(1);
+        x.set8(Troll::TIMER, n);
         if (n as i8) < 0 {
             set_state_long(x, STANCE);
         }
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set8(TIMER, 0x14);
+    x.set8(Troll::TIMER, 0x14);
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x12);

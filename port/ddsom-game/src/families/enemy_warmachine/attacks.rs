@@ -58,7 +58,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
             }
             let target = load_target(x);
             let goal = target.u16(x.b, Obj::X);
-            x.set16(GOAL_X, goal);
+            x.set16(WarMachine::GOAL_X, goal);
             x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x2b);
             spark(x, 1);
@@ -75,7 +75,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
                 lib::shake_54(x, 0x10);
                 lib::sound(x, crate::sound::CMD_376_476);
             }
-            let (mut d0, mut d1) = (x.u16(GOAL_X), x.u16(Obj::X));
+            let (mut d0, mut d1) = (x.u16(WarMachine::GOAL_X), x.u16(Obj::X));
             if (x.u16(Obj::VX) as i16) < 0 {
                 std::mem::swap(&mut d0, &mut d1);
             }
@@ -83,9 +83,9 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x1e);
-            x.set16(TIMER2, 0);
-            x.set8(FLAG, 0);
+            x.set16(WarMachine::TIMER, 0x1e);
+            x.set16(WarMachine::TIMER2, 0);
+            x.set8(WarMachine::FLAG, 0);
             let v: i16 = if x.u8(f::FLIP) != 0 { -0x30 } else { 0x30 };
             x.set16(Obj::AX, v as u16);
             lib::sound(x, crate::sound::CMD_376_476);
@@ -158,15 +158,15 @@ fn smash<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             x.set16(Obj::Z, 0);
-            x.set16(TIMER, 0x14);
+            x.set16(WarMachine::TIMER, 0x14);
             lib::shake_58(x, 0x14);
             spark(x, 2);
             lib::sound(x, crate::sound::CMD_327_427_C);
             weapon(x, 7);
         }
         8 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+            x.set16(WarMachine::TIMER, t);
             if (t as i16) > 0 {
                 return;
             }
@@ -190,20 +190,20 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(FLAG, 0);
+            x.set8(WarMachine::FLAG, 0);
             let level = (var::RANK.get(x.b) & 0x1e) * 2;
             let players = var::PLAYERS_ALIVE.get(x.b);
             let rank = if players == 0 { 0 } else { players - 1 } as u16;
-            let v = x.rom8(0x78856 + (level + rank) as u32);
-            x.set8(COUNT, v);
+            let v = tables::table("warmachine/shot_counts").at8(x.b, (level + rank) as u32);
+            x.set8(WarMachine::COUNT, v);
         }
         4 => {
             lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            let n = x.u8(COUNT).wrapping_sub(1);
-            x.set8(COUNT, n);
+            let n = x.u8(WarMachine::COUNT).wrapping_sub(1);
+            x.set8(WarMachine::COUNT, n);
             if (n as i8) > 0 {
                 return;
             }
@@ -233,8 +233,8 @@ fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if lib::step(x) {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 0x14);
-                x.set8(VULNERABLE, 1);
+                x.set16(WarMachine::TIMER, 0x14);
+                x.set8(Enemy::VULNERABLE, 1);
                 return mv(x, 4);
             }
             if x.u8(f::KEY_FRAME) == 0 {
@@ -242,14 +242,14 @@ fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(f::KEY_FRAME, 0);
             let Some(obj) = x.alloc(&pools::ESHL) else { return };
-            obj.set_u8(x.b, 0, 1);
-            obj.set_u8(x.b, 2, 0x43);
+            obj.set_u8(x.b, Enemy::ACTIVE, 1);
+            obj.set_u8(x.b, Enemy::KIND, 0x43);
             let at = x.u16(Obj::X);
             obj.set_u16(x.b, Obj::X, at);
             let h = x.u16(Obj::Z);
             obj.set_u16(x.b, Obj::Z, h);
-            let depth = x.u16(0x10);
-            obj.set_u16(x.b, 0x10, depth);
+            let depth = x.u16(Obj::Y);
+            obj.set_u16(x.b, Obj::Y, depth);
             let flip = x.u8(f::FLIP);
             obj.set_u8(x.b, f::FLIP, flip);
             let target = x.u16(f::TARGET);
@@ -259,8 +259,8 @@ fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
             add16(x, obj, Obj::X, shift as u16);
         }
         4 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+            x.set16(WarMachine::TIMER, t);
             if (t as i16) > 0 {
                 lib::step(x);
                 return;
@@ -279,7 +279,7 @@ pub(super) fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(LOOK_PREV, 0xff);
+            x.set8(WarMachine::LOOK_PREV, 0xff);
             mv(x, 0x11);
         }
         2 => {

@@ -23,15 +23,15 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
-        let n = x.u8(TIMER).wrapping_sub(1);
-        x.set8(TIMER, n);
+        let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+        x.set8(Gnoll::TIMER, n);
         if (n as i8) < 0 {
             set_state_long(x, STANCE);
         }
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set8(TIMER, 0x14);
+    x.set8(Gnoll::TIMER, 0x14);
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x12);
@@ -121,7 +121,7 @@ fn side_jump<R: Bench>(x: &mut Cx<'_, R>) {
 fn weapon_key_drop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) == 9 {
         x.set8(f::KEY_FRAME, 0);
-        x.set8(WEAPON, 0);
+        x.set8(Gnoll::WEAPON, 0);
         lib::eshl_12(x);
     }
 }
@@ -131,10 +131,10 @@ fn armed_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(WEAPON, 1);
-            x.set8(ARMED, 1);
-            x.set8(VULNERABLE, 0);
-            x.set8(TIMER, 0x1a);
+            x.set8(Gnoll::WEAPON, 1);
+            x.set8(Gnoll::ARMED, 1);
+            x.set8(Enemy::VULNERABLE, 0);
+            x.set8(Gnoll::TIMER, 0x1a);
             set_speed(x, 0x17);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(Obj::SPEED_INDEX, angle);
@@ -155,7 +155,7 @@ fn armed_in<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) == 0xb {
                 lib::eshl_16(x, 1);
                 x.set8(f::KEY_FRAME, 0);
-                x.set8(ARMED, 0);
+                x.set8(Gnoll::ARMED, 0);
             }
         }
         _ => {}
@@ -166,8 +166,8 @@ fn armed_in<R: Bench>(x: &mut Cx<'_, R>) {
 fn armed_run<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+    x.set8(Gnoll::TIMER, n);
     if (n as i8) >= 0 {
         return;
     }
@@ -180,10 +180,10 @@ fn armed_run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(WEAPON, 1);
-            x.set8(ARMED, 1);
-            x.set8(VULNERABLE, 0);
-            x.set8(TIMER, 0x1a);
+            x.set8(Gnoll::WEAPON, 1);
+            x.set8(Gnoll::ARMED, 1);
+            x.set8(Enemy::VULNERABLE, 0);
+            x.set8(Gnoll::TIMER, 0x1a);
             set_speed(x, 0x17);
             let (angle, shift) = if x.u8(f::FLIP) != 0 { (8, -0x20i16) } else { (0x18, 0x1a0) };
             x.set8(Obj::SPEED_INDEX, angle);

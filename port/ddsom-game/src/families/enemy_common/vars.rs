@@ -22,6 +22,11 @@ pub const CAMERA1_X: Word = Word::a5(0x5a6);
 pub const CAMERA1_Y: Word = Word::a5(0x5aa);
 pub const CAMERA2_X: Word = Word::a5(0x5ae);
 pub const CAMERA2_Y: Word = Word::a5(0x5b2);
+/// Frame counter (low word; `effects::vars::FRAME_LOW`). Some enemies mask it in place (h: a glitch of the
+/// original, which meant a copy).
+pub const FRAME_COUNTER: Word = Word::a5(0x6e);
+/// Difficulty level of the setting (h; `ai`): beyond 5, other tables of initial HP and speeds.
+pub const LEVEL: Byte = Byte::a5(0x48);
 /// Rank (dynamic difficulty, `objects::rank`), 0 to 31: indexes the enemies' decision tables.
 pub const RANK: Word = Word::a5(0x7f92);
 /// Visibility of the two Nagpa (type 28) of the scene: bit 1 for variant 0, bit 0 for variant 1 (`A5-0x5f9c`).

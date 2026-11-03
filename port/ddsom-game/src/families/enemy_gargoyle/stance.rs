@@ -39,34 +39,34 @@ fn fly_forward_or_back<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// The flight animation set matching the direction of the speed, on the same frame (0x645b8).
 fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
-    let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
+    let table = if lib::moving_forward(x) { SET_FLY_ALONG.0 } else { SET_FLY_AGAINST.0 };
     lib::switch_keeping_time(x, table);
 }
 
 /// 0x6563c / 0x65648: pursuit pace read according to difficulty.
 fn charge_a<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x65654 + level);
-    x.set8(CHARGE, v);
+    let v = tables::table("gargoyle/charge_a").at8(x.b, level);
+    x.set8(Enemy::AI_STANCE, v);
 }
 
 fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x65674 + level);
-    x.set8(CHARGE, v);
+    let v = tables::table("gargoyle/charge_b").at8(x.b, level);
+    x.set8(Enemy::AI_STANCE, v);
 }
 
 /// 0x65694 / 0x656a6: number of passes before changing gesture.
 fn wander_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x656b8 + r);
-    x.set8(WANDER, v);
+    let v = tables::table("gargoyle/wander_a").at8(x.b, r);
+    x.set8(Enemy::AI_WANDER, v);
 }
 
 fn wander_b<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x656d8 + r);
-    x.set8(WANDER, v);
+    let v = tables::table("gargoyle/wander_b").at8(x.b, r);
+    x.set8(Enemy::AI_WANDER, v);
 }
 
 // --- +6 = 0 : poursuite lente ---------------------------------------------------------------------
@@ -78,9 +78,9 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         lib::draw_6e(x);
-        x.set8(LOOK, 0);
-        if x.u8(LOOK_PREV) != 0 {
-            x.set8(LOOK_PREV, 0);
+        x.set8(Gargoyle::LOOK, 0);
+        if x.u8(Gargoyle::LOOK_PREV) != 0 {
+            x.set8(Gargoyle::LOOK_PREV, 0);
             fly(x, 0);
         }
         return;
@@ -88,8 +88,8 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::outside_band(x, -0x40, 0x1c0) {
         return go::dive(x);
     }
-    let n = x.u8(TURNS).wrapping_sub(1);
-    x.set8(TURNS, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) <= 0 {
         return go::wander(x);
     }
@@ -106,7 +106,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        x.set8(LOOK, 1);
+        x.set8(Gargoyle::LOOK, 1);
         return fly(x, 2);
     }
     if !lib::step(x) {
@@ -115,11 +115,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if interrupted(x) {
         return;
     }
-    let saved = x.u32(SAVED_STATE);
+    let saved = x.u32(Gargoyle::SAVED_STATE);
     x.set32(f::STATE, saved);
-    let prev = x.u8(LOOK_PREV);
+    let prev = x.u8(Gargoyle::LOOK_PREV);
     if prev == 2 || prev == 3 {
-        x.set8(LOOK, prev);
+        x.set8(Gargoyle::LOOK, prev);
         return fly_forward_or_back(x);
     }
     fly(x, 0);
@@ -136,11 +136,11 @@ fn glide<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
         if second {
             wander_b(x);
             charge_b(x);
-            x.set8(LOOK, 3);
+            x.set8(Gargoyle::LOOK, 3);
         } else {
             wander_a(x);
             charge_a(x);
-            x.set8(LOOK, 2);
+            x.set8(Gargoyle::LOOK, 2);
         }
         return begin_glide(x);
     }
@@ -157,9 +157,9 @@ fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
     }
     lib::approach_target(x);
     set_speed(x, 0xd);
-    let prev = x.u8(LOOK_PREV);
-    let look = x.u8(LOOK);
-    x.set8(LOOK_PREV, look);
+    let prev = x.u8(Gargoyle::LOOK_PREV);
+    let look = x.u8(Gargoyle::LOOK);
+    x.set8(Gargoyle::LOOK_PREV, look);
     if prev == 2 || prev == 3 {
         switch_flight_set(x);
     } else {
@@ -169,17 +169,17 @@ fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x6452c: one flight step; changes move when the counters are exhausted or a player is in range.
 fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(CHARGE).wrapping_sub(1);
-    x.set8(CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
-        let w = x.u8(WANDER).wrapping_sub(1);
-        x.set8(WANDER, w);
+        let w = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, w);
         if (w as i8) <= 0 {
             return go::wander_far(x);
         }
         lib::approach_target(x);
         set_speed(x, 0xd);
-        if x.u8(LOOK) == 3 {
+        if x.u8(Gargoyle::LOOK) == 3 {
             charge_b(x);
         } else {
             charge_a(x);
@@ -193,7 +193,7 @@ fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
     if near != 0 {
         return pick_b(x, near);
     }
-    if x.u8(LOOK) == 3 {
+    if x.u8(Gargoyle::LOOK) == 3 {
         let close = near_box(x, -0x3a, 0x12, 3);
         if close != 0 {
             return pick_a2(x, close);
@@ -222,8 +222,8 @@ fn near_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u32 {
 /// 0x6575a: chooses the next attack move (table by HP threshold `+0xaa`).
 fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let table = [0x65792, 0x657a2, 0x657b2][x.u8(PHASE).min(2) as usize];
-    let v = x.rom8(table + r);
+    let phase = x.u8(Gargoyle::PHASE).min(2) as u32;
+    let v = tables::table("gargoyle/near_moves").at8(x.b, 0x10 * phase + r);
     match v {
         0 => go::strike_0(x, false),
         2 => go::strike_0(x, true),
@@ -236,8 +236,8 @@ fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
 fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
-    let table = if gate == 1 { 0x65822 } else { 0x65832 };
-    let v = x.rom8(table + r);
+    let row = if gate == 1 { 0 } else { 0x10 };
+    let v = tables::table("gargoyle/side_moves").at8(x.b, row + r);
     match v {
         0 => go::strike_2(x, false),
         2 => go::strike_2(x, true),
@@ -250,8 +250,8 @@ fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
-    let table = 0x658a2 + 0x10 * x.u8(PHASE).min(2) as u32;
-    let v = x.rom8(table + r);
+    let phase = x.u8(Gargoyle::PHASE).min(2) as u32;
+    let v = tables::table("gargoyle/fallback_moves").at8(x.b, 0x10 * phase + r);
     match v {
         0 => go::strike_10(x),
         2 => go::strike_6(x),
@@ -268,10 +268,10 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set16(Obj::AX, 0);
             let mut angle = 0x18;
-            if x.u8(SIDE_TURN) != 0 {
+            if x.u8(Gargoyle::SIDE_TURN) != 0 {
                 let target = load_target(x);
                 let px = target.u16(x.b, Obj::X);
-                x.set16(GOAL_X, px);
+                x.set16(Gargoyle::GOAL_X, px);
                 if x.u8(f::FLIP) != 0 {
                     angle = 8;
                 }
@@ -291,7 +291,7 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if (x.u16(Obj::Z) as i16) >= 0x14 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 2);
+                x.set16(Gargoyle::TIMER, 2);
             } else {
                 rise(x);
             }
@@ -300,7 +300,7 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             lib::step(x);
             bob(x);
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 return;
             }
             x.add8(f::SUB3, 2);
@@ -311,12 +311,12 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             x.move_x();
             let (mut d0, mut d1);
             let leftward = (x.u16(Obj::VX) as i16) < 0;
-            if x.u8(SIDE_TURN) == 0 {
+            if x.u8(Gargoyle::SIDE_TURN) == 0 {
                 let cam = camera_x(x);
                 d0 = cam.wrapping_add(if leftward { 0xf0 } else { 0x90 });
                 d1 = x.u16(Obj::X);
             } else {
-                d0 = x.u16(GOAL_X);
+                d0 = x.u16(Gargoyle::GOAL_X);
                 d1 = x.u16(Obj::X);
             }
             if leftward {
@@ -337,20 +337,20 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 0x14);
+            x.set16(Gargoyle::TIMER2, 0);
             x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { -0x10i16 } else { 0x10 };
             x.set16(Obj::AX, vy as u16);
             fly(x, 6);
         }
         10 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 4);
                 spark(x, 8);
             }
             x.move_x();
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 lib::step(x);
             } else if !interrupted(x) {
                 go::wander(x);
@@ -390,7 +390,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(INVULNERABLE, 0);
+            x.set8(Gargoyle::INVULNERABLE, 0);
             x.set16(Obj::AX, 0);
         }
         6 => {
@@ -400,8 +400,8 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x12);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 0x12);
+            x.set16(Gargoyle::TIMER2, 0);
             x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { 0x20i16 } else { -0x20 };
             x.set16(Obj::AX, vy as u16);
@@ -409,11 +409,11 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             fly(x, 0xa);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 4);
                 spark(x, 8);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else if !interrupted(x) {

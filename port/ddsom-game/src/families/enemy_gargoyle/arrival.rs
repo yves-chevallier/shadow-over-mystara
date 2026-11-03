@@ -24,7 +24,7 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             let right = camera_x(x).wrapping_add(0xc0);
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
@@ -36,7 +36,7 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
             set_speed(x, 0x21);
             x.set16(Obj::Z, 0x28);
             look(x, 0x30);
-            x.set8(INVULNERABLE, 0);
+            x.set8(Gargoyle::INVULNERABLE, 0);
             lib::set_immunities(x);
             lib::sound(x, crate::sound::CMD_373_473);
             fly(x, 5);
@@ -65,20 +65,20 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 0x14);
+            x.set16(Gargoyle::TIMER2, 0);
             x.set16(Obj::Z, 0);
             let vy = signed_by_facing(x, 0x10);
             x.set16(Obj::AX, vy);
             fly(x, 6);
         }
         6 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 4);
                 spark(x, 8);
             }
             x.move_x();
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 lib::step(x);
             } else if lib::players_alive(x) {
                 go::wander(x);
@@ -95,19 +95,19 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
-            x.set8(NO_GRAB, 1);
+            x.set_bit(Enemy::DISPLAY, 1, false);
+            x.set8(Enemy::DOWNED, 1);
             if let Some(shadow) = x.alloc(&pools::EFFCT) {
-                shadow.set_u8(x.b, 0, 1);
-                shadow.set_u8(x.b, 2, 0x32);
-                shadow.set_u8(x.b, 3, 0xe);
+                shadow.set_u8(x.b, Enemy::ACTIVE, 1);
+                shadow.set_u8(x.b, Enemy::KIND, 0x32);
+                shadow.set_u8(x.b, Enemy::VARIANT, 0xe);
                 let px = x.u16(Obj::X);
                 shadow.set_u16(x.b, Obj::X, px);
                 let depth = x.u32(Obj::Y);
                 shadow.set_u32(x.b, Obj::Y, depth);
-                let n = shadow.u16(x.b, 0x12).wrapping_add(1);
-                shadow.set_u16(x.b, 0x12, n);
-                shadow.set_u16(x.b, 0x42, x.o.0 as u16);
+                let n = shadow.u16(x.b, Enemy::Y_FRACTION).wrapping_add(1);
+                shadow.set_u16(x.b, Enemy::Y_FRACTION, n);
+                shadow.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
                 x.set16(Obj::Z, 0x28);
             }
             look(x, 0x31);
@@ -117,15 +117,15 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
             pick_target(x);
             if lib::target_in_box(x, 0, 0x20, 0x40) {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 0x18);
+                x.set16(Gargoyle::TIMER, 0x18);
             }
         }
         4 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x32);
+            x.set16(Gargoyle::TIMER, 0x32);
             let mut flip = 0;
             if (x.u16(f::TARGET) as i16) < 0 {
                 let target = x.linked(f::TARGET);
@@ -137,12 +137,12 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
             lib::step(x);
         }
         6 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 lib::step(x);
                 return;
             }
-            x.set8(NO_GRAB, 0);
-            x.set8(INVULNERABLE, 0);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Gargoyle::INVULNERABLE, 0);
             lib::set_immunities(x);
             spark(x, 0xa);
             if (x.u16(f::TARGET) as i16) >= 0 {

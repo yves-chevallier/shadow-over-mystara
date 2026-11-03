@@ -29,11 +29,11 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set16(TIMER, 0x10);
+        x.set16(Skeleton::TIMER, 0x10);
         return body(x, 0);
     }
-    let t = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, t);
+    let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+    x.set16(Skeleton::TIMER, t);
     if t == 0 {
         set_state_long(x, STANCE);
     }
@@ -45,7 +45,7 @@ fn hop_sideways<R: Bench>(x: &mut Cx<'_, R>) {
         0 => ready(x),
         2 => settle(x),
         4 => {
-            if x.u8(SERIES) != 0 {
+            if x.u8(Enemy::GROUP) != 0 {
                 return guard_windup(x);
             }
             x.add8(f::SUB3, 2);
@@ -72,7 +72,7 @@ fn hop_forward<R: Bench>(x: &mut Cx<'_, R>, striking: bool) {
         0 => ready(x),
         2 => settle(x),
         4 => {
-            if !striking && x.u8(SERIES) != 0 {
+            if !striking && x.u8(Enemy::GROUP) != 0 {
                 x.set8(f::SUB2, 8);
                 return guard_windup_random(x);
             }
@@ -97,7 +97,7 @@ fn hop_forward<R: Bench>(x: &mut Cx<'_, R>, striking: bool) {
             x.move_xz();
             if (x.u16(Obj::VZ) as i16) < 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_COUNT, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             }
         }
         10 if striking => fall(x),
@@ -107,7 +107,7 @@ fn hop_forward<R: Bench>(x: &mut Cx<'_, R>, striking: bool) {
             if (x.u32(Obj::Z) as i32) <= 0 {
                 x.add8(f::SUB3, 2);
                 x.set32(Obj::Z, 0);
-                x.set16(ANIM_COUNT, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             }
         }
         12 if striking => hop_end_byte(x),
@@ -122,7 +122,7 @@ fn hop_rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_yz();
     if (x.u16(Obj::VZ) as i16) < 0 {
         x.add8(f::SUB3, 2);
-        x.set16(ANIM_COUNT, 1);
+        x.set16(Obj::ANIM_TIMER, 1);
     }
 }
 
@@ -132,14 +132,14 @@ fn hop_fall<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u32(Obj::Z) as i32) <= 0 {
         x.add8(f::SUB3, 2);
         x.set32(Obj::Z, 0);
-        x.set16(ANIM_COUNT, 1);
+        x.set16(Obj::ANIM_TIMER, 1);
     }
 }
 
 /// End of a leap: once the landing animation is over, back to standing.
 fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
-    if (x.u16(ANIM_STATE) as i16) < 0 {
+    if (x.u16(Enemy::ANIM_END) as i16) < 0 {
         set_state_long(x, STANCE);
     }
 }
@@ -147,7 +147,7 @@ fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
 /// End of a leap with attack animation: the test is on the high byte of the state.
 fn hop_end_byte<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
-    if (x.u8(ANIM_STATE) as i8) < 0 {
+    if (x.u8(Enemy::ANIM_END) as i8) < 0 {
         set_state_long(x, STANCE);
     }
 }
@@ -160,8 +160,8 @@ pub(super) fn guard<R: Bench>(x: &mut Cx<'_, R>) {
         0 => ready(x),
         2 => settle(x),
         4 => {
-            x.set16(COUNTER, 0x100);
-            x.set8(COUNTER_MOVE, 2);
+            x.set16(Skeleton::COUNTER, 0x100);
+            x.set8(Skeleton::COUNTER_MOVE, 2);
             guard_start(x);
         }
         6 => guard_wait(x),
@@ -183,7 +183,7 @@ fn guard_leap<R: Bench>(x: &mut Cx<'_, R>) {
         6 => guard_wait(x),
         8 => {
             step(x);
-            if (x.u16(ANIM_STATE) as i16) < 0 {
+            if (x.u16(Enemy::ANIM_END) as i16) < 0 {
                 set_state_long(x, STANCE);
             }
         }
@@ -193,7 +193,7 @@ fn guard_leap<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x58966 / 0x58974: starts the guard from a leap (`+6` = 8, random counter-attack or none).
 fn guard_windup<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set16(COUNTER, 0);
+    x.set16(Skeleton::COUNTER, 0);
     x.set8(f::SUB2, 8);
     guard_start(x);
 }
@@ -201,32 +201,32 @@ fn guard_windup<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5897a: counter-attack drawn at random (0 or 2), then the guard.
 fn guard_windup_random<R: Bench>(x: &mut Cx<'_, R>) {
     let n = rand_and(x, 1) * 2;
-    x.set8(COUNTER_MOVE, n as u8);
-    x.set8(COUNTER, 0xff);
+    x.set8(Skeleton::COUNTER_MOVE, n as u8);
+    x.set8(Skeleton::COUNTER, 0xff);
     guard_start(x);
 }
 
 /// 0x58990: the guard lasts `0x3c` frames, the posture changes to "on guard".
 fn guard_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x3c);
-    x.set8(POSTURE, 9);
+    x.set16(Skeleton::TIMER, 0x3c);
+    x.set8(Enemy::AI_68, 9);
     body(x, 8);
 }
 
 /// 0x589ae: holds the guard, then releases it.
 fn guard_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        let t = x.u16(TIMER).wrapping_sub(1);
-        x.set16(TIMER, t);
+        let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+        x.set16(Skeleton::TIMER, t);
         if (t as i16) >= 0 {
             return;
         }
         x.add8(f::SUB3, 2);
-        x.set16(ANIM_COUNT, 1);
-        let series = x.u8(SERIES) as i8 as i16 as u16 as u32;
-        let v = x.rom8(0x589da + series);
-        x.set8(POSTURE, v);
+        x.set16(Obj::ANIM_TIMER, 1);
+        let series = x.u8(Enemy::GROUP) as i8 as i16 as u16 as u32;
+        let v = tables::table("skeleton/parry_by_series").at8(x.b, series);
+        x.set8(Enemy::AI_68, v);
     }
     step(x);
 }
@@ -276,11 +276,11 @@ pub(super) fn run_dash<R: Bench>(x: &mut Cx<'_, R>) {
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set16(TIMER, 0x1e);
+        x.set16(Skeleton::TIMER, 0x1e);
         return body(x, 0);
     }
-    let t = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, t);
+    let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+    x.set16(Skeleton::TIMER, t);
     if t == 0 {
         set_state_long(x, STANCE);
     }
@@ -291,18 +291,18 @@ fn run_aside<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         restart_slide(x);
-        x.set16(TIMER, 0x20);
+        x.set16(Skeleton::TIMER, 0x20);
         return;
     }
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         return;
     }
-    let t = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, t);
+    let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+    x.set16(Skeleton::TIMER, t);
     if t != 0 {
         move_xy(x);
-        let d = x.u16(SAVED_POS).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x30);
+        let d = x.u16(Skeleton::SAVED_POS).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x30);
         if d < 0x60 {
             return;
         }
@@ -324,7 +324,7 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
                 }
             }
             x.set8(Obj::SPEED_INDEX, angle);
-            if (x.random() as u32) & 1 != 0 {
+            if rand_and(x, 1) != 0 {
                 x.set8(f::SUB3, 4);
                 x.set16(Obj::VY, 0x300);
                 if angle != 0 {
@@ -335,10 +335,10 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::AZ, -0x80i16 as u16);
                 body(x, 3);
             } else {
-                x.set16(TIMER, 0x16);
+                x.set16(Skeleton::TIMER, 0x16);
                 let y = x.u16(Obj::Y);
-                x.set16(SAVED_POS, y);
-                x.set32(MOVE_TABLE, 0x1c74b6);
+                x.set16(Skeleton::SAVED_POS, y);
+                x.set32(Obj::SPEED_TABLE, 0x1c74b6);
                 body(x, 0);
             }
         }
@@ -347,11 +347,11 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
             if (x.u8(f::KEY_FRAME) as i8) < 0 {
                 return;
             }
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+            x.set16(Skeleton::TIMER, t);
             if t != 0 {
                 move_xy(x);
-                let d = x.u16(SAVED_POS).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
+                let d = x.u16(Skeleton::SAVED_POS).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
                 if d < 0x40 {
                     return;
                 }
@@ -388,7 +388,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
             x.move_xz();
             if (x.u16(Obj::VZ) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
-                x.set16(ANIM_COUNT, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             }
         }
         4 => {
@@ -397,7 +397,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
             if (x.u16(Obj::Z) as i16) <= 0 {
                 x.set32(Obj::Z, 0);
                 x.add8(f::SUB2, 2);
-                x.set16(ANIM_COUNT, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             }
         }
         6 => {

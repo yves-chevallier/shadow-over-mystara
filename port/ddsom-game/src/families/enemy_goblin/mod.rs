@@ -15,6 +15,8 @@
 //! the active state (the same frame).
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -24,29 +26,34 @@ mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Timer (byte) of a gesture.
-    pub const TIMER: u32 = 0xa2;
-    pub const COOLDOWN: u32 = 0xa4;
-    /// Chosen move (value of `+6` to resume).
-    pub const CHOSEN: u32 = 0xaa;
-    /// Non-zero: no zone test (arrival by the run-in).
-    pub const NO_ZONE: u32 = 0xae;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Goblin(pub Obj);
+
+impl Goblin {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Goblin {
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Timer (byte) of a gesture.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        cooldown, set_cooldown, COOLDOWN: u8 @ 0xa4;
+        /// Chosen move (value of `+6` to resume).
+        chosen, set_chosen, CHOSEN: u8 @ 0xaa;
+        /// Non-zero: no zone test (arrival by the run-in).
+        no_zone, set_no_zone, NO_ZONE: u8 @ 0xae;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x165ee6;
-const SET_STRIKE: u32 = 0x165ef4;
+const SET_MOVE: RomAddr = RomAddr(0x165ee6);
+const SET_STRIKE: RomAddr = RomAddr(0x165ef4);
 const STANCE: u32 = 0x0202_0000;
 const HELD: u32 = 0x0408_0000;
 const IDLE: u32 = 0x020a_0000;
@@ -75,24 +82,16 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
-}
-
-/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
-    let r = rand_and(x, 0x1f);
-    x.data8(at + r)
 }
 
 /// 0x6eb04: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
@@ -110,7 +109,7 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
         return false;
     }
     let target = load_target(x);
-    let facing = target.u8(x.b, 0x2c);
+    let facing = target.u8(x.b, Enemy::FLIP);
     if facing == x.u8(f::FLIP) && !lib::decision_b(x) {
             return false;
         }
@@ -141,26 +140,26 @@ fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     want as u8 != x.u8(f::FLIP)
 }
 
-const NEAR_TABLE: u32 = 0x6ebc0;
-const FAR_TABLE: u32 = 0x6edc0;
+const NEAR_TABLE: &str = "goblin/near_moves";
+const FAR_TABLE: &str = "goblin/far_moves";
 /// Rows of strike-series durations.
-const SERIES_TABLE: u32 = 0x6efc0;
+const SERIES_TABLE: &str = "goblin/series";
 /// Rows of moves that follow a series (substate 8).
-const FOLLOW_TABLE: u32 = 0x6e904;
+const FOLLOW_TABLE: &str = "goblin/follow_moves";
 
 /// 0x6eb8a (far series) / 0x6eb90 (near series): chooses the move (`+5 = 4`, `+6 = 0`).
-fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let b = row_byte(x, table);
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
+    let b = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
-    x.set8(CHOSEN, b);
+    x.set8(Goblin::CHOSEN, b);
     b
 }
 
 /// 0x6e8d6: after a series, chooses the fallback move (substate 8).
 fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
-    let b = row_byte(x, FOLLOW_TABLE);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    let b = rank_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
     x.set8(f::SUB3, 0);
@@ -193,33 +192,33 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::initial_hp(x);
     lib::set_immunities(x);
     for (off, v) in [
-        (0x68, 2),
-        (0x69, 4),
-        (0x70, 0),
-        (0x6a, 1),
-        (0x6c, 3),
-        (0x6d, 3),
-        (0x72, 3),
-        (0x73, 2),
-        (0x74, 3),
-        (0x75, 0x38),
-        (0x76, 3),
-        (TIMER, 0x20),
-        (LOOK_PREV, 0),
-        (COOLDOWN, 2),
-        (VULNERABLE, 1),
-        (0x8e, 0),
-        (0x7f, 0),
-        (0x7e, 0xe),
+        (Enemy::AI_68, 2),
+        (Enemy::AI_69, 4),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 1),
+        (Enemy::AI_WAIT_MASKS, 3),
+        (Enemy::AI_WAIT_ROW, 3),
+        (Enemy::AI_DECISION_A, 3),
+        (Enemy::AI_DECISION_B, 2),
+        (Enemy::AI_BOX_CHANCE, 3),
+        (Enemy::AI_BOX_ANIM, 0x38),
+        (Enemy::AI_BYTE_ROW, 3),
+        (Goblin::TIMER, 0x20),
+        (Goblin::LOOK_PREV, 0),
+        (Goblin::COOLDOWN, 2),
+        (Enemy::VULNERABLE, 1),
+        (Enemy::AI_ROW_8E, 0),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::EVENT_KIND, 0xe),
     ] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
-    x.set8(AI_SHOT, 0xff);
-    x.set8(0x80, 0xe);
-    x.set8(0x81, 0xc);
-    x.set8(0xab, 0x20);
-    x.set8(NO_ZONE, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    x.set8(Enemy::LOOT_ROW, 0xe);
+    x.set8(Enemy::LOOT, 0xc);
+    x.set8(Enemy::HP_TIERS, 0x20);
+    x.set8(Goblin::NO_ZONE, 0);
     true
 }
 

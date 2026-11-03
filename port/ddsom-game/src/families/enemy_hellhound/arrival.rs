@@ -46,8 +46,8 @@ fn howl<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 1);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 1);
             mv(x, 1);
         }
         4 => stand_when_done(x),
@@ -64,13 +64,13 @@ fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(TIMER, 0x24);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 2);
+            x.set8(Hellhound::TIMER, 0x24);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 2);
             set_angle_run(x);
-            if x.u8(LOOK) != x.u8(LOOK_PREV) {
-                let l = x.u8(LOOK);
-                x.set8(LOOK_PREV, l);
+            if x.u8(Hellhound::LOOK) != x.u8(Hellhound::LOOK_PREV) {
+                let l = x.u8(Hellhound::LOOK);
+                x.set8(Hellhound::LOOK_PREV, l);
                 mv(x, 2);
             }
             set_speed(x, 0xb);
@@ -79,8 +79,8 @@ fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
             if !pick_target(x) {
                 return;
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if n != 0 {
                 if lib::target_in_box(x, 0, 0x80, 0x20) {
                     set_state_long(x, STANCE);
@@ -93,7 +93,7 @@ fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0);
             mv(x, 4);
         }
@@ -104,8 +104,8 @@ fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::SUB3, 0);
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
-            x.set8(VULNERABLE, 1);
-            x.set8(TIMER, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::TIMER, 0);
             mv(x, 0);
         }
         _ => {}
@@ -128,9 +128,9 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 6);
-            x.set8(STRIKE_KIND, 0x2b);
+            x.set8(Enemy::STRIKE_KIND, 0x2b);
             x.set16(Obj::VX, -0x280i16 as u16);
             if x.u8(f::FLIP) != 0 {
                 negate(x, Obj::VX);
@@ -153,8 +153,8 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0x19);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 0x19);
             x.set16(Obj::VZ, -0x300i16 as u16);
             x.set16(Obj::AZ, -0x80i16 as u16);
             let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
@@ -181,20 +181,20 @@ fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0x1a);
-            x.set16(TIMER_W, 0x400);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 0x1a);
+            x.set16(Hellhound::TIMER_W, 0x400);
             mv(x, 0xe);
         }
         2 => {
-            let n = x.u8(TIMER_W).wrapping_sub(1);
-            x.set8(TIMER_W, n);
+            let n = x.u8(Hellhound::TIMER_W).wrapping_sub(1);
+            x.set8(Hellhound::TIMER_W, n);
             if n != 0 {
                 x.anim_step();
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(LOOK, 0x1b);
+            x.set8(Hellhound::LOOK, 0x1b);
             mv(x, 9);
         }
         4 => stand_when_done(x),

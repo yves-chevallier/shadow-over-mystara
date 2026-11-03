@@ -119,6 +119,11 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    `rom32` d'`enemy_common` remplacés par `x.random()` et `x.prog32()` chez les appelants (`enemy_*`, `boss_*`).
    Pour L8b : voir « Pour L8b » dans fin.md (une ligne par table dans `extract/src/enemies.rs`, lecture par
    `enemy_common::tables`, champs communs d'`Enemy`).
+   **Lot L8b (familles d'ennemis)** fait (branche `wt-l8b-ennemis`, [fin.md](fin.md) « Résultat L8b ») :
+   `enemy_riyakaa/` et `enemy_double/` découpés, 161 tables des familles dans `data/enemies.json`
+   (`extract/src/enemies.rs`, `families`), un `record!` par famille, `Enemy` complété (paramètres d'IA) : zone
+   `enemies` à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante d'adresse ROM, plus gros
+   fichier 793 lignes. **Réextraire les assets** (`data/enemies.json`).
 
 8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
    `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées

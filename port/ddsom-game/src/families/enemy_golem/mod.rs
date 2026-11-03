@@ -15,6 +15,8 @@
 //! `wait` (0x69346, wait of `+0x77` frames) and `turn` (0x6899a, turn-around).
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use crate::objects::Current;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -25,27 +27,36 @@ mod control;
 mod hit;
 mod moves;
 
-mod g {
-    pub const GROUP: u32 = 0x2f;
-    /// Time (word) of the current animation.
-    pub const ANIM_TIME: u32 = 0x30;
-    /// End flag (word) of the current animation.
-    pub const ANIM_END: u32 = 0x32;
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const AI_WAIT: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const HIT_FLAG: u32 = 0x8f;
-    pub const TIMER: u32 = 0xa2;
-    pub const TIMER2: u32 = 0xa4;
-    /// Orientation of the target as seen by the boxes (0, 2) or box number.
-    pub const SIDE: u32 = 0xa6;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Golem(pub Obj);
+
+impl Golem {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Golem {
+        hit_flag, set_hit_flag, HIT_FLAG: u8 @ 0x8f;
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        timer2, set_timer2, TIMER2: u16 @ 0xa4;
+        /// Orientation of the target as seen by the boxes (0, 2) or box number.
+        side, set_side, SIDE: u8 @ 0xa6;
+        /// Set when a player grabs the golem; not read by the family (h).
+        grabbed, set_grabbed, GRABBED: u8 @ 0xa7;
+        /// Set before a squat (0x100, or 0xff with `SQUAT_SIDE`); not read by the family (h).
+        squat_mode, set_squat_mode, SQUAT_MODE: u16 @ 0xa8;
+        /// Side drawn before a squat (0 or 2), 1 at the end of a freeze; not read by the family (h).
+        squat_side, set_squat_side, SQUAT_SIDE: u8 @ 0xa9;
+    }
+}
 use crate::objects::pools;
 
-const SET_MOVE: u32 = 0x15eed8;
-const SET_STRIKE: u32 = 0x15eef4;
+const SET_MOVE: RomAddr = RomAddr(0x15eed8);
+const SET_STRIKE: RomAddr = RomAddr(0x15eef4);
 const STANCE: u32 = 0x0202_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -65,18 +76,18 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// Sets the attack type and its strength.
 fn set_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
-    x.set8(STRIKE_KIND, kind);
-    x.set8(STRIKE_POWER, power);
+    x.set8(Enemy::STRIKE_KIND, kind);
+    x.set8(Enemy::STRIKE_POWER, power);
 }
 
 /// 0x6935c: next step, animation 0.
@@ -87,10 +98,10 @@ fn next_anim<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x69346: waits `+0x77` frames (countdown), then next step.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(AI_WAIT);
+    let n = x.u8(Enemy::AI_BYTE);
     if n != 0 {
         let m = n.wrapping_sub(1);
-        x.set8(AI_WAIT, m);
+        x.set8(Enemy::AI_BYTE, m);
         if (m as i8) > 0 {
             return;
         }
@@ -101,15 +112,15 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6899a: turn-around according to `+0xa6` (0 or 1: nothing, 2: animation 1 then 3: waits for the end and turns
 /// around).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    let side = x.u8(SIDE) as i8;
+    let side = x.u8(Golem::SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
     }
     if side == 2 {
-        x.add8(SIDE, 1);
+        x.add8(Golem::SIDE, 1);
         return mv(x, 1);
     }
-    if (x.u8(ANIM_END) as i8) < 0 {
+    if (x.u8(Enemy::ANIM_END) as i8) < 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
@@ -132,13 +143,13 @@ fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             }
         }
     }
-    x.set8(SIDE, d1 as u8);
+    x.set8(Golem::SIDE, d1 as u8);
     d1 != 0
 }
 
 /// 0x68910: received hit flag `+0x8f`: returns true when the state must continue normally.
 fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let v = x.u8(HIT_FLAG);
+    let v = x.u8(Golem::HIT_FLAG);
     if v == 0 {
         return true;
     }
@@ -147,10 +158,10 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             if x.u16(Obj::Z) != 0 {
                 return true;
             }
-            x.set8(HIT_FLAG, 0);
-            x.set8(0x49, 0x58);
+            x.set8(Golem::HIT_FLAG, 0);
+            x.set8(Enemy::REACTION, 0x58);
             if x.u32(f::STATE) == 0x0404_0200 {
-                x.set16(ANIM_END, 0xffff);
+                x.set16(Enemy::ANIM_END, 0xffff);
                 set_state_long(x, 0x0406_0200);
             } else {
                 set_state_long(x, 0x0400_0000);
@@ -159,16 +170,16 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         2 => {
             set_state_long(x, 0x0400_0000);
-            x.set8(HIT_FLAG, 0);
+            x.set8(Golem::HIT_FLAG, 0);
             let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
-            x.set8(0x49, code);
+            x.set8(Enemy::REACTION, code);
             false
         }
         3 => {
             if x.u16(Obj::Z) != 0 {
                 return true;
             }
-            x.set8(HIT_FLAG, 0);
+            x.set8(Golem::HIT_FLAG, 0);
             set_state_long(x, 0x0206_0a00);
             false
         }
@@ -176,17 +187,9 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-/// Byte drawn at random from the difficulty row of `table`.
-fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
-    let r = rand_and(x, 0x1f);
-    x.data8(at + r)
-}
-
 /// 0x690ce: chooses the next move (`+5` = 8) according to the distance of the target, or gets back on its feet.
 fn choose<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -198,8 +201,8 @@ fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     if !side.found() {
         return set_state_long(x, STANCE);
     }
-    x.set8(SIDE, side as u8);
-    let b = row_byte(x, 0x69146);
+    x.set8(Golem::SIDE, side as u8);
+    let b = rank_byte(x, "golem/next_moves");
     x.set8(f::SUB2, b);
     x.set16(f::STATE, 0x0208);
     x.set8(f::SUB3, 0);
@@ -208,30 +211,30 @@ fn choose<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x67ea4: restarts animation 2 taking over the time and the end flag of the previous animation (at most eight frames
 /// ahead), marks the strike and saves the position.
 fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
-    let time = x.u16(ANIM_TIME);
-    let end = x.u16(ANIM_END);
+    let time = x.u16(Obj::ANIM_TIMER);
+    let end = x.u16(Enemy::ANIM_END);
     mv(x, 2);
     let mut keep = time;
     let mut found = false;
     for _ in 0..8 {
-        if x.u16(ANIM_END) == end {
+        if x.u16(Enemy::ANIM_END) == end {
             found = true;
             break;
         }
-        x.set16(ANIM_END, 1);
+        x.set16(Enemy::ANIM_END, 1);
         x.anim_step();
     }
     if !found {
-        keep = x.u16(ANIM_TIME);
+        keep = x.u16(Obj::ANIM_TIMER);
     }
-    x.set16(ANIM_TIME, keep);
-    x.set32(0x4c, 0x1c7336);
+    x.set16(Obj::ANIM_TIMER, keep);
+    x.set32(Obj::SPEED_TABLE, 0x1c7336);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
         x.add8(Obj::SPEED_INDEX, 0x10);
     }
     let at = x.u16(Obj::X);
-    x.set16(TIMER2, at);
+    x.set16(Golem::TIMER2, at);
 }
 
 // --- state 0: creation --------------------------------------------------------------------------

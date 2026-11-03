@@ -17,6 +17,8 @@
 //! (counters `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -26,57 +28,57 @@ mod hit;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-mod g {
-    /// Series: 0 troglodyte (blinks), 1 armed variant.
-    pub const SERIES: u32 = 0x2f;
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const POSTURE: u32 = 0x68;
-    /// AI counters: delay before a new choice, wait, walk.
-    pub const AI_CHOICE: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_WALK: u32 = 0x71;
-    pub const COOLDOWN: u32 = 0x77;
-    pub const AI_KIND: u32 = 0x78;
-    pub const AI_SHOT: u32 = 0x79;
-    /// Current and previous look (tint byte read by the display).
-    pub const LOOK: u32 = 0xa0;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Repetitions or timer of a step.
-    pub const REPEAT: u32 = 0xa2;
-    /// Attack to resume after an announcement or a turn-around.
-    pub const RESUME: u32 = 0xa3;
-    /// Blinking: phase (`+0xa5`, 0xff = at rest), alternation, wait, counters.
-    pub const BLINK_PHASE: u32 = 0xa5;
-    pub const BLINK_ON: u32 = 0xa6;
-    pub const BLINK_WAIT: u32 = 0xa7;
-    pub const BLINK_COUNT: u32 = 0xa8;
-    pub const BLINK_DELAY: u32 = 0xaa;
-    pub const BLINK_REST: u32 = 0xae;
-    /// Non-zero byte: the hit state does not draw the shadow.
-    pub const NO_SHADOW: u32 = 0xb0;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Trog(pub Obj);
+
+impl Trog {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl Trog {
+        /// Current and previous look (tint byte read by the display).
+        look, set_look, LOOK: u8 @ 0xa0;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Repetitions or timer of a step.
+        repeat, set_repeat, REPEAT: u8 @ 0xa2;
+        /// Attack to resume after an announcement or a turn-around.
+        resume, set_resume, RESUME: u8 @ 0xa3;
+        /// Blinking: phase (`+0xa5`, 0xff = at rest), alternation, wait, counters.
+        blink_phase, set_blink_phase, BLINK_PHASE: u8 @ 0xa5;
+        blink_on, set_blink_on, BLINK_ON: u8 @ 0xa6;
+        blink_wait, set_blink_wait, BLINK_WAIT: u8 @ 0xa7;
+        blink_count, set_blink_count, BLINK_COUNT: u16 @ 0xa8;
+        blink_delay, set_blink_delay, BLINK_DELAY: u16 @ 0xaa;
+        blink_rest, set_blink_rest, BLINK_REST: u16 @ 0xae;
+        /// Non-zero byte: the hit state does not draw the shadow.
+        no_shadow, set_no_shadow, NO_SHADOW: u8 @ 0xb0;
+    }
+}
+
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_BODY: u32 = 0x15faa0;
-const SET_STRIKE: u32 = 0x15fabe;
+const SET_BODY: RomAddr = RomAddr(0x15faa0);
+const SET_STRIKE: RomAddr = RomAddr(0x15fabe);
 /// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const FALLBACK_MOVES: u32 = 0x5bba6;
-const CLOSE_ATTACKS: u32 = 0x5b074;
-const CLOSE_ATTACKS_ARMED: u32 = 0x5b274;
-const REPEATS_TABLE: u32 = 0x5b4d6;
-const JUMP_MOVES: u32 = 0x5b6f8;
-const BLINK_DELAYS: u32 = 0x5b974;
-const BLINK_TIMES: u32 = 0x5b96c;
-/// Walking speeds per series (2 words per series).
-const WALK_SPEEDS: u32 = 0x5af64;
+const FALLBACK_MOVES: &str = "trog/fallback_moves";
+const CLOSE_ATTACKS: &str = "trog/close_attacks";
+const CLOSE_ATTACKS_ARMED: &str = "trog/close_attacks_armed";
+const REPEATS_TABLE: &str = "trog/repeats";
+const JUMP_MOVES: &str = "trog/jump_moves";
+/// Invisibility delays: index (in bytes) in `BLINK_TIMES`, by difficulty level.
+const BLINK_DELAYS: &str = "trog/blink_delays";
+const BLINK_TIMES: &str = "trog/blink_times";
+/// Speed tables of the walk per series (words, read at the series × 4 plus 0, 2 or 4).
+const WALK_SPEEDS: &str = "trog/walk_speeds";
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -95,11 +97,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
@@ -121,17 +123,11 @@ fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
-/// Byte drawn at random from the difficulty row of `table` (A4 = row, D0 = index).
-fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = difficulty_row(x);
-    let n = rand_and(x, 0x1f);
-    x.data8(table + row + n)
-}
 
 /// 0x5af4e: chooses the speed table according to the series (`idx`: 0, 2 or 4).
 fn walk_speed<R: Bench>(x: &mut Cx<'_, R>, idx: u32) {
-    let series = x.u8(SERIES) as u32;
-    let n = x.data16(WALK_SPEEDS + ((series << 2) & 0xff) + idx);
+    let series = x.u8(Enemy::GROUP) as u32;
+    let n = tables::table(WALK_SPEEDS).at16(x.b, ((series << 2) & 0xff) + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
@@ -176,21 +172,19 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// End of the attacks: the next one is drawn from the difficulty row (0x5bb74).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_KIND, 0xff);
-    let row = difficulty_row(x);
-    let n = rand_and(x, 0x1f);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    let mv = rank_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
-    let mv = x.data8(FALLBACK_MOVES + row + n);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
 }
 
 /// Blinking is started if it is not already (series 0, positive phase).
 fn blink_if_running<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(SERIES) == 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
-        x.set8(BLINK_ON, 1);
-        x.set16(BLINK_COUNT, 0xc);
-        x.set8(BLINK_WAIT, 0);
+    if x.u8(Enemy::GROUP) == 0 && (x.u8(Trog::BLINK_PHASE) as i8) > 0 {
+        x.set8(Trog::BLINK_ON, 1);
+        x.set16(Trog::BLINK_COUNT, 0xc);
+        x.set8(Trog::BLINK_WAIT, 0);
     }
 }
 
@@ -204,22 +198,22 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0xe);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    for (off, v) in [(0x80, 0xb), (0x68, 4), (0x69, 4), (0x70, 0), (0x6a, 3), (0x6c, 3), (0x6d, 5), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x2c), (BLINK_PHASE, 0xff)] {
+    for (off, v) in [(Enemy::LOOT_ROW, 0xb), (Enemy::AI_68, 4), (Enemy::AI_69, 4), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 3), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 5), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x2c), (Trog::BLINK_PHASE, 0xff)] {
         x.set8(off, v);
     }
-    x.set16(BLINK_REST, 0x258);
-    x.set8(BLINK_ON, 0);
-    if x.u8(SERIES) != 0 {
-        x.add8(0x75, 4);
-        x.set8(BLINK_PHASE, 0xff);
+    x.set16(Trog::BLINK_REST, 0x258);
+    x.set8(Trog::BLINK_ON, 0);
+    if x.u8(Enemy::GROUP) != 0 {
+        x.add8(Enemy::AI_BOX_ANIM, 4);
+        x.set8(Trog::BLINK_PHASE, 0xff);
     }
-    for (off, v) in [(0x76, 4), (REPEAT, 0x20), (LOOK_PREV, 2), (VULNERABLE, 1), (0x8e, 0), (0x7f, 0), (0x7e, 0xf)] {
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 4), (Trog::REPEAT, 0x20), (Trog::LOOK_PREV, 2), (Enemy::VULNERABLE, 1), (Enemy::AI_ROW_8E, 0), (Enemy::EVENT_LOW, 0), (Enemy::EVENT_KIND, 0xf)] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
-    x.set8(AI_KIND, 0xff);
-    x.set8(0x81, 0xa);
-    x.set8(AI_SHOT, 0x14);
+    x.set32(Enemy::RESUME_STATE, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    x.set8(Enemy::LOOT, 0xa);
+    x.set8(Enemy::AI_POINT_SET, 0x14);
     if pick_target(x) {
         // creation chains directly into the active state
         active(x);
@@ -257,7 +251,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) != 0 {
         zone_and_terrain(x);
     }
-    if x.u8(SERIES) == 0 {
+    if x.u8(Enemy::GROUP) == 0 {
         flicker(x);
     }
     x.reinsert();
@@ -266,50 +260,50 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 /// Blinking of series 0 (0x59d02): `+0xa5` is the phase (0xff: at rest, countdown `+0xae`; 0: starts the blinking;
 /// positive: alternates visibility `+1` bit 1).
 fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
-    let phase = x.u8(BLINK_PHASE) as i8;
+    let phase = x.u8(Trog::BLINK_PHASE) as i8;
     if phase == 0 {
-        x.add8(BLINK_PHASE, 1);
-        x.set8(BLINK_WAIT, 1);
-        x.set8(BLINK_ON, 1);
-        x.set16(BLINK_REST, 0x258);
-        x.set16(BLINK_COUNT, 0xc);
+        x.add8(Trog::BLINK_PHASE, 1);
+        x.set8(Trog::BLINK_WAIT, 1);
+        x.set8(Trog::BLINK_ON, 1);
+        x.set16(Trog::BLINK_REST, 0x258);
+        x.set16(Trog::BLINK_COUNT, 0xc);
         return pick_blink_delay(x);
     }
     if phase < 0 {
-        let n = x.u16(BLINK_REST).wrapping_sub(1);
-        x.set16(BLINK_REST, n);
+        let n = x.u16(Trog::BLINK_REST).wrapping_sub(1);
+        x.set16(Trog::BLINK_REST, n);
         return;
     }
-    if x.u8(BLINK_ON) != 0 {
-        let v = x.u8(1) ^ 2;
-        x.set8(1, v);
-    } else if x.u8(BLINK_WAIT) != 0 {
-        x.set_bit(1, 1, true);
-        let n = x.u16(BLINK_DELAY).wrapping_sub(1);
-        x.set16(BLINK_DELAY, n);
+    if x.u8(Trog::BLINK_ON) != 0 {
+        let v = x.u8(Enemy::DISPLAY) ^ 2;
+        x.set8(Enemy::DISPLAY, v);
+    } else if x.u8(Trog::BLINK_WAIT) != 0 {
+        x.set_bit(Enemy::DISPLAY, 1, true);
+        let n = x.u16(Trog::BLINK_DELAY).wrapping_sub(1);
+        x.set16(Trog::BLINK_DELAY, n);
         if (n as i16) < 0 {
-            x.set8(BLINK_WAIT, 0);
-            x.set8(BLINK_ON, 1);
-            x.set16(BLINK_COUNT, 0xc);
-            x.set_bit(1, 1, false);
+            x.set8(Trog::BLINK_WAIT, 0);
+            x.set8(Trog::BLINK_ON, 1);
+            x.set16(Trog::BLINK_COUNT, 0xc);
+            x.set_bit(Enemy::DISPLAY, 1, false);
         }
     } else {
-        x.set8(BLINK_PHASE, 0xff);
-        x.set_bit(1, 1, false);
+        x.set8(Trog::BLINK_PHASE, 0xff);
+        x.set_bit(Enemy::DISPLAY, 1, false);
     }
 }
 
 /// 0x5b940: invisibility duration drawn at random.
 fn pick_blink_delay<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(BLINK_WAIT, 1);
+    x.set8(Trog::BLINK_WAIT, 1);
     let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
     let n = rand_and(x, 0x1f);
-    let idx = x.data8(BLINK_DELAYS + row + n) as u32;
-    let w = x.rom16(BLINK_TIMES + idx);
-    x.set16(BLINK_DELAY, w);
+    let idx = tables::table(BLINK_DELAYS).at8(x.b, row + n) as u32;
+    let w = tables::table(BLINK_TIMES).at16(x.b, idx);
+    x.set16(Trog::BLINK_DELAY, w);
 }
 
 /// Substate 0: arrival according to variant `+3` (0 walk, 1 fall, 2 leap, 3 and 4 jump, 5 wake-up).
@@ -317,31 +311,31 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
-                let t = x.u8(REPEAT).wrapping_sub(1);
-                x.set8(REPEAT, t);
+                let t = x.u8(Trog::REPEAT).wrapping_sub(1);
+                x.set8(Trog::REPEAT, t);
                 if t == 0 {
-                    x.set8(LOOK_PREV, 0);
+                    x.set8(Trog::LOOK_PREV, 0);
                     set_state_long(x, STANCE);
-                    x.set8(0, 1);
+                    x.set8(Enemy::ACTIVE, 1);
                 }
                 move_xy(x);
                 step(x);
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set16(LOOK, 0);
-            x.set8(REPEAT, 0x18);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set16(Trog::LOOK, 0);
+            x.set8(Trog::REPEAT, 0x18);
             set_angle(x, 8, 0x18);
-            x.set16(LOOK, 0);
+            x.set16(Trog::LOOK, 0);
             walk_speed(x, 0);
             body(x, 2);
         }
         1 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(LOOK_PREV, 0xe);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Trog::LOOK_PREV, 0xe);
                 x.set16(Obj::VZ, -0x300i16 as u16);
                 x.set16(Obj::AZ, -0x80i16 as u16);
                 let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
@@ -364,7 +358,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 x.set16(Obj::VX, 0);
                 let t = load_target(x);
-                if t.u8(x.b, 0) == 0 {
+                if t.u8(x.b, Enemy::ACTIVE) == 0 {
                     set_state_long(x, IDLE);
                     return rest_begin(x);
                 }
@@ -408,7 +402,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 if x.move_yz().pl() {
                     return;
                 }
-                x.set8(LOOK_PREV, 0xe0);
+                x.set8(Trog::LOOK_PREV, 0xe0);
                 x.set16(Obj::Z, 0);
                 set_state_long(x, STANCE);
             }
@@ -428,16 +422,16 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x59f38: once the arrival animation is over, the troglodyte stands up.
 fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
-        x.set8(LOOK_PREV, 0xe0);
+        x.set8(Trog::LOOK_PREV, 0xe0);
         set_state_long(x, STANCE);
-        x.set8(0, 1);
+        x.set8(Enemy::ACTIVE, 1);
     }
 }
 
 /// 0x5a010: rest look and animation 0xe.
 fn rest_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
-    x.set8(LOOK_PREV, 1);
+    x.set8(Trog::LOOK_PREV, 1);
     body(x, 0xe);
 }
 

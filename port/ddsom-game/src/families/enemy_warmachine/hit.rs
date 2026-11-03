@@ -3,13 +3,14 @@
 //! and shadow are tested except in flight (`+5` = 8).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table of reactions shared by the hits, indexed by code `+0x49`.
-const REACT: u32 = 0x78a26;
+const REACT: RomAddr = RomAddr(0x78a26);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::FREEZE) as i8) > 0 {
@@ -38,25 +39,25 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     x.set8(f::SUB, 6);
-    x.set8(0, 2);
+    x.set8(Enemy::ACTIVE, 2);
     true
 }
 
 fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
-        x.set8(FLAG, 0);
+        x.set8(WarMachine::FLAG, 0);
         if dying(x) {
             return death(x);
         }
     }
-    react(x, REACT);
+    react(x, REACT.0);
 }
 
 /// 0x78b4a: recoil backward.
 fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            x.set16(TIMER, 0x14);
+            x.set16(WarMachine::TIMER, 0x14);
             let (angle, v) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20i16) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, v as u16);
@@ -67,25 +68,25 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
             mv(x, 0xb);
         }
         2 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+            x.set16(WarMachine::TIMER, t);
             if (t as i16) <= 0 {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 6);
+                x.set16(WarMachine::TIMER, 6);
                 x.set16(Obj::AX, 0);
             }
             x.move_x();
             lib::step(x);
         }
         4 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+            x.set16(WarMachine::TIMER, t);
             if (t as i16) > 0 {
                 x.move_x();
                 lib::step(x);
                 return;
             }
-            x.set32(0x58, 0);
+            x.set32(Enemy::HIT_LOCK, 0);
             go::attack(x, 0xa, true);
         }
         _ => {}
@@ -97,22 +98,22 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(LOOK_PREV, 0xff);
-            x.anim_start(SET_MOVE, 0x12);
+            x.set8(WarMachine::LOOK_PREV, 0xff);
+            x.anim_start(SET_MOVE.0, 0x12);
         }
         2 => {
             if var::PAUSE.get_i8(x.b) > 0 {
                 return;
             }
-            let n = x.u16(0x84).wrapping_sub(1);
-            x.set16(0x84, n);
+            let n = x.u16(Enemy::RECOVER).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, n);
             if (n as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
         }
         4 => {
             if paused(x) {
@@ -128,12 +129,12 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x78c3c: get up: chooses a target, crosses an HP threshold, then shot or attack leap.
 pub(crate) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0, 1);
-    x.set8(LOOK_PREV, 0xff);
+    x.set8(Enemy::ACTIVE, 1);
+    x.set8(WarMachine::LOOK_PREV, 0xff);
     if !pick_target(x) {
         return go::idle(x);
     }
-    let table = if x.a5_u8(0x48) > 5 { 0x109e2 } else { 0x108e2 };
+    let table = if var::LEVEL.get(x.b) > 5 { 0x109e2 } else { 0x108e2 };
     lib::next_threshold(x, table);
     if lib::target_in_box(x, 0, 0x38, 0xc) {
         return go::attack(x, 6, true);
@@ -146,7 +147,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(0, 2);
+            x.set8(Enemy::ACTIVE, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::sound(x, crate::sound::CMD_30B_40B);
             lib::object_event(x);
@@ -164,7 +165,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::VX, speed as u16);
             x.set8(f::FLIP, flip);
             x.move_xz();
-            x.anim_start(SET_MOVE, 0x13);
+            x.anim_start(SET_MOVE.0, 0x13);
         }
         2 => {
             x.move_xz();
@@ -173,7 +174,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.anim_start(SET_MOVE, 0x14);
+            x.anim_start(SET_MOVE.0, 0x14);
         }
         4 => {
             x.move_xz();
@@ -189,17 +190,17 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 0x3c);
+                x.set16(WarMachine::TIMER, 0x3c);
             }
         }
         8 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+            x.set16(WarMachine::TIMER, t);
             if (t as i16) <= 0 {
                 return x.free(&pools::ENEMY);
             }
-            let flags = x.u8(1) ^ 2;
-            x.set8(1, flags);
+            let flags = x.u8(Enemy::DISPLAY) ^ 2;
+            x.set8(Enemy::DISPLAY, flags);
         }
         _ => {}
     }

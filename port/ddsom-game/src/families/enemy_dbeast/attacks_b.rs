@@ -26,7 +26,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn end_and_pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_STANCE);
-        x.set8(WANT_ANIM, 0);
+        x.set8(DisplacerBeast::WANT_ANIM, 0);
         play(x, 0);
         pursue_tail(x);
     }
@@ -36,15 +36,15 @@ fn end_and_pursue<R: Bench>(x: &mut Cx<'_, R>) {
 fn hop_or_pounce<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
-            if (x.random() as u32) & 1 != 0 {
+            if rand_and(x, 1) != 0 {
                 set_state_long(x, 0x0202_0002);
-                x.set8(WANT_ANIM, 0xc);
+                x.set8(DisplacerBeast::WANT_ANIM, 0xc);
                 play(x, 8);
                 return pursue_tail(x);
             }
-            x.add8(0x7, 4);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 7);
+            x.add8(Enemy::SUB_STEP, 4);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 7);
             roll_pounces(x);
             play(x, 7);
         }
@@ -58,9 +58,9 @@ fn hop_or_pounce<R: Bench>(x: &mut Cx<'_, R>) {
 fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0xf);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0xf);
             play(x, 0xb);
         }
         6 => end_and_pursue(x),
@@ -72,15 +72,15 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
 fn side_leap<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            let vy = if (x.random() as u32) & 1 != 0 { -0x100i16 } else { 0x100 };
-            x.set16(0x1c, vy as u16);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 6);
-            x.set8(CUR_ANIM, 6);
-            x.set16(0x1e, 0);
-            x.set16(0x18, 0x400);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.add8(Enemy::SUB_STEP, 2);
+            let vy = if rand_and(x, 1) != 0 { -0x100i16 } else { 0x100 };
+            x.set16(Enemy::VY, vy as u16);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 6);
+            x.set8(DisplacerBeast::CUR_ANIM, 6);
+            x.set16(Enemy::AY, 0);
+            x.set16(Enemy::VZ, 0x400);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             play(x, 6);
         }
         6 => bound_y_wait(x),
@@ -92,17 +92,17 @@ fn side_leap<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Start of an X leap of the second series (0x73b30): speed `vx`, height `vz`.
 fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
-    x.add8(0x7, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0x1c);
-    x.set8(CUR_ANIM, 0x1c);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x1c);
+    x.set8(DisplacerBeast::CUR_ANIM, 0x1c);
     let vx = if x.u8(f::FLIP) != 0 { vx.wrapping_neg() } else { vx };
     set_velocity(x, vx, vz, -0x38);
     match anim {
         None => play(x, 0x11),
         Some(n) => {
-            x.set8(STRIKE_POWER, 6);
-            x.set8(STRIKE_KIND, 2);
+            x.set8(Enemy::STRIKE_POWER, 6);
+            x.set8(Enemy::STRIKE_KIND, 2);
             play_b(x, n);
         }
     }
@@ -127,10 +127,10 @@ fn leap_and_claw<R: Bench>(x: &mut Cx<'_, R>) {
         8 => bound_land(x),
         10 => {
             if x.anim_step() {
-                x.add8(0x7, 2);
-                x.set8(STRIKE_POWER, 5);
-                x.set8(STRIKE_KIND, 3);
-                x.set8(WANT_ANIM, 0x28);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(Enemy::STRIKE_POWER, 5);
+                x.set8(Enemy::STRIKE_KIND, 3);
+                x.set8(DisplacerBeast::WANT_ANIM, 0x28);
                 play_b(x, 0);
             }
         }
@@ -152,8 +152,8 @@ fn long_leap<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x73c5a: backs off roaring then turns around, on the ground.
 fn retreat<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         return play(x, 0x18);
     }
     if x.anim_step() {

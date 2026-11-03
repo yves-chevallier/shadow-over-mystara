@@ -196,10 +196,14 @@ const CIRCLE: RomAddr = RomAddr(0x1c94b6);
 
 /// Word at byte `off` of the circle of the whirls.
 pub(crate) fn circle(b: &mut Cps2Bus, off: u32) -> u16 {
-    let a = CIRCLE.offset(off as i32);
-    match data().speeds.at(a) {
+    speed16(b, CIRCLE.offset(off as i32).0)
+}
+
+/// Word at the address `a` of a speed table of `data/speeds.json` (the families keep the address of their table).
+pub(crate) fn speed16(b: &mut Cps2Bus, a: u32) -> u16 {
+    match data().speeds.at(RomAddr(a)) {
         Some(v) => v,
-        None => Missing { table: "speed table", key: CIRCLE.0 }.read16(b, a.0),
+        None => Missing { table: "speed table", key: a }.read16(b, a),
     }
 }
 
