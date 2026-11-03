@@ -1014,7 +1014,7 @@ libre.
     garde ses constantes de champs par type. Restent dans la zone 141 constantes d'adresses de tables lues par
     adresse (à passer en `&Table` au lot L12 ou plus tard) et les lectures `rd*` de la RAM.
 
-**L11. Écrans** (moyen)
+**L11. Écrans** (moyen) — **fait** (branche `wt-l11-ecrans`, voir « Résultat »)
 * Périmètre : `modes/`, `hud/`, `service/`, `scene/`, `credits*.rs`, `text.rs`, `popups.rs`.
 * (b) 62 accesseurs ROM et 437 constantes d'adresses. Scripts de démonstration (0x20070), écrans fixes, colonnes du
   HUD (`hud/layer.rs`, 0x3f54c2-0x3f6300), chaînes terminées par `@`, tables des scènes, classement (0xfc6d8).
@@ -1022,6 +1022,49 @@ libre.
   les fait passer par `world::ram` et par l'interface `hw::video` (tilemaps, couche de texte), à créer dans ce lot
   pour la couche 8x8.
 * Factoriser : `set8`/`set16` locaux de `scene/transition/mod.rs`, `credits_task.rs` et `service/mod.rs`.
+* Résultat :
+  * (a) Découpage (f0cd2d3) : `scene/exit.rs`, `scene/entry.rs`, `modes/ending.rs`, `modes/demo.rs`, `hud/slot.rs` et
+    `scene/transition/early.rs` deviennent des dossiers (`exit/{mod,sequences,custom}`, `entry/{mod,levels,later}`,
+    `ending/{mod,states}`, `demo/{mod,presentation,recorder}`, `slot/{mod,play,choose}`, `early/{mod,timed}`) ;
+    `examples/names` identique ; 308/308 VALID (mode par défaut).
+  * (b) Données : nouveau `data/screens.json` (`DataFile`, `extract/src/screens.rs` sur le constructeur de tables de
+    `set.rs` rendu réutilisable : `Tables::new`, `pointed`, palettes) ; `GameData` charge aussi `data/scenes.json`,
+    `data/misc.json` et `texts.json` (`scenes`, `misc`, `texts` ; `Texts::regions`, `From<RomAddr> for u32`). Tables
+    nommées : colonnes du HUD (`hud_columns` 0x3f54c2-0x3f6c08), lettres, portraits, palettes des panneaux,
+    démonstrations (sons, phases, présentation, textes 0x20070), sélection, fin, classement (`ranking_palette`
+    0xfc6d8, `ranking_text`), titre, démarrage, transitions (réponses, textes défilants, primes), scripts
+    d'apparition (une table exacte par script, plus la table 0xf2f62), menu de service, octets du test ROM
+    (`rom_test@…`) ; texte de l'invite (`prompt_texts`). Le jeu lit tout par adresse : `screens/tables.rs` (`byte`,
+    `word`, `long`, `pc_*`, type `Rom` = table ou texte désigné par son adresse d'origine ; une adresse de RAM passe
+    par le bus ; hors tables, résidu `Missing { table: "screens" }`). Les chaînes `@` passent par les descripteurs
+    de `texts.json` (`text.rs`). Adresses de reprise des `steps!` en littéraux, entrées de tâches en `RomAddr`.
+    Tests `screens_lossless`, `to_data` étendu (scenes, misc, screens, texts).
+  * (c) Variables et matériel : `hw/` (nouveau, couche matériel) — `hw::video` (`Cell`, `Tilemap` `TEXT`/`SCROLL1`,
+    `Vram`, `palette(page, couleur)`, `regs` CPS-A/B et sortie objets) et `hw::io` (ports `IN0`/`IN2`, RAM de la carte
+    de développement `DevRam`, `Memory` pour le test RAM du menu). Variables de la RAM de travail typées
+    (`ram::Byte`/`Word`/`Long`, communes dans `screens/vars.rs`, propres dans les modules), champs nommés
+    (`CoinSlot` en `record!`, `screens/obj.rs`, constantes de fiches, `Obj`/`Player`), blocs d'état par
+    `screens/block.rs` (`Block`) qui remplace les `get8`/`set8`/`get16`/`set16` locaux de `scene/transition` et du
+    menu de service (ceux de `credits_task.rs` sont supprimés). Outils de conversion mécanique dans le scratchpad
+    (variables, champs, adresses ROM), chaque étape revalidée sur les scénarios des écrans (113 scénarios).
+  * Mesures (`measure_end.py`, zone `screens` étendue à `screens/`) : 41 → 56 fichiers, 18 085 → 18 531 lignes,
+    accesseurs ROM 62 → 0, décalages littéraux 15 → 0, `A5 + littéral` 137 → 0, `rd*`/`wr*` bruts 1 637 → 3 (les
+    lectures de RAM de `screens/tables.rs`), constantes d'adresses ROM 400 → 0, plus gros fichier 1 533 → 800
+    (`modes/select.rs`). Littéraux de la GFX RAM et des registres hors `hw/` : les seuls restants sont les bornes du
+    test RAM du menu de service (`service/memory.rs`) et les constructeurs typés (`Port(0x804001)`, `Memory(…)`).
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; chaque étape revalidée sur les 113 scénarios des écrans
+    (modes, scènes d'entrée et de sortie, menu de service, crédits, boutiques) ; `render_check` identique au code
+    d'avant le lot sur attract, bot30k, boss10_scene65 et cov_4p_a (4 000 images) ; `mame_snapshots` identique.
+    Final, après fusion de main 2090293 (L6, L8b, L10, L9a, L19) : 309/309 VALID en mode par défaut et avec
+    `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; résidu identique
+    dans les deux modes (16 472 lectures, 20 clés, toutes celles de L1 : images, animations, vitesses), aucune de la
+    table `screens`. Tests `ddsom-assets` (`screens_lossless`), `extract` (`to_data`), `ddsom-game --lib` ;
+    `cargo clippy` sans avertissement, avec et sans `tools`.
+  * Pour les lots suivants : la vidéo s'écrit par `hw::video` (`Cell`, `TEXT`, `palette`, `regs`), les ports par
+    `hw::io` ; une donnée désignée par adresse se lit par `screens::tables` (ou la table de sa famille) ; les
+    caméras et scrolls partagés sont dans `screens::vars` ; `RomAddr` se convertit en `u32` (`From`). Les
+    `rd*`/`wr*` restants de la zone sont les lectures de RAM de `screens/tables.rs` ; le test RAM du menu de
+    service passe par `hw::io::Memory`.
 
 ### Vague 4
 
