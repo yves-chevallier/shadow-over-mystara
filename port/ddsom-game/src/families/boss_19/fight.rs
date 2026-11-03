@@ -16,10 +16,10 @@ use super::*;
 use crate::objects::Current;
 
 /// Table of threshold bytes for the special counterattacks (0x901e0), indexed by the quarter of HP remaining.
-const SPECIAL_LEVELS: u32 = 0x901e0;
+const SPECIAL_LEVELS: &str = "boss_19/special_levels";
 /// Attack choice (0x91096, 32 bytes) and short-range attack choice (0x9110c, 32 bytes per difficulty level).
-const PICK_A: u32 = 0x91096;
-const PICK_B: u32 = 0x9110c;
+const PICK_A: &str = "boss_19/attack_picks";
+const PICK_B: &str = "boss_19/next_attacks";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -38,20 +38,20 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- marche ---------------------------------------------------------------------------------------
 
 fn walk<R: Bench>(x: &mut Cx<'_, R>, shot: u8) {
-    x.set8(SHOT, shot);
-    x.set8(HOVER, 1);
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
-        x.set8(VULNERABLE, 1);
+    x.set8(Boss::SHOT, shot);
+    x.set8(Boss19::HOVER, 1);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set8(Enemy::VULNERABLE, 1);
         speed(x, 0x11);
         lib::draw_stance(x);
         return;
     }
     lib::pick_target(x);
     lib::approach_target(x);
-    if !sub8(x, WALK_DELAY, 1).gt() {
+    if !sub8(x, Boss::WALK_DELAY, 1).gt() {
         lib::draw_stance(x);
-        if !sub8(x, WALK_STEPS, 1).pl() {
+        if !sub8(x, Boss::WALK_STEPS, 1).pl() {
             if lib::maybe_draw_6e(x) {
                 return chase(x);
             }
@@ -78,8 +78,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, shot: u8) {
 
 /// 0x901c2: is a special counterattack due? The remaining HP (in quarters of `+0x60`) trigger it.
 fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let d1 = x.u16(0x60) as u32;
-    let d3 = (x.u16(0x62) as u32) << 2;
+    let d1 = x.u16(Enemy::HP_MAX) as u32;
+    let d3 = (x.u16(Enemy::HP) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
     // the original loops forever if `+0x60` is zero
     for _ in 0..0x20000 {
@@ -89,12 +89,12 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             break;
         }
     }
-    let level = x.rom8(SPECIAL_LEVELS + (d0 as u16 as u32));
-    let left = x.u8(SPECIALS);
+    let level = byte(x, SPECIAL_LEVELS, d0 as u16 as u32);
+    let left = x.u8(Boss19::SPECIALS);
     if left == 0 || (level as i8) > (left as i8) {
         return false;
     }
-    x.set8(SPECIALS, left - 1);
+    x.set8(Boss19::SPECIALS, left - 1);
     true
 }
 
@@ -105,7 +105,7 @@ fn facing_away<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return true;
     }
     let target = x.linked(f::TARGET);
-    let mut d = target.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_sub(0x20) as i16;
+    let mut d = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_sub(0x20) as i16;
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
@@ -147,16 +147,16 @@ fn probe_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x91050: chooses an attack (`+6` = 0 to 10) from the table.
 fn pick_attack_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0x1f;
-    let which = x.data8(PICK_A + r);
+    let which = byte(x, PICK_A, r);
     x.set8(f::SUB2, which);
     x.set16(f::STATE, 0x0204);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 // --- +6 = 2 : demi-tour -----------------------------------------------------------------------------
 
 fn turning<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u16(ANIM_SET) != 1 {
+    if x.u16(Boss19::ANIM_SET) != 1 {
         return stand(x);
     }
     if step(x) {
@@ -170,12 +170,12 @@ fn turning<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 4 : immobile -------------------------------------------------------------------------------
 
 fn hold<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
-        x.set8(VULNERABLE, 1);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set8(Enemy::VULNERABLE, 1);
         return rest(x);
     }
-    if sub8(x, APPROACH, 1).pl() {
+    if sub8(x, Boss::IDLE_COUNT, 1).pl() {
         if facing_away(x) {
             return turn(x);
         }
@@ -188,16 +188,16 @@ fn hold<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 6 : approche ---------------------------------------------------------------------------------
 
 fn close_in<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
-        x.set16(TIMER, 0x28);
-        x.set8(VULNERABLE, 1);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set16(Boss19::TIMER, 0x28);
+        x.set8(Enemy::VULNERABLE, 1);
         return speed(x, 0x21);
     }
-    if !sub16(x, TIMER, 1).gt() {
+    if !sub16(x, Boss19::TIMER, 1).gt() {
         return stand(x);
     }
-    x.set8(SHOT, 0x20);
+    x.set8(Boss::SHOT, 0x20);
     lib::approach_target(x);
     if facing_away(x) {
         return turn(x);
@@ -218,11 +218,10 @@ pub(super) fn pick_attack_b<R: Bench>(x: &mut Cx<'_, R>) {
         return stand(x);
     }
     let level = (var::RANK.get(x.b) >> 1) as u32;
-    let base = PICK_B + (level << 5);
     let r = (x.random() as u32) & 0x1f;
-    let which = x.data8(base + r);
+    let which = byte(x, PICK_B, (level << 5) + r);
     x.set8(f::SUB2, which);
     x.set16(f::STATE, 0x0208);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
     x.set32(f::STATE, STAND);
 }

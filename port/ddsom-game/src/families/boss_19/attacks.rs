@@ -17,13 +17,10 @@ use super::*;
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Players table (FF85DE, 0x200 bytes each).
-const PLAYERS: u32 = 0xff85de;
-/// Choice of the breath target (bytes, per draw) then routine (words relative to 0x90494).
-const AIM_PICK: u32 = 0x9049a;
-const AIM_ROUTINES: u32 = 0x90494;
+/// Players table (0x200 bytes each).
+const PLAYERS: u32 = crate::ram::PLAYERS.base;
 /// Offsets (longs) of the player slots walked in a randomly drawn order.
-const PLAYER_ORDERS: u32 = 0x90556;
+const PLAYER_ORDERS: &str = "boss_19/player_orders";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -44,7 +41,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Dust under the dragon (0xb10c8): `kind` 0x100 or 0x101.
 fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u16) {
-    let z = x.u16(0xc).wrapping_neg();
+    let z = x.u16(Obj::Z).wrapping_neg();
     lib::shock(x, 0, kind, 0, z);
 }
 
@@ -52,7 +49,7 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u16) {
 /// relative to A0; we read the same address.
 fn tick_word<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let addr = x.o.0.wrapping_sub(0x7f92) & 0xff_ffff;
-    x.data16(addr)
+    crate::mem::rd16(x.b, addr)
 }
 
 /// Speeds `(vx, vz)` by direction: `(a, b)` if the dragon looks right (`+0x2c` zero inverted).
@@ -67,32 +64,32 @@ fn signed_by_facing<R: Bench>(x: &mut Cx<'_, R>, a: i16, b: i16) -> (u16, u16) {
 /// Touches the ground: the altitude is brought back to 0, the vertical speed cancelled and the horizontal speed halved
 /// (`grow`: doubled in the big jump).
 fn bounce<R: Bench>(x: &mut Cx<'_, R>, grow: bool) {
-    if (x.u16(0xc) as i16) >= 0 {
+    if (x.u16(Obj::Z) as i16) >= 0 {
         return;
     }
-    x.set16(0xc, 0);
-    x.set32(0x18, 0);
-    let v = x.u16(0x14) as i16;
-    x.set16(0x14, if grow { v.wrapping_shl(1) } else { v >> 1 } as u16);
-    x.set16(0x16, 0);
+    x.set16(Obj::Z, 0);
+    x.set32(Enemy::VZ_LONG, 0);
+    let v = x.u16(Enemy::VX) as i16;
+    x.set16(Enemy::VX, if grow { v.wrapping_shl(1) } else { v >> 1 } as u16);
+    x.set16(Enemy::AX, 0);
 }
 
 fn jump_back_and_forth<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: i16) {
     let (a, b) = signed_by_facing(x, vx, vz);
-    x.set16(0x14, a);
-    x.set16(0x16, b);
+    x.set16(Enemy::VX, a);
+    x.set16(Enemy::AX, b);
 }
 
 // --- +6 = 0: backward leap -------------------------------------------------------------------
 
 fn back_hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x47);
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             jump_back_and_forth(x, 0x100, 0x40);
-            x.set16(0x18, (-0x100i16) as u16);
-            x.set16(0x1a, 0);
+            x.set16(Enemy::VZ, (-0x100i16) as u16);
+            x.set16(Enemy::GRAVITY, 0);
             let side = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, side);
             set_anim(x, 2, 4);
@@ -103,10 +100,10 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>) {
             if !step(x) {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x100);
-            x.set16(0x1a, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x100);
+            x.set16(Enemy::GRAVITY, 0);
             let side = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, side);
             set_anim(x, 2, 5);
@@ -116,8 +113,8 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>) {
                 dust(x, 0x101);
             }
             x.move_xz();
-            if (x.u16(0xc) as i16) > 0x28 {
-                x.set32(0x18, 0);
+            if (x.u16(Obj::Z) as i16) > 0x28 {
+                x.set32(Enemy::VZ_LONG, 0);
             }
             if step(x) {
                 fight::pick_attack_b(x);
@@ -133,22 +130,22 @@ const FRAME_KIND: u32 = 0x44;
 // --- +6 = 2 : charge ----------------------------------------------------------------------------
 
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(HOVER, 1);
-    x.set8(HURT_BOX, 1);
+    x.set8(Boss19::HOVER, 1);
+    x.set8(Boss19::HURT_BOX, 1);
     x.set8(FRAME_KIND, 0x48);
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(MARK, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss19::MARK, 0);
             let (a, _) = signed_by_facing(x, 0x200, 0);
-            x.set16(0x14, a);
-            x.set16(0x16, 0);
-            x.set32(0x18, 0);
-            x.set32(0x1c, 0);
+            x.set16(Enemy::VX, a);
+            x.set16(Enemy::AX, 0);
+            x.set32(Enemy::VZ_LONG, 0);
+            x.set32(Enemy::VY_LONG, 0);
         }
         2 => {
             x.move_x();
-            if x.u8(MARK) != 0 {
+            if x.u8(Boss19::MARK) != 0 {
                 return fight::pick_attack_b(x);
             }
             x.anim_step();
@@ -163,14 +160,14 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 4 : souffle ---------------------------------------------------------------------------
 
 fn breath<R: Bench>(x: &mut Cx<'_, R>) {
-    let boxes = if x.u8(TYPE) == TYPE_GREEN { 2 } else { 4 };
-    x.set8(HURT_BOX, boxes);
-    x.set8(HOVER, 1);
-    match x.u8(0x7) {
+    let boxes = if x.u8(Enemy::KIND) == TYPE_GREEN { 2 } else { 4 };
+    x.set8(Boss19::HURT_BOX, boxes);
+    x.set8(Boss19::HOVER, 1);
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(MARK, 0);
-            x.set8(TIMER, 0x10);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss19::MARK, 0);
+            x.set8(Boss19::TIMER, 0x10);
             speed(x, 0x11);
             breath_step(x);
         }
@@ -180,7 +177,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn breath_step<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(MARK) != 0 {
+    if x.u8(Boss19::MARK) != 0 {
         return fight::pick_attack_b(x);
     }
     aim_choice(x);
@@ -189,7 +186,7 @@ fn breath_step<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Is player `a2` usable (0x9059e): slot occupied and `+0x182` zero.
 fn usable<R: Bench>(x: &mut Cx<'_, R>, a2: Obj) -> bool {
-    a2.u8(x.b, 0) != 0 && a2.u8(x.b, 0x182) == 0
+    a2.u8(x.b, Obj::ACTIVE) != 0 && a2.u8(x.b, Player::AURA) == 0
 }
 
 /// 0x90458: keeps the current target as long as the timer (byte `+0xa6`) runs, otherwise draws another.
@@ -197,7 +194,7 @@ fn aim_choice<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return;
     }
-    if sub8(x, TIMER, 1).gt() {
+    if sub8(x, Boss19::TIMER, 1).gt() {
         // 0x90596: the target (+0x50) if usable
         let t = x.u16(f::TARGET);
         if (t as i16) < 0 {
@@ -207,11 +204,10 @@ fn aim_choice<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
     }
-    x.set8(TIMER, 0x10);
+    x.set8(Boss19::TIMER, 0x10);
     let r = (x.random() as u32) & 0xf;
-    let pick = x.rom8(AIM_PICK + r) as u32;
-    let routine = (AIM_ROUTINES as i32 + x.rom16(AIM_ROUTINES + pick) as i16 as i32) as u32;
-    let found = match routine {
+    // choice of the breath target, then routine
+    let found = match decide(x, "boss_19/aim_picks", r, "boss_19/aim_jumps") {
         0x904aa => nearest(x, false),
         0x904ee => nearest(x, true),
         0x90524 => in_random_order(x),
@@ -234,12 +230,12 @@ fn nearest<R: Bench>(x: &mut Cx<'_, R>, by_own: bool) -> Option<Obj> {
         let player = Obj(a2);
         let ok = usable(x, player);
         counter = ok as u16;
-        if ok && (player.u8(x.b, 4) as i8) < 4 {
+        if ok && (player.u8(x.b, Obj::STATE) as i8) < 4 {
             let score = if by_own {
-                x.u16(0x60) as i16
+                x.u16(Enemy::HP_MAX) as i16
             } else {
-                let dx = (player.u16(x.b, 0x8) as i16).wrapping_abs_keep();
-                let dy = (player.u16(x.b, 0x10) as i16).wrapping_abs_keep();
+                let dx = (player.u16(x.b, Obj::X) as i16).wrapping_abs_keep();
+                let dy = (player.u16(x.b, Obj::Y) as i16).wrapping_abs_keep();
                 dx.wrapping_add(dy)
             };
             if score < best {
@@ -270,15 +266,15 @@ impl AbsKeep for i16 {
 /// 0x90524: walks through the players in a randomly drawn order (rotation table) until a usable player is found.
 /// Same destroyed loop counter as `nearest`.
 fn in_random_order<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    let mut order = PLAYER_ORDERS + ((x.random() as u32) & 0xc);
+    let mut order = (x.random() as u32) & 0xc;
     let mut counter: u16;
     loop {
-        let offset = x.data32(order);
+        let offset = long(x, PLAYER_ORDERS, order);
         order += 4;
         let player = Obj(PLAYERS.wrapping_add(offset));
         let ok = usable(x, player);
         counter = ok as u16;
-        if ok && (player.u8(x.b, 4) as i8) < 4 {
+        if ok && (player.u8(x.b, Obj::STATE) as i8) < 4 {
             return Some(player);
         }
         counter = counter.wrapping_sub(1);
@@ -294,8 +290,8 @@ fn aim<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     if x.u8(f::FLIP) != 0 {
         d1 = d1.wrapping_neg();
     }
-    let px = p.u16(x.b, 0x8).wrapping_add(d1 as u16);
-    let py = p.u16(x.b, 0x10);
+    let px = p.u16(x.b, Obj::X).wrapping_add(d1 as u16);
+    let py = p.u16(x.b, Obj::Y);
     lib::turn_toward(x, px, py);
     x.move_by_table_xy();
 }
@@ -304,30 +300,30 @@ fn aim<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
 
 fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x49);
-    x.set8(HURT_BOX, 3);
-    match x.u8(0x7) {
+    x.set8(Boss19::HURT_BOX, 3);
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(SHIELD, 8);
-            x.set8(0, 1);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss19::SHIELD, 8);
+            x.set8(Enemy::ACTIVE, 1);
             let (a, b) = signed_by_facing(x, -0x400, 0x80);
-            x.set16(0x14, a);
-            x.set16(0x16, b);
-            x.set16(0x18, 0x300);
-            x.set16(0x1a, (-0x40i16) as u16);
-            x.set32(0x1c, 0);
-            x.set16(TIMER, 0x40);
+            x.set16(Enemy::VX, a);
+            x.set16(Enemy::AX, b);
+            x.set16(Enemy::VZ, 0x300);
+            x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
+            x.set32(Enemy::VY_LONG, 0);
+            x.set16(Boss19::TIMER, 0x40);
             set_anim(x, 2, 7);
         }
         2 => {
             x.move_xz();
             bounce(x, false);
             step(x);
-            let t = x.u16(TIMER).wrapping_sub(1);
+            let t = x.u16(Boss19::TIMER).wrapping_sub(1);
             if t & 0x8000 != 0 {
                 return fight::pick_attack_b(x);
             }
-            x.set16(TIMER, t);
+            x.set16(Boss19::TIMER, t);
             dust(x, 0x100);
         }
         _ => {}
@@ -338,54 +334,54 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x49);
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(SHIELD, 8);
-            x.set8(0, 1);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss19::SHIELD, 8);
+            x.set8(Enemy::ACTIVE, 1);
             let (a, _) = signed_by_facing(x, -0x100, 0);
-            x.set16(0x14, a);
-            x.set16(0x16, 0);
-            x.set16(0x18, 0x200);
-            x.set16(0x1a, (-0x20i16) as u16);
-            x.set32(0x1c, 0);
+            x.set16(Enemy::VX, a);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, 0x200);
+            x.set16(Enemy::GRAVITY, (-0x20i16) as u16);
+            x.set32(Enemy::VY_LONG, 0);
             rest(x);
         }
         2 => {
             step(x);
-            x.set8(SHIELD, 8);
+            x.set8(Boss19::SHIELD, 8);
             x.move_xz();
-            if (x.u16(0x18) as i16) > 0 {
+            if (x.u16(Enemy::VZ) as i16) > 0 {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x10);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss19::TIMER, 0x10);
         }
         4 => {
             step(x);
-            if sub16(x, TIMER, 1).gt() {
+            if sub16(x, Boss19::TIMER, 1).gt() {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x20);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss19::TIMER, 0x20);
             let (a, b) = signed_by_facing(x, 0x200, 0x40);
-            x.set16(0x14, a);
-            x.set16(0x16, b);
-            x.set16(0x18, (-0x300i16) as u16);
-            x.set16(0x1a, 0);
+            x.set16(Enemy::VX, a);
+            x.set16(Enemy::AX, b);
+            x.set16(Enemy::VZ, (-0x300i16) as u16);
+            x.set16(Enemy::GRAVITY, 0);
             set_anim(x, 2, 7);
         }
         6 => {
-            x.set8(HURT_BOX, 3);
-            x.set8(SHIELD, 8);
+            x.set8(Boss19::HURT_BOX, 3);
+            x.set8(Boss19::SHIELD, 8);
             x.move_xz();
             bounce(x, false);
             step(x);
-            let t = x.u16(TIMER).wrapping_sub(1);
+            let t = x.u16(Boss19::TIMER).wrapping_sub(1);
             if t & 0x8000 != 0 {
                 return fight::pick_attack_b(x);
             }
-            x.set16(TIMER, t);
+            x.set16(Boss19::TIMER, t);
             if t & 3 == 0 {
                 dust(x, 0x100);
             }
@@ -397,75 +393,76 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 10: big jump ------------------------------------------------------------------------------------
 
 fn lift<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set16(0x18, 0x800);
-    x.set16(0x1a, (-0x40i16) as u16);
+    x.set16(Enemy::VZ, 0x800);
+    x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
 }
 
 fn big_jump<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x49);
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(SHIELD, 8);
-            x.set8(0, 1);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss19::SHIELD, 8);
+            x.set8(Enemy::ACTIVE, 1);
             lift(x);
-            x.set32(0x1c, 0);
-            x.set32(0x14, 0);
+            x.set32(Enemy::VY_LONG, 0);
+            x.set32(Enemy::VX_LONG, 0);
             rest(x);
         }
         2 => {
-            x.set8(SHIELD, 8);
+            x.set8(Boss19::SHIELD, 8);
             x.move_z();
-            if (x.u16(0xc) as i16) >= 0x100 {
-                x.add8(0x7, 2);
-                x.set16(TIMER, 0x20);
+            if (x.u16(Obj::Z) as i16) >= 0x100 {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Boss19::TIMER, 0x20);
                 return;
             }
-            if (x.u16(0x18) as i16) < 0 {
+            if (x.u16(Enemy::VZ) as i16) < 0 {
                 return lift(x);
             }
             x.anim_step();
         }
         4 => {
-            if sub16(x, TIMER, 1).gt() {
+            if sub16(x, Boss19::TIMER, 1).gt() {
                 return;
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             // lands on the other side of the screen
             let mut d0 = var::SCROLL_X.get(x.b);
-            if x.u8(0xa) == 0 {
+            // the high byte of the saved X, as the original reads it (`tst.b (0xa,A0)`)
+            if x.u8(Enemy::X_SAVED) == 0 {
                 d0 = var::CAMERA_ALT_X.get(x.b);
             }
             let mut d1 = d0.wrapping_sub(0x40).wrapping_add(0xc0);
             let (mut side, mut vx) = (0x20u8, 0x600u16);
-            d1 = d1.wrapping_sub(x.u16(0x8));
+            d1 = d1.wrapping_sub(x.u16(Obj::X));
             if (d1 as i16) >= 0 {
                 side = 0;
                 d0 = d0.wrapping_add(0x1c0);
                 vx = vx.wrapping_neg();
             }
-            x.set16(0x8, d0);
-            x.set16(0xc, 0xc0);
+            x.set16(Obj::X, d0);
+            x.set16(Obj::Z, 0xc0);
             x.set8(f::FLIP, side);
-            x.set16(0x14, vx);
-            x.set16(0x16, 0);
-            x.set16(0x18, (-0x500i16) as u16);
-            x.set16(0x1a, 0);
-            x.set32(0x1c, 0);
-            x.set16(TIMER, 0x20);
+            x.set16(Enemy::VX, vx);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, (-0x500i16) as u16);
+            x.set16(Enemy::GRAVITY, 0);
+            x.set32(Enemy::VY_LONG, 0);
+            x.set16(Boss19::TIMER, 0x20);
             set_anim(x, 2, 7);
         }
         6 => {
-            x.set8(HURT_BOX, 3);
+            x.set8(Boss19::HURT_BOX, 3);
             x.move_xz();
             bounce(x, true);
             step(x);
-            let t = x.u16(TIMER).wrapping_sub(1);
+            let t = x.u16(Boss19::TIMER).wrapping_sub(1);
             if t & 0x8000 != 0 {
                 return fight::pick_attack_b(x);
             }
-            x.set16(TIMER, t);
-            if (x.u16(0xc) as i16) >= 0x30 || t & 3 != 0 {
+            x.set16(Boss19::TIMER, t);
+            if (x.u16(Obj::Z) as i16) >= 0x30 || t & 3 != 0 {
                 return;
             }
             dust(x, 0x100);

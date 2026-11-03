@@ -19,48 +19,57 @@
 //! The dragon floats around altitude 0x20 (`hover`, 0x91424) when `+0xa4` is raised.
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
+use crate::player::Player;
 
 mod attacks;
 mod fight;
 mod hit;
 mod intro;
 
-mod g {
-    pub const TYPE: u32 = 0x2;
-    pub const REACTION: u32 = 0x49;
-    pub const STUN: u32 = 0x56;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const APPROACH: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    pub const SHOT: u32 = 0x79;
-    pub const SHAKE: u32 = 0x90;
-    /// Current animation set (0, 2 or 4) and current animation.
-    pub const ANIM_SET: u32 = 0xa0;
-    pub const ANIM_N: u32 = 0xa1;
-    /// Hit boxes (value read by the collision engine) and mark set by the animation scripts.
-    pub const HURT_BOX: u32 = 0xa2;
-    pub const MARK: u32 = 0xa3;
-    /// Requested floating (`+0xa4`) and its state (`+0xa5`).
-    pub const HOVER: u32 = 0xa4;
-    pub const HOVER_STATE: u32 = 0xa5;
-    pub const TIMER: u32 = 0xa6;
-    pub const SAVED_STATE: u32 = 0xa8;
-    /// Counterattack countdown (`+0xac`, 4 every 32 frames) and its rhythm (`+0xad`).
-    pub const RETALIATE: u32 = 0xac;
-    pub const RETALIATE_TICK: u32 = 0xad;
-    /// Invulnerability frames remaining.
-    pub const SHIELD: u32 = 0xae;
-    /// Number of special counterattacks remaining.
-    pub const SPECIALS: u32 = 0xaf;
-    pub const BUBBLES: u32 = 0xb0;
-    pub const BUBBLE_TICK: u32 = 0xb1;
-    pub const PUSHED: u32 = 0xb2;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss19(pub Obj);
+
+impl Boss19 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss19 {
+        /// Current animation set (0, 2 or 4) and current animation.
+        anim_set, set_anim_set, ANIM_SET: u16 @ 0xa0;
+        anim_n, set_anim_n, ANIM_N: u8 @ 0xa1;
+        /// Hit boxes (value read by the collision engine) and mark set by the animation scripts.
+        hurt_box, set_hurt_box, HURT_BOX: u8 @ 0xa2;
+        mark, set_mark, MARK: u8 @ 0xa3;
+        /// Requested floating (`+0xa4`) and its state (`+0xa5`).
+        hover, set_hover, HOVER: u8 @ 0xa4;
+        hover_state, set_hover_state, HOVER_STATE: u8 @ 0xa5;
+        /// Countdown of a step (word; some steps use its high byte alone).
+        timer, set_timer, TIMER: u16 @ 0xa6;
+        /// State to resume after an about-face (long).
+        saved_state, set_saved_state, SAVED_STATE: u32 @ 0xa8;
+        /// Counterattack countdown (`+0xac`, 4 every 32 frames) and its rhythm (`+0xad`).
+        retaliate, set_retaliate, RETALIATE: u8 @ 0xac;
+        retaliate_tick, set_retaliate_tick, RETALIATE_TICK: u8 @ 0xad;
+        /// Invulnerability frames remaining.
+        shield, set_shield, SHIELD: u8 @ 0xae;
+        /// Number of special counterattacks remaining.
+        specials, set_specials, SPECIALS: u8 @ 0xaf;
+        /// Bubbles of the breath left to blow, and the countdown between two.
+        bubbles, set_bubbles, BUBBLES: u8 @ 0xb0;
+        bubble_tick, set_bubble_tick, BUBBLE_TICK: u8 @ 0xb1;
+        /// Countdown of the push of the players; its end clears the hit lock.
+        pushed, set_pushed, PUSHED: u8 @ 0xb2;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -95,7 +104,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// Starts animation `n` of set `set` (0, 2 or 4) of the type, unless it is already playing (0x914c6, 0x914e0,
 /// 0x914fa).
 fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
-    let black = x.u8(TYPE) == TYPE_BLACK;
+    let black = x.u8(Enemy::KIND) == TYPE_BLACK;
     let base = match (set, black) {
         (0, false) => 0x17dbb0,
         (0, true) => 0x1824d4,
@@ -104,11 +113,11 @@ fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
         (_, false) => 0x17dbd2,
         (_, true) => 0x1824f6,
     };
-    if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
+    if set == x.u8(Boss19::ANIM_SET) && n as u8 == x.u8(Boss19::ANIM_N) {
         return;
     }
-    x.set8(ANIM_SET, set);
-    x.set8(ANIM_N, n as u8);
+    x.set8(Boss19::ANIM_SET, set);
+    x.set8(Boss19::ANIM_N, n as u8);
     x.anim_start(base, n as u16);
 }
 
@@ -146,7 +155,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x9140a: attack 4 (breath), invulnerable for a moment.
 fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ATTACK_4);
-    x.set8(SHIELD, 8);
+    x.set8(Boss19::SHIELD, 8);
 }
 
 /// 0x8fcf0: waits for a player.
@@ -171,16 +180,16 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::SUB, 0);
     x.set16(f::SUB2, 0);
-    x.set8(0x9e, 5);
-    x.set8(0x9f, 0);
-    x.set8(0x7e, 0x26);
-    x.set8(0x80, 0x24);
-    let kind = x.u8(TYPE);
+    x.set8(Boss::WEAK_ELEMENT, 5);
+    x.set8(Boss::RESISTED_ELEMENT, 0);
+    x.set8(Enemy::EVENT_KIND, 0x26);
+    x.set8(Enemy::LOOT_ROW, 0x24);
+    let kind = x.u8(Enemy::KIND);
     if kind == TYPE_GREEN {
-        x.set8(0x7e, 0x4b);
-        x.set8(0x80, 0x20);
-        x.set8(0x2a, 1);
-        x.set8(0x2b, 0x1c);
+        x.set8(Enemy::EVENT_KIND, 0x4b);
+        x.set8(Enemy::LOOT_ROW, 0x20);
+        x.set8(Enemy::OWN_PALETTE, 1);
+        x.set8(Enemy::PALETTE, 0x1c);
     }
     if kind == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
         lib::initial_hp_boss(x);
@@ -193,27 +202,27 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         lib::clear_all_popups(x);
         var::STAGE_CLOCK.set(x.b, 0x0459_5900);
         var::BOSS_FIGHT.set(x.b, 1);
-        x.set8(0x93, 1);
-        x.set8(0x9a, 0xff);
+        x.set8(Boss::DEATH_CREDIT, 1);
+        x.set8(Boss::DEATH_VALUE, 0xff);
         lib::initial_hp_boss(x);
         lib::create_set_14(x);
         lib::create_set_15(x);
     }
-    x.set8(0x78, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     x.set8(f::BOX_SET, 0x2e);
-    x.set8(0x82, 1);
+    x.set8(Enemy::WEAK_TO_B, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    for (off, v) in [(0x76, 5), (0x8e, 3), (0x6f, 2), (0x68, 5), (0x69, 5), (0x6c, 4), (0x6d, 8), (0x6a, 3)] {
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 5), (Enemy::AI_ROW_8E, 3), (Enemy::AI_SPARE_ROW, 2), (Enemy::AI_68, 5), (Enemy::AI_69, 5), (Enemy::AI_WAIT_MASKS, 4), (Enemy::AI_WAIT_ROW, 8), (Enemy::AI_WANDER_ROW, 3)] {
         x.set8(off, v);
     }
     var::SCENE_LEVEL.set(x.b, 0);
     lib::draw_6b(x);
-    x.set8(0x70, 0);
+    x.set8(Enemy::AI_STANCE_ROW, 0);
     lib::draw_stance(x);
-    x.set8(0x81, 0);
-    x.set8(SHIELD, 0);
-    x.set8(SPECIALS, 3);
-    x.set16(ANIM_SET, 0xffff);
+    x.set8(Enemy::LOOT, 0);
+    x.set8(Boss19::SHIELD, 0);
+    x.set8(Boss19::SPECIALS, 3);
+    x.set16(Boss19::ANIM_SET, 0xffff);
     rest(x);
 }
 
@@ -226,19 +235,19 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             sub8(x, f::FREEZE, 1);
         } else {
             // Nagpa's dragon disappears with its host
-            if x.u8(TYPE) == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
+            if x.u8(Enemy::KIND) == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
                 if (x.u16(f::HOST) as i16) >= 0 {
                     return host_gone(x);
                 }
                 let host = x.linked(f::HOST);
-                if host.u8(x.b, 0) == 0 || host.u16(x.b, f::HP) == 0 {
+                if host.u8(x.b, Obj::ACTIVE) == 0 || host.u16(x.b, f::HP) == 0 {
                     return host_gone(x);
                 }
             }
-            x.set8(HURT_BOX, 0);
-            if sub8(x, RETALIATE_TICK, 1).le() {
-                x.set8(RETALIATE_TICK, 0x20);
-                x.set8(RETALIATE, 4);
+            x.set8(Boss19::HURT_BOX, 0);
+            if sub8(x, Boss19::RETALIATE_TICK, 1).le() {
+                x.set8(Boss19::RETALIATE_TICK, 0x20);
+                x.set8(Boss19::RETALIATE, 4);
             }
             match x.u8(f::SUB) {
                 0 => intro::run(x),
@@ -249,14 +258,15 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 _ => {}
             }
             let s = x.u32(f::STATE);
-            x.set32(SAVED_STATE, s);
+            x.set32(Boss19::SAVED_STATE, s);
             hover(x);
-            if tst8(x, SHIELD).gt() {
-                sub8(x, SHIELD, 1);
-                x.set8(0x38, 0);
+            if tst8(x, Boss19::SHIELD).gt() {
+                sub8(x, Boss19::SHIELD, 1);
+                x.set8(Enemy::FRAME_TAG, 0);
             }
-            if tst8(x, PUSHED).gt() && sub8(x, PUSHED, 1).le() {
-                x.set8(0x58, 0);
+            if tst8(x, Boss19::PUSHED).gt() && sub8(x, Boss19::PUSHED, 1).le() {
+                // `clr.b`: the high byte of the hit lock
+                x.set8(Enemy::HIT_LOCK, 0);
             }
         }
     }
@@ -274,9 +284,9 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, STAND);
         return;
     }
-    x.set8(HOVER, 1);
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    x.set8(Boss19::HOVER, 1);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         return rest(x);
     }
     step(x);
@@ -284,54 +294,54 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x91424: floating around altitude 0x20 when `+0xa4` is raised; the altitude does not go below 0.
 fn hover<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(TYPE) == TYPE_GREEN && x.u8(f::SUB) == 0 {
+    if x.u8(Enemy::KIND) == TYPE_GREEN && x.u8(f::SUB) == 0 {
         return;
     }
-    if x.u8(HOVER) == 0 {
-        x.set8(HOVER_STATE, 0);
+    if x.u8(Boss19::HOVER) == 0 {
+        x.set8(Boss19::HOVER_STATE, 0);
     } else {
-        x.set8(HOVER, 0);
+        x.set8(Boss19::HOVER, 0);
         let mut physics = true;
-        if x.u8(HOVER_STATE) == 0 {
+        if x.u8(Boss19::HOVER_STATE) == 0 {
             // reaches altitude 0x20 at one pixel per frame
             let mut d: i16 = 1;
-            if (x.u16(0xc).wrapping_sub(0x20) as i16) >= 0 {
+            if (x.u16(Obj::Z).wrapping_sub(0x20) as i16) >= 0 {
                 d = -d;
             }
-            x.add16(0xc, d as u16);
-            if x.u16(0xc) != 0x20 {
+            x.add16(Obj::Z, d as u16);
+            if x.u16(Obj::Z) != 0x20 {
                 physics = false;
             } else {
-                x.set8(HOVER_STATE, 0xff);
+                x.set8(Boss19::HOVER_STATE, 0xff);
                 let (mut vz, mut az) = (0x20i16, -0x200i16);
                 if d >= 0 {
                     vz = -vz;
                     az = -az;
                 }
-                x.set16(0x18, vz as u16);
-                x.set16(0x1a, az as u16);
+                x.set16(Enemy::VZ, vz as u16);
+                x.set16(Enemy::GRAVITY, az as u16);
             }
         }
         if physics {
             // oscillation: the acceleration reverses on either side of 0x20
             x.move_z();
             let (mut a, mut b) = (0x20i16, -0x200i16);
-            let accel = x.u16(0x1a) as i16;
-            if x.u16(0xc) as i16 >= 0x20 {
+            let accel = x.u16(Enemy::GRAVITY) as i16;
+            if x.u16(Obj::Z) as i16 >= 0x20 {
                 if accel >= 0 {
                     a = -a;
                     b = -b;
-                    x.set16(0x1a, a as u16);
-                    x.set16(0x18, b as u16);
+                    x.set16(Enemy::GRAVITY, a as u16);
+                    x.set16(Enemy::VZ, b as u16);
                 }
             } else if accel < 0 {
-                x.set16(0x1a, a as u16);
-                x.set16(0x18, b as u16);
+                x.set16(Enemy::GRAVITY, a as u16);
+                x.set16(Enemy::VZ, b as u16);
             }
         }
     }
-    if (x.u16(0xc) as i16) < 0 {
-        x.set16(0xc, 0);
+    if (x.u16(Obj::Z) as i16) < 0 {
+        x.set16(Obj::Z, 0);
     }
 }
 
