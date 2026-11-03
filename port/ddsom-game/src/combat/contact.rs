@@ -1,5 +1,6 @@
 //! Parries, enemy attacks, crates, pushes and pickable items.
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::machine::Machine;
@@ -352,7 +353,7 @@ pub(super) fn box_hits_player(w: &mut World, p: Obj, bx: Obj) {
     bx.set_u8(w.b, f::HITSTOP, 6);
     p.set_u32(w.b, f::STATE, state::PLAYER_HURT);
     p.set_u8(w.b, f::ACTION, 4);
-    bx.set_u8(w.b, 0x71, 1);
+    bx.set_u8(w.b, f::CRATE_HIT, 1);
     let hp = p.u16(w.b, f::HP);
     p.set_u16(w.b, f::HP_PREV, hp);
     let dmg = box_damage(w, bx);
@@ -402,7 +403,7 @@ pub(super) fn box_hits_enemy(w: &mut World, e: Obj, bx: Obj) {
         return;
     }
     e.set_u8(w.b, f::HIT_MARK, 0xff);
-    let thrower = Obj::from_word(bx.u16(w.b, 0x6c));
+    let thrower = Obj::from_word(bx.u16(w.b, f::CRATE_TOUCHER));
     let fl = thrower.u8(w.b, f::FLIP);
     e.set_u8(w.b, f::REACTION_FLIP, fl);
     e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
@@ -415,7 +416,7 @@ pub(super) fn box_hits_enemy(w: &mut World, e: Obj, bx: Obj) {
             e.set_u8(w.b, f::REACTION, 8);
         }
     }
-    bx.set_u8(w.b, 0x71, 1);
+    bx.set_u8(w.b, f::CRATE_HIT, 1);
     let st = e.u32(w.b, f::STATE);
     e.set_u32(w.b, f::PREV_STATE, st);
     let hp = e.u16(w.b, f::HP);
@@ -608,7 +609,7 @@ pub(super) fn grab_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
     p.set_u8(w.b, Player::CARRY, 0);
     p.set_u32(w.b, Player::LINK, bx.long_ref());
     bx.set_u8(w.b, f::ACTIVE, 2);
-    bx.set_u16(w.b, 0x6c, p.word());
+    bx.set_u16(w.b, f::CRATE_TOUCHER, p.word());
     bx.set_u32(w.b, f::STATE, state::PLAYER_HURT);
     true
 }
@@ -629,7 +630,7 @@ pub(super) fn shove_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
     p.set_u8(w.b, Player::CARRY, 4);
     p.set_u32(w.b, Player::LINK, bx.long_ref());
     bx.set_u8(w.b, f::ACTIVE, 2);
-    bx.set_u16(w.b, 0x6c, p.word());
+    bx.set_u16(w.b, f::CRATE_TOUCHER, p.word());
     true
 }
 
@@ -647,15 +648,15 @@ pub(super) fn shove_special_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
         wr8(w.b, slot.0, 1);
         p.set_u32(w.b, f::STATE, state::CRATE_PUSHED);
     }
-    bx.set_u8(w.b, 0x6e, 1);
-    bx.set_u16(w.b, 0x6c, p.word());
+    bx.set_u8(w.b, f::CRATE_PUSHED, 1);
+    bx.set_u16(w.b, f::CRATE_TOUCHER, p.word());
     true
 }
 
 /// 0x278c4: the player pushes a barrel (type 3 crate).
 pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: HitBox) -> bool {
     cov::hit("push_barrel");
-    if bx.u8(w.b, 0x66) != 0 || bx.u16(w.b, f::Z) != 0 {
+    if bx.u8(w.b, f::CRATE_HELD) != 0 || bx.u16(w.b, f::Z) != 0 {
         return false;
     }
     let pair = Pair { a: p, abox: mine, b: bx, bbox: theirs, signed: false };
@@ -692,7 +693,7 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
     }
     let d = if push.neg_y { push.depth_y.wrapping_neg() } else { push.depth_y };
     w.add16(p, f::Y, d);
-    if bx.u8(w.b, 0x65) != 0 {
+    if bx.u8(w.b, f::CRATE_FIXED) != 0 {
         return false;
     }
     let keys = p.u8(w.b, f::KEYS_HELD);
@@ -727,8 +728,8 @@ pub(super) fn barrel_kick(w: &mut World, p: Obj, bx: Obj) -> bool {
     }
     p.set_u32(w.b, f::STATE, state::GRABBING);
     p.set_u32(w.b, Player::LINK, bx.long_ref());
-    bx.set_u8(w.b, 0x66, 1);
-    bx.set_u16(w.b, 0x6c, p.word());
+    bx.set_u8(w.b, f::CRATE_HELD, 1);
+    bx.set_u16(w.b, f::CRATE_TOUCHER, p.word());
     true
 }
 

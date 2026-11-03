@@ -1,5 +1,6 @@
 //! Player shots (PSHL) against enemies: contact behaviours (ROM table 0x267c4).
 
+use crate::objects::Obj;
 use super::*;
 use crate::machine::Machine;
 use crate::player::tables::{player_data, Read};

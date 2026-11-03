@@ -1,5 +1,6 @@
 //! Special attack of the magic-user and its first spells (sparks, bolt, frost, quake).
 
+use crate::player::Player;
 use super::*;
 use crate::player::tables::{player_data, pc16, Read};
 
@@ -120,7 +121,7 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
             }
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0);
+                p.set_u8(g, Player::ACTION_COUNT, 0);
                 let level = p.u8(g, Player::LEVEL) as u32;
                 let gesture = player_data().magic_user_spark_gestures.at8(g.b, level) as u16;
                 animation::start_plain(g, p, 0x36 + gesture);
@@ -129,8 +130,8 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
         }
         4 => {
             if p.u8(g, field::EVENT) != 0 {
-                let side = p.u8(g, 0x1e8) ^ 1;
-                p.set_u8(g, 0x1e8, side);
+                let side = p.u8(g, Player::ACTION_COUNT) ^ 1;
+                p.set_u8(g, Player::ACTION_COUNT, side);
                 if is_cancelled(g, p) {
                     p.set_u8(g, Player::STEP, 8);
                     common::cancel_cast(g, p, 0x1c);
@@ -232,8 +233,8 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
             }
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0x10);
-                p.set_u8(g, 0x1e9, 2);
+                p.set_u8(g, Player::ACTION_COUNT, 0x10);
+                p.set_u8(g, Player::SPELL_LEVEL, 2);
                 p.set_u16(g, field::TIMER, 0x78);
                 animation::start_plain(g, p, 0x22);
                 g.sound(crate::sound::CMD_72, p);
@@ -244,10 +245,10 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
                 return;
             }
             next_step(g, p);
-            p.set_u8(g, 0x1eb, 0);
-            p.set_u8(g, 0x1ea, 4);
-            p.set_u8(g, 0x1e8, 0x10);
-            p.set_u8(g, 0x1e9, 2);
+            p.set_u8(g, Player::SPELL_PHASE, 0);
+            p.set_u8(g, Player::SPELL_BLINKS, 4);
+            p.set_u8(g, Player::ACTION_COUNT, 0x10);
+            p.set_u8(g, Player::SPELL_LEVEL, 2);
             animation::start_plain(g, p, 0x23 + 2);
             if is_cancelled(g, p) {
                 p.set_u8(g, Player::STEP, 0xc);
@@ -261,7 +262,7 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
             common::blink_screen(g, p);
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1eb, 0);
+                p.set_u8(g, Player::SPELL_PHASE, 0);
                 animation::start_plain(g, p, 0x28);
                 return;
             }

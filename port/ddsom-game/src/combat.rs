@@ -9,6 +9,7 @@
 //! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
+use crate::families::enemy_common::records::Enemy;
 use crate::player::Player;
 use cps2::Cps2Bus;
 
@@ -166,6 +167,19 @@ mod f {
     pub const HITS_LANDED: u32 = 0x190;
     pub const DYING: u32 = 0x196;
     pub const DAMAGE_CAP: u32 = 0x16e;
+    /// Crate: non-zero, it cannot be pushed (h).
+    pub const CRATE_FIXED: u32 = 0x65;
+    /// Crate: held by a player.
+    pub const CRATE_HELD: u32 = 0x66;
+    /// Crate: player that last touched, pushed or grabbed it (word).
+    pub const CRATE_TOUCHER: u32 = 0x6c;
+    /// Crate: pushed by a player.
+    pub const CRATE_PUSHED: u32 = 0x6e;
+    /// Crate: hit by a player or a shot (h).
+    pub const CRATE_HIT: u32 = 0x71;
+    /// Enemy: element it is weak to, and the weakness bonus (h).
+    pub const WEAKNESS: u32 = 0x9e;
+    pub const WEAK_ELEMENT: u32 = 0x9f;
 }
 
 /// Program ROM tables.
@@ -623,10 +637,10 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     }
     count_combo(w, p, e);
     let mut dmg = player_damage(w, p, e);
-    if p.u8(w.b, f::WEAPON_10D) == 0xb && e.u8(w.b, 0x82) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xb && e.u8(w.b, Enemy::WEAK_TO_B) != 0 {
         dmg = dmg.wrapping_add(dmg >> 1);
     }
-    if p.u8(w.b, f::WEAPON_10D) == 0xc && e.u8(w.b, 0x83) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xc && e.u8(w.b, Enemy::WEAK_TO_C) != 0 {
         dmg = 0x200;
     }
     if p.u8(w.b, f::GEAR_184) != 0 {

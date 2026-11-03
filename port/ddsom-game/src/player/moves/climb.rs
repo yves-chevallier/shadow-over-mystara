@@ -1,5 +1,7 @@
 //! Climbing (action 0x1a) and the exit from the scene (action 0x20).
 
+use crate::objects::Obj;
+use crate::player::Player;
 use super::*;
 use crate::player::tables::{player_data, word, long, Read};
 
@@ -288,7 +290,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             p.set_u8(g, Obj::ACTIVE, 2);
             p.set_u8(g, exit_field::TIMER, 0x30);
             animation::start(g, p, 0x38);
-            p.set_u8(g, 0x3b, 0);
+            p.set_u8(g, Player::GROUND_MARK, 0);
         }
         0xc => {
             exit_start(g, p, 0x14, 0x1e);
@@ -310,7 +312,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if exit_countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x3b, 0);
+                p.set_u8(g, Player::GROUND_MARK, 0);
             }
             exit_fade(g, p);
         }
@@ -322,7 +324,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             if exit_countdown(g, p) {
                 p.set_u8(g, Player::STEP, 0x10);
             }
-            p.set_u8(g, 0x3b, 0);
+            p.set_u8(g, Player::GROUND_MARK, 0);
         }
         0x14 => {
             move_z(g, p);
@@ -334,7 +336,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             if exit_countdown(g, p) {
                 p.set_u8(g, Player::STEP, 0x10);
             }
-            p.set_u8(g, 0x3b, 0);
+            p.set_u8(g, Player::GROUND_MARK, 0);
             exit_fade(g, p);
         }
         v => unreachable!("0x3632c : value {v:#x} outside the original jump table"),

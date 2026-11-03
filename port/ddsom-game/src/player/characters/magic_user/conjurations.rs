@@ -1,5 +1,7 @@
 //! Spells of the magic-user, continued: storm, rain, witch, curse, wave, portal, summon, wall, drain, sacrifice.
 
+use crate::families::enemy_common::records::Enemy;
+use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;
 use super::*;
@@ -125,9 +127,9 @@ pub(super) fn witch(g: &mut Ctx, p: Player) {
         2 => {
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0);
-                p.set_u32(g, 0x1d0, 0);
-                p.set_u16(g, 0x1d4, 0);
+                p.set_u8(g, Player::ACTION_COUNT, 0);
+                p.set_u32(g, Player::RECOGNIZERS + 0x30, 0);
+                p.set_u16(g, Player::RECOGNIZERS + 0x34, 0);
                 p.set_u16(g, field::TIMER, 0x2c);
                 animation::start_plain(g, p, 0x18);
                 g.sound(crate::sound::CMD_F6, p);
@@ -143,7 +145,7 @@ pub(super) fn witch(g: &mut Ctx, p: Player) {
             if countdown(g, p) {
                 next_step(g, p);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                let (timer, anim) = if p.u8(g, 0x1e8) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
+                let (timer, anim) = if p.u8(g, Player::ACTION_COUNT) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
                 p.set_u16(g, field::TIMER, timer);
                 animation::start_plain(g, p, anim);
                 g.sound(crate::sound::CMD_7A, p);
@@ -157,8 +159,8 @@ pub(super) fn witch(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 0x24);
                     return linger(g, p);
                 }
-            } else if p.u16(g, 0x1d4) != 0 {
-                p.set_u8(g, 0x1e8, 1);
+            } else if p.u16(g, Player::RECOGNIZERS + 0x34) != 0 {
+                p.set_u8(g, Player::ACTION_COUNT, 1);
             }
             animation::step(g, p);
         }
@@ -489,7 +491,7 @@ pub(super) fn drain(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             common::begin_cast(g, p, Some(0x3c), None);
-            p.set_u8(g, 0x1ef, 0);
+            p.set_u8(g, Player::SECOND_STRIKE_LANDED, 0);
             common::dim_screen(g, p);
             aim_at_center(g, p, REGROUP_SPEEDS, 0x200, -8);
         }
@@ -521,9 +523,9 @@ pub(super) fn drain(g: &mut Ctx, p: Player) {
             }
             let timer = p.u16(g, field::TIMER);
             if timer <= 0x100 {
-                let tally = p.u8(g, 0x1ef);
+                let tally = p.u8(g, Player::SECOND_STRIKE_LANDED);
                 if spawn::portal_burst(g, p, tally) {
-                    p.set_u8(g, 0x1ef, tally.wrapping_add(1));
+                    p.set_u8(g, Player::SECOND_STRIKE_LANDED, tally.wrapping_add(1));
                 }
             }
             if timer == 0xe0 {
@@ -563,37 +565,37 @@ pub(super) fn sacrifice(g: &mut Ctx, p: Player) {
     let (index, character) = (p.u8(g, Player::INDEX), p.u8(g, Player::CHARACTER));
     for pool in [&BOSS, &ENEMY] {
         for o in pool.iter() {
-            if o.u8(g.b, Obj::ACTIVE) == 0 || o.u8(g.b, Obj::FLAGS) == 0 || o.u8(g.b, 0x40) != 0 {
+            if o.u8(g.b, Obj::ACTIVE) == 0 || o.u8(g.b, Obj::FLAGS) == 0 || o.u8(g.b, Victim::BOXES_OFF) != 0 {
                 continue;
             }
             let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
             p.set_u16(g, Player::SPELL_KILLS, counter);
-            let hits = o.u8(g.b, 0x9c).wrapping_add(1);
-            o.set_u8(g.b, 0x9c, hits);
+            let hits = o.u8(g.b, Victim::HITS_TAKEN).wrapping_add(1);
+            o.set_u8(g.b, Victim::HITS_TAKEN, hits);
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, Obj::FLAGS, 1);
-            o.set_u8(g.b, 0x49, 0xa8);
-            o.set_u8(g.b, 0x48, index);
-            o.set_u8(g.b, 0x4b, character);
-            o.set_u16(g.b, 0x54, p.0 as u16);
-            o.set_u8(g.b, 0x4a, 0);
+            o.set_u8(g.b, Enemy::REACTION, 0xa8);
+            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
+            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
+            o.set_u8(g.b, Enemy::ATTACKER_FLIP, 0);
             if g.random() & 1 != 0 {
-                o.set_u8(g.b, 0x4a, 0x20);
+                o.set_u8(g.b, Enemy::ATTACKER_FLIP, 0x20);
             }
             let kind = o.u8(g.b, Obj::KIND);
             if o.u8(g.b, Obj::CLASS) == 4 && matches!(kind, 0xf | 0x14) {
-                let hp = (o.u16(g.b, 0x62) as i16).wrapping_sub(0x1f4);
-                o.set_u16(g.b, 0x62, if hp < 0 { 0 } else { hp as u16 });
+                let hp = (o.u16(g.b, Enemy::HP) as i16).wrapping_sub(0x1f4);
+                o.set_u16(g.b, Enemy::HP, if hp < 0 { 0 } else { hp as u16 });
             } else {
-                o.set_u16(g.b, 0x62, 1);
+                o.set_u16(g.b, Enemy::HP, 1);
             }
-            if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
+            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Victim::DEATH_CREDIT) != 0 {
                 p.set_u8(g, Player::HOLY, 1);
-                let loot = o.u8(g.b, 0x9a);
+                let loot = o.u8(g.b, Victim::DEATH_VALUE);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | kind as u32;
-            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, Obj::CLASS) as u32);
+            let (max, hp, class) = (o.u16(g.b, Enemy::HP_MAX) as u32, o.u16(g.b, Enemy::HP) as u32, o.u8(g.b, Obj::CLASS) as u32);
             crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
         }
     }

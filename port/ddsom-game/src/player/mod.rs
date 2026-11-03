@@ -333,8 +333,12 @@ crate::record::record! {
         body_box, set_body_box, BODY_BOX: u8 @ 0x38;
         /// Index of the attack box.
         attack_box, set_attack_box, ATTACK_BOX: u8 @ 0x3a;
+        /// Index of the ground mark (`sprites.rs`).
+        ground_mark, set_ground_mark, GROUND_MARK: u8 @ 0x3b;
         /// Kind of the current hit (< 2: weapon hit) (h).
         attack_kind, set_attack_kind, ATTACK_KIND: u8 @ 0x3c;
+        /// Identifier of the attack in progress, compared by the collisions (h).
+        attack_id, set_attack_id, ATTACK_ID: u8 @ 0x3e;
         /// Current action as the effects read it (bubbles) (h).
         bubble_action, set_bubble_action, BUBBLE_ACTION: u8 @ 0x3d;
         /// Frame of the held weapon, of the low shield, of the raised shield (indices of the `overlays` tables).
@@ -517,16 +521,31 @@ crate::record::record! {
         dying_timer, set_dying_timer, DYING_TIMER: u8 @ 0x196;
         /// Nine recognizers of special moves of 6 bytes (`combos`).
         recognizers, set_recognizers, RECOGNIZERS: u8 @ 0x1a0;
+        /// Timer of the scripts (`scripted`, word) (h).
+        script_timer, set_script_timer, SCRIPT_TIMER: u16 @ 0x1e0;
+        /// Parity of the double update under the speed aura.
+        double_parity, set_double_parity, DOUBLE_PARITY: u8 @ 0x1e3;
+        // Scratch of the current action (from +0x1e8): each action uses these bytes its own way; the names give the
+        // most common use (h).
+        /// Counter of the current action (frames, strokes, side).
+        action_count, set_action_count, ACTION_COUNT: u8 @ 0x1e8;
         /// Level of the spell or item in use (chosen with the up and down keys; read by its effects).
         spell_level, set_spell_level, SPELL_LEVEL: u8 @ 0x1e9;
         /// A strike already landed during the action (fighter, thief; read by the shadow shot) (h).
         strike_landed, set_strike_landed, STRIKE_LANDED: u8 @ 0x1ec;
         /// The spell hits an ally in range (1) or only the caster (0).
         spell_area, set_spell_area, SPELL_AREA: u8 @ 0x1ee;
-        /// Timer of the scripts (`scripted`, word) (h).
-        script_timer, set_script_timer, SCRIPT_TIMER: u16 @ 0x1e0;
-        /// Parity of the double update under the speed aura.
-        double_parity, set_double_parity, DOUBLE_PARITY: u8 @ 0x1e3;
+        /// Blinks of the spell in progress (byte).
+        spell_blinks, set_spell_blinks, SPELL_BLINKS: u8 @ 0x1ea;
+        /// Phase or flashes of the spell in progress.
+        spell_phase, set_spell_phase, SPELL_PHASE: u8 @ 0x1eb;
+        /// Repetitions of the item or spell effect.
+        spell_repeat, set_spell_repeat, SPELL_REPEAT: u8 @ 0x1ed;
+        /// A second strike already landed during the action (elf, magic-user) (h).
+        second_strike_landed, set_second_strike_landed, SECOND_STRIKE_LANDED: u8 @ 0x1ef;
+        /// Undead the turning can still affect: type 1, type 5 (cleric).
+        undead_left, set_undead_left, UNDEAD_LEFT: u8 @ 0x1f0;
+        undead_left_b, set_undead_left_b, UNDEAD_LEFT_B: u8 @ 0x1f1;
     }
 }
 

@@ -9,12 +9,47 @@
 //! Each creator has a Rust function (called by the actions) and a native at the original address for
 //! the callers left in ROM. When the pool is full the allocation fails and nothing is created.
 
+use crate::families::player::records::Shot as ShotFields;
 use super::{Ctx, Player};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::player::ram;
 use crate::player::tables::{player_data, players, Read, Table};
+
+/// Fields of the created shots and effects that their creator sets (each type reads them under its own name,
+/// `families/player`).
+mod arg {
+    /// Step of the player's move when the effect is created (slash, blood, leap).
+    pub const MOVE_STEP: u32 = 0x5c;
+    /// Strike kind of the player (dash, cursed weapon).
+    pub const SUBACTION: u32 = 0x5c;
+    /// Target monster (16-bit pointer, banishment).
+    pub const FOE: u32 = 0x5c;
+    /// Delay before the shot starts (wand rows).
+    pub const DELAY: u32 = 0x5c;
+    /// Gesture of the player when the effect is created (shower, glows).
+    pub const GESTURE: u32 = 0x5d;
+    /// Number given to the shard (witch).
+    pub const COUNT: u32 = 0x5d;
+    /// Action or gesture compared by the effect (holy light, ice).
+    pub const ACTION: u32 = 0x56;
+    /// Step of the aura or of the wave bolt.
+    pub const AURA_STEP: u32 = 0x59;
+    /// Step of the ring.
+    pub const RING_STEP: u32 = 0x5b;
+    /// Step of the palette cycle (cure).
+    pub const PALETTE_STEP: u32 = 0x5f;
+    /// Countdown of the ice pieces (word).
+    pub const TIMER: u32 = 0x54;
+    /// Blinks of the portal sparks.
+    pub const BLINKS: u32 = 0x5a;
+    /// Bursts of the portal.
+    pub const BURSTS: u32 = 0x5e;
+    /// Player whose hand holds the chunk (16-bit pointer).
+    pub const HOST: u32 = 0x42;
+}
+
 
 /// Bytes of the created object.
 mod field {
@@ -128,12 +163,12 @@ pub fn slash(g: &mut Ctx, p: Player, numbered: Option<u8>) {
             let step = step_of(g, p);
             effect(g, p, kind::SLASH, Some(0), |g, o| {
                 o.set_u8(g.b, field::PARAM, n);
-                o.set_u8(g.b, 0x5c, step);
+                o.set_u8(g.b, arg::MOVE_STEP, step);
             });
         }
         None => {
             let step = step_of(g, p);
-            effect(g, p, kind::SLASH, Some(1), |g, o| o.set_u8(g.b, 0x5c, step));
+            effect(g, p, kind::SLASH, Some(1), |g, o| o.set_u8(g.b, arg::MOVE_STEP, step));
         }
     }
 }
@@ -142,7 +177,7 @@ pub fn slash(g: &mut Ctx, p: Player, numbered: Option<u8>) {
 pub fn blood(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::BLOOD, None, |g, o| o.set_u8(g.b, 0x5c, step));
+    effect(g, p, kind::BLOOD, None, |g, o| o.set_u8(g.b, arg::MOVE_STEP, step));
 }
 
 /// 0x4ab48: healing of an ally (cleric's prayer), prayer number `n`.
@@ -161,7 +196,7 @@ pub fn potion(g: &mut Ctx, p: Player) {
 pub fn holy_light(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::HOLY_LIGHT, None, |g, o| o.set_u8(g.b, 0x56, step));
+    effect(g, p, kind::HOLY_LIGHT, None, |g, o| o.set_u8(g.b, arg::ACTION, step));
 }
 
 /// 0x4b5ac: ray. `aimed` false: two rays (parameter 0 and 1); true: a single aimed one (variant 1).
@@ -175,7 +210,7 @@ pub fn beam(g: &mut Ctx, p: Player, aimed: bool) {
     for param in [0, 1] {
         let made = effect(g, p, kind::BEAM, Some(0), |g, o| {
             o.set_u8(g.b, field::PARAM, param);
-            o.set_u8(g.b, 0x5f, step);
+            o.set_u8(g.b, arg::PALETTE_STEP, step);
         });
         if made.is_none() {
             return;
@@ -216,7 +251,7 @@ pub fn banish(g: &mut Ctx, p: Player, foe: Option<u32>) {
     for param in (0..4).rev() {
         let made = effect(g, p, kind::BANISH, Some(1), |g, o| {
             o.set_u8(g.b, field::PARAM, param);
-            o.set_u16(g.b, 0x5c, foe as u16);
+            o.set_u16(g.b, arg::FOE, foe as u16);
         });
         if made.is_none() {
             return;
@@ -240,7 +275,7 @@ pub fn shower(g: &mut Ctx, p: Player, side: u8) {
     let step = step_of(g, p);
     effect(g, p, kind::SHOWER, Some(1), |g, o| {
         o.set_u8(g.b, field::PARAM, side);
-        o.set_u8(g.b, 0x5d, step);
+        o.set_u8(g.b, arg::GESTURE, step);
     });
 }
 
@@ -248,7 +283,7 @@ pub fn shower(g: &mut Ctx, p: Player, side: u8) {
 pub fn aura(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::AURA, Some(v), |g, o| o.set_u8(g.b, 0x59, step));
+    effect(g, p, kind::AURA, Some(v), |g, o| o.set_u8(g.b, arg::AURA_STEP, step));
 }
 
 /// 0x4f004: lightning target, variant `v`. Returns the created effect (or nothing if the pool is full).
@@ -283,7 +318,7 @@ pub fn leap(g: &mut Ctx, p: Player, v: u8) {
         return;
     }
     let step = step_of(g, p);
-    effect(g, p, kind::LEAP, Some(v), |g, o| o.set_u8(g.b, 0x5c, step));
+    effect(g, p, kind::LEAP, Some(v), |g, o| o.set_u8(g.b, arg::MOVE_STEP, step));
 }
 
 /// 0x4fd2c: equipment swap, variant `v`.
@@ -296,7 +331,7 @@ pub fn swap(g: &mut Ctx, p: Player, v: u8) {
 pub fn dash(g: &mut Ctx, p: Player) {
     cov!();
     let sub = p.u8(g, Player::SUBACTION);
-    effect(g, p, kind::DASH, None, |g, o| o.set_u8(g.b, 0x5c, sub));
+    effect(g, p, kind::DASH, None, |g, o| o.set_u8(g.b, arg::SUBACTION, sub));
 }
 
 /// 0x50324: wall target; the scene's wall reserve (`A5 - 0x5fbe`) counts one more. Returns what the caller tests:
@@ -334,7 +369,7 @@ pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
     o.set_u16(g.b, Obj::Z, z);
     o.set_u16(g.b, Obj::Y, y);
     o.set_u16(g.b, Obj::Z, z.wrapping_add(0x40));
-    o.set_u8(g.b, 0x5d, step);
+    o.set_u8(g.b, arg::GESTURE, step);
 }
 
 /// 0x4cd8e: storm bolt, at the player's position, 0x48 higher and just in front of them.
@@ -353,7 +388,7 @@ pub fn flare(g: &mut Ctx, p: Player) {
     o.set_u16(g.b, Obj::Z, z);
     let y = o.u16(g.b, Obj::Y).wrapping_sub(1);
     o.set_u16(g.b, Obj::Y, y);
-    o.set_u8(g.b, 0x5d, step);
+    o.set_u8(g.b, arg::GESTURE, step);
 }
 
 /// 0x4ccac: summoned creature, turned like the player.
@@ -377,7 +412,7 @@ pub fn portal(g: &mut Ctx, p: Player, v: u8) {
 pub fn ring(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::RING, Some(v), |g, o| o.set_u8(g.b, 0x5b, step));
+    effect(g, p, kind::RING, Some(v), |g, o| o.set_u8(g.b, arg::RING_STEP, step));
 }
 
 /// 0x4b196: ray (spell 17), variant `v`.
@@ -403,7 +438,7 @@ pub fn ice_columns(g: &mut Ctx, p: Player) {
     cov!();
     for n in 0..4u8 {
         let made = effect(g, p, kind::ICE, Some(0), |g, o| {
-            o.set_u16(g.b, 0x54, 1 + 8 * n as u16);
+            o.set_u16(g.b, arg::TIMER, 1 + 8 * n as u16);
             o.set_u8(g.b, field::PARAM, n);
         });
         if made.is_none() {
@@ -439,7 +474,7 @@ pub fn ice_shards(g: &mut Ctx, p: Player) {
         o.set_u8(g.b, Obj::VARIANT, 4);
         o.set_u8(g.b, Player::FACING, facing);
         o.set_u8(g.b, field::PARAM, 2 * n);
-        o.set_u16(g.b, 0x54, 2 + 2 * n as u16);
+        o.set_u16(g.b, arg::TIMER, 2 + 2 * n as u16);
         o.set_u16(g.b, Obj::X, x);
         o.set_u16(g.b, Obj::Z, z);
         o.set_u16(g.b, Obj::Y, y.wrapping_sub(1));
@@ -450,7 +485,7 @@ pub fn ice_shards(g: &mut Ctx, p: Player) {
 pub fn ice_crown(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::ICE, Some(5), |g, o| o.set_u8(g.b, 0x56, step));
+    effect(g, p, kind::ICE, Some(5), |g, o| o.set_u8(g.b, arg::ACTION, step));
 }
 
 // ---- player shot creators ---------------------------------------------------------------------
@@ -502,9 +537,9 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     let Some(o) = create(g, p, &pools::PSHL, shot.kind) else {
         return false;
     };
-    o.set_u8(g.b, 0x2a, 2);
-    o.set_u8(g.b, 0x45, shot.power.0);
-    o.set_u8(g.b, 0x46, shot.power.1);
+    o.set_u8(g.b, ShotFields::OWN_PALETTE, 2);
+    o.set_u8(g.b, ShotFields::ATTACK_ID, shot.power.0);
+    o.set_u8(g.b, ShotFields::ATTACK_POWER, shot.power.1);
     let facing = p.u8(g, Player::FACING);
     if shot.copies_facing {
         o.set_u8(g.b, Player::FACING, facing);
@@ -572,8 +607,8 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: &Table)
         wr16(g.b, rod.counter, alive.wrapping_add(1));
         let (facing, x, y) = (p.u8(g, Player::FACING), p.u16(g, Obj::X), p.u16(g, Obj::Y));
         o.set_u8(g.b, Obj::VARIANT, variant);
-        o.set_u8(g.b, 0x5c, delay);
-        o.set_u8(g.b, 0x2c, facing);
+        o.set_u8(g.b, arg::DELAY, delay);
+        o.set_u8(g.b, ShotFields::FLIP, facing);
         o.set_u16(g.b, Obj::X, x.wrapping_add(offset));
         o.set_u16(g.b, Obj::Y, y);
         o.set_u16(g.b, field::LINK, p.0 as u16);
@@ -652,8 +687,8 @@ pub fn knife(g: &mut Ctx, p: Player) -> bool {
     let Some(o) = create(g, p, &pools::PSHL, kind::KNIFE) else {
         return false;
     };
-    o.set_u8(g.b, 0x45, 0xa);
-    o.set_u8(g.b, 0x46, 5);
+    o.set_u8(g.b, ShotFields::ATTACK_ID, 0xa);
+    o.set_u8(g.b, ShotFields::ATTACK_POWER, 5);
     link(g, o, p);
     true
 }
@@ -686,7 +721,7 @@ pub fn witch(g: &mut Ctx, p: Player) {
         o.set_u16(g.b, field::LINK, p.0 as u16);
         let slot = player_data().spawn_slots.at8(g.b, n as u32);
         o.set_u8(g.b, Obj::SPEED_INDEX, slot);
-        o.set_u8(g.b, 0x5d, n);
+        o.set_u8(g.b, arg::COUNT, n);
     }
 }
 
@@ -699,8 +734,8 @@ pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     o.set_u16(g.b, field::LINK, p.0 as u16);
     let level = p.u8(g, Player::LEVEL) as u32;
     let (power, boss) = (players("magic_damage/2").at8(g.b, level), players("magic_damage/2").at8(g.b, 30 + level));
-    o.set_u8(g.b, 0x45, power);
-    o.set_u8(g.b, 0x46, boss);
+    o.set_u8(g.b, ShotFields::ATTACK_ID, power);
+    o.set_u8(g.b, ShotFields::ATTACK_POWER, boss);
 }
 
 // ---- creators without a native until now (reachable, never exercised by the scenarios) --------------------
@@ -710,7 +745,7 @@ pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
 pub fn cursed_weapon(g: &mut Ctx, p: Player) {
     cov!();
     let sub = p.u8(g, Player::SUBACTION);
-    effect(g, p, kind::CURSED_WEAPON, None, |g, o| o.set_u8(g.b, 0x5c, sub));
+    effect(g, p, kind::CURSED_WEAPON, None, |g, o| o.set_u8(g.b, arg::SUBACTION, sub));
 }
 
 /// Copies the player's orientation and position into the shard, a bit in front of them (depth + 1).
@@ -746,7 +781,7 @@ pub fn dying_shards(g: &mut Ctx, p: Player) {
     let Some(o) = create(g, p, &pools::PEFF, kind::SHARD) else { return };
     o.set_u8(g.b, Obj::VARIANT, 1);
     shard_place(g, p, o);
-    o.set_u16(g.b, 0x42, p.0 as u16);
+    o.set_u16(g.b, arg::HOST, p.0 as u16);
 }
 
 /// 0x51aa4: storm swarm (kind 0x2e), in two halves: the second (variant 1) turned to the left.
@@ -777,7 +812,7 @@ pub fn portal_glow(g: &mut Ctx, p: Player) {
     let y = o.u16(g.b, Obj::Y).wrapping_sub(1);
     o.set_u16(g.b, Obj::Y, y);
     let step = step_of(g, p);
-    o.set_u8(g.b, 0x5d, step);
+    o.set_u8(g.b, arg::GESTURE, step);
 }
 
 /// 0x4cfee: four portal sparks (kind 0x13, variant 1, numbers 3 to 0 at `+0x2f`), then the screen takes the
@@ -788,7 +823,7 @@ pub fn portal_sparks(g: &mut Ctx, p: Player) {
         let Some(o) = create(g, p, &pools::PEFF, kind::PORTAL_SPARK) else { break };
         o.set_u8(g.b, Obj::VARIANT, 1);
         o.set_u8(g.b, field::PARAM, n);
-        o.set_u8(g.b, 0x5a, 4);
+        o.set_u8(g.b, arg::BLINKS, 4);
         link(g, o, p);
     }
     crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_RED);
@@ -805,7 +840,7 @@ pub fn storm_spell(g: &mut Ctx, p: Player) {
 pub fn rain_glow(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
-    effect(g, p, kind::RAIN_GLOW, Some(v), |g, o| o.set_u8(g.b, 0x5d, step));
+    effect(g, p, kind::RAIN_GLOW, Some(v), |g, o| o.set_u8(g.b, arg::GESTURE, step));
 }
 
 /// 0x4d2c0: spark of the wall of fire (kind 0x15), variant `v` (0: preparation, 1: cast).
@@ -821,7 +856,7 @@ pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
     cov!();
     let step = step_of(g, p);
     if !columns {
-        if effect(g, p, kind::WAVE_BOLT, None, |g, o| o.set_u8(g.b, 0x59, step)).is_some() {
+        if effect(g, p, kind::WAVE_BOLT, None, |g, o| o.set_u8(g.b, arg::AURA_STEP, step)).is_some() {
             p.set_u16(g, Player::Y_FRACTION, 0x8000);
         }
         return;
@@ -829,7 +864,7 @@ pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
     for param in [1, 0] {
         let made = effect(g, p, kind::WAVE_BOLT, Some(1), |g, o| {
             o.set_u8(g.b, field::PARAM, param);
-            o.set_u8(g.b, 0x59, step);
+            o.set_u8(g.b, arg::AURA_STEP, step);
         });
         if made.is_none() {
             return;
@@ -852,7 +887,7 @@ pub fn moon_b(g: &mut Ctx, p: Player) {
 /// 0x4d064: portal shard (kind 0x14, variant 1) numbered `n` (`+0x5e`). True if it could be created (D0 = 0).
 pub fn portal_burst(g: &mut Ctx, p: Player, n: u8) -> bool {
     cov!();
-    effect(g, p, kind::PORTAL_BURST, Some(1), |g, o| o.set_u8(g.b, 0x5e, n)).is_some()
+    effect(g, p, kind::PORTAL_BURST, Some(1), |g, o| o.set_u8(g.b, arg::BURSTS, n)).is_some()
 }
 
 /// 0x54274: rain of bolts (PSHL shots of kind 0x14, variants 0, 1, 2...): one bolt every 0x40 pixels, from

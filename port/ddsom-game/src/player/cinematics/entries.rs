@@ -1,5 +1,6 @@
 //! Scene entries of the players (state `+4` = 0, `+5` = 4): common tools and routines 0x23ac8 to 0x253a0.
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{pc16, pc32};

@@ -20,7 +20,7 @@ use super::super::combos::clear_recognizers;
 use super::super::init::init_weapon_stats;
 use super::super::walk::move_xz;
 use super::super::{animation, ram, Ctx, Player};
-use crate::mem::{wr8, A5};
+use crate::mem::wr8;
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::external as ext;
@@ -364,8 +364,8 @@ fn leap(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) == 2 {
                 p.set_u8(g, field::EVENT, 0);
-                let strokes = p.u8(g, 0x1e8) + 1;
-                p.set_u8(g, 0x1e8, strokes);
+                let strokes = p.u8(g, Player::ACTION_COUNT) + 1;
+                p.set_u8(g, Player::ACTION_COUNT, strokes);
                 if strokes == 5 {
                     next_step(g, p);
                     animation::start_plain(g, p, 0x1a);
@@ -389,7 +389,7 @@ fn leap_mace_begin(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STRIKE_HITS, 0);
     p.set_u8(g, field::MOVE_STATE, 1);
     p.set_u8(g, field::MOVE_KIND, 1);
-    p.set_u8(g, 0x1e8, 0);
+    p.set_u8(g, Player::ACTION_COUNT, 0);
     animation::start_plain(g, p, 0x19);
 }
 
@@ -405,8 +405,8 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             let level = 2 * p.u8(g, Player::LEVEL) as u32;
             let (first, second) = (players("undead_counts").at8(g.b, level), players("undead_counts").at8(g.b, level + 1));
             let (first, second) = if p.u8(g, Player::TALISMAN) == 3 { (0xff, 0xff) } else { (first, second) };
-            p.set_u8(g, 0x1f0, first);
-            p.set_u8(g, 0x1f1, second);
+            p.set_u8(g, Player::UNDEAD_LEFT, first);
+            p.set_u8(g, Player::UNDEAD_LEFT_B, second);
             animation::start_plain(g, p, 0x21);
         }
         2 => {
@@ -416,9 +416,9 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 if ram::INPUT_MASK.get(g.b) & 0x40 != 0 {
                     ram::INPUT_MASK.set(g.b, 0x7f);
                 }
-                p.set_u8(g, 0x1ea, 4);
-                p.set_u8(g, 0x1eb, 3);
-                p.set_u8(g, 0x1ec, 1);
+                p.set_u8(g, Player::SPELL_BLINKS, 4);
+                p.set_u8(g, Player::SPELL_PHASE, 3);
+                p.set_u8(g, Player::STRIKE_LANDED, 1);
                 ram::SCROLL1_Y.set(g.b, 0x100);
                 // 0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da; the palette copy leaves its longs 2 to 5 in D2-D5
                 crate::families::creators::for_players::effect_8(&mut g.leftovers, g.b, p.obj());
@@ -431,20 +431,20 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             animation::step(g, p);
         }
         4 => {
-            let blink = p.u8(g, 0x1ea).wrapping_sub(1);
-            p.set_u8(g, 0x1ea, blink);
+            let blink = p.u8(g, Player::SPELL_BLINKS).wrapping_sub(1);
+            p.set_u8(g, Player::SPELL_BLINKS, blink);
             if blink != 0 {
                 return;
             }
-            p.set_u8(g, 0x1ea, 4);
+            p.set_u8(g, Player::SPELL_BLINKS, 4);
             ram::SCROLL1_Y.set(g.b, 0);
-            let lit = p.u8(g, 0x1ec) ^ 1;
-            p.set_u8(g, 0x1ec, lit);
+            let lit = p.u8(g, Player::STRIKE_LANDED) ^ 1;
+            p.set_u8(g, Player::STRIKE_LANDED, lit);
             if lit != 0 {
                 ram::SCROLL1_Y.set(g.b, 0x100);
             }
-            let flashes = p.u8(g, 0x1eb).wrapping_sub(1);
-            p.set_u8(g, 0x1eb, flashes);
+            let flashes = p.u8(g, Player::SPELL_PHASE).wrapping_sub(1);
+            p.set_u8(g, Player::SPELL_PHASE, flashes);
             if flashes != 0 {
                 return;
             }

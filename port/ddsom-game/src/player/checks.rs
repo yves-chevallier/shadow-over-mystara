@@ -69,8 +69,8 @@ pub fn turn_check(g: &mut Ctx, p: Player) -> bool {
         }
     }
     p.flip(g);
-    p.set_u32(g, 0x1b2, 0);
-    p.set_u16(g, 0x1b6, 0);
+    p.set_u32(g, Player::RECOGNIZERS + 0x12, 0);
+    p.set_u16(g, Player::RECOGNIZERS + 0x16, 0);
     animation::start(g, p, anim);
     true
 }

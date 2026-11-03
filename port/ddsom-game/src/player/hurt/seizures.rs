@@ -1,6 +1,7 @@
 //! Reactions with their own automaton: crash landing (0x34), hurled out (0x3e), shock (0x22), dizzy (0x24),
 //! fallen (0x38), sitting (0x28), frozen (stepped reaction 0x3b30e), held (0x32).
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 

@@ -537,7 +537,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
         0 => {
             next_step(g, p);
             p.set_u8(g, Player::STRIKE_HITS, 0);
-            p.set_u8(g, 0x1ec, 0);
+            p.set_u8(g, Player::STRIKE_LANDED, 0);
             p.set_u8(g, Player::JUMP_KIND, 0);
             p.set_u16(g, Obj::VZ, 0x380);
             p.set_u16(g, Obj::AZ, (-0x38i16) as u16);

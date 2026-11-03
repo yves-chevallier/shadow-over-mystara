@@ -1,5 +1,6 @@
 //! Guard, slow end, rare poses (actions 0x26, 0x2c, 0x30), hop, fall-in, push and spell fizzle.
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{player_data, pc16, Read};
@@ -211,12 +212,12 @@ pub fn hop(g: &mut Ctx, p: Player) {
             let y = p.u16(g, Obj::Y).wrapping_sub(4);
             p.set_u16(g, Obj::Y, y);
             animation::step(g, p);
-            p.set_u8(g, 0x3b, 0);
+            p.set_u8(g, Player::GROUND_MARK, 0);
             clamp_x(g.b, p);
         }
         v => unreachable!("0x36c12 : value {v:#x} outside the original jump table"),
     }
-    p.set_u8(g, 0x3b, 0);
+    p.set_u8(g, Player::GROUND_MARK, 0);
     let z = p.u16(g, Obj::Z).wrapping_add(2);
     p.set_u16(g, Obj::Z, z);
     let phase = p.u8(g, Player::TIMER_6F).wrapping_add(1) & 1;

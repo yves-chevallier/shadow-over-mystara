@@ -1,5 +1,6 @@
 //! Leaps of the characters (action 0x12), parry and the special-move actions (combos, backstab).
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{player_data, players, long, Read};
@@ -116,7 +117,7 @@ pub fn parry(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::ACTION) {
         0 => {
             p.set_u8(g, Player::ACTION, 2);
-            p.set_u8(g, 0x3e, 0);
+            p.set_u8(g, Player::ATTACK_ID, 0);
             set_vx_pair(g, p, 0x400, (-64i16) as u16);
             parry_slide(g, p);
         }
@@ -206,7 +207,7 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
                 return false;
             }
             p.set_state(g, State::pack(2, 0, 6, 0).0);
-            let facing = p.u8(g, 0x1a5);
+            let facing = p.u8(g, Player::RECOGNIZERS + 5);
             p.set_u8(g, Player::FACING, facing);
             facing != 0
         }
@@ -215,7 +216,7 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
                 return false;
             }
             p.set_state(g, State::pack(2, 0, 0x10, 0).0);
-            let facing = p.u8(g, 0x1ab);
+            let facing = p.u8(g, Player::RECOGNIZERS + 0xb);
             p.set_u8(g, Player::FACING, facing);
             true
         }

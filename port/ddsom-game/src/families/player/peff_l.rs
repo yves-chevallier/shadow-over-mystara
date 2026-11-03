@@ -11,6 +11,9 @@ use crate::objects::Obj;
 use crate::objects::Current;
 use crate::player::tables::{word};
 
+/// Step of the slide of the icons toward their place (pixels per frame).
+const SLIDE_STEP: u16 = 8;
+
 /// Type 17 (0x4c9fe): icon of an equipment slot (rank `+3`) of the owning player, placed on the screen at a spot that
 /// depends on the game (`A5+0x20`: one-player mode or more) and on the player. It changes frame when the equipment
 /// changes, reaches its place at eight pixels per frame, and follows the scroll of the camera. No processing during the
@@ -189,12 +192,12 @@ mod slot_icon {
             return;
         }
         if t > here {
-            x.add16(at, 8);
+            x.add16(at, SLIDE_STEP);
             if t <= x.u16(at) as i16 {
                 x.set16(at, target);
             }
         } else {
-            x.add16(at, 0xfff8);
+            x.add16(at, SLIDE_STEP.wrapping_neg());
             if t >= x.u16(at) as i16 {
                 x.set16(at, target);
             }

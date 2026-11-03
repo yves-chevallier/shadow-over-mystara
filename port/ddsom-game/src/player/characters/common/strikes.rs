@@ -1,5 +1,7 @@
 //! Common character code: strikes, allies in range and the spell skeleton.
 
+use crate::objects::Obj;
+use crate::player::Player;
 use super::*;
 
 // ---- common strikes ----------------------------------------------------------------------------
@@ -229,8 +231,8 @@ pub fn flash_screen(g: &mut Ctx, p: Player) {
         return;
     }
     ram::FADE_PAGES.set(g.b, 0xc);
-    let phase = (p.u8(g, 0x1eb) + 1) & 3;
-    p.set_u8(g, 0x1eb, phase);
+    let phase = (p.u8(g, Player::SPELL_PHASE) + 1) & 3;
+    p.set_u8(g, Player::SPELL_PHASE, phase);
     let color: u16 = if phase & 2 != 0 { 0x2000 } else { 0xc000 };
     crate::palette::set_brightness(g.b, color);
 }
@@ -240,15 +242,15 @@ pub fn flash_screen(g: &mut Ctx, p: Player) {
 /// 0 to 4), and the gesture `base + intensity` is played; otherwise the animation advances.
 pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
     cov!();
-    let wait = p.u8(g, 0x1e8);
+    let wait = p.u8(g, Player::ACTION_COUNT);
     if wait != 0 {
-        p.set_u8(g, 0x1e8, wait - 1);
+        p.set_u8(g, Player::ACTION_COUNT, wait - 1);
         animation::step(g, p);
         return;
     }
     let keys = p.u8(g, Player::KEYS_HELD);
     let forward = if p.u8(g, Player::FACING) != 0 { 1 } else { 0 };
-    let level = p.u8(g, 0x1e9);
+    let level = p.u8(g, Player::SPELL_LEVEL);
     if keys >> forward & 1 == 0 {
         let next = if keys & 8 != 0 {
             level.checked_sub(1)
@@ -258,8 +260,8 @@ pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
             None
         };
         if let Some(next) = next {
-            p.set_u8(g, 0x1e8, 0x10);
-            p.set_u8(g, 0x1e9, next);
+            p.set_u8(g, Player::ACTION_COUNT, 0x10);
+            p.set_u8(g, Player::SPELL_LEVEL, next);
             animation::start_plain(g, p, base + next as u16);
             return;
         }
@@ -271,10 +273,10 @@ pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
 pub fn blink_screen(g: &mut Ctx, p: Player) {
     cov!();
     ram::SCROLL1_Y.set(g.b, 0);
-    let blinks = p.u8(g, 0x1ea);
+    let blinks = p.u8(g, Player::SPELL_BLINKS);
     if blinks != 0 {
         ram::SCROLL1_Y.set(g.b, 0x100);
-        p.set_u8(g, 0x1ea, blinks - 1);
+        p.set_u8(g, Player::SPELL_BLINKS, blinks - 1);
     }
 }
 

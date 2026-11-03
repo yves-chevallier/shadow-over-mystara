@@ -335,7 +335,7 @@ pub const CAST_14: Cast = Cast {
 
 pub const CAST_15: Cast = Cast {
     frames: 0x78,
-    prepare: |g, p| p.set_u8(g, 0x1e9, 2),
+    prepare: |g, p| p.set_u8(g, Player::SPELL_LEVEL, 2),
     fire: |g, p, _| {
         spawn::ice_spell(g, p);
         spawn::ice_crown(g, p);
@@ -392,7 +392,7 @@ pub const CAST_18: Cast = Cast {
 /// Healing potion (no. 19): nearby allies are healed as by the cleric's spell.
 pub const CAST_19: Cast = Cast {
     frames: 0x78,
-    prepare: |g, p| p.set_u8(g, 0x1ed, 0),
+    prepare: |g, p| p.set_u8(g, Player::SPELL_REPEAT, 0),
     after_freeze: common::heal_scan,
     every_frame: common::heal_flicker,
     fire: |g, p, _| {

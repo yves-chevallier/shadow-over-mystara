@@ -1,5 +1,7 @@
 //! Special attack of the cleric: equipment swap, turning away the undead, prayer skeleton, hold, storm, swarm.
 
+use crate::families::enemy_common::records::Enemy;
+use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;
 use super::*;
@@ -73,7 +75,7 @@ pub(super) fn scare_undead(g: &mut Ctx, p: Player) {
     let level = p.u8(g, Player::LEVEL);
     let talisman = p.u8(g, Player::TALISMAN) == 3;
     for k in 0..23 {
-        let o = Obj(A5 + 0x299e + 0xc0 * k);
+        let o = crate::objects::pools::ENEMY.slot(k);
         let in_play = o.u8(g.b, Obj::ACTIVE) != 0 && o.u8(g.b, Obj::FLAGS) & 1 != 0;
         let kind = o.u8(g.b, Obj::KIND);
         let counter = if in_play && kind == 1 {
@@ -94,7 +96,7 @@ pub(super) fn scare_undead(g: &mut Ctx, p: Player) {
         } else {
             2
         };
-        o.set_u8(g.b, 0x8f, mark);
+        o.set_u8(g.b, Victim::SPELL_MARK, mark);
     }
 }
 
@@ -204,18 +206,18 @@ pub(super) fn hold_foes(g: &mut Ctx, p: Player) {
         for o in pool.iter() {
             if o.u8(g.b, Obj::ACTIVE) == 0
                 || o.u8(g.b, Obj::FLAGS) & 1 == 0
-                || o.u16(g.b, 0x62) == 0
-                || o.u8(g.b, 0x40) != 0
-                || o.u8(g.b, 0x49) == 0x9c
-                || o.u32(g.b, 0x94) >> 15 & 1 != 0
+                || o.u16(g.b, Enemy::HP) == 0
+                || o.u8(g.b, Victim::BOXES_OFF) != 0
+                || o.u8(g.b, Enemy::REACTION) == 0x9c
+                || o.u32(g.b, Enemy::IMMUNITY) >> 15 & 1 != 0
             {
                 continue;
             }
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
-            o.set_u8(g.b, 0x49, 0x9c);
-            o.set_u8(g.b, 0x48, index);
-            o.set_u8(g.b, 0x4b, character);
-            o.set_u16(g.b, 0x54, p.0 as u16);
+            o.set_u8(g.b, Enemy::REACTION, 0x9c);
+            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
+            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
             left = left.wrapping_sub(1);
             if left == 0 {
                 break;

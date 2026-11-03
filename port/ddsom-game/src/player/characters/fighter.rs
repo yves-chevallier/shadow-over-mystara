@@ -517,7 +517,7 @@ fn whirl(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 2);
             p.set_u8(g, Player::STRIKE, 0);
-            p.set_u8(g, 0x1ec, 0);
+            p.set_u8(g, Player::STRIKE_LANDED, 0);
             let anim = if p.u16(g, Obj::Z) != 0 { 0x1c } else { 0x1b };
             animation::start_plain(g, p, anim);
             g.sound(ext::sound::SPIN, p);
@@ -534,8 +534,8 @@ fn whirl(g: &mut Ctx, p: Player) {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::blood(g, p);
             }
-            if p.u8(g, 0x1ec) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
-                p.set_u8(g, 0x1ec, 1);
+            if p.u8(g, Player::STRIKE_LANDED) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
+                p.set_u8(g, Player::STRIKE_LANDED, 1);
                 let hp = (p.u16(g, Player::HP) as i16).wrapping_sub(0xc);
                 p.set_u16(g, Player::HP, if hp > 0 { hp as u16 } else { 1 });
             }

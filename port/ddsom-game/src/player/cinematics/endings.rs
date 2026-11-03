@@ -1,8 +1,16 @@
 //! Step tables of the end-of-scene cinematics (routines 0x2411a to 0x24de6).
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{pc8, pc16, word, long};
+
+/// Countdown of the palette fade of the exit (player scratch).
+const FADE_TIMER: u32 = 0x1e6;
+/// Palette set reached by the fade (player scratch).
+const FADE_SET: u32 = 0x1e7;
+/// Wait between two fade steps (player scratch).
+const FADE_WAIT: u32 = 0x1e8;
 
 // ---- 0x2411a ----------------------------------------------------------------------------------
 
@@ -220,9 +228,9 @@ pub(super) const END_245EC: Steps = &[
     (0x246fe, |g, p| {
         if p.u16(g, Obj::Y) == EXIT_Y {
             next(g, p);
-            p.set_u8(g, 0x1e7, 0);
-            p.set_u8(g, 0x1e8, 1);
-            p.set_u8(g, 0x1e6, 48);
+            p.set_u8(g, FADE_SET, 0);
+            p.set_u8(g, FADE_WAIT, 1);
+            p.set_u8(g, FADE_TIMER, 48);
             anim_step(g, p);
             return;
         }
@@ -243,20 +251,20 @@ pub(super) const PALETTE_RAM: u32 = 0x91c000;
 /// to the next set (three sets).
 pub(super) fn fade_out(g: &mut Ctx, p: Player) {
     anim_step(g, p);
-    let left = p.u8(g, 0x1e6).wrapping_sub(1);
-    p.set_u8(g, 0x1e6, left);
+    let left = p.u8(g, FADE_TIMER).wrapping_sub(1);
+    p.set_u8(g, FADE_TIMER, left);
     if left == 0 {
         next(g, p);
         let flags = p.u8(g, Player::FLAGS) | 2;
         p.set_u8(g, Player::FLAGS, flags);
     }
-    p.set_u8(g, 0x3b, 0);
-    let set = p.u8(g, 0x1e7);
+    p.set_u8(g, Player::GROUND_MARK, 0);
+    let set = p.u8(g, FADE_SET);
     if set > 2 {
         return;
     }
-    let wait = p.u8(g, 0x1e8).wrapping_sub(1);
-    p.set_u8(g, 0x1e8, wait);
+    let wait = p.u8(g, FADE_WAIT).wrapping_sub(1);
+    p.set_u8(g, FADE_WAIT, wait);
     if wait != 0 {
         return;
     }
@@ -267,8 +275,8 @@ pub(super) fn fade_out(g: &mut Ctx, p: Player) {
         let v = long(g.b, from + 4 * i);
         wr32(g.b, to + 4 * i, v);
     }
-    p.set_u8(g, 0x1e8, 12);
-    p.set_u8(g, 0x1e7, set + 1);
+    p.set_u8(g, FADE_WAIT, 12);
+    p.set_u8(g, FADE_SET, set + 1);
 }
 
 // ---- 0x247b2 ----------------------------------------------------------------------------------

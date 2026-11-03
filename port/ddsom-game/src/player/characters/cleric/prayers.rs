@@ -1,5 +1,7 @@
 //! Prayers of the cleric, continued: beam, banish, holy light, protection, blessing, heal.
 
+use crate::families::enemy_common::records::Enemy;
+use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;
 use super::*;
@@ -114,9 +116,9 @@ pub(super) fn banish_foes(g: &mut Ctx, p: Player) -> u8 {
         for o in pool.iter() {
             if o.u8(g.b, Obj::ACTIVE) == 0
                 || o.u8(g.b, Obj::FLAGS) & 1 == 0
-                || o.u16(g.b, 0x62) == 0
-                || o.u8(g.b, 0x40) != 0
-                || o.u32(g.b, 0x94) >> 19 & 1 != 0
+                || o.u16(g.b, Enemy::HP) == 0
+                || o.u8(g.b, Victim::BOXES_OFF) != 0
+                || o.u32(g.b, Enemy::IMMUNITY) >> 19 & 1 != 0
             {
                 continue;
             }
@@ -192,45 +194,45 @@ pub(super) fn holy_damage(g: &mut Ctx, p: Player) {
         for o in pool.iter() {
             if o.u8(g.b, Obj::ACTIVE) == 0
                 || o.u8(g.b, Obj::FLAGS) & 1 == 0
-                || o.u16(g.b, 0x62) == 0
-                || o.u8(g.b, 0x40) != 0
+                || o.u16(g.b, Enemy::HP) == 0
+                || o.u8(g.b, Victim::BOXES_OFF) != 0
                 || o.u16(g.b, Obj::Z) != 0
-                || o.u32(g.b, 0x94) >> 20 & 1 != 0
+                || o.u32(g.b, Enemy::IMMUNITY) >> 20 & 1 != 0
             {
                 continue;
             }
             o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, Obj::FLAGS, 1);
-            o.set_u8(g.b, 0x48, index);
-            o.set_u8(g.b, 0x49, 0x10);
-            o.set_u8(g.b, 0x4b, character);
-            o.set_u16(g.b, 0x54, p.0 as u16);
-            o.set_u8(g.b, 0x2c, 0);
+            o.set_u8(g.b, Victim::HIT_BY_KIND, index);
+            o.set_u8(g.b, Enemy::REACTION, 0x10);
+            o.set_u8(g.b, Victim::HIT_BY_VARIANT, character);
+            o.set_u16(g.b, Enemy::HOLDER, p.0 as u16);
+            o.set_u8(g.b, Enemy::FLIP, 0);
             if g.random() & 1 != 0 {
-                o.set_u8(g.b, 0x2c, 0x20);
+                o.set_u8(g.b, Enemy::FLIP, 0x20);
             }
-            let facing = o.u8(g.b, 0x2c);
-            o.set_u8(g.b, 0x4a, facing);
+            let facing = o.u8(g.b, Enemy::FLIP);
+            o.set_u8(g.b, Enemy::ATTACKER_FLIP, facing);
             let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
             p.set_u16(g, Player::SPELL_KILLS, counter);
-            let hits = o.u8(g.b, 0x9c).wrapping_add(1);
-            o.set_u8(g.b, 0x9c, hits);
+            let hits = o.u8(g.b, Victim::HITS_TAKEN).wrapping_add(1);
+            o.set_u8(g.b, Victim::HITS_TAKEN, hits);
             let mut damage = byte(g.b, table + level) as u16;
             if p.u8(g, Player::ARMOR) == 4 {
                 damage = damage.wrapping_add(damage >> 2);
             }
-            let hp = (o.u16(g.b, 0x62) as i16).wrapping_sub(damage as i16);
-            o.set_u16(g.b, 0x62, if hp < 0 { 0 } else { hp as u16 });
+            let hp = (o.u16(g.b, Enemy::HP) as i16).wrapping_sub(damage as i16);
+            o.set_u16(g.b, Enemy::HP, if hp < 0 { 0 } else { hp as u16 });
             if o.u8(g.b, Obj::CLASS) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
-                o.set_u16(g.b, 0x62, 0);
+                o.set_u16(g.b, Enemy::HP, 0);
             }
-            if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
+            if o.u16(g.b, Enemy::HP) == 0 && o.u8(g.b, Victim::DEATH_CREDIT) != 0 {
                 p.set_u8(g, Player::HOLY, 1);
-                let loot = o.u8(g.b, 0x9a);
+                let loot = o.u8(g.b, Victim::DEATH_VALUE);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
-            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, Obj::CLASS) as u32);
+            let (max, hp, class) = (o.u16(g.b, Enemy::HP_MAX) as u32, o.u16(g.b, Enemy::HP) as u32, o.u8(g.b, Obj::CLASS) as u32);
             crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
         }
     }
@@ -393,7 +395,7 @@ pub(super) fn prayer_heal(g: &mut Ctx, p: Player, variant: u32) {
     match p.u8(g, Player::STEP) {
         0 => {
             begin_prayer(g, p, Some(0x60), 0x154 + variant);
-            p.set_u8(g, 0x1ed, 0);
+            p.set_u8(g, Player::SPELL_REPEAT, 0);
             common::dim_screen(g, p);
             start_stand(g, p);
         }

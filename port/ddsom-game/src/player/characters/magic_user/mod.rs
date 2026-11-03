@@ -321,17 +321,17 @@ pub fn dash(g: &mut Ctx, p: Player) {
         2 => {
             if animation::step(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 8);
+                p.set_u8(g, Player::ACTION_COUNT, 8);
                 animation::start(g, p, 0x1d);
                 g.sound(ext::sound::SLIDE, p);
             }
         }
         4 => {
-            let left = p.u8(g, 0x1e8).wrapping_sub(1);
-            p.set_u8(g, 0x1e8, left);
+            let left = p.u8(g, Player::ACTION_COUNT).wrapping_sub(1);
+            p.set_u8(g, Player::ACTION_COUNT, left);
             if left == 0 || p.u8(g, Player::KEYS_HELD) & 0x20 == 0 {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0xc);
+                p.set_u8(g, Player::ACTION_COUNT, 0xc);
                 let brake = if p.u8(g, Player::FACING) != 0 { -0xc0i16 } else { 0xc0 };
                 p.set_u16(g, Obj::AX, brake as u16);
             }
@@ -344,8 +344,8 @@ pub fn dash(g: &mut Ctx, p: Player) {
             let vx = p.u16(g, Obj::VX) as i16;
             let along = if p.u8(g, Player::FACING) == 0 { vx.wrapping_neg() } else { vx };
             if along as u16 > 0x500 {
-                let left = p.u8(g, 0x1e8).wrapping_sub(1);
-                p.set_u8(g, 0x1e8, left);
+                let left = p.u8(g, Player::ACTION_COUNT).wrapping_sub(1);
+                p.set_u8(g, Player::ACTION_COUNT, left);
                 if (left as i8) >= 0 {
                     common::dust_jump(g, p);
                 }

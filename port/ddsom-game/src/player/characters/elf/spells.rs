@@ -1,5 +1,7 @@
 //! Special attack of the elf and its spells (wards, beam, sparks, bolt, frost, quake, moonlight).
 
+use crate::objects::Obj;
+use crate::player::Player;
 use super::*;
 use crate::player::tables::{player_data, pc16, Read};
 
@@ -285,7 +287,7 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
             }
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0);
+                p.set_u8(g, Player::ACTION_COUNT, 0);
                 let level = p.u8(g, Player::LEVEL) as u32;
                 let gesture = player_data().elf_spark_gestures.at8(g.b, level) as u16;
                 animation::start_plain(g, p, 0x34 + gesture);
@@ -294,8 +296,8 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
         }
         4 => {
             if p.u8(g, field::EVENT) != 0 {
-                let side = p.u8(g, 0x1e8) ^ 1;
-                p.set_u8(g, 0x1e8, side);
+                let side = p.u8(g, Player::ACTION_COUNT) ^ 1;
+                p.set_u8(g, Player::ACTION_COUNT, side);
                 if is_cancelled(g, p) {
                     next_step(g, p);
                     p.set_u16(g, field::TIMER, 0x10);
@@ -374,8 +376,8 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
             }
             if countdown(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 0x10);
-                p.set_u8(g, 0x1e9, 2);
+                p.set_u8(g, Player::ACTION_COUNT, 0x10);
+                p.set_u8(g, Player::SPELL_LEVEL, 2);
                 let duration = by_level(g, p, FROST_DURATIONS);
                 p.set_u16(g, field::TIMER, duration);
                 animation::start_plain(g, p, 0x2e);
@@ -386,10 +388,10 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
                 return;
             }
             next_step(g, p);
-            p.set_u8(g, 0x1eb, 0);
-            p.set_u8(g, 0x1ea, 4);
-            p.set_u8(g, 0x1e8, 0x10);
-            p.set_u8(g, 0x1e9, 2);
+            p.set_u8(g, Player::SPELL_PHASE, 0);
+            p.set_u8(g, Player::SPELL_BLINKS, 4);
+            p.set_u8(g, Player::ACTION_COUNT, 0x10);
+            p.set_u8(g, Player::SPELL_LEVEL, 2);
             animation::start_plain(g, p, 0x2f + 2);
             g.sound(rom::FROST_START_SOUND, p);
             if is_cancelled(g, p) {
@@ -413,7 +415,7 @@ pub(super) fn frost_steer(g: &mut Ctx, p: Player) {
     if countdown(g, p) {
         next_step(g, p);
         p.set_u16(g, field::TIMER, 1);
-        p.set_u8(g, 0x1eb, 0);
+        p.set_u8(g, Player::SPELL_PHASE, 0);
     }
     common::flash_screen(g, p);
     common::intensity_keys(g, p, 0x2f);

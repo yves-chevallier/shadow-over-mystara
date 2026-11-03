@@ -71,6 +71,8 @@ record! {
         /// Class of the last attacker (`Obj::CLASS`) and its variant, set by the hit.
         hit_by_kind, set_hit_by_kind, HIT_BY_KIND: u8 @ 0x48;
         hit_by_variant, set_hit_by_variant, HIT_BY_VARIANT: u8 @ 0x4b;
+        /// Mark set by a spell on the monsters it affects (h).
+        spell_mark, set_spell_mark, SPELL_MARK: u8 @ 0x8f;
         /// Links of a lightning chain attached to the victim (h).
         chain_links, set_chain_links, CHAIN_LINKS: u8 @ 0x92;
         /// Non-zero: the death of the victim credits a value (`DEATH_VALUE`) (h).

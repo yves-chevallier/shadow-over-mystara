@@ -1,5 +1,6 @@
 //! Scene entries of the players, continued: routines 0x2541a to 0x25f7e (walk-ins, jumps, falls).
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{pc8, pc16};
@@ -214,7 +215,7 @@ pub(super) fn drop_in(g: &mut Ctx, p: Player, high: u16, clear_z: bool) {
     }
     anim_step(g, p);
     if p.u16(g, Obj::Z) > high {
-        p.set_u8(g, 0x3b, 0);
+        p.set_u8(g, Player::GROUND_MARK, 0);
     }
 }
 
@@ -230,7 +231,7 @@ pub(super) const INTRO_25954: Steps = &[
         p.set_u16(g, Obj::Y, y);
         p.set_u16(g, WAIT, wait);
         animation::start(g, p, 56);
-        p.set_u8(g, 0x3b, 0);
+        p.set_u8(g, Player::GROUND_MARK, 0);
     }),
     (0x259d0, |g, p| {
         if !waiting(g, p, WAIT) {
@@ -252,7 +253,7 @@ pub(super) fn intro_25a24(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::ACTION) != 0 {
         if countdown(g, p, WAIT) {
             p.set_state(g, 0x0200_2a00);
-            p.set_u8(g, 0x3b, 1);
+            p.set_u8(g, Player::GROUND_MARK, 1);
         }
         return;
     }
@@ -268,7 +269,7 @@ pub(super) fn intro_25a24(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::Y, y);
     p.set_u8(g, Player::FACING, facing);
     animation::start(g, p, 13);
-    p.set_u8(g, 0x3b, 0);
+    p.set_u8(g, Player::GROUND_MARK, 0);
 }
 
 // ---- 0x25aa2, 0x25b3e, 0x25ba0, 0x25c9e, 0x25d40, 0x25db4: walk-ins ----------------------
@@ -407,7 +408,7 @@ pub(super) const INTRO_25E28: Steps = &[
         let delay = pc16(g.b, 0x25e82 + 2 * k);
         p.set_u16(g, TIMER_B, delay);
         animation::start(g, p, 56);
-        p.set_u8(g, 0x3b, 0);
+        p.set_u8(g, Player::GROUND_MARK, 0);
     }),
     (0x25e8a, |g, p| {
         if waiting(g, p, WAIT) || waiting(g, p, TIMER_B) {

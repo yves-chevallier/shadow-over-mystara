@@ -11,7 +11,7 @@
 use crate::machine::Machine;
 use cps2::Cps2Bus;
 
-use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
+use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{wr32, A5};
 use crate::Native;
 use crate::player::tables::{player_data, players, pc32, byte, word, long, Read};
@@ -51,9 +51,13 @@ pub fn clear_player(g: &mut Ctx, k: u32) {
     clear(g, Player::nth(k).0, PLAYER_STRIDE / 32);
 }
 
+/// First of the eight sub-objects (two per player: weapon, shield), after the player records, and their size.
+pub const OVERLAYS: u32 = A5 + PLAYER_BASE + PLAYER_COUNT * PLAYER_STRIDE;
+pub const OVERLAY_SIZE: u32 = 0x60;
+
 /// Addresses of the eight sub-objects (two per player: weapon, shield).
 pub fn overlay(k: u32, shield: bool) -> u32 {
-    A5 + 0xdde + 0x60 * (2 * k + shield as u32)
+    OVERLAYS + OVERLAY_SIZE * (2 * k + shield as u32)
 }
 
 /// Clears the two sub-objects of player `k`.
@@ -169,8 +173,8 @@ pub fn raise_spells(g: &mut Ctx, p: Player) {
     if byte(g.b, row) as i8 >= 0 {
         for i in 0..9 {
             let minimum = byte(g.b, row + 1 + i) as i8;
-            if minimum > p.u8(g, 0x151 + i) as i8 {
-                p.set_u8(g, 0x151 + i, minimum as u8);
+            if minimum > p.u8(g, Player::SPELL_RESERVE + 1 + i) as i8 {
+                p.set_u8(g, Player::SPELL_RESERVE + 1 + i, minimum as u8);
             }
         }
     }

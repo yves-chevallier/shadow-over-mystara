@@ -96,7 +96,7 @@ const JUMP_KIT: common::JumpKit = common::JumpKit {
     takeoff: |g, p| {
         p.set_u8(g, Player::STRIKE_STYLE, 0);
         p.set_u8(g, Player::STRIKE, 0);
-        p.set_u8(g, 0x1e8, 0);
+        p.set_u8(g, Player::ACTION_COUNT, 0);
     },
     busy: |g, p| p.u8(g, field::AIR_ATTACK_DONE) == 2,
     apex_gravity: None,
@@ -145,7 +145,7 @@ fn extra_step(g: &mut Ctx, p: Player, step: u8) {
     cov!();
     match step {
         0xa => {
-            if p.u8(g, Player::STRIKE_STYLE) == 3 && p.u8(g, Player::STRIKE) & 1 != 0 && p.u8(g, 0x1e8) <= 4 {
+            if p.u8(g, Player::STRIKE_STYLE) == 3 && p.u8(g, Player::STRIKE) & 1 != 0 && p.u8(g, Player::ACTION_COUNT) <= 4 {
                 bounce(g, p);
             } else {
                 air_fall(g, p);
@@ -170,8 +170,8 @@ fn bounce(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::STRIKE, 0);
     p.set_u8(g, field::AIR_STEERED, 0);
-    let n = p.u8(g, 0x1e8) + 1;
-    p.set_u8(g, 0x1e8, n);
+    let n = p.u8(g, Player::ACTION_COUNT) + 1;
+    p.set_u8(g, Player::ACTION_COUNT, n);
     p.set_u16(g, Obj::VZ, 0x600);
     p.set_u16(g, Obj::AZ, (-0x48i16) as u16);
     common::set_forward_motion(g, p, 0x180, 0);
@@ -446,8 +446,8 @@ fn whirl(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 2);
             p.set_u8(g, Player::STRIKE, 0);
-            p.set_u8(g, 0x1ef, 0);
-            p.set_u8(g, 0x1e8, 0x80);
+            p.set_u8(g, Player::SECOND_STRIKE_LANDED, 0);
+            p.set_u8(g, Player::ACTION_COUNT, 0x80);
             animation::start_plain(g, p, 0x1b);
             clear_recognizers(g, p);
         }
@@ -458,14 +458,14 @@ fn whirl(g: &mut Ctx, p: Player) {
                 g.sound(rom::WHIRL_SOUND_A, p);
                 g.sound(ext::sound::SPIN, p);
             }
-            let left = p.u8(g, 0x1e8).wrapping_sub(1);
-            p.set_u8(g, 0x1e8, left);
+            let left = p.u8(g, Player::ACTION_COUNT).wrapping_sub(1);
+            p.set_u8(g, Player::ACTION_COUNT, left);
             if left == 0 {
                 to_stand(g, p);
                 return;
             }
-            if p.u8(g, 0x1ef) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
-                p.set_u8(g, 0x1ef, 1);
+            if p.u8(g, Player::SECOND_STRIKE_LANDED) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
+                p.set_u8(g, Player::SECOND_STRIKE_LANDED, 1);
                 let hp = (p.u16(g, Player::HP) as i16).wrapping_sub(0xc);
                 p.set_u16(g, Player::HP, if hp > 0 { hp as u16 } else { 1 });
             }

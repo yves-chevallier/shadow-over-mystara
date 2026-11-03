@@ -3,6 +3,7 @@
 //!
 //! The scales are ROM tables (read at run time); only the formulas are here.
 
+use crate::objects::Obj;
 use crate::player::Player;
 use crate::families::enemy_common::records::Enemy;
 use super::*;
@@ -158,14 +159,14 @@ fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
     if element == 0 {
         return d5;
     }
-    let weak = e.u8(w.b, 0x9e);
+    let weak = e.u8(w.b, f::WEAKNESS);
     if weak == 0 {
         return d5;
     }
     if element == weak {
         return d5.wrapping_add(4);
     }
-    if element == e.u8(w.b, 0x9f) {
+    if element == e.u8(w.b, f::WEAK_ELEMENT) {
         return d5 >> 1;
     }
     d5
@@ -321,7 +322,7 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     item.set_u16(w.b, f::X, x);
     item.set_u16(w.b, f::Z, z.wrapping_add(16));
     item.set_u16(w.b, f::Y, y.wrapping_sub(1));
-    item.set_u16(w.b, 0x18, 0x300);
-    item.set_u16(w.b, 0x1a, 0xffd8);
+    item.set_u16(w.b, Obj::VZ, 0x300);
+    item.set_u16(w.b, Obj::AZ, 0xffd8);
     e.set_u8(w.b, Enemy::LOOT, 0);
 }

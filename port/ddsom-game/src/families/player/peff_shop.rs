@@ -178,7 +178,7 @@ mod item {
             return false;
         }
         let dz = x
-            .u16(0xc)
+            .u16(Obj::Z)
             .wrapping_add(x.u16(Obj::Y))
             .wrapping_sub(customer.u16(x.b, Obj::Z))
             .wrapping_sub(customer.u16(x.b, Obj::Y))

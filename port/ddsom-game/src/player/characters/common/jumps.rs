@@ -1,5 +1,6 @@
 //! Common character code: healing, the jump skeleton and the run-up (action 0x10).
 
+use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::player::tables::{players, Read};
@@ -59,11 +60,11 @@ pub fn heal_flicker(g: &mut Ctx, p: Player) {
     if ram::VBLANK_FRAMES_LOW.get(g.b) & 7 != 0 {
         return;
     }
-    let mut n = p.u8(g, 0x1ed) + 1;
+    let mut n = p.u8(g, Player::SPELL_REPEAT) + 1;
     if n == 3 {
         n = 0;
     }
-    p.set_u8(g, 0x1ed, n);
+    p.set_u8(g, Player::SPELL_REPEAT, n);
     for i in 0..4 {
         let v = players("heal_flicker").at32(g.b, 16 * n as u32 + 4 * i);
         crate::mem::wr32(g.b, FLICKER_PALETTE + 4 * i, v);
@@ -293,21 +294,21 @@ pub fn dash(g: &mut Ctx, p: Player) {
         2 => {
             if animation::step(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x1e8, 8);
+                p.set_u8(g, Player::ACTION_COUNT, 8);
                 animation::start(g, p, 0x1d);
                 g.sound(ext::sound::SLIDE, p);
             }
         }
         4 => {
-            let left = p.u8(g, 0x1e8).wrapping_sub(1);
-            p.set_u8(g, 0x1e8, left);
+            let left = p.u8(g, Player::ACTION_COUNT).wrapping_sub(1);
+            p.set_u8(g, Player::ACTION_COUNT, left);
             if left != 0 && p.u8(g, Player::KEYS_HELD) & 0x20 != 0 {
                 dust_jump(g, p);
                 move_x(g, p);
                 return;
             }
             next_step(g, p);
-            p.set_u8(g, 0x1e8, 0xc);
+            p.set_u8(g, Player::ACTION_COUNT, 0xc);
             let brake = if p.u8(g, Player::FACING) != 0 { -0xa0i16 } else { 0xa0 };
             p.set_u16(g, Obj::AX, brake as u16);
             dash_slide(g, p);
@@ -326,8 +327,8 @@ pub(super) fn dash_slide(g: &mut Ctx, p: Player) {
         to_stand(g, p);
         return;
     }
-    let left = p.u8(g, 0x1e8).wrapping_sub(1);
-    p.set_u8(g, 0x1e8, left);
+    let left = p.u8(g, Player::ACTION_COUNT).wrapping_sub(1);
+    p.set_u8(g, Player::ACTION_COUNT, left);
     if (left as i8) >= 0 {
         dust_jump(g, p);
     }
