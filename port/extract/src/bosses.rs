@@ -133,6 +133,35 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("boss_10/next_steps", 0x8d540, "u8", &[], 32));
     s.push(prog("boss_10/walk_delays", 0x8d47c, "u8", &[], PER_RANK));
     s.push(prog("boss_10/walk_steps", 0x8d4ce, "u8", &[], 32));
+    // ---- boss 11 (and 12) ----
+    s.push(prog("boss_11/strike_kinds", 0x8eb42, "u8", &[], 4));
+    s.push(prog("boss_11/walk_delays", 0x8eb5e, "u8", &[], PER_RANK));
+    s.push(prog("boss_11/walk_steps", 0x8eb90, "u8", &[], 32));
+    s.push(prog("boss_11/near_masks", 0x8da88, "x32", &[], 4));
+    s.push(prog("boss_11/far_masks", 0x8dad2, "x32", &[], 4));
+    s.push(prog("boss_11/rests", 0x8db64, "u8", &[], 4));
+    s.push(data("boss_11/close_attacks", 0x8db68, "i8", &[], 16));
+    s.push(data("boss_11/near_attacks", 0x8db78, "i8", &[], 16));
+    s.push(data("boss_11/far_attacks", 0x8db88, "i8", &[], 16));
+    // 16 masks, but the index adds the high byte of a D2 left over by the box tests (original glitch: up to
+    // 0x3fff more, read in the code that follows, observed up to 0x288): the whole reachable range is kept.
+    s.push(prog("boss_11/give_up_masks", 0x8dbc0, "x8", &[], 0x4008));
+    s.push(data("boss_11/charge_lengths", 0x8dfcc, "u8", &[], 64));
+    s.push(prog("boss_11/aim_pauses", 0x8dfbc, "u8", &[], 16));
+    s.push(data("boss_11/routes", 0x8e1e8, "u8", &[], 16));
+    // Relative offsets of the paths (the routes only designate the first); a path: its last point index, then points.
+    s.push(prog("boss_11/route_paths", 0x8e0f8, "i16", &[], 1));
+    s.push(data("boss_11/route_0", 0x8e1f8, "i16", &[], 9));
+    upto(s, "boss_11/stun_times", 0x8e978, true, "u8", 0x40);
+    // The rings (`boss_11::chain`): rows per pose, then per rank the path and depth tables.
+    s.push(data("boss_11/rows", 0x1069f8, "u8*32", &[], 22));
+    s.push(data("boss_11/paths", 0x106cb8, "addr", &[], 24));
+    s.push(data("boss_11/paths/0", 0x106d18, "i16*4", &[], 0x400));
+    s.push(data("boss_11/paths/8", 0x108d18, "i16*4", &[], 0x400));
+    s.push(data("boss_11/paths/10", 0x10ad18, "i16*4", &[], 0x400));
+    s.push(data("boss_11/rises/0", 0x10cd18, "i16", &[], 32));
+    s.push(data("boss_11/rises/8", 0x10cd58, "i16", &[], 32));
+    s.push(data("boss_11/rises/10", 0x10cd98, "i16", &[], 32));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.

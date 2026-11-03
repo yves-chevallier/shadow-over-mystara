@@ -116,7 +116,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
-    if (var::SHOT_LIMIT.get(x.b) as i16) < 2 {
+    if (pools::ESHL.free_count(x.b) as i16) < 2 {
         return;
     }
     let Some(lead) = leader(x) else { return };

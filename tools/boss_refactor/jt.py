@@ -27,7 +27,7 @@ def entries(t):
     return out
 
 
-CALL = re.compile(r"(?:dispatch\(x, (0x[0-9a-f]+), ([\w:]+)\)|\bstep\(x, (0x[0-9a-f]+)\))")
+CALL = re.compile(r"(?:dispatch0?\(x, (0x[0-9a-f]+), ([\w:]+)\)|\bstep\(x, (0x[0-9a-f]+)\))")
 
 
 def index_pattern(idxs):

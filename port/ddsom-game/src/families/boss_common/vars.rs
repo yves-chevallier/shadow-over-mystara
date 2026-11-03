@@ -65,5 +65,5 @@ pub const ALT_CAMERA_EDGES: Byte = Byte::a5(0xa);
 pub const END_COUNTDOWN: Byte = Byte(A5 - 0x713a);
 /// Step of the scene sequence of the menus and cinematics (`A5-0x55c8`; `shell::vars::SCENE_ICONS`).
 pub const SCENE_SEQUENCE: Byte = Byte(A5 - 0x55c8);
-/// Number of shots of type 5 that may still be created (word; `shell::vars::LIMIT_TWELVE`) (h).
-pub const SHOT_LIMIT: Word = Word::a5(0x7e64);
+/// High byte of the difficulty word `RANK` (0: the rank fits in the low byte), that boss 11 reads as a byte (h).
+pub const RANK_HIGH: Byte = Byte::a5(0x7f92);

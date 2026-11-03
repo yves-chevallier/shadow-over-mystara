@@ -66,6 +66,9 @@ record! {
         death_credit, set_death_credit, DEATH_CREDIT: u8 @ 0x93;
         /// Value credited by a death by a spell (0xff for the bosses).
         death_value, set_death_value, DEATH_VALUE: u8 @ 0x9a;
+        /// Element the boss is weak to (damage + 4) and element it resists (damage halved) (`combat::damage`).
+        weak_element, set_weak_element, WEAK_ELEMENT: u8 @ 0x9e;
+        resisted_element, set_resisted_element, RESISTED_ELEMENT: u8 @ 0x9f;
         /// Template: kind of the animation requested and of the last one started (0xff: none).
         anim_kind, set_anim_kind, ANIM_KIND: u8 @ 0xa0;
         anim_last, set_anim_last, ANIM_LAST: u8 @ 0xa1;
