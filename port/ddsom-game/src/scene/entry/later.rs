@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::screens::tables::Rom;
-use crate::ram::{Word};
+use crate::ram::Word;
 
 /// Scenes 33 and 36: simple fade, one waiting frame.
 pub(super) fn plain_fade(x: &mut Ctx) {
@@ -262,7 +262,7 @@ pub(super) fn scene_54(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(scratch(0x9a5a), 1);
+            Word(scratch(0x9a5a)).set(x.b, 1);
             x.fade_in();
             x.title_card();
             if x.v8(0x66) == 0 {
@@ -408,7 +408,7 @@ pub(super) fn scene_66(x: &mut Ctx) {
                 final_effects(x);
             } else {
                 x.next_sub();
-                x.wr16(scratch(0x9a60), 0);
+                Word(scratch(0x9a60)).set(x.b, 0);
                 x.lock();
                 x.fade_in_stepped();
                 x.spawn(&pools::BOSS, 10);
@@ -535,7 +535,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
         }
         12 | 14 => {
             let boss = x.load_obj(BOSS);
-            if boss.u8(x.b, 0x2f) != 0 {
+            if boss.u8(x.b, crate::screens::obj::INDEX) != 0 {
                 x.end_scene();
             }
         }

@@ -61,7 +61,7 @@ crate::steps! {
             clear_layer(x.b, Layer::Two);
             clear_layer(x.b, Layer::Three);
             reset_pools(x);
-            let scene = get8(x, var::MESSAGE);
+            let scene = VARS_BLOCK.get8(x.b, var::MESSAGE);
             finish(x, scene)
         },
         S5Retry = 0xf84e8 => s5_message,
@@ -78,7 +78,7 @@ crate::steps! {
         S5TextHidden = 0xf855a => |x| {
             clear_layer(x.b, Layer::Two);
             scroll_text(x, 0xf858a);
-            set16(x, var::TIMER, 120);
+            VARS_BLOCK.set16(x.b, var::TIMER, 120);
             sprites_next_frame(x, Step::S5TextShown)
         },
         S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, crate::tasks::fading::rise, At(Step::S5TextFadedIn.into())),
@@ -98,13 +98,13 @@ crate::steps! {
         S4Shown = 0xf87c2 => |x| {
             // palette of page 7 (eight longs, `movem.l`: the registers keep the data)
             const FROM: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x292260);
-            const TO: u32 = 0x91c1e0;
+            const TO: crate::hw::video::Vram = crate::hw::video::palette(0, 0xf0);
             for k in 0..8 {
                 let v = FROM.long(x.b, 4 * k);
-                wr32(x.b, TO + 4 * k, v);
+                TO.offset(4 * k).set_long(x.b, v);
             }
             scroll_text(x, 0xf8810);
-            set16(x, var::TIMER, 120);
+            VARS_BLOCK.set16(x.b, var::TIMER, 120);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::no_brightness(x.b);
             fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
@@ -122,7 +122,7 @@ crate::steps! {
             let end = tiles(x, TB, 0x20d, SCROLL_2);
             tiles(x, TB, 0x20e, end);
             scroll_text(x, 0xf8986);
-            set16(x, var::TIMER, 60);
+            VARS_BLOCK.set16(x.b, var::TIMER, 60);
             sprites_next_frame(x, Step::S4SecondDrawn)
         },
         S4SecondDrawn = 0xf897c => |x| {
@@ -143,7 +143,7 @@ crate::steps! {
         S4Retry92 = 0xf8acc => s4_message_92,
         S4RetryWizard = 0xf8aea => s4_wizard,
         S4SecondFaded = 0xf8b1c => |x| {
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S4SecondClear)
         },
@@ -156,14 +156,14 @@ crate::steps! {
             home_camera_1(x, At(Step::S4SecondHomed.into()))
         },
         S4SecondHomed = 0xf8b3e => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             s4_second_object(x)
         },
         S4RetryObject = 0xf8b56 => s4_second_object,
         S4Scenery = 0xf8b64 => |x| {
             // terrain in eight plane 2 tile blocks (the third with D4 = 0)
-            for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
-                (174, 0x916800), (174, 0x916c00)]
+            for (n, at) in [(206, crate::hw::video::SCROLL2.offset(0x3000).0), (173, crate::hw::video::SCROLL2.offset(0x3400).0), (175, crate::hw::video::SCROLL2.offset(0x3800).0), (175, crate::hw::video::SCROLL2.offset(0x3c00).0), (172, crate::hw::video::SCROLL2.offset(0x2000).0), (205, crate::hw::video::SCROLL2.offset(0x2400).0),
+                (174, crate::hw::video::SCROLL2.offset(0x2800).0), (174, crate::hw::video::SCROLL2.offset(0x2c00).0)]
             {
                 tiles(x, TB, n, at);
             }
@@ -174,7 +174,7 @@ crate::steps! {
             crate::families::small::background_2_on(x.b);
             x.set_v8(0x36, 1);
             x.set_v16(a5::LAYERS, 0x138e);
-            wr16(x.b, 0x400004, 0x3155);
+            crate::hw::video::regs::OBJECT_OUTPUT.set(x.b, 0x3155);
             show_layers(x, At(Step::S4SceneryShown.into()))
         },
         S4SceneryShown = 0xf8c2c => |x| {
@@ -194,7 +194,7 @@ crate::steps! {
             if fading::STEP.get(x.b) != 0 {
                 return s4_fading_out(x);
             }
-            set8(x, var::SIGNAL, 1);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
             world(x);
             sprites_next_frame(x, Step::S4FadedOut)
         },
@@ -211,7 +211,7 @@ crate::steps! {
             yield_frames(x, 1, At(Step::S11Shown.into()))
         },
         S11Shown = 0xf8d7a => |x| {
-            set16(x, var::TIMER, 10);
+            VARS_BLOCK.set16(x.b, var::TIMER, 10);
             fading::DELAY.set(x.b, 4);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::tasks::fading::rise(x)
@@ -219,7 +219,7 @@ crate::steps! {
         S11Retry17 = 0xf8db4 => s11_message_17,
         S11Retry18 = 0xf8e48 => s11_message_18,
         S11Faded = 0xf8e6a => |x| {
-            set8(x, var::SIGNAL, 1);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
             world(x);
             sprites_next_frame(x, Step::S11DrawnOut)
         },
@@ -272,7 +272,7 @@ crate::steps! {
         S13OutFaded = 0xf90cc => |x| yield_frames(x, 30, At(Step::S13OutScenery.into())),
         S13OutScenery = 0xf90d4 => s13_out_scenery,
         S13OutSceneryDrawn = 0xf911c => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             s13_set_9(x)
         },
         S13Retry9 = 0xf9134 => s13_set_9,
@@ -308,7 +308,7 @@ crate::steps! {
         S13Faded = 0xf938a => |x| hide_layers(x, At(Step::S13End.into())),
         S13End = 0xf938e => |x| {
             clear_layer(x.b, Layer::Two);
-            let scene = get8(x, var::FLAG);
+            let scene = VARS_BLOCK.get8(x.b, var::FLAG);
             finish(x, scene)
         },
     }
@@ -362,7 +362,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             Flow::Done
         }
         10 | 12 => {
-            let n = if get8(x, var::STATE) == 10 { 12 } else { 13 };
+            let n = if VARS_BLOCK.get8(x.b, var::STATE) == 10 { 12 } else { 13 };
             if message_done(x) && try_message(x, n) {
                 next(x);
             }
@@ -373,7 +373,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             let scene = answer(x, 0xf847c);
-            set8(x, var::MESSAGE, scene);
+            VARS_BLOCK.set8(x.b, var::MESSAGE, scene);
             sound(x, 0);
             fade(x, ALL_PAGES, crate::tasks::fading::descent, At(Step::S2Faded.into()))
         }
@@ -391,7 +391,7 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
             crate::sound::play_global(x.b, ext::MUSIC_B);
             let end = tiles(x, TB, 0x218, SCROLL_2);
             tiles(x, TB, 0x219, end);
-            set16(x, var::TIMER, 60);
+            VARS_BLOCK.set16(x.b, var::TIMER, 60);
             show_and_fade_in(x, Caller)
         }
         2 => {
@@ -454,9 +454,9 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             if any_button(x) {
-                set16(x, var::TIMER, 0);
+                VARS_BLOCK.set16(x.b, var::TIMER, 0);
             }
-            if get16(x, var::TIMER) != 0 {
+            if VARS_BLOCK.get16(x.b, var::TIMER) != 0 {
                 return Flow::Done;
             }
             next(x);
@@ -473,7 +473,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
         }
         6 => {
             if any_button(x) {
-                set16(x, var::TIMER, 1);
+                VARS_BLOCK.set16(x.b, var::TIMER, 1);
             }
             if tick(x) && try_message(x, 15) {
                 next(x);
@@ -507,8 +507,8 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
 
 /// The timer counts down; every four frames, camera 1 advances by one pixel.
 fn drift(x: &mut Ctx) {
-    let t = get16(x, var::TIMER).wrapping_sub(1);
-    set16(x, var::TIMER, t);
+    let t = VARS_BLOCK.get16(x.b, var::TIMER).wrapping_sub(1);
+    VARS_BLOCK.set16(x.b, var::TIMER, t);
     if t & 3 == 0 {
         let cam = x.v16(a5::CAM1_X).wrapping_add(1);
         set_camera(x, a5::CAM1_X, cam);
@@ -517,7 +517,7 @@ fn drift(x: &mut Ctx) {
 
 fn s4_message_92(x: &mut Ctx) -> Flow {
     or_yield!(message(x, 92, Step::S4Retry92));
-    set8(x, var::SIGNAL, 0);
+    VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
     s4_wizard(x)
 }
 /// System object 0, placed (subtype 2, X 144, Y 188).

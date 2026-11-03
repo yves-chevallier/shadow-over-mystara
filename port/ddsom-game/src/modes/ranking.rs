@@ -40,6 +40,9 @@ const SCROLL_2: Long = Long(0xff_2b20);
 /// Table of the four players (16 bytes each: score and state; byte `+14`: the player named an entry, h).
 const SCORES: u32 = 0xff_24e8;
 const NAMED: u32 = 14;
+/// Entry of a player of the score table: played (byte `+0`), score (two longs, `+0`).
+const PLAYED: u32 = 0;
+const SCORE: u32 = 0;
 const FRAME_COUNT: Word = Word::a5(0x7e68);
 const VIDEO: Word = Word::a5(0x14);
 /// Rank of a score cartridge (`+0x42`).
@@ -250,7 +253,7 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     let mut rank = 3u8;
     let mut a4 = SCORES;
     for counter in (0..4u8).rev() {
-        if Obj(a4).u32(x.b, 0) != 0 || Obj(a4).u32(x.b, 4) != 0 {
+        if Obj(a4).u32(x.b, SCORE) != 0 || Obj(a4).u32(x.b, SCORE + 4) != 0 {
             let o = end_screen(x.b, 5, counter);
             let o = or_rest(x.b, o);
             o.set_u8(x.b, RANK, rank);
@@ -262,7 +265,7 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     let mut rank = 3u8;
     a4 = SCORES;
     for counter in (0..4u8).rev() {
-        if Obj(a4).u8(x.b, 0) != 0 {
+        if Obj(a4).u8(x.b, PLAYED) != 0 {
             if Obj(a4).u8(x.b, NAMED) != 0 {
                 let o = end_screen(x.b, 9, counter);
                 let o = or_rest(x.b, o);

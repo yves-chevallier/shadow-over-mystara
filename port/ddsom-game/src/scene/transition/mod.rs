@@ -18,11 +18,18 @@
 pub(crate) mod early;
 pub(crate) mod late;
 
+use crate::hw::io::Memory;
+use crate::scene::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
+/// Remaining display time of a message object (word).
+const MESSAGE_TIME: u32 = 0x32;
+/// Byte `+0x56` of the record at `A5-0x5b88` (h), receives the answer of scene 33.
+const RECORD_56: crate::ram::Byte = crate::ram::Byte(0xff_2478 + 0x56);
+use crate::screens::block::Block;
 use crate::screens::tables;
 use super::Ctx;
 use crate::scene::fading;
 use crate::video::{load_grid, clear_layer, Layer, Grid};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::A5;
 use crate::modes::{Flow, Sequence};
 use crate::objects::Obj;
 use crate::tasks::table::Next;
@@ -71,8 +78,8 @@ const TB: Grid = Grid::Layer2;
 const TB2: Grid = Grid::Layer3;
 
 /// Scenery planes: plane 1 (characters), plane 2 and plane 3, in GFX RAM.
-const SCROLL_2: u32 = 0x917000;
-const SCROLL_3: u32 = 0x91b800;
+const SCROLL_2: u32 = crate::hw::video::SCROLL2.offset(0x3000).0;
+const SCROLL_3: u32 = crate::hw::video::SCROLL3.offset(0x3800).0;
 
 /// Continuation of a subroutine that yields: return to an address of the script (`bsr`), or to the caller of the script
 /// (`bra`, the scene exit dispatch).
@@ -97,38 +104,28 @@ use crate::screens::obj;
 // ---------------------------------------------------------------------------------------------
 // Variables
 
-fn get8(x: &mut Ctx, off: u32) -> u8 {
-    rd8(x.b, VARS + off)
-}
-fn set8(x: &mut Ctx, off: u32, v: u8) {
-    wr8(x.b, VARS + off, v)
-}
-fn get16(x: &mut Ctx, off: u32) -> u16 {
-    rd16(x.b, VARS + off)
-}
-fn set16(x: &mut Ctx, off: u32, v: u16) {
-    wr16(x.b, VARS + off, v)
-}
+/// The variables of the transition scripts, as a state block.
+const VARS_BLOCK: Block = Block(VARS);
 /// Next state.
 fn next(x: &mut Ctx) {
-    let s = get8(x, var::STATE).wrapping_add(2);
-    set8(x, var::STATE, s);
+    let s = VARS_BLOCK.get8(x.b, var::STATE).wrapping_add(2);
+    VARS_BLOCK.set8(x.b, var::STATE, s);
 }
 fn next_sub(x: &mut Ctx) {
-    let s = get8(x, var::SUB).wrapping_add(2);
-    set8(x, var::SUB, s);
+    let s = VARS_BLOCK.get8(x.b, var::SUB).wrapping_add(2);
+    VARS_BLOCK.set8(x.b, var::SUB, s);
 }
 /// Subtracts one frame from the timer; true when it reaches zero.
 fn tick(x: &mut Ctx) -> bool {
-    let t = get16(x, var::TIMER).wrapping_sub(1);
-    set16(x, var::TIMER, t);
+    let t = VARS_BLOCK.get16(x.b, var::TIMER).wrapping_sub(1);
+    VARS_BLOCK.set16(x.b, var::TIMER, t);
     t == 0
 }
 
 /// Dispatch `moveq #0,D0 ; move.b (off,A6),D0 ; move.w (table,PC,D0.w),D1`: returns the state (the table is only
 /// that of the original).
 fn dispatch(x: &mut Ctx, off: u32, _table: u32) -> u8 {
-    get8(x, off)
+    VARS_BLOCK.get8(x.b, off)
 }
 
 fn layers_or(x: &mut Ctx, bits: u16) {
@@ -168,11 +165,10 @@ fn finish(x: &mut Ctx, next_scene: u8) -> Flow {
 
 /// The scene exit moves to its next state (`+2` of the block designated by A0), script reset, one frame yielded.
 fn end(x: &mut Ctx) -> Flow {
-    let a0 = crate::scene::screen::blocks::EXIT;
-    let step = rd8(x.b, a0 + 2).wrapping_add(4);
-    wr8(x.b, a0 + 2, step);
-    set8(x, var::STATE, 0);
-    wr8(x.b, a0 + 3, 0);
+    let step = EXIT_STEP.get(x.b).wrapping_add(4);
+    EXIT_STEP.set(x.b, step);
+    VARS_BLOCK.set8(x.b, var::STATE, 0);
+    EXIT_SUB_STEP.set(x.b, 0);
     layers_or(x, 0xe);
     yield_frames(x, 1, Caller)
 }
@@ -287,8 +283,8 @@ fn any_button(x: &mut Ctx) -> bool {
     let mut pressed = 0u8;
     for k in (0..4u32).rev() {
         let player = A5 + a5::PLAYERS + k * 0x200;
-        if rd8(x.b, player) != 0 {
-            pressed |= rd8(x.b, A5 + 0xc + k);
+        if Obj(player).u8(x.b, Obj::ACTIVE) != 0 {
+            pressed |= crate::screens::vars::pressed(k).get(x.b);
         }
     }
     pressed & 0xf0 != 0
@@ -299,7 +295,7 @@ fn any_button(x: &mut Ctx) -> bool {
 
 /// Le message ouvert (`movea.w 4(A6),A1`).
 fn message_obj(x: &mut Ctx) -> Obj {
-    Obj(get16(x, var::MESSAGE) as i16 as i32 as u32)
+    Obj(VARS_BLOCK.get16(x.b, var::MESSAGE) as i16 as i32 as u32)
 }
 /// Is the open message finished (byte `+0x22`)?
 fn message_done(x: &mut Ctx) -> bool {
@@ -323,7 +319,7 @@ fn try_message(x: &mut Ctx, n: u8) -> bool {
     true
 }
 fn store_message(x: &mut Ctx, o: Obj) {
-    set16(x, var::MESSAGE, o.0 as u16);
+    VARS_BLOCK.set16(x.b, var::MESSAGE, o.0 as u16);
 }
 /// Message `n` whose failure is not tested. Original glitch: the A1 left by the allocation is stored.
 fn message_untested(x: &mut Ctx, n: u8) -> Obj {
@@ -381,11 +377,13 @@ fn scroll_text(x: &mut Ctx, table: u32) {
     x.set_v32(a5::SCROLL_TEXT, a4);
 }
 
-/// Copy of 0x400 bytes of palettes (0xf9e38, `movem.l` by eight longs).
+/// Copy of 0x400 bytes of palettes between the work RAM and the palette RAM (0xf9e38, `movem.l` by eight longs).
 fn copy_palettes(x: &mut Ctx, from: u32, to: u32) {
     for i in (0..0x400).step_by(4) {
-        let v = rd32(x.b, from + i);
-        wr32(x.b, to + i, v);
+        for half in [0, 2] {
+            let v = Memory(from + i + half).word(x.b);
+            Memory(to + i + half).set_word(x.b, v);
+        }
     }
 }
 

@@ -2,6 +2,13 @@
 
 use super::*;
 
+/// Player state long of the walk out, once off screen.
+const WALKED_OUT: u32 = u32::from_be_bytes([0, 0x0c, 0x0c, 0]);
+/// Field of the effect of sequences 5 and 7 that receives its speed (h).
+const EFFECT_SPEED: u32 = 0x58;
+/// Answer chosen in a message object.
+const ANSWER: u32 = 0x23;
+
 /// Wait of sequence 30 by the number of players (PC-relative words).
 const PLAYER_WAITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5542);
 use crate::objects::Obj;
@@ -152,7 +159,7 @@ pub(super) fn seq2_wait_exit(ex: &mut Ex) {
     ex.reset_transition();
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(ex.x.b, p) != 0 && Obj(p).u16(ex.x.b, player::HEALTH) != 0 && crate::mem::rd32(ex.x.b, p + P_STATE_LONG) != 0x000c_0c00 {
+        if Obj(p).u8(ex.x.b, player::ACTIVE) != 0 && Obj(p).u16(ex.x.b, player::HEALTH) != 0 && Obj(p).u32(ex.x.b, P_STATE_LONG) != WALKED_OUT {
             return;
         }
     }
@@ -172,7 +179,7 @@ pub(super) fn seq2_message_done(ex: &mut Ex) {
 
 pub(super) fn seq2_boss_state(ex: &mut Ex) {
     let o = ex.object(blk::OBJECT);
-    if o.u8(ex.x.b, 4) == 6 {
+    if o.state(ex.x.b) == 6 {
         ex.next();
         ex.set_b16(blk::TIMER, 160);
     }
@@ -195,8 +202,8 @@ pub(super) fn seq4_probe(ex: &mut Ex) {
     ex.next();
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(ex.x.b, p) != 0 && Obj(p).u16(ex.x.b, player::HEALTH) != 0 {
-            let character = rd8(ex.x.b, p + 3);
+        if Obj(p).u8(ex.x.b, player::ACTIVE) != 0 && Obj(p).u16(ex.x.b, player::HEALTH) != 0 {
+            let character = Obj(p).u8(ex.x.b, Obj::VARIANT);
             if character == 4 || character == 5 {
                 ex.next();
                 ex.message(33);
@@ -210,7 +217,7 @@ pub(super) fn seq4_probe(ex: &mut Ex) {
 
 pub(super) fn seq4_effect(ex: &mut Ex) {
     let e = ex.object(blk::EFFECT);
-    if e.u8(ex.x.b, 5) == 2 {
+    if e.u8(ex.x.b, crate::screens::obj::SUB_STATE) == 2 {
         ex.next();
         ex.message(33);
     }
@@ -234,7 +241,7 @@ pub(super) fn walk_with_effect(ex: &mut Ex) {
     ex.set_b16(blk::TIMER, 144);
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
-    wr32(ex.x.b, effect.0 + 0x58, 0x2_0000);
+    effect.set_u32(ex.x.b, EFFECT_SPEED, 0x2_0000);
     ex.fade(1, fading::DESCENT.0);
 }
 
@@ -282,7 +289,7 @@ pub(super) fn seq14_message_done_wait(ex: &mut Ex) {
 /// Sequence 15: clears the temporary variable A5-0x65ac, resets transition and shop.
 pub(super) fn seq15_clear(ex: &mut Ex) {
     ex.next();
-    ex.x.wr16(scratch(0x9a54), 0);
+    Word(scratch(0x9a54)).set(ex.x.b, 0);
     ex.reset_transition();
     ex.reset_shop();
 }
@@ -319,9 +326,9 @@ pub(super) fn seq21_start(ex: &mut Ex) {
 pub(super) fn seq21_route(ex: &mut Ex) {
     const NEXT_SCENES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf4a0c);
     let m = ex.object(blk::MESSAGE);
-    if m.u8(ex.x.b, 0x22) != 0 {
+    if m.u8(ex.x.b, crate::screens::obj::MESSAGE_DONE) != 0 {
         ex.next();
-        let index = m.u8(ex.x.b, 0x23) as u32;
+        let index = m.u8(ex.x.b, ANSWER) as u32;
         let scene = NEXT_SCENES.pc_byte(ex.x.b, index);
         ex.set_b8(blk::NEXT_SCENE, scene);
         ex.fade(1, fading::DESCENT.0);
@@ -420,7 +427,7 @@ pub(super) fn seq35_walk(ex: &mut Ex) {
     }
     ex.next();
     PAUSE.set(ex.x.b, 0);
-    ex.x.wr16(scratch(0xaa84), 0x1400);
+    Word(scratch(0xaa84)).set(ex.x.b, 0x1400);
     var::INPUT_LOCK.set(ex.x.b, 0);
     crate::inputs::clear_inputs(ex.x.b);
     ex.release_players(false);
@@ -451,7 +458,7 @@ pub(super) fn seq35_boss(ex: &mut Ex) {
     if ex.message_done() {
         ex.next();
         let o = ex.object(blk::OBJECT);
-        o.set_u8(ex.x.b, 4, 4);
+        o.set_state(ex.x.b, 4);
         ex.x.set_v16(0x544, 1);
     }
 }

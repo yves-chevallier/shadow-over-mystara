@@ -90,6 +90,10 @@ fn modes(t: &mut Tables) {
     t.data("ranking_palette", 0xfc6d8, "x16", Some(16));
     t.data("ranking_text", 0xfc938, "u8", None);
     t.palette(0x2537c0, 0x20);
+    // title (`title.rs`): delays between the appearances, offsets of the texts, logo palette
+    t.prog("title_delays", 0xfa42e, "u8", None);
+    t.data("title_text_offsets", 0xfa8bc, "i16*2", Some(3));
+    t.palette(0x2538c0, 0x80);
     // ending (`ending/`): offsets of the reward objects
     t.prog("ending_reward_offsets", 0xfc3e4, "i16*2", Some(3));
     t.data("ending_rewards", 0xfb7bc, "x32*2", Some(24));
@@ -99,6 +103,41 @@ fn modes(t: &mut Tables) {
     for at in [0x291980, 0x28fa80, 0x28faa0, 0x28f4c0, 0x292260, 0x291f00] {
         t.palette(at, 0x20);
     }
+}
+
+/// Scene sequences (`scene/`) besides the tables of `data/scenes.json`.
+fn scenes(t: &mut Tables) {
+    t.prog("exit_sequence_jumps", 0xf31ea, "i16", None);
+    t.prog("exit_player_waits", 0xf5542, "u16", Some(5));
+    t.prog("bonus_dispatch", 0xf5946, "u16", Some(2));
+    t.prog("characters_masks", 0xf672e, "u8", None);
+    t.prog("characters_tables", 0xf679c, "u8", Some(2));
+    t.prog("big_digits", 0xf6e74, "u16", Some(10));
+    t.data("shop_musics", 0xf7ac4, "x32", None);
+    t.data("shop_welcomes", 0xf7b9c, "x32", None);
+    // scenes past the tables of `scenes.json` (the demonstration scenes 109 to 114 read one entry further)
+    t.data("shop_of_scene_tail", 0xf7b2a, "u8", Some(0x18));
+    t.prog("exit_sequence_tail", 0xf31de, "u8", Some(0xc));
+    // transitions (`transition/`): answers of the questions, scrolling texts, remaining-time prizes
+    for at in [0xf847c, 0xf92e4, 0xf932e, 0xf937a, 0xf99e2] {
+        t.prog(&format!("transition_answers@{at:#x}"), at, "u8", None);
+    }
+    for at in [0xf858a, 0xf8810, 0xf8986] {
+        t.pointed(&format!("transition_scroll_texts@{at:#x}"), at, true, 2, "u16");
+    }
+    t.prog("transition_next_scenes", 0xf9454, "u8", None);
+    t.prog("transition_time_prizes", 0xf95ba, "u8", Some(0x350));
+}
+
+/// Service menu (`service/`): colour ramps of the test pattern, levers and directions of the input test, coin modes
+/// of the card dispenser.
+fn service(t: &mut Tables) {
+    t.data("service_color_ramps", 0x293a6, "u16", None);
+    t.data("service_levers", 0x2a63c, "x32", Some(4));
+    t.data("service_directions", 0x2a64c, "u8", None);
+    t.prog("service_card_modes_4", 0x2c008, "u8", Some(4));
+    t.prog("service_card_modes", 0x2c00c, "u8", Some(4));
+    t.prog("service_ram_patterns", 0x2d0ce, "x16", Some(4));
 }
 
 /// Spawn scripts of the scenes (`scene/script.rs`): the table of one long per scene, then each script up to and
@@ -142,6 +181,8 @@ pub fn specs(rom: &Program) -> Vec<Spec> {
     hud(&mut t);
     modes(&mut t);
     spawn_scripts(&mut t, rom);
+    scenes(&mut t);
+    service(&mut t);
     let mut specs = t.finish();
     specs.extend(rom_test());
     specs

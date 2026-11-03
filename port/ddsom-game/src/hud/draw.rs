@@ -65,8 +65,8 @@ fn clear_rect(b: &mut Cps2Bus, at: u32, rows: u32, columns: u32) {
 
 /// 0x16c86: clears the two layer strips reserved for the panels (top and bottom of the screen).
 pub fn clear_panels(b: &mut Cps2Bus) {
-    clear_rect(b, 0x91_2008, 4, 48);
-    clear_rect(b, 0x91_2068, 4, 48);
+    clear_rect(b, crate::hw::video::TEXT.at(0x8).0, 4, 48);
+    clear_rect(b, crate::hw::video::TEXT.at(0x68).0, 4, 48);
 }
 
 // ---------------------------------------------------------------------------------------------

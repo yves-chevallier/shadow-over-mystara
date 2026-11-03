@@ -12,8 +12,8 @@
 //! It is instantaneous in both validation machines: here in Rust, and in the original code through
 //! the patch [`patch_instant_check`], which runs it without advancing time.
 
-use super::{back_to_menu, f, get, layers_off, layers_on, next_step, print, set};
-use crate::mem::wr8;
+use super::{back_to_menu, f, layers_off, layers_on, next_step, print, MENU_BLOCK};
+use crate::hw::io::Memory;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -35,9 +35,9 @@ const COUNTDOWN_FRAMES: u8 = 0x3c;
 /// Patterns written into each word (table addressed PC-relative).
 const PATTERNS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d0ce);
 /// Output that selects the Object RAM bank seen at 0x708000.
-const OBJ_BANK: u32 = 0x8040e1;
+const OBJ_BANK: Memory = Memory(0x8040e1);
 /// Byte of the Z80 shared RAM set before and after its test.
-const Z80_FLAG: u32 = 0x619ffb;
+const Z80_FLAG: Memory = Memory(0x619ffb);
 /// Expected sums of the program blocks (header words).
 const ROM_SUMS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xca);
 /// Size of a block of the program, and distance between two bytes summed.
@@ -46,16 +46,16 @@ const ROM_STRIDE: u32 = (1 << 12) - 1;
 
 /// Cells of each result line.
 mod cell {
-    pub const WORK_RAM: u32 = 0x912ea0;
-    pub const CPS_RAM: u32 = 0x912ea8;
-    pub const OBJECT_RAM: u32 = 0x912eb0;
-    pub const SOUND_RAM: u32 = 0x912eb8;
-    pub const EEPROM: u32 = 0x912ec0;
-    pub const ROM: u32 = 0x912ec8;
+    pub const WORK_RAM: u32 = crate::hw::video::TEXT.at(0xea0).0;
+    pub const CPS_RAM: u32 = crate::hw::video::TEXT.at(0xea8).0;
+    pub const OBJECT_RAM: u32 = crate::hw::video::TEXT.at(0xeb0).0;
+    pub const SOUND_RAM: u32 = crate::hw::video::TEXT.at(0xeb8).0;
+    pub const EEPROM: u32 = crate::hw::video::TEXT.at(0xec0).0;
+    pub const ROM: u32 = crate::hw::video::TEXT.at(0xec8).0;
 }
 
 pub fn memory(x: &mut Ctx) -> Flow {
-    match get(x, f::STEP) {
+    match MENU_BLOCK.get8(x.b, f::STEP) {
         0 => {
             next_step(x);
             layers_off(x);
@@ -71,12 +71,12 @@ pub fn memory(x: &mut Ctx) -> Flow {
                 return Flow::Yield;
             }
             next_step(x);
-            set(x, COUNTDOWN, COUNTDOWN_FRAMES);
+            MENU_BLOCK.set8(x.b, COUNTDOWN, COUNTDOWN_FRAMES);
             Flow::Done
         }
         _ => {
-            let left = get(x, COUNTDOWN) as i8 as i16 - 1;
-            set(x, COUNTDOWN, left as u8);
+            let left = MENU_BLOCK.get8(x.b, COUNTDOWN) as i8 as i16 - 1;
+            MENU_BLOCK.set8(x.b, COUNTDOWN, left as u8);
             if left > 0 { Flow::Done } else { back_to_menu(x) }
         }
     }
@@ -85,9 +85,8 @@ pub fn memory(x: &mut Ctx) -> Flow {
 /// `0x2d12a`: a 10-character text on line `at`.
 fn label(x: &mut Ctx, at: u32, text: u32, attr: u16) {
     for k in 0..10 {
-        let ch = x.rd8(text + k) as u16;
-        x.wr16(at + 0x80 * k, ch);
-        x.wr16(at + 0x80 * k + 2, attr);
+        let ch = crate::screens::tables::byte(x.b, text + k) as u16;
+        crate::hw::video::Cell(at + 0x80 * k).put(x.b, ch, attr);
     }
 }
 
@@ -106,14 +105,14 @@ fn verdict(x: &mut Ctx, at: u32, ok: bool) -> bool {
 fn test_words(x: &mut Ctx, start: u32, end: u32, byte: bool) -> bool {
     let patterns: [u16; 4] = std::array::from_fn(|k| PATTERNS.pc_word(x.b, 2 * k as u32));
     for a in (start..end).step_by(2) {
-        let saved = x.rd16(a);
+        let saved = Memory(a).word(x.b);
         for p in patterns {
-            x.wr16(a, p);
-            let ok = if byte { x.rd8(a + 1) == p as u8 } else { x.rd16(a) == p };
+            Memory(a).set_word(x.b, p);
+            let ok = if byte { Memory(a + 1).byte(x.b) == p as u8 } else { Memory(a).word(x.b) == p };
             if !ok {
                 return false;
             }
-            x.wr16(a, saved);
+            Memory(a).set_word(x.b, saved);
         }
     }
     true
@@ -121,8 +120,8 @@ fn test_words(x: &mut Ctx, start: u32, end: u32, byte: bool) -> bool {
 
 /// `bchg #0` of the Object RAM bank output (reread as the original does).
 fn toggle_bank(x: &mut Ctx) {
-    let v = x.rd8(OBJ_BANK) ^ 1;
-    wr8(x.b, OBJ_BANK, v);
+    let v = OBJ_BANK.byte(x.b) ^ 1;
+    OBJ_BANK.set_byte(x.b, v);
 }
 
 /// `0x2d0d6`: one-byte-in-0xfff sum of block `k` of the program.
@@ -166,12 +165,12 @@ fn check(x: &mut Ctx) -> bool {
         return false;
     }
     toggle_bank(x);
-    wr8(x.b, Z80_FLAG, 0);
+    Z80_FLAG.set_byte(x.b, 0);
     label(x, cell::SOUND_RAM, TESTING.addr(), 0);
     if !test_line(x, cell::SOUND_RAM, (0x61_8000, 0x61_a000), true, false) {
         return false;
     }
-    wr8(x.b, Z80_FLAG, 0x88);
+    Z80_FLAG.set_byte(x.b, 0x88);
     label(x, cell::EEPROM, TESTING.addr(), 0);
     let ok = crate::eeprom::tester(x.b);
     if !verdict(x, cell::EEPROM, ok) {

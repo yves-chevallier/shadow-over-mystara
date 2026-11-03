@@ -288,11 +288,11 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     }
     crate::dispatch::SOBJ.update_no_next(x.b);
     // two grids of each kind, the second following the first
-    let end = load_grid(x.b, Grid::Blocks4x4, 5, 0x912000);
+    let end = load_grid(x.b, Grid::Blocks4x4, 5, crate::hw::video::TEXT.at(0x0).0);
     load_grid(x.b, Grid::Blocks4x4, 6, end.destination);
-    let end = load_grid(x.b, Grid::Layer2, 0x201, 0x917000);
+    let end = load_grid(x.b, Grid::Layer2, 0x201, crate::hw::video::SCROLL2.offset(0x3000).0);
     load_grid(x.b, Grid::Layer2, 0x202, end.destination);
-    let end = load_grid(x.b, Grid::Layer3, 8, 0x91b800);
+    let end = load_grid(x.b, Grid::Layer3, 8, crate::hw::video::SCROLL3.offset(0x3800).0);
     load_grid(x.b, Grid::Layer3, 8, end.destination);
     crate::palette::load_palette_page(x.b, 1, 2);
     crate::palette::load_palette_page(x.b, 2, 0x55);

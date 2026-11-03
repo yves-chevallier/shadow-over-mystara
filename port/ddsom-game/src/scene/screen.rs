@@ -56,6 +56,9 @@ pub mod blocks {
     use crate::mem::A5;
     /// Scene exit block (phase 16), 8 longs (0xf3130).
     pub const EXIT: u32 = A5 - 0x55ca;
+    /// Its state (`+2`, step of 4) and the sub-state of the shared states (`+3`, step of 2).
+    pub const EXIT_STEP: crate::ram::Byte = crate::ram::Byte(EXIT + 2);
+    pub const EXIT_SUB_STEP: crate::ram::Byte = crate::ram::Byte(EXIT + 3);
     /// Shop block, 5 longs (0xf7916).
     pub const SHOP: u32 = A5 - 0x5560;
     /// Transition script variables (shared state 0xf7ecc), 4 longs (0xf7ee0).

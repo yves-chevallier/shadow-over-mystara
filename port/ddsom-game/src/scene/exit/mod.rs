@@ -29,7 +29,7 @@ use super::fading;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::dispatch;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::A5;
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::tasks::table::Next;
@@ -76,8 +76,6 @@ const WALK_OUT_STATE: u32 = u32::from_be_bytes([0, 0x0c, 0, 0]);
 const P_STATE_LONG: u32 = 4;
 const WALK_OUT_CLEAR_BYTES: [u32; 3] = [0x66, 0x8a, 0x15c];
 const P_RANK: u32 = 0x7d;
-/// Player longs cleared on leaving (state `+0x24` of each).
-const PLAYER_LONGS: [u32; 4] = [0x602, 0x802, 0xa02, 0xc02];
 
 /// Jumping forbidden (`A5+0x3d`), input lock, animation flags.
 const PAUSE: Byte = Byte::a5(0x3d);
@@ -118,16 +116,16 @@ impl<'a> Ex<'a> {
     // --- state block ----------------------------------------------------------------------------
 
     fn b8(&mut self, off: u32) -> u8 {
-        rd8(self.x.b, BASE + off)
+        Obj(BASE).u8(self.x.b, off)
     }
     fn set_b8(&mut self, off: u32, v: u8) {
-        wr8(self.x.b, BASE + off, v)
+        Obj(BASE).set_u8(self.x.b, off, v)
     }
     fn b16(&mut self, off: u32) -> u16 {
-        rd16(self.x.b, BASE + off)
+        Obj(BASE).u16(self.x.b, off)
     }
     fn set_b16(&mut self, off: u32, v: u16) {
-        wr16(self.x.b, BASE + off, v)
+        Obj(BASE).set_u16(self.x.b, off, v)
     }
     fn next(&mut self) {
         let step = self.b8(blk::STEP).wrapping_add(4);
@@ -158,7 +156,7 @@ impl<'a> Ex<'a> {
     }
     fn message_done(&mut self) -> bool {
         let m = self.object(blk::MESSAGE);
-        m.u8(self.x.b, 0x22) != 0
+        m.u8(self.x.b, crate::screens::obj::MESSAGE_DONE) != 0
     }
     /// Object designated by a block word (`movea.w`: sign-extended address).
     fn object(&mut self, off: u32) -> Obj {
@@ -181,7 +179,7 @@ impl<'a> Ex<'a> {
                 n += 1;
             }
             for off in WALK_OUT_CLEAR_BYTES {
-                wr8(self.x.b, p + off, 0);
+                Obj(p).set_u8(self.x.b, off, 0);
             }
         }
         // Original glitch: the rank count left in D5 is re-read by the handlers of the next frame (leftover D5 of the
@@ -408,11 +406,10 @@ pub fn phase_16(b: &mut Cps2Bus) -> bool {
 fn init(ex: &mut Ex) {
     let state = ex.b8(blk::STATE).wrapping_add(2);
     ex.set_b8(blk::STATE, state);
-    wr8(ex.x.b, A5 - 0x5b8e, 0);
+    crate::hud::var::FROZEN.set(ex.x.b, 0);
     var::PLAYERS_FROZEN.set(ex.x.b, 1);
     let scene = var::SCENE.get(ex.x.b) as u32;
-    let sequence = ex.x.b.fetch16((SEQUENCE_OF_SCENE.addr() + scene) & !1);
-    let sequence = if scene & 1 == 0 { (sequence >> 8) as u8 } else { sequence as u8 };
+    let sequence = SEQUENCE_OF_SCENE.pc_byte(ex.x.b, scene);
     ex.set_b8(blk::SEQUENCE, sequence);
 }
 
@@ -482,7 +479,7 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
 /// End of frame: except at the final state, world update.
 fn finish_frame(ex: &mut Ex, sequence: &Sequence) {
     let step = match ex.a0 {
-        Some(a0) => rd8(ex.x.b, a0.wrapping_add(blk::STEP)),
+        Some(a0) => Obj(a0).u8(ex.x.b, blk::STEP),
         None => ex.b8(blk::STEP),
     };
     if step == sequence.last {
@@ -586,10 +583,10 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         crate::palette::no_brightness(ex.x.b);
     }
     if let Some(w) = leave.clear_word {
-        wr16(ex.x.b, w, 0);
+        Word(w).set(ex.x.b, 0);
     }
-    for off in PLAYER_LONGS {
-        wr32(ex.x.b, A5 + off, 0);
+    for k in 0..4 {
+        Obj(crate::ram::PLAYERS.nth(k).0).set_u32(ex.x.b, crate::objects::Obj::PREV, 0);
     }
     crate::sprites::clear_lists(ex.x.b);
     if leave.clear_flags {

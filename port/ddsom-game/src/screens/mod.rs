@@ -2,5 +2,6 @@
 //! ROM data they read ([`tables`]).
 
 pub mod tables;
+pub mod block;
 pub mod obj;
 pub mod vars;

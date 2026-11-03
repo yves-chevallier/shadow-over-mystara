@@ -224,15 +224,13 @@ fn step_0(x: &mut Ctx) -> Flow {
 /// Creates the screen objects: four cursors, a panel, six markers, a counter, eight
 /// cells; if a pool is full the step stops (the original exits without undoing anything).
 fn objects_0(x: &mut Ctx) -> Flow {
-    let mut link = 0;
-    for slot in (0..4u32).rev() {
+    for (link, slot) in (0..4u32).rev().enumerate() {
         let Some(o) = element_d_interface(x.b) else {
             return Flow::Done;
         };
         o.set_u8(x.b, el::KIND, 1);
         o.set_u8(x.b, el::SLOT, slot as u8);
-        slot_link(link).set(x.b, o.0 as u16);
-        link += 1;
+        slot_link(link as u32).set(x.b, o.0 as u16);
     }
     let Some(main) = element_d_interface(x.b) else {
         return Flow::Done;

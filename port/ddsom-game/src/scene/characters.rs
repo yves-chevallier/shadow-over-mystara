@@ -5,10 +5,11 @@
 //! player three SET objects (types 5, 6, 7) created as soon as there is room, 240 frames, and the next player.
 //! Six sub-states (byte `+3` of the block, step of 2); several cede control to the scheduler.
 
+use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
+use crate::player::Player as PlayerRecord;
 use super::bonus::{dispatch, fade};
 use crate::video::{clear_layer, Layer};
 use super::Ctx;
-use crate::mem::{rd8, wr16, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::screens::obj;
@@ -38,14 +39,17 @@ mod at {
     pub const NEXT_WAITED: crate::data::RomAddr = crate::data::RomAddr(0xf66aa);
 }
 
+/// Field of object 7: the player it shows (word).
+const PLAYER_LINK: u32 = 0x34;
+
 /// Scene exit block: the original's A0, set by the dispatch and kept across the yields.
 const BLOCK: u32 = super::screen::blocks::EXIT;
 
 fn sub_step(x: &mut Ctx) -> u8 {
-    rd8(x.b, BLOCK + 3)
+    EXIT_SUB_STEP.get(x.b)
 }
 fn set_sub_step(x: &mut Ctx, s: u8) {
-    wr8(x.b, BLOCK + 3, s)
+    EXIT_SUB_STEP.set(x.b, s)
 }
 fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
@@ -54,15 +58,16 @@ fn next_sub_step(x: &mut Ctx) {
 
 /// End of the state without an interlude: next state of the sequence.
 fn skip(x: &mut Ctx) {
-    let s = rd8(x.b, A5 - 0x55c8).wrapping_add(4);
-    wr8(x.b, A5 - 0x55c8, s);
-    wr8(x.b, A5 - 0x55c7, 0);
+    let s = EXIT_STEP.get(x.b).wrapping_add(4);
+    EXIT_STEP.set(x.b, s);
+    EXIT_SUB_STEP.set(x.b, 0);
 }
 
 /// Is player `p` in the game and concerned by the mask (`btst` on a register: bit modulo 32)?
 fn concerned(x: &mut Ctx, p: u32, mask: u8) -> bool {
-    let bit = (rd8(x.b, p + 3) >> 1) as u32 % 32;
-    rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4 && (mask as u32) >> bit & 1 != 0
+    let p = Obj(p);
+    let bit = (p.u8(x.b, PlayerRecord::CHARACTER) >> 1) as u32 % 32;
+    p.u8(x.b, Obj::ACTIVE) != 0 && (p.u8(x.b, Obj::STATE) as i8) < 4 && (mask as u32) >> bit & 1 != 0
 }
 
 pub fn run(x: &mut Ctx) -> Flow {
@@ -196,7 +201,7 @@ fn player_scene(x: &mut Ctx) -> Flow {
     v::TIMER.set(x.b, 0xf0);
     x.set_v16(0x14, 0x12c0);
     let p = v::PLAYER.get(x.b) as i16 as i32 as u32;
-    let player = Player { record: p, byte: rd8(x.b, p + 3) };
+    let player = Player { record: p, byte: Obj(p).u8(x.b, PlayerRecord::CHARACTER) };
     x.wait(4, Step::Retry5(player))
 }
 
@@ -242,7 +247,7 @@ fn objects_6_7(x: &mut Ctx, j: Player) -> Flow {
 
 fn object_7(x: &mut Ctx, j: Player) -> Flow {
     let Some(o) = object(x, 7, 1, Step::Retry7(j)) else { return Flow::Yield };
-    wr16(x.b, o + 0x34, j.record as u16);
+    Obj(o).set_u16(x.b, PLAYER_LINK, j.record as u16);
     Flow::Done
 }
 

@@ -12,7 +12,12 @@
 
 use super::Ctx;
 use crate::video::{clear_layer, Layer};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use super::screen::blocks::EXIT_STEP;
+use crate::hw::video::regs;
+use crate::player::Player;
+use crate::screens::obj;
+use crate::screens::tables;
+use crate::screens::vars as sv;
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -21,7 +26,7 @@ use crate::objects::{pools, Obj};
 const EXIT_BLOCK: u32 = super::screen::blocks::EXIT;
 
 /// Shop block.
-pub const BLOCK: u32 = A5 - 0x5560;
+pub const BLOCK: u32 = super::screen::blocks::SHOP;
 mod f {
     pub const STATE: u32 = 0;
     pub const EXIT_STEP: u32 = 1;
@@ -70,17 +75,23 @@ mod sub {
 const PORTRAITS_TASK: crate::data::RomAddr = crate::data::RomAddr(0xf7dfe);
 
 fn b8(x: &mut Ctx, off: u32) -> u8 {
-    rd8(x.b, BLOCK + off)
+    Obj(BLOCK).u8(x.b, off)
 }
 fn set_b8(x: &mut Ctx, off: u32, v: u8) {
-    wr8(x.b, BLOCK + off, v)
+    Obj(BLOCK).set_u8(x.b, off, v)
 }
 fn b16(x: &mut Ctx, off: u32) -> u16 {
-    rd16(x.b, BLOCK + off)
+    Obj(BLOCK).u16(x.b, off)
 }
 fn set_b16(x: &mut Ctx, off: u32, v: u16) {
-    wr16(x.b, BLOCK + off, v)
+    Obj(BLOCK).set_u16(x.b, off, v)
 }
+
+/// Fields of the shoppers (EFFCT 20, one per player): their player (word); of the players: HP; of the messages:
+/// their remaining display time.
+const SHOPPER_PLAYER: u32 = 0x50;
+const PLAYER_HP: u32 = 0x62;
+const MESSAGE_TIME: u32 = 0x32;
 fn add_b8(x: &mut Ctx, off: u32, v: u8) {
     let n = b8(x, off).wrapping_add(v);
     set_b8(x, off, n);
@@ -171,19 +182,20 @@ crate::steps! {
             Obj(o).set_u8(x.b, Obj::KIND, 13);
             for k in 0..4u32 {
                 let p = super::PLAYERS + k * super::PLAYER_STRIDE;
-                let slot = BLOCK + f::PLAYER_OBJECTS + 2 * k;
-                wr16(x.b, slot, 0);
-                if rd8(x.b, p) == 0 || rd16(x.b, p + 0x62) == 0 {
+                let slot = f::PLAYER_OBJECTS + 2 * k;
+                set_b16(x, slot, 0);
+                let player = Obj(p);
+                if player.u8(x.b, Obj::ACTIVE) == 0 || player.u16(x.b, PLAYER_HP) == 0 {
                     continue;
                 }
-                let Some(Obj(e)) = pools::EFFCT.alloc(x.b) else { crate::families::effects::address_error(sub::FULL.0) };
-                wr8(x.b, e, 1);
-                wr8(x.b, e + 2, 20);
-                let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));
-                wr8(x.b, e + 3, variant);
-                wr8(x.b, e + 0x2f, character);
-                wr16(x.b, e + 0x50, p as u16);
-                wr16(x.b, slot, e as u16);
+                let Some(e) = pools::EFFCT.alloc(x.b) else { crate::families::effects::address_error(sub::FULL.0) };
+                e.set_active(x.b, 1);
+                e.set_kind(x.b, 20);
+                let (variant, character) = (player.u8(x.b, Player::CHARACTER), player.u8(x.b, Player::INDEX));
+                e.set_variant(x.b, variant);
+                e.set_u8(x.b, obj::INDEX, character);
+                e.set_u16(x.b, SHOPPER_PLAYER, p as u16);
+                set_b16(x, slot, e.0 as u16);
                 add_b8(x, f::SHOPPERS, 1);
             }
             let shop_scene = b8(x, f::SHOP).wrapping_add(69);
@@ -209,13 +221,13 @@ crate::steps! {
         /// Return from the shop: layers cleared, next state of the sequence, return scene.
         LeaveWaited = 0xf7c96 => |x| {
             clear_layers(x);
-            let s = rd8(x.b, EXIT_BLOCK + 2).wrapping_add(4);
-            wr8(x.b, EXIT_BLOCK + 2, s);
+            let s = EXIT_STEP.get(x.b).wrapping_add(4);
+            EXIT_STEP.set(x.b, s);
             x.set_v8(0x3c, 0xff);
             x.set_v8(0x59, 0);
             x.and16(0x12, 0xfffe);
             let layers = x.v16(0x12);
-            wr16(x.b, 0x804122, layers);
+            regs::VIDEO_CONTROL.set(x.b, layers);
             let shop = Obj(BLOCK).u8(x.b, f::SHOP) as u32;
             let next = rom::NEXT_SCENE.byte(x.b, shop);
             x.set_v8(0x34, next);
@@ -296,15 +308,15 @@ fn messages(x: &mut Ctx) {
         set_b16(x, f::PENDING, 0);
         return;
     }
-    let m = Obj(BLOCK).u16(x.b, f::MESSAGE) as i16 as i32 as u32 & 0xff_ffff;
-    if rd8(x.b, m) == 0 || rd8(x.b, m + 0x22) != 0 {
+    let m = Obj(Obj(BLOCK).u16(x.b, f::MESSAGE) as i16 as i32 as u32 & 0xff_ffff);
+    if m.u8(x.b, Obj::ACTIVE) == 0 || m.u8(x.b, obj::MESSAGE_DONE) != 0 {
         set_b8(x, f::TALKING, 0);
         return;
     }
-    if b16(x, f::NEXT_MESSAGE) == 0 || (rd16(x.b, m + 0x32) as i16) <= 1 {
+    if b16(x, f::NEXT_MESSAGE) == 0 || (m.u16(x.b, MESSAGE_TIME) as i16) <= 1 {
         return;
     }
-    wr16(x.b, m + 0x32, 1);
+    m.set_u16(x.b, MESSAGE_TIME, 1);
 }
 
 /// Exit, step 0: exit messages from the shop's list, one after the other.
@@ -333,7 +345,7 @@ fn exit_messages(x: &mut Ctx) {
 
 fn next_exit_message(x: &mut Ctx) {
     let at = Obj(BLOCK).u32(x.b, f::EXIT_MESSAGES);
-    let n = rd16(x.b, at);
+    let n = tables::word(x.b, at);
     if n == 0 {
         return exit_messages_done(x);
     }
@@ -365,7 +377,7 @@ fn leave(x: &mut Ctx) -> Flow {
     x.and16(0x12, 0xfffe);
     set_b8(x, f::REOPENED, 1);
     crate::video::clear_objects(x.b);
-    wr32(x.b, BLOCK, 0);
+    Obj(BLOCK).set_u32(x.b, f::STATE, 0);
     crate::objects::lists::unlink_all(x.b);
     crate::tasks::one_frame(x, Step::ReopenWaited)
 }
@@ -374,14 +386,14 @@ fn leave(x: &mut Ctx) -> Flow {
 /// then the task ends (`jmp 0x9f8`).
 fn portraits(x: &mut Ctx) -> Flow {
     let b = &mut *x.b;
-    let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE.addr() } else { rom::PORTRAITS.addr() };
+    let table = if sv::CABINET.get(b) == 1 { rom::PORTRAITS_WIDE } else { rom::PORTRAITS };
     for k in 0..4 {
-        let p = super::PLAYERS + k * super::PLAYER_STRIDE;
-        if rd8(b, p) == 0 || (rd8(b, p + 4) as i8) >= 4 {
+        let p = Obj(super::PLAYERS + k * super::PLAYER_STRIDE);
+        if p.u8(b, Obj::ACTIVE) == 0 || (p.u8(b, Obj::STATE) as i8) >= 4 {
             continue;
         }
-        let e = table + 8 * rd8(b, p + 2) as u32;
-        let (at, tile, attr) = (rd32(b, e), rd16(b, e + 4), rd16(b, e + 6));
+        let e = 8 * p.u8(b, Player::INDEX) as u32;
+        let (at, tile, attr) = (table.long(b, e), table.word(b, e + 4), table.word(b, e + 6));
         super::tiles::glyph(b, at, tile, attr);
         super::tiles::glyph(b, at + 0x100, 0x1b2, attr);
     }

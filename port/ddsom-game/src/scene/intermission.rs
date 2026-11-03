@@ -13,10 +13,13 @@ use crate::screens::tables::Rom;
 use cps2::Cps2Bus;
 
 use super::{scratch, var, Ctx};
-use crate::mem::wr32;
+use crate::objects::Obj;
 use crate::Native;
 use crate::objects::pools;
 use crate::ram::{Byte, Long, Word};
+
+/// Action of the boss (byte `+6` of its state): the sequences drive its entry through it.
+const BOSS_ACTION: u32 = 6;
 
 /// Temporary variables of the two sequences.
 const TIMER: u32 = scratch(0x9a2a);
@@ -87,7 +90,7 @@ fn boss_intro(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 x.next_sub();
                 let boss = x.load_obj(BOSS);
-                boss.set_u8(x.b, 6, 2);
+                boss.set_u8(x.b, BOSS_ACTION, 2);
             }
         }
         8 => {
@@ -102,15 +105,15 @@ fn boss_intro(x: &mut Ctx) {
                 x.next_sub();
                 var::HOLD.set(x.b, 0);
                 let boss = x.load_obj(BOSS);
-                let state = boss.u8(x.b, 6).wrapping_add(2);
-                boss.set_u8(x.b, 6, state);
+                let state = boss.u8(x.b, BOSS_ACTION).wrapping_add(2);
+                boss.set_u8(x.b, BOSS_ACTION, state);
             } else if Word(TIMER).get(x.b) == 40 {
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 40);
             }
         }
         12 => {
             let boss = x.load_obj(BOSS);
-            if boss.u8(x.b, 6) == 0x16 {
+            if boss.u8(x.b, BOSS_ACTION) == 0x16 {
                 x.next_sub();
                 var::HOLD.set(x.b, 1);
                 Word(TIMER).set(x.b, 40);
@@ -126,7 +129,7 @@ fn boss_intro(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 resume_game(x);
                 let boss = x.load_obj(BOSS);
-                wr32(x.b, boss.0 + 4, 0x0202_0000);
+                boss.set_u32(x.b, Obj::STATE, 0x0202_0000);
             }
         }
         _ => {}

@@ -17,7 +17,7 @@ mod ext {
 }
 
 /// Palette page 0x91c400 and its backup.
-const PALETTE_PAGE: u32 = 0x91c400;
+const PALETTE_PAGE: u32 = crate::hw::video::palette(1, 0).0;
 const PALETTE_SAVE: u32 = 0xff1190;
 /// Next scene by the choice of scene 27, and the remaining-time prizes of scene 31 (words then longs, PC-relative).
 const NEXT_SCENES: Rom = Rom::at(0xf9454);
@@ -27,7 +27,7 @@ const TIME_PRIZES: Rom = Rom::at(0xf95ba);
 // Scene 27: the next scene depends on the choice kept in `+4` (table 0xf9454)
 
 pub fn scene_27(x: &mut Ctx) -> Flow {
-    let choice = get8(x, var::MESSAGE);
+    let choice = VARS_BLOCK.get8(x.b, var::MESSAGE);
     if choice == 0 {
         x.set_v8(0x4e, 0);
     }
@@ -50,37 +50,37 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             x.set_v8(0x33, 1);
-            set16(x, var::TIMER, 120);
+            VARS_BLOCK.set16(x.b, var::TIMER, 120);
             next(x);
             crate::text::print_tall(x.b, 0xf985e);
             // bonus and duration from the remaining time (8-byte table per ten seconds)
             let clock = x.v16(a5::CLOCK);
             let at = (clock >> 8 & 15) * 48 + (clock & 0xf0) / 2;
             let time = TIME_PRIZES.pc_word(x.b, at as u32);
-            set16(x, SHOWN_TIME, time);
+            VARS_BLOCK.set16(x.b, SHOWN_TIME, time);
             let prize = TIME_PRIZES.pc_long(x.b, at as u32 + 2);
             Obj(VARS).set_u32(x.b, PRIZE, prize);
-            duration(x, 0x912958, time);
+            duration(x, crate::hw::video::TEXT.at(0x958).0, time);
             tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
             Flow::Done
         }
         4 => {
-            if get16(x, var::TIMER) != 0 && !tick(x) {
+            if VARS_BLOCK.get16(x.b, var::TIMER) != 0 && !tick(x) {
                 return Flow::Done;
             }
-            set16(x, var::TIMER, 2);
+            VARS_BLOCK.set16(x.b, var::TIMER, 2);
             if pay_players(x) {
                 return Flow::Done;
             }
             next(x);
-            set16(x, var::TIMER, 30);
+            VARS_BLOCK.set16(x.b, var::TIMER, 30);
             Flow::Done
         }
         6 => {
             if tick(x) {
                 next(x);
                 let o = message_obj(x);
-                wr16(x.b, o.0 + 0x32, 1);
+                o.set_u16(x.b, MESSAGE_TIME, 1);
                 x.set_v8(0x33, 0);
             }
             Flow::Done
@@ -94,7 +94,7 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-const PRIZE_AT: u32 = 0x912c58;
+const PRIZE_AT: u32 = crate::hw::video::TEXT.at(0xc58).0;
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
@@ -108,7 +108,7 @@ crate::steps! {
         S33Shown = 0xf98fc => s33_message_39,
         S33Retry39 = 0xf9910 => s33_message_39,
         S33Faded = 0xf992a => |x| {
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S33Clear)
         },
@@ -171,13 +171,13 @@ crate::steps! {
             end(x)
         },
         S38Drawn = 0xf9c54 => |x| {
-            set16(x, var::TIMER, 300);
+            VARS_BLOCK.set16(x.b, var::TIMER, 300);
             show_and_fade_in(x, Caller)
         },
         S38Closed = 0xf9caa => s38_message_73,
         S38Retry73 = 0xf9cbe => s38_message_73,
         S38Gone = 0xf9cfc => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             crate::video::clear_objects(x.b);
             hide_layers(x, At(Step::S38Hidden.into()))
         },
@@ -192,10 +192,10 @@ crate::steps! {
             let mut scenery = 540;
             for k in 0..4u32 {
                 let p = A5 + a5::PLAYERS + k * 0x200;
-                if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
+                if Obj(p).u8(x.b, Obj::ACTIVE) == 0 || (Obj(p).u8(x.b, Obj::STATE) as i8) >= 4 {
                     continue;
                 }
-                match rd8(x.b, p + 3) {
+                match Obj(p).u8(x.b, Obj::VARIANT) {
                     10 => break,
                     11 => scenery = 551,
                     _ => {}
@@ -223,16 +223,16 @@ crate::steps! {
         },
         S46Homed = 0xf9e7c => |x| {
             x.set_v8(0x3c, 0xff);
-            let last_tile = tiles(x, TB2, 385, 0x91b000);
+            let last_tile = tiles(x, TB2, 385, crate::hw::video::SCROLL3.offset(0x3000).0);
             tiles(x, TB2, 386, last_tile);
             let last_tile = tiles(x, TB2, 387, SCROLL_3);
             tiles(x, TB2, 388, last_tile);
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             if try_set_object(x, 12).is_none() {
                 return Flow::Done;
             }
             next(x);
-            set8(x, var::SUB, 0);
+            VARS_BLOCK.set8(x.b, var::SUB, 0);
             let y = x.v16(a5::CAM2_Y);
             Obj(VARS).set_u32(x.b, var::MESSAGE, (y as u32) << 16);
             try_set_object(x, 21);
@@ -241,7 +241,7 @@ crate::steps! {
         },
         S46Drawn = 0xf9ef2 => |x| {
             crate::sound::play_global(x.b, ext::MUSIC_FINALE);
-            set16(x, var::TIMER, 300);
+            VARS_BLOCK.set16(x.b, var::TIMER, 300);
             layers_or(x, 0xe);
             yield_frames(x, 1, At(Step::S46Shown.into()))
         },
@@ -259,7 +259,7 @@ crate::steps! {
             home_cameras(x, At(Step::S46End.into()))
         },
         S46End = 0xf9fb0 => |x| {
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             finish(x, 46)
         },
         FinaleFaded = 0xfa058 => |x| {
@@ -282,15 +282,14 @@ crate::steps! {
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::full_brightness(x.b);
             x.set_v8(0x42, 1);
-            let a0 = crate::scene::screen::blocks::EXIT;
-            let step = rd8(x.b, a0 + 2).wrapping_add(4);
-            wr8(x.b, a0 + 2, step);
+            let step = EXIT_STEP.get(x.b).wrapping_add(4);
+            EXIT_STEP.set(x.b, step);
             for (off, v) in [(a5::CAM1_X, 96), (a5::CAM1_Y, 296), (a5::CAM2_X, 64), (a5::CAM2_Y, 1552)] {
                 x.set_v16(off, v);
             }
             x.set_v16(a5::LAYERS, 0x12ce);
-            set8(x, var::STATE, 0);
-            wr8(x.b, a0 + 3, 0);
+            VARS_BLOCK.set8(x.b, var::STATE, 0);
+            EXIT_SUB_STEP.set(x.b, 0);
             x.set_v16(0x56e, 0);
             Flow::Done
         },
@@ -298,7 +297,7 @@ crate::steps! {
 }
 fn s31_message(x: &mut Ctx) -> Flow {
     or_yield!(message(x, 141, Step::S31Retry));
-    set16(x, var::TIMER, 60);
+    VARS_BLOCK.set16(x.b, var::TIMER, 60);
     Flow::Done
 }
 
@@ -320,7 +319,7 @@ fn pay_players(x: &mut Ctx) -> bool {
     let mut paid = false;
     for k in 0..4u32 {
         let p = A5 + a5::PLAYERS + k * 0x200;
-        if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
+        if Obj(p).u8(x.b, Obj::ACTIVE) == 0 || (Obj(p).u8(x.b, Obj::STATE) as i8) >= 4 {
             continue;
         }
         let left = Obj(VARS).u32(x.b, PRIZE);
@@ -337,7 +336,7 @@ fn pay_players(x: &mut Ctx) -> bool {
             (left.wrapping_sub(0x10000), 33)
         };
         Obj(VARS).set_u32(x.b, PRIZE, left);
-        let player = (rd8(x.b, p + 2) as u32) << 8;
+        let player = (Obj(p).u8(x.b, Obj::KIND) as u32) << 8;
         crate::events::enqueue_points(x.b, (amount | player) as u16);
         tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
     }
@@ -353,7 +352,7 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
             tiles(x, TB, 0x207, SCROLL_2);
             let last_tile = tiles(x, TB2, 0x158, SCROLL_3);
             tiles(x, TB2, 0x159, last_tile);
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             s33_object(x)
         }
         2 => {
@@ -368,7 +367,7 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
             }
             let v = answer(x, 0xf99e2);
             x.set_v8(0x59, v);
-            wr8(x.b, 0xff2478 + 0x56, v);
+            RECORD_56.set(x.b, v);
             fade(x, ALL_PAGES, crate::tasks::fading::descent, At(Step::S33EndFaded.into()))
         }
         _ => Flow::Done,
@@ -438,7 +437,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             tiles(x, TB, 0x226, SCROLL_2);
             let last_tile = tiles(x, TB2, 8, SCROLL_3);
             tiles(x, TB2, 8, last_tile);
-            wr16(x.b, 0x91cc00, 0);
+            crate::hw::video::palette(3, 0).set(x.b, 0);
             show_layers(x, At(Step::S32SecondShown.into()))
         }
         10 => {
@@ -493,7 +492,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             set_camera(x, a5::CAM2_Y, 8);
             let last_tile = tiles(x, TB2, 0x15c, SCROLL_3);
             tiles(x, TB2, 0x15d, last_tile);
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             for n in [4, 5] {
                 system_object_untested(x, n);
             }
@@ -501,18 +500,18 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             sprites_next_frame(x, Step::S38Drawn)
         }
         2 => {
-            if get8(x, var::SIGNAL) != 0 {
-                set8(x, var::SIGNAL, 0);
+            if VARS_BLOCK.get8(x.b, var::SIGNAL) != 0 {
+                VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
                 let m = message_untested(x, 97);
                 store_message(x, m);
                 next(x);
-                set16(x, var::TIMER, 180);
+                VARS_BLOCK.set16(x.b, var::TIMER, 180);
             }
             Flow::Done
         }
         4 => {
             if any_button(x) {
-                set16(x, var::TIMER, 1);
+                VARS_BLOCK.set16(x.b, var::TIMER, 1);
             }
             if !tick(x) {
                 return Flow::Done;
@@ -532,7 +531,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             if fading::STEP.get(x.b) != 0 {
                 return Flow::Done;
             }
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S38Gone)
         }
@@ -558,7 +557,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
 /// Closes dialogue 97 (word `+0x32`), then dialogue 73.
 fn s38_close_message(x: &mut Ctx) -> Flow {
     let o = message_obj(x);
-    wr16(x.b, o.0 + 0x32, 1);
+    o.set_u16(x.b, MESSAGE_TIME, 1);
     world(x);
     sprites_next_frame(x, Step::S38Closed)
 }
@@ -591,7 +590,7 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
             home_cameras(x, At(Step::S46Homed.into()))
         }
         2 => {
-            if get8(x, var::SUB) == 0 && fading::STEP.get(x.b) == 0 {
+            if VARS_BLOCK.get8(x.b, var::SUB) == 0 && fading::STEP.get(x.b) == 0 {
                 message_untested(x, 69);
                 next_sub(x);
             }
@@ -609,7 +608,7 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
             if fading::STEP.get(x.b) != 0 {
                 return Flow::Done;
             }
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S46Gone)
         }
@@ -633,20 +632,20 @@ pub fn finale(x: &mut Ctx) -> Flow {
             fading::PAGES.set(x.b, 12);
             crate::palette::full_brightness(x.b);
             crate::sound::play_global(x.b, ext::MUSIC_FINALE);
-            let last_tile = tiles(x, TB, 544, 0x915000);
+            let last_tile = tiles(x, TB, 544, crate::hw::video::SCROLL2.offset(0x1000).0);
             tiles(x, TB, 545, last_tile);
-            let last_tile = tiles(x, TB2, 389, 0x919000);
+            let last_tile = tiles(x, TB2, 389, crate::hw::video::SCROLL3.offset(0x1000).0);
             tiles(x, TB2, 390, last_tile);
             x.set_v16(a5::LAYERS, 0x12cc);
-            set16(x, var::MESSAGE, 180);
+            VARS_BLOCK.set16(x.b, var::MESSAGE, 180);
             Flow::Done
         }
         _ => {
             // plane 1 blinks for 180 frames
             let layers = x.v8(a5::LAYERS + 1) ^ 4;
             x.set_v8(a5::LAYERS + 1, layers);
-            let t = get16(x, var::MESSAGE).wrapping_sub(1);
-            set16(x, var::MESSAGE, t);
+            let t = VARS_BLOCK.get16(x.b, var::MESSAGE).wrapping_sub(1);
+            VARS_BLOCK.set16(x.b, var::MESSAGE, t);
             if t != 0 {
                 return Flow::Done;
             }

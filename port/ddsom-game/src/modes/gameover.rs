@@ -8,9 +8,9 @@
 //! Replacing the task does not touch its stack: the mode machine restarts with the stack pointer
 //! the task had at its last yield (the video clear one, `0xc32`).
 
+use crate::ram::Long;
 use super::{mode, Flow, Sequence};
 use crate::hw::video::regs;
-use crate::objects::Obj;
 use crate::scene::fading;
 use crate::screens::vars as sv;
 use crate::scene::Ctx;
@@ -57,10 +57,10 @@ crate::steps! {
 /// screen (four longs at `FF2B10`, `0xfc562`).
 pub fn reset_modes(x: &mut Ctx) {
     for i in 0..16 {
-        Obj(mode::BASE).set_u32(x.b, 4 * i, 0);
+        Long(mode::BASE + 4 * i).set(x.b, 0);
     }
     for i in 0..4 {
-        Obj(super::ranking::STATE).set_u32(x.b, 4 * i, 0);
+        Long(super::ranking::STATE + 4 * i).set(x.b, 0);
     }
 }
 

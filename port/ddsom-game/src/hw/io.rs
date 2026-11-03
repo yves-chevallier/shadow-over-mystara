@@ -61,3 +61,23 @@ impl DevRam {
         crate::mem::wr32(b, self.0, v)
     }
 }
+
+/// Any memory the board maps, by address: the RAM test of the service menu (`service/memory.rs`) writes and reads
+/// back the work RAM, the graphics RAM, the object RAM and the RAM shared with the Z80 through it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Memory(pub u32);
+
+impl Memory {
+    pub fn byte(self, b: &mut Cps2Bus) -> u8 {
+        rd8(b, self.0)
+    }
+    pub fn set_byte(self, b: &mut Cps2Bus, v: u8) {
+        crate::mem::wr8(b, self.0, v)
+    }
+    pub fn word(self, b: &mut Cps2Bus) -> u16 {
+        rd16(b, self.0)
+    }
+    pub fn set_word(self, b: &mut Cps2Bus, v: u16) {
+        wr16(b, self.0, v)
+    }
+}

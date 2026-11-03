@@ -3,7 +3,10 @@
 //! Each has two steps (preparation, then update every frame) and returns to the menu by
 //! held 1P start + fire 1 (`exit_check`).
 
-use super::{exit_check, f, get, get16, hex_digits, key, layers_off, layers_on, next_step, pressed, print, set, set16, var};
+use crate::hw::video::{regs, Cell};
+use crate::ram::Long;
+use crate::screens::tables;
+use super::{exit_check, f, hex_digits, key, layers_off, layers_on, next_step, pressed, print, var, MENU_BLOCK};
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -37,7 +40,7 @@ mod input {
 }
 
 pub fn input(x: &mut Ctx) -> Flow {
-    if get(x, f::STEP) == 0 {
+    if MENU_BLOCK.get8(x.b, f::STEP) == 0 {
         next_step(x);
         layers_off(x);
         print(x, input::TITLE.addr());
@@ -54,9 +57,8 @@ pub fn input(x: &mut Ctx) -> Flow {
 
 /// `0x2a6b6`: coloured "1" or "0" in cell `k` of the table `cells`.
 fn show_bit(x: &mut Ctx, cells: u32, k: u32, on: bool) {
-    let cell = x.rd32(cells + 4 * k);
-    x.wr16(cell, 0x30 + on as u16);
-    x.wr16(cell + 2, if on { super::HIGHLIGHT } else { 0 });
+    let cell = tables::long(x.b, cells + 4 * k);
+    Cell(cell).put(x.b, 0x30 + on as u16, if on { super::HIGHLIGHT } else { 0 });
 }
 
 /// `0x2a564`: state of each input.
@@ -114,10 +116,9 @@ fn card_variant(x: &mut Ctx) -> bool {
 }
 
 pub fn output(x: &mut Ctx) -> Flow {
-    if get(x, f::STEP) == 0 {
+    if MENU_BLOCK.get8(x.b, f::STEP) == 0 {
         next_step(x);
-        x.wr16(output::CLEARED, 0);
-        x.wr16(output::CLEARED + 2, 0);
+        Long(output::CLEARED).set(x.b, 0);
         output::COUNTER.set(x.b, 0);
         layers_off(x);
         print(x, output::TITLE.addr());
@@ -191,22 +192,20 @@ mod sound {
     /// Largest code.
     pub const LAST: i32 = 0x4a0;
     /// Cells of the code, of the volume (two digits) and of the gauge.
-    pub const CODE_CELL: u32 = 0x912eac;
-    pub const VOLUME_CELL: u32 = 0x912dd8;
-    pub const GAUGE: u32 = 0x9121e0;
+    pub const CODE_CELL: u32 = crate::hw::video::TEXT.at(0xeac).0;
+    pub const VOLUME_CELL: u32 = crate::hw::video::TEXT.at(0xdd8).0;
+    pub const GAUGE: u32 = crate::hw::video::TEXT.at(0x1e0).0;
     pub const GAUGE_STEPS: u8 = 0x27;
-    /// QSound volume, read from the port.
-    pub const VOLUME_PORT: u32 = 0x804030;
     /// Code step per key: (bit of the key in P1's byte, addition to the code).
     pub const KEYS: [(u8, i16); 6] = [(6, 0x100), (7, -0x100), (0, 0x10), (1, -0x10), (2, -1), (3, 1)];
 }
 
 pub fn sound(x: &mut Ctx) -> Flow {
-    if get(x, f::STEP) == 0 {
+    if MENU_BLOCK.get8(x.b, f::STEP) == 0 {
         next_step(x);
-        set16(x, sound::CODE, 0);
-        set(x, sound::REPEAT, 0);
-        set(x, sound::REDRAW, 1);
+        MENU_BLOCK.set16(x.b, sound::CODE, 0);
+        MENU_BLOCK.set8(x.b, sound::REPEAT, 0);
+        MENU_BLOCK.set8(x.b, sound::REDRAW, 1);
         layers_off(x);
         print(x, sound::TITLE.addr());
         print(x, sound::HELP.addr());
@@ -225,9 +224,9 @@ fn sound_update(x: &mut Ctx) {
         code_key(x, held, new, bit, delta);
     }
     request(x, new);
-    if get(x, sound::REDRAW) != 0 {
-        set(x, sound::REDRAW, 0);
-        let code = get16(x, sound::CODE);
+    if MENU_BLOCK.get8(x.b, sound::REDRAW) != 0 {
+        MENU_BLOCK.set8(x.b, sound::REDRAW, 0);
+        let code = MENU_BLOCK.get16(x.b, sound::CODE);
         hex_digits(x, sound::CODE_CELL, code as u64, 4, super::HIGHLIGHT);
     }
     volume(x);
@@ -237,20 +236,20 @@ fn sound_update(x: &mut Ctx) {
 /// `0x2b518`: a key changes the code, with automatic repeat (shared counter).
 fn code_key(x: &mut Ctx, held: u8, new: u8, bit: u8, delta: i16) {
     if new >> bit & 1 != 0 {
-        set(x, sound::REPEAT, 0x14);
+        MENU_BLOCK.set8(x.b, sound::REPEAT, 0x14);
     } else {
         if held >> bit & 1 == 0 {
             return;
         }
-        let left = get(x, sound::REPEAT) as i8 as i16 - 1;
-        set(x, sound::REPEAT, left as u8);
+        let left = MENU_BLOCK.get8(x.b, sound::REPEAT) as i8 as i16 - 1;
+        MENU_BLOCK.set8(x.b, sound::REPEAT, left as u8);
         if left > 0 {
             return;
         }
-        set(x, sound::REPEAT, 4);
+        MENU_BLOCK.set8(x.b, sound::REPEAT, 4);
     }
-    set(x, sound::REDRAW, 1);
-    let code = get16(x, sound::CODE) as i16 as i32 + delta as i32;
+    MENU_BLOCK.set8(x.b, sound::REDRAW, 1);
+    let code = MENU_BLOCK.get16(x.b, sound::CODE) as i16 as i32 + delta as i32;
     let code = if code < 0 {
         sound::LAST
     } else if code as i16 as i32 > sound::LAST {
@@ -258,13 +257,13 @@ fn code_key(x: &mut Ctx, held: u8, new: u8, bit: u8, delta: i16) {
     } else {
         code
     };
-    set16(x, sound::CODE, code as u16);
+    MENU_BLOCK.set16(x.b, sound::CODE, code as u16);
 }
 
 /// `0x2b556`: fire 1 plays the code (if it is not zero), fire 2 cuts the sound.
 fn request(x: &mut Ctx, new: u8) {
     if new & key::SHOT1 != 0 {
-        let code = get16(x, sound::CODE);
+        let code = MENU_BLOCK.get16(x.b, sound::CODE);
         if code != 0 {
             // D2 and D3 are those left by the code keys (0x2b50e)
             crate::sound::emit(x.b, crate::sound::Command { d1: code as u32, d2: 1, d3: 3 });
@@ -276,29 +275,29 @@ fn request(x: &mut Ctx, new: u8) {
 
 /// `0x2b582`: volume (0 to 39) read from the port: bits 0-4 (first bit set), bits 5-12 (5 per zero bit).
 fn volume(x: &mut Ctx) {
-    let port = x.rd16(sound::VOLUME_PORT);
+    let port = regs::VOLUME.get(x.b);
     let low = (port.trailing_zeros()).min(5) as u8;
     let high = ((port >> 5).trailing_zeros()).min(8) as u8;
     let level = sound::GAUGE_STEPS.wrapping_sub(low + 5 * high);
-    set(x, sound::VOLUME, level);
+    MENU_BLOCK.set8(x.b, sound::VOLUME, level);
     super::decimal(x, sound::VOLUME_CELL, level as u32, 2, super::HIGHLIGHT);
 }
 
 /// `0x2b5c0`: volume gauge.
 fn gauge(x: &mut Ctx) {
     let mut cell = sound::GAUGE;
-    crate::mem::wr32(x.b, cell, 0x28_0000);
-    crate::mem::wr32(x.b, cell + 0x1480, 0x29_0000);
+    Cell(cell).put(x.b, 0x28, 0);
+    Cell(cell + 0x1480).put(x.b, 0x29, 0);
     cell += 0x80;
-    let level = get(x, sound::VOLUME);
+    let level = MENU_BLOCK.get8(x.b, sound::VOLUME);
     for _ in 0..level {
-        crate::mem::wr32(x.b, cell, 0x2d_0000);
+        Cell(cell).put(x.b, 0x2d, 0);
         cell += 0x80;
     }
-    crate::mem::wr32(x.b, cell, 0x2b_0013);
+    Cell(cell).put(x.b, 0x2b, 0x13);
     cell += 0x80;
     for _ in 0..sound::GAUGE_STEPS.wrapping_sub(level) {
-        crate::mem::wr32(x.b, cell, 0x20_0013);
+        Cell(cell).put(x.b, 0x20, 0x13);
         cell += 0x80;
     }
 }

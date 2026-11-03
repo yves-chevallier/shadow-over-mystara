@@ -23,9 +23,12 @@ pub mod memory;
 pub mod test_pattern;
 pub mod settings;
 
+use crate::hw::video::{regs, Cell, PALETTES};
+use crate::ram::Long;
+use crate::screens::tables::Rom;
+use crate::screens::block::Block;
 use crate::config;
 use crate::video::Layer;
-use crate::mem::wr32;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -94,15 +97,14 @@ mod text {
     pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a03a);
 }
 
-/// Board outputs (0x400004), value set by the menu.
-const OUTPUTS: u32 = 0x400004;
+/// Value of the board outputs (0x400004) set by the menu.
 const MENU_OUTPUTS: u16 = 0x2355;
 /// Program word that enables the "Secret Test" (zero in this game).
-const SECRET_ENABLE: u32 = 0xc0;
+const SECRET_ENABLE: Rom = Rom::at(0xc0);
 /// Character layer: menu arrow, line "7. CONFIGURATION" coloured if the settings differ
 /// from the factory settings.
-const MENU_ARROW: u32 = 0x912690;
-const MENU_CONFIG_LINE: u32 = 0x912940;
+const MENU_ARROW: u32 = crate::hw::video::TEXT.at(0x690).0;
+const MENU_CONFIG_LINE: u32 = crate::hw::video::TEXT.at(0x940).0;
 /// Highlight colour (cell attribute).
 pub const HIGHLIGHT: u16 = 0x13;
 /// Menu lines: the last one is EXIT.
@@ -111,22 +113,12 @@ const LAST_LINE: u8 = 0x10;
 // ---------------------------------------------------------------------------------------------
 // Access
 
-pub fn get(x: &mut Ctx, field: u32) -> u8 {
-    x.rd8(MENU + field)
-}
-pub fn set(x: &mut Ctx, field: u32, v: u8) {
-    crate::mem::wr8(x.b, MENU + field, v)
-}
-pub fn get16(x: &mut Ctx, field: u32) -> u16 {
-    x.rd16(MENU + field)
-}
-pub fn set16(x: &mut Ctx, field: u32, v: u16) {
-    x.wr16(MENU + field, v)
-}
+/// The state block of the menu.
+pub const MENU_BLOCK: Block = Block(MENU);
 /// Next step of the screen.
 pub fn next_step(x: &mut Ctx) {
-    let s = get(x, f::STEP).wrapping_add(2);
-    set(x, f::STEP, s);
+    let s = MENU_BLOCK.get8(x.b, f::STEP).wrapping_add(2);
+    MENU_BLOCK.set8(x.b, f::STEP, s);
 }
 
 /// Newly pressed P1 keys (active at 1).
@@ -176,15 +168,15 @@ fn repeat(x: &mut Ctx, value: u8, step: u8, max: u8, keys: u8, back: fn(u8) -> b
     }
     let new = !x.v8(var::PREV) & keys & held;
     let dir = if new != 0 {
-        set(x, counter, 0x1e);
+        MENU_BLOCK.set8(x.b, counter, 0x1e);
         new
     } else {
-        let left = (get(x, counter) as i8 as i16) - 1;
-        set(x, counter, left as u8);
+        let left = (MENU_BLOCK.get8(x.b, counter) as i8 as i16) - 1;
+        MENU_BLOCK.set8(x.b, counter, left as u8);
         if left > 0 {
             return None;
         }
-        set(x, counter, 8);
+        MENU_BLOCK.set8(x.b, counter, 8);
         held
     };
     let v = if back(dir) {
@@ -213,10 +205,10 @@ fn line_cell(base: u32, line: u8) -> u32 {
 }
 /// `0x299fc`: arrow (tile 0x2a) in front of the line; `0x29a10`: erased.
 pub fn arrow(x: &mut Ctx, base: u32, line: u8) {
-    wr32(x.b, line_cell(base, line), 0x002a_0000);
+    Cell(line_cell(base, line)).put(x.b, 0x2a, 0);
 }
 pub fn no_arrow(x: &mut Ctx, base: u32, line: u8) {
-    wr32(x.b, line_cell(base, line), 0x0020_0000);
+    Cell(line_cell(base, line)).put(x.b, 0x20, 0);
 }
 /// Moves the arrow from one line to another.
 pub fn move_arrow(x: &mut Ctx, base: u32, from: u8, to: u8) {
@@ -227,20 +219,21 @@ pub fn move_arrow(x: &mut Ctx, base: u32, from: u8, to: u8) {
 /// `0x299e0`: attribute `attr` on `len` + 1 cells of a line of the character layer.
 pub fn paint(x: &mut Ctx, cell: u32, attr: u16, len: u32) {
     for k in 0..=len {
-        x.wr16(cell + 2 + 0x80 * k, attr);
+        Cell(cell + 0x80 * k).set_attr(x.b, attr);
     }
 }
 
 /// `0x29a7a`: full brightness for the four palette pages (0x91c000-0x91cfff).
 pub fn full_brightness(x: &mut Ctx) {
-    for a in (0x91c000..0x91d000).step_by(4) {
-        let v = x.rd32(a) | 0xf000_f000;
-        wr32(x.b, a, v);
+    for i in (0..0x1000).step_by(4) {
+        let a = PALETTES.offset(i);
+        let v = a.long(x.b) | 0xf000_f000;
+        a.set_long(x.b, v);
     }
 }
 
 /// Decimal conversion buffer (A5 - 0x62a8, 8 BCD bytes).
-const BCD: u32 = 0xff_1d58;
+const BCD: Long = Long(0xff_1d58);
 
 /// `0x29da4`: `value` in binary-coded decimal, in the buffer.
 fn to_bcd(x: &mut Ctx, value: u32) -> u64 {
@@ -253,8 +246,8 @@ fn to_bcd(x: &mut Ctx, value: u32) -> u64 {
         bcd |= ((v % 10) as u64) << (4 * shift);
         v /= 10;
     }
-    wr32(x.b, BCD, (bcd >> 32) as u32);
-    wr32(x.b, BCD + 4, bcd as u32);
+    BCD.set(x.b, (bcd >> 32) as u32);
+    Long(BCD.0 + 4).set(x.b, bcd as u32);
     bcd
 }
 
@@ -262,8 +255,7 @@ fn to_bcd(x: &mut Ctx, value: u32) -> u64 {
 /// right, attribute `attr`. Returns the cell that follows.
 pub fn hex_digits(x: &mut Ctx, mut cell: u32, value: u64, n: u32, attr: u16) -> u32 {
     for k in (0..n).rev() {
-        x.wr16(cell, (value >> (4 * k)) as u16 & 0xf);
-        x.wr16(cell + 2, attr);
+        Cell(cell).put(x.b, (value >> (4 * k)) as u16 & 0xf, attr);
         cell += 0x80;
     }
     cell
@@ -280,10 +272,10 @@ pub fn decimal(x: &mut Ctx, cell: u32, value: u32, n: u32, attr: u16) -> u32 {
 
 /// One turn of the task: handler of the menu state.
 pub fn handler(x: &mut Ctx) -> Flow {
-    match get(x, f::STATE) {
+    match MENU_BLOCK.get8(x.b, f::STATE) {
         state::INIT => {
             var::ACTIVE.set(x.b, 1);
-            set(x, f::STATE, state::MENU);
+            MENU_BLOCK.set8(x.b, f::STATE, state::MENU);
             show_menu(x)
         }
         state::MENU => menu(x),
@@ -306,13 +298,13 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
 /// `0x291ec`: the menu, once the screen is cleared.
 pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     var::FRAME_FLAG.set(x.b, 0);
-    set(x, f::SECRET, 0);
-    set(x, f::REPEAT_V, 1);
-    x.wr16(OUTPUTS, MENU_OUTPUTS);
+    MENU_BLOCK.set8(x.b, f::SECRET, 0);
+    MENU_BLOCK.set8(x.b, f::REPEAT_V, 1);
+    regs::OBJECT_OUTPUT.set(x.b, MENU_OUTPUTS);
     crate::video::unlock_counters(x.b, 0xf1);
     print(x, text::MENU.addr());
     print(x, text::HELP.addr());
-    let line = get(x, f::CURSOR);
+    let line = MENU_BLOCK.get8(x.b, f::CURSOR);
     arrow(x, MENU_ARROW, line);
     if !config::is_factory(x) {
         paint(x, MENU_CONFIG_LINE, HIGHLIGHT, 0xc);
@@ -323,27 +315,27 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
 
 /// `0x29254`: choice of a line (up, down), entry into the screen (fire 1).
 fn menu(x: &mut Ctx) -> Flow {
-    if x.rd16(SECRET_ENABLE) != 0 {
-        if get(x, f::SECRET) != 0 {
+    if SECRET_ENABLE.word(x.b, 0) != 0 {
+        if MENU_BLOCK.get8(x.b, f::SECRET) != 0 {
             // the program word 0xc0 is zero in this version (docs/service.md): the "Secret Test" is not rewritten
-            unreachable!("TEST.addr() menu: \"Secret Test\" (0xee16e) requested");
+            unreachable!("TEST menu: \"Secret Test\" (0xee16e) requested");
         }
         if (x.v8(0) & x.v8(1)) & key::SHOT2 != 0 {
-            set(x, f::SECRET, 1);
-            set(x, f::STEP, 0);
+            MENU_BLOCK.set8(x.b, f::SECRET, 1);
+            MENU_BLOCK.set8(x.b, f::STEP, 0);
             return Flow::Done;
         }
     }
-    let line = get(x, f::CURSOR);
+    let line = MENU_BLOCK.get8(x.b, f::CURSOR);
     if let Some(to) = vertical(x, line, 2, LAST_LINE) {
         if to != line {
             move_arrow(x, MENU_ARROW, line, to);
-            set(x, f::CURSOR, to);
+            MENU_BLOCK.set8(x.b, f::CURSOR, to);
         }
     }
     if pressed(x) & key::SHOT1 != 0 {
-        set(x, f::STATE, state::SCREEN);
-        if get(x, f::CURSOR) != LAST_LINE {
+        MENU_BLOCK.set8(x.b, f::STATE, state::SCREEN);
+        if MENU_BLOCK.get8(x.b, f::CURSOR) != LAST_LINE {
             crate::video::clear_layer(x.b, Layer::One);
         }
     }
@@ -352,7 +344,7 @@ fn menu(x: &mut Ctx) -> Flow {
 
 /// `0x292da`: the screen of the chosen line.
 fn screen(x: &mut Ctx) -> Flow {
-    match get(x, f::CURSOR) {
+    match MENU_BLOCK.get8(x.b, f::CURSOR) {
         0 => io_tests::input(x),
         2 => io_tests::output(x),
         4 => io_tests::sound(x),
@@ -386,10 +378,10 @@ pub fn exit_check(x: &mut Ctx) -> Flow {
 /// `0x29a5a`: return to the menu (the sound is cut).
 pub fn back_to_menu(x: &mut Ctx) -> Flow {
     crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-    set(x, f::STATE, state::MENU);
+    MENU_BLOCK.set8(x.b, f::STATE, state::MENU);
     // step of the screen and configuration cursors (bytes 2 to 5)
-    x.wr16(MENU + f::STEP, 0);
-    x.wr16(MENU + f::STEP + 2, 0);
+    MENU_BLOCK.set16(x.b, f::STEP, 0);
+    MENU_BLOCK.set16(x.b, f::STEP + 2, 0);
     let flags = var::FLAGS.get(x.b) & 0x7fff;
     var::FLAGS.set(x.b, flags);
     var::BYTE_34.set(x.b, 0);

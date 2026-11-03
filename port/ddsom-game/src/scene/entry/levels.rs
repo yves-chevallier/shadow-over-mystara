@@ -2,6 +2,10 @@
 //! title cards): one step per frame.
 
 use super::*;
+use crate::ram::Long;
+
+/// Setting of the enemies brought in by the opening sequences (word `+0x42`).
+const ENEMY_SETTING: u32 = 0x42;
 use crate::ram::{Word};
 
 /// Scene 1 (level 1): fade, title card, first dialogue, then three enemies enter from the right.
@@ -23,12 +27,12 @@ pub(super) fn stage_1(x: &mut Ctx) {
                 x.next_sub();
                 // Original glitch: the failure is not tested, the A1 left by the allocation is stored
                 let message = crate::families::creators::scene_set_or_rest(x.b, 0);
-                wr32(x.b, MESSAGE, message.0);
+                Long(MESSAGE).set(x.b, message.0);
             }
         }
         4 => {
-            let message = Obj(crate::mem::rd32(x.b, MESSAGE));
-            if message.u8(x.b, 0x22) != 0 {
+            let message = Obj(Long(MESSAGE).get(x.b));
+            if message.u8(x.b, crate::screens::obj::MESSAGE_DONE) != 0 {
                 x.next_sub();
                 Word(TIMER).set(x.b, 0xb0);
             }
@@ -51,7 +55,7 @@ pub(super) fn stage_1(x: &mut Ctx) {
                     o.set_u8(x.b, Obj::VARIANT, 1);
                     o.set_u16(x.b, Obj::X, px);
                     o.set_u16(x.b, Obj::Y, py);
-                    o.set_u16(x.b, 0x14, 0xfb80);
+                    o.set_u16(x.b, Obj::VX, 0xfb80);
                 }
             }
         }
@@ -258,7 +262,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
                 Word(TIMER).set(x.b, 0xe0);
                 let o = x.spawn(&pools::ENEMY, 0x15);
                 o.set_u8(x.b, Obj::VARIANT, 8);
-                o.set_u16(x.b, 0x42, 0x401);
+                o.set_u16(x.b, ENEMY_SETTING, 0x401);
                 x.store_obj(ENEMY, o);
             }
         }
@@ -277,7 +281,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
                 x.set_v16(0x4ba, 0);
                 Word(TIMER).set(x.b, 0x100);
                 let o = x.load_obj(ENEMY);
-                crate::mem::wr32(x.b, o.0 + 4, 0x0206_0000);
+                o.set_u32(x.b, Obj::STATE, 0x0206_0000);
             }
         }
         14 => {
@@ -361,8 +365,8 @@ pub(super) fn scene_24(x: &mut Ctx) {
                 let mut found = false;
                 for k in 0..4 {
                     let p = PLAYERS + k * PLAYER_STRIDE;
-                    if rd8(x.b, p) != 0 {
-                        let character = rd8(x.b, p + 3) as u16 >> 1;
+                    if Obj(p).u8(x.b, Obj::ACTIVE) != 0 {
+                        let character = Obj(p).u8(x.b, Obj::VARIANT) as u16 >> 1;
                         found |= character as u8 == 2;
                     }
                 }

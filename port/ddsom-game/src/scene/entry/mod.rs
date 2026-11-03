@@ -11,13 +11,13 @@
 //! (`scratch`). A scene without its own sequence (the majority) only does a fade and immediately goes
 //! to phase 12. See `docs/scenes.md` for the scene table.
 
+use crate::screens::vars as sv;
 use cps2::Cps2Bus;
 use super::fading;
 
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::families::effects_creators as creators;
 use crate::game;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
 
@@ -41,16 +41,19 @@ pub(crate) mod table {
 
 /// Work RAM variables outside the A5 ± 0x7fff page, cleared on entry.
 mod ram {
-    use crate::ram::Word;
-    pub const BYTE_A: u32 = 0xff_2472;
-    pub const BYTE_B: u32 = 0xff_2474;
-    pub const BYTE_C: u32 = 0xff_2042;
-    pub const WORD_D: u32 = 0xff_2046;
-    pub const WORD_E: u32 = 0xff_2048;
-    pub const WORD_F: u32 = 0xff_204a;
+    use crate::ram::{Byte, Word};
+    pub const BYTE_A: Byte = Byte(0xff_2472);
+    pub const BYTE_B: Byte = Byte(0xff_2474);
+    pub const BYTE_C: Byte = Byte(0xff_2042);
+    pub const WORD_D: Word = Word(0xff_2046);
+    pub const WORD_E: Word = Word(0xff_2048);
+    pub const WORD_F: Word = Word(0xff_204a);
     pub const WORD_G: Word = Word(0xff_204c);
     pub const WORD_H: Word = Word(0xff_2040);
 }
+
+/// Player field: rank of arrival in the scene.
+const ARRIVAL_RANK: u32 = 0x7d;
 
 const STEP_INIT: u8 = 0;
 const STEP_SEQUENCE: u8 = 2;
@@ -69,11 +72,11 @@ const PLAYER_SPELL_SLOTS: std::ops::RangeInclusive<u32> = 0x1a0..=0x1d8;
 
 fn init_scene(x: &mut Ctx) {
     var::STEP.set(x.b, STEP_SEQUENCE);
-    for addr in [ram::BYTE_A, ram::BYTE_B, ram::BYTE_C] {
-        wr8(x.b, addr, 0);
+    for v in [ram::BYTE_A, ram::BYTE_B, ram::BYTE_C] {
+        v.set(x.b, 0);
     }
-    for addr in [ram::WORD_D, ram::WORD_E, ram::WORD_F] {
-        wr16(x.b, addr, 0);
+    for v in [ram::WORD_D, ram::WORD_E, ram::WORD_F] {
+        v.set(x.b, 0);
     }
     ram::WORD_G.set(x.b, 5);
     ram::WORD_H.set(x.b, 9);
@@ -116,10 +119,10 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x40, marker);
     let mut alive = 0u8;
     for k in 0..4 {
-        let p = PLAYERS + k * PLAYER_STRIDE;
-        if x.rd8(p + player::ACTIVE) != 0 && x.rd16(p + player::HEALTH) != 0 {
+        let p = Obj(PLAYERS + k * PLAYER_STRIDE);
+        if p.u8(x.b, player::ACTIVE) != 0 && p.u16(x.b, player::HEALTH) != 0 {
             alive += 1;
-            wr32(x.b, p + 4, 0);
+            p.set_u32(x.b, Obj::STATE, 0);
         }
     }
     var::PLAYERS.set(x.b, alive);
@@ -127,17 +130,18 @@ fn init_scene(x: &mut Ctx) {
 }
 
 fn clear_player(x: &mut Ctx, p: u32) {
+    let p = Obj(p);
     for off in PLAYER_CLEAR_BYTES {
-        wr8(x.b, p + off, 0);
+        p.set_u8(x.b, off, 0);
     }
     for off in PLAYER_CLEAR_WORDS {
-        wr16(x.b, p + off, 0);
+        p.set_u16(x.b, off, 0);
     }
     for off in PLAYER_CLEAR_LONGS {
-        wr32(x.b, p + off, 0);
+        p.set_u32(x.b, off, 0);
     }
     for off in PLAYER_SPELL_SLOTS.step_by(4) {
-        wr32(x.b, p + off, 0);
+        p.set_u32(x.b, off, 0);
     }
 }
 
@@ -146,25 +150,27 @@ fn clear_player(x: &mut Ctx, p: u32) {
 /// leaves to its callers).
 pub fn place_players(b: &mut Cps2Bus) -> u8 {
     let scene = var::SCENE.get(b) as u32;
-    let mut positions = table::START_POSITIONS.addr() + (scene << 4);
-    let mut states = table::START_STATES.addr() + (scene << 2);
-    let camera = A5 + if var::USE_ALT_CAMERA.get(b) != 0 { 0x556 } else { 0x506 };
+    let mut positions = scene << 4;
+    let mut states = scene << 2;
+    let (camera_x, camera_y) =
+        if var::USE_ALT_CAMERA.get(b) != 0 { (sv::CAMERA_2_X, sv::CAMERA_2_Y) } else { (sv::CAMERA_X, sv::CAMERA_Y) };
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
         if Obj(p).u8(b, player::ACTIVE) == 0 || Obj(p).u16(b, player::HEALTH) == 0 {
             continue;
         }
-        let (dx, dy) = (rd16(b, camera), rd16(b, camera + 4));
-        let (px, py) = (rd16(b, positions), rd16(b, positions + 2));
+        let (dx, dy) = (camera_x.get(b), camera_y.get(b));
+        let (px, py) = (table::START_POSITIONS.word(b, positions), table::START_POSITIONS.word(b, positions + 2));
         positions += 4;
-        wr16(b, p + 8, px.wrapping_add(dx));
-        wr16(b, p + 0x10, py.wrapping_add(dy));
-        wr32(b, p + 0xc, 0);
-        let state = rd8(b, states);
-        wr8(b, p + 0x2c, state);
+        let p = Obj(p);
+        p.set_u16(b, Obj::X, px.wrapping_add(dx));
+        p.set_u16(b, Obj::Y, py.wrapping_add(dy));
+        p.set_z(b, 0);
+        let state = table::START_STATES.byte(b, states);
+        p.set_u8(b, crate::player::Player::FACING, state);
         states += 1;
-        wr8(b, p + 0x7d, rank);
+        p.set_u8(b, ARRIVAL_RANK, rank);
         rank += 1;
     }
     rank

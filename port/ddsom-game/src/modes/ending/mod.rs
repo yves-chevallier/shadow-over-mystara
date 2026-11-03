@@ -119,8 +119,8 @@ crate::steps! {
         S08Picture = 0xfb93a => |x| {
             load_palette_page(x.b, 3, 87);
             load_palette_set(x.b, 6);
-            tile_blocks(x, 0x91b800, 350, 351, Grid::Layer3);
-            tile_blocks(x, 0x917000, 548, 549, Grid::Layer2);
+            tile_blocks(x, crate::hw::video::SCROLL3.offset(0x3800).0, 350, 351, Grid::Layer3);
+            tile_blocks(x, crate::hw::video::SCROLL2.offset(0x3000).0, 548, 549, Grid::Layer2);
             Obj(BLOCK).set_u8(x.b, f::SIGNAL, 0);
             s08_object(x)
         },

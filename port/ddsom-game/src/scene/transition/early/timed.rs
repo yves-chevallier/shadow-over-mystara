@@ -14,7 +14,7 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
             next(x);
             crate::sound::play_global(x.b, ext::MUSIC_C);
             set_camera(x, a5::CAM1_X, 288);
-            let end = tiles(x, TB, 0x214, 0x917400);
+            let end = tiles(x, TB, 0x214, crate::hw::video::SCROLL2.offset(0x3400).0);
             tiles(x, TB, 0x215, end);
             let end = tiles(x, TB2, 0x152, SCROLL_3);
             tiles(x, TB2, 0x153, end);
@@ -24,32 +24,32 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
             if !tick(x) {
                 return Flow::Done;
             }
-            set16(x, var::TIMER, 60);
+            VARS_BLOCK.set16(x.b, var::TIMER, 60);
             s11_message_17(x)
         }
         4 => {
-            if get8(x, var::FLAG) != 0 && message_done(x) {
-                set8(x, var::FLAG, 0);
-                set16(x, var::TIMER, 1);
+            if VARS_BLOCK.get8(x.b, var::FLAG) != 0 && message_done(x) {
+                VARS_BLOCK.set8(x.b, var::FLAG, 0);
+                VARS_BLOCK.set16(x.b, var::TIMER, 1);
             }
             if tick(x) {
-                set16(x, var::TIMER, 120);
-                set8(x, var::SIGNAL, 1);
+                VARS_BLOCK.set16(x.b, var::TIMER, 120);
+                VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
                 next(x);
             }
             Flow::Done
         }
         6 => {
-            if get8(x, var::FLAG) != 0 && message_done(x) {
-                set8(x, var::FLAG, 0);
+            if VARS_BLOCK.get8(x.b, var::FLAG) != 0 && message_done(x) {
+                VARS_BLOCK.set8(x.b, var::FLAG, 0);
             }
-            if get16(x, var::TIMER) != 0 {
+            if VARS_BLOCK.get16(x.b, var::TIMER) != 0 {
                 if !tick(x) {
                     return Flow::Done;
                 }
-                set8(x, var::SIGNAL, 0);
+                VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             }
-            let busy = get8(x, var::SIGNAL).wrapping_add(get8(x, var::FLAG));
+            let busy = VARS_BLOCK.get8(x.b, var::SIGNAL).wrapping_add(VARS_BLOCK.get8(x.b, var::FLAG));
             if busy != 0 {
                 return Flow::Done;
             }
@@ -69,14 +69,14 @@ pub(super) fn s11_object(x: &mut Ctx) -> Flow {
     if system_object(x, 2, Step::S11RetryObject).is_none() {
         return Flow::Yield;
     }
-    set8(x, var::SIGNAL, 0);
+    VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
     world(x);
     sprites_next_frame(x, Step::S11Drawn)
 }
 pub(super) fn s11_message_17(x: &mut Ctx) -> Flow {
     or_yield!(message(x, 17, Step::S11Retry17));
     next(x);
-    set8(x, var::FLAG, 1);
+    VARS_BLOCK.set8(x.b, var::FLAG, 1);
     Flow::Done
 }
 pub(super) fn s11_message_18(x: &mut Ctx) -> Flow {
@@ -99,10 +99,10 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
             s13_object(x)
         }
         2 => {
-            if get8(x, var::SIGNAL) != 0 {
-                set8(x, var::SIGNAL, 0);
+            if VARS_BLOCK.get8(x.b, var::SIGNAL) != 0 {
+                VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
                 next(x);
-                set8(x, var::SUB, 0);
+                VARS_BLOCK.set8(x.b, var::SUB, 0);
             }
             Flow::Done
         }
@@ -117,7 +117,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             next(x);
-            set8(x, var::SUB, 0);
+            VARS_BLOCK.set8(x.b, var::SUB, 0);
             s13_route(x);
             Flow::Done
         }
@@ -127,7 +127,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
             6 => choice(x, 137, 0xf933e, 0xf937a),
             _ => {
                 next(x);
-                set8(x, var::FLAG, 14);
+                VARS_BLOCK.set8(x.b, var::FLAG, 14);
                 Flow::Done
             }
         },
@@ -139,7 +139,7 @@ pub(super) fn s13_object(x: &mut Ctx) -> Flow {
     if system_object(x, 3, Step::S13RetryObject).is_none() {
         return Flow::Yield;
     }
-    set8(x, var::SIGNAL, 0);
+    VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
     world(x);
     sprites_next_frame(x, Step::S13Drawn)
 }
@@ -159,19 +159,19 @@ pub(super) fn s13_time_left(x: &mut Ctx) -> Flow {
             if fading::STEP.get(x.b) != 0 {
                 return Flow::Done;
             }
-            set8(x, var::SIGNAL, 0xff);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
             world(x);
             sprites_next_frame(x, Step::S13LeftDrawn)
         }
         4 => {
             if fading::STEP.get(x.b) == 0 {
-                set8(x, var::SIGNAL, 1);
+                VARS_BLOCK.set8(x.b, var::SIGNAL, 1);
                 next_sub(x);
             }
             Flow::Done
         }
         6 => {
-            if get8(x, var::SIGNAL) == 2 {
+            if VARS_BLOCK.get8(x.b, var::SIGNAL) == 2 {
                 next_sub(x);
             }
             Flow::Done
@@ -182,11 +182,11 @@ pub(super) fn s13_time_left(x: &mut Ctx) -> Flow {
 }
 /// End of the interlude when the object has signalled (`+8` negative): fade to black.
 pub(super) fn s13_leave(x: &mut Ctx) -> Flow {
-    if (get8(x, var::SIGNAL) as i8) >= 0 {
+    if (VARS_BLOCK.get8(x.b, var::SIGNAL) as i8) >= 0 {
         return Flow::Done;
     }
     next(x);
-    set8(x, var::SUB, 0);
+    VARS_BLOCK.set8(x.b, var::SUB, 0);
     fade(x, SCENE_PAGES, crate::tasks::fading::descent, Caller)
 }
 pub(super) fn s13_set_11(x: &mut Ctx) -> Flow {
@@ -208,10 +208,10 @@ pub(super) fn s13_time_out(x: &mut Ctx) -> Flow {
         }
         2 => s13_out_scenery(x),
         4 => {
-            if get8(x, var::SIGNAL) == 0 {
+            if VARS_BLOCK.get8(x.b, var::SIGNAL) == 0 {
                 return Flow::Done;
             }
-            set8(x, var::SIGNAL, 0);
+            VARS_BLOCK.set8(x.b, var::SIGNAL, 0);
             world(x);
             sprites_next_frame(x, Step::S13OutDrawn)
         }
@@ -225,7 +225,7 @@ pub(super) fn s13_out_scenery(x: &mut Ctx) -> Flow {
     tiles(x, TB, 0x22b, end);
     let end = tiles(x, TB2, 0x164, SCROLL_3);
     tiles(x, TB2, 0x165, end);
-    set8(x, var::SIGNAL, 0xff);
+    VARS_BLOCK.set8(x.b, var::SIGNAL, 0xff);
     world(x);
     sprites_next_frame(x, Step::S13OutSceneryDrawn)
 }
@@ -247,8 +247,8 @@ pub(super) fn s13_route(x: &mut Ctx) {
     let mut found = false;
     for k in 0..4u32 {
         let p = A5 + a5::PLAYERS + k * 0x200;
-        if rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4 {
-            let pose = (rd8(x.b, p + 3) >> 1).wrapping_sub(2);
+        if Obj(p).u8(x.b, Obj::ACTIVE) != 0 && (Obj(p).u8(x.b, Obj::STATE) as i8) < 4 {
+            let pose = (Obj(p).u8(x.b, Obj::VARIANT) >> 1).wrapping_sub(2);
             if pose == 0 {
                 found = true;
                 break;
@@ -261,7 +261,7 @@ pub(super) fn s13_route(x: &mut Ctx) {
     if x.v16(a5::CLOCK) != 0 {
         route += 2;
     }
-    set8(x, var::FLAG, route);
+    VARS_BLOCK.set8(x.b, var::FLAG, route);
 }
 
 /// Question `n`, then the next scene according to the answer (table `answers`).
@@ -276,9 +276,9 @@ pub(super) fn choice(x: &mut Ctx, n: u16, table: u32, answers: u32) -> Flow {
         _ => {
             if message_done(x) {
                 let scene = answer(x, answers);
-                set8(x, var::FLAG, scene);
+                VARS_BLOCK.set8(x.b, var::FLAG, scene);
                 next(x);
-                set8(x, var::SUB, 0);
+                VARS_BLOCK.set8(x.b, var::SUB, 0);
             }
         }
     }

@@ -23,7 +23,7 @@ use cps2::Cps2Bus;
 
 use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::Cell;
-use crate::ram::{Byte, Table};
+use crate::ram::{Byte, Long, Table};
 use crate::record::record;
 use crate::Native;
 
@@ -102,7 +102,7 @@ pub fn initialize(b: &mut Cps2Bus) {
     const FREE_START: Byte = Byte::a5(0x24);
     for slot in COIN_SLOTS.iter() {
         for i in 0..4 {
-            slot.set_u32(b, 4 * i, 0);
+            Long(slot.0 + 4 * i).set(b, 0);
         }
     }
     for k in 0..4 {

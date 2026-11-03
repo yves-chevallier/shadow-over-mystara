@@ -5,11 +5,12 @@
 //! scene (table `0xf80c4`, four bytes per scene); (2) transition script specific to the scene (table of
 //! jumps `0xf81fa`, variables `A5-0x5520`, module [`super::transition`]).
 
+use super::screen::blocks::EXIT_SUB_STEP;
+use crate::hw::video::regs;
 use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
 use crate::video::{clear_layer, Layer};
-use crate::mem::{rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 
@@ -26,9 +27,8 @@ mod at {
 }
 
 fn next_sub_step(x: &mut Ctx) {
-    let a0 = super::screen::blocks::EXIT;
-    let s = rd8(x.b, a0 + 3).wrapping_add(2);
-    wr8(x.b, a0 + 3, s);
+    let s = EXIT_SUB_STEP.get(x.b).wrapping_add(2);
+    EXIT_SUB_STEP.set(x.b, s);
 }
 
 /// Scene whose tables are read.
@@ -85,7 +85,7 @@ crate::steps! {
         },
         /// Layers cleared, scrolls and cameras reset.
         Cleared = at::CLEARED.0 => |x| {
-            wr16(x.b, 0x400004, 0x1355);
+            regs::OBJECT_OUTPUT.set(x.b, 0x1355);
             clear_layer(x.b, Layer::One);
             x.set_v8(0x3c, 1);
             clear_layer(x.b, Layer::Two);
@@ -121,14 +121,14 @@ crate::steps! {
 /// Sub-state 1: the palettes of the next scene, then the player screen and the fade.
 fn palettes(x: &mut Ctx) {
     next_sub_step(x);
-    let at = PALETTES.addr() + 4 * table_scene(x);
-    let set = rd8(x.b, at);
+    let at = 4 * table_scene(x);
+    let set = PALETTES.byte(x.b, at);
     if (set as i8) >= 0 {
         crate::palette::load_palette_set(x.b, set as u16);
     }
     // pages 1, 2 and 3 (0x1a60a, 0x1a67e, 0x1a8b2)
     for page in 1..=3 {
-        let n = rd8(x.b, at + page as u32);
+        let n = PALETTES.byte(x.b, at + page as u32);
         crate::palette::load_palette_page(x.b, page, n as u16);
     }
     crate::hud::forget_displayed(x.b);

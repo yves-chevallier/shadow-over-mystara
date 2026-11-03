@@ -10,7 +10,9 @@
 use super::tiles::{self, Number, COLUMN, LAYER};
 use super::fading;
 use super::Ctx;
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
+use crate::hw::video::{Cell, Vram, SCROLL1, TEXT};
+use crate::ram::{Byte, Long};
 use crate::modes::{Flow, Sequence};
 use crate::ops::abcd;
 use crate::objects::Obj;
@@ -20,8 +22,7 @@ use crate::screens::obj;
 
 /// Tally variables (work RAM, under A5).
 mod v {
-    use crate::ram::{Byte, Word};
-    use crate::mem::A5;
+    use crate::ram::{Byte, Long, Word};
     /// Arrival column of the banner (decreases from 48 to 0) and number of columns already visible - 1.
     pub const BANNER_AT: Byte = Byte(0xff_2a56);
     pub const BANNER_WIDTH: Byte = Byte(0xff_2a57);
@@ -31,14 +32,15 @@ mod v {
     /// Counted-down time (BCD word m:ss).
     pub const TIME: Word = Word(0xff_2a5a);
     /// Total bonus (BCD long) and current bonus (BCD long; its byte `+2`: seconds bonus).
-    pub const BONUS: u32 = A5 - 0x55a4;
-    pub const PRIME: u32 = A5 - 0x55a0;
+    pub const BONUS: Long = Long(0xff_2a5c);
+    pub const PRIME: Long = Long(0xff_2a60);
+    pub const PRIME_SECONDS: Byte = Byte(0xff_2a62);
     /// Index of the scene in the name and bonus tables, and its banner variant.
     pub const NAME: Byte = Byte(0xff_2a84);
     pub const NAME_FIRST: Byte = Byte(0xff_2a85);
     pub const PRIME_INDEX: Byte = Byte(0xff_2a86);
     /// Bonuses left to pay out, one BCD long per player.
-    pub const PAYOUT: u32 = A5 - 0x5574;
+    pub const PAYOUT: u32 = 0xff_2a8c;
     /// Player of the optional bonus in progress (word, RAM address).
     pub const WINNER: Word = Word(0xff_2a9e);
     /// Counter of open end screens (incremented at the start, decremented at the end).
@@ -102,15 +104,15 @@ mod sub {
 }
 
 /// The banner is drawn off-screen (rows 8 and 9 of the first page of the layer, 0x910000), then copied.
-const BANNER: u32 = 0x910020;
+const BANNER: u32 = SCROLL1.base + 0x20;
 
 
 /// Current sub-state (byte `+3` of the block designated by A0).
 fn sub_step(x: &mut Ctx) -> u8 {
-    rd8(x.b, super::screen::blocks::EXIT + 3)
+    EXIT_SUB_STEP.get(x.b)
 }
 fn set_sub_step(x: &mut Ctx, s: u8) {
-    wr8(x.b, super::screen::blocks::EXIT + 3, s)
+    EXIT_SUB_STEP.set(x.b, s)
 }
 fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
@@ -131,7 +133,7 @@ fn set_timer(x: &mut Ctx, t: u8) {
 fn players_in_game(x: &mut Ctx) -> impl Iterator<Item = u32> {
     let alive: Vec<u32> = (0..4)
         .map(|k| super::PLAYERS + k * super::PLAYER_STRIDE)
-        .filter(|&p| rd8(x.b, p) != 0 && (Obj(p).u8(x.b, p::STATE) as i8) < 4)
+        .filter(|&p| Obj(p).u8(x.b, Obj::ACTIVE) != 0 && (Obj(p).u8(x.b, p::STATE) as i8) < 4)
         .collect();
     alive.into_iter()
 }
@@ -177,9 +179,9 @@ pub fn run(x: &mut Ctx) -> Flow {
         26 => {
             if tick(x) {
                 x.set_v8(a5::HOLD, 0);
-                let step = rd8(x.b, A5 - 0x55c8).wrapping_add(4);
-                wr8(x.b, A5 - 0x55c8, step);
-                wr8(x.b, A5 - 0x55c7, 0);
+                let step = EXIT_STEP.get(x.b).wrapping_add(4);
+                EXIT_STEP.set(x.b, step);
+                EXIT_SUB_STEP.set(x.b, 0);
                 let n = v::SCREENS.get(x.b).wrapping_sub(1);
                 v::SCREENS.set(x.b, n);
             }
@@ -245,7 +247,7 @@ fn banner(x: &mut Ctx) {
         let at = tiles::blank_columns(x.b, at, 2);
         tiles::glyphs(x.b, at, name_text)
     };
-    wr16(x.b, at, 0xffff);
+    Vram(at).set(x.b, 0xffff);
 }
 
 /// Sub-state 2: the banner advances one column to the left (rows 10 and 11), up to column 0.
@@ -258,12 +260,12 @@ fn banner_step(x: &mut Ctx) {
     let mut dst = LAYER + ((col as u32) << 7) + 0x28;
     let mut src = BANNER;
     for _ in 0..=width as u32 {
-        let (top, bottom) = (rd32(x.b, src), rd32(x.b, src + 4));
-        wr32(x.b, dst, top);
-        wr32(x.b, dst + 4, bottom);
+        let (top, bottom) = (Cell(src).long(x.b), Cell(src + 4).long(x.b));
+        Cell(dst).set_long(x.b, top);
+        Cell(dst + 4).set_long(x.b, bottom);
         src += COLUMN;
         dst += COLUMN;
-        if rd16(x.b, src) == 0xffff {
+        if Cell(src).tile(x.b) == 0xffff {
             tiles::blank(x.b, dst);
             break;
         }
@@ -286,20 +288,20 @@ fn clock(x: &mut Ctx) -> Flow {
     set_timer(x, 30);
     crate::text::print_tall(x.b, rom::TIME_TEXT.addr());
     let t = x.v16(a5::CLOCK);
-    tiles::duration(x.b, 0x912db4, t);
+    tiles::duration(x.b, TEXT.at(0xdb4).0, t);
     Flow::Done
 }
 
 /// Time elapsed (0x0f6dca): the treasure bonus in large digits, then directly the players' bonuses.
 fn time_over(x: &mut Ctx) -> Flow {
     let src = rom::TREASURE_BONUS.addr() + 4 * v::PRIME_INDEX.get(x.b) as u32 + 1;
-    let mut n = Number::new(0x9128b4, 3);
+    let mut n = Number::new(TEXT.at(0x8b4).0, 3);
     for i in 0..2 {
-        let byte = rd8(x.b, src + i);
+        let byte = tables::byte(x.b, src + i);
         tiles::big_digit(x.b, &mut n, byte >> 4);
         tiles::big_digit(x.b, &mut n, byte);
     }
-    let byte = rd8(x.b, src + 2);
+    let byte = tables::byte(x.b, src + 2);
     tiles::big_digit(x.b, &mut n, byte >> 4);
     n.lead = true;
     tiles::big_digit(x.b, &mut n, byte);
@@ -317,14 +319,14 @@ fn time_bonus(x: &mut Ctx) -> Flow {
     }
     set_timer(x, 10);
     let t = v::TIME.get(x.b);
-    tiles::duration(x.b, 0x91283c, t);
+    tiles::duration(x.b, TEXT.at(0x83c).0, t);
     // `cmpi.b #30 ; ble`: signed comparison of a byte then used unsigned
     let steps = v::STEPS.get(x.b);
     let steps = if (steps as i8) <= 30 { steps } else { 30 } as u32;
     let bonus = rom::TIME_BONUS.addr() + 4 * steps;
-    let value = rd32(x.b, bonus);
-    wr32(x.b, v::BONUS, value);
-    tiles::number6(x.b, 0x912d3c, bonus, 0);
+    let value = tables::long(x.b, bonus);
+    v::BONUS.set(x.b, value);
+    tiles::number6(x.b, TEXT.at(0xd3c).0, bonus, 0);
     if t == x.v16(a5::CLOCK) & 0xfff0 {
         set_timer(x, 30);
         next_sub_step(x);
@@ -332,8 +334,8 @@ fn time_bonus(x: &mut Ctx) -> Flow {
     }
     // BCD subtraction on two bytes (sbcd), initial carry zero
     let dec = if t & 0xf0 != 0 { rom::TEN_SECONDS.addr() } else { rom::MINUTE.addr() };
-    let (lo, borrow) = crate::game::sbcd(t as u8, rd8(x.b, dec + 1), false);
-    let (hi, _) = crate::game::sbcd((t >> 8) as u8, rd8(x.b, dec), borrow);
+    let (lo, borrow) = crate::game::sbcd(t as u8, tables::byte(x.b, dec + 1), false);
+    let (hi, _) = crate::game::sbcd((t >> 8) as u8, tables::byte(x.b, dec), borrow);
     v::TIME.set(x.b, (hi as u16) << 8 | lo as u16);
     let n = v::STEPS.get(x.b).wrapping_add(1);
     v::STEPS.set(x.b, n);
@@ -348,25 +350,25 @@ fn second_bonus(x: &mut Ctx) -> Flow {
     set_timer(x, 30);
     next_sub_step(x);
     let seconds = (x.v16(a5::CLOCK) & 15) as u8;
-    tiles::digit(x.b, 0x912a44, seconds, 0);
-    tiles::tall(x.b, 0x912a44 + COLUMN, tiles::SECONDS, 0);
+    tiles::digit(x.b, TEXT.at(0xa44).0, seconds, 0);
+    tiles::tall(x.b, TEXT.at(0xa44).0 + COLUMN, tiles::SECONDS, 0);
     let rate = rom::SECOND_BONUS.byte(x.b, 0);
-    wr32(x.b, v::PRIME, 0);
+    v::PRIME.set(x.b, 0);
     if seconds != 0 {
         let (mut prime, mut carry) = (0u8, false);
         for _ in 0..seconds {
             (prime, carry) = abcd(rate >> 4, prime, false);
         }
         let _ = carry;
-        wr8(x.b, v::PRIME + 2, prime);
+        v::PRIME_SECONDS.set(x.b, prime);
         add_bcd(x, v::BONUS, v::PRIME);
     }
     // the rate (two digits), and the seconds bonus followed by "00"
-    let mut n = Number::new(0x912a44 + 2 * COLUMN, 0);
+    let mut n = Number::new(TEXT.at(0xa44).0 + 2 * COLUMN, 0);
     n.byte(x.b, rate);
     n.digit(x.b, 0);
-    let prime = rd8(x.b, v::PRIME + 2);
-    let mut n = Number::new(0x912e44, 0);
+    let prime = v::PRIME_SECONDS.get(x.b);
+    let mut n = Number::new(TEXT.at(0xe44).0, 0);
     n.byte(x.b, prime);
     n.digit(x.b, 0);
     n.last(x.b, 0);
@@ -374,11 +376,11 @@ fn second_bonus(x: &mut Ctx) -> Flow {
 }
 
 /// `dst += src` (BCD longs), four `abcd` from the low byte to the high byte.
-fn add_bcd(x: &mut Ctx, dst: u32, src: u32) {
+fn add_bcd(x: &mut Ctx, dst: Long, src: Long) {
     let mut carry = false;
     for i in (0..4).rev() {
-        let (r, c) = abcd(rd8(x.b, src + i), rd8(x.b, dst + i), carry);
-        wr8(x.b, dst + i, r);
+        let (r, c) = abcd(Byte(src.0 + i).get(x.b), Byte(dst.0 + i).get(x.b), carry);
+        Byte(dst.0 + i).set(x.b, r);
         carry = c;
     }
 }
@@ -390,22 +392,22 @@ fn total(x: &mut Ctx) -> Flow {
     }
     next_sub_step(x);
     set_timer(x, 30);
-    let at = 0x9127c4;
-    for (k, tile) in [0x0460u32, 0x0462, 0x0464].into_iter().enumerate() {
-        wr32(x.b, at + 4 * k as u32, tile << 16);
+    let at = TEXT.at(0x7c4).0;
+    for (k, tile) in [0x0460u16, 0x0462, 0x0464].into_iter().enumerate() {
+        Cell(at + 4 * k as u32).put(x.b, tile, 0);
     }
-    for (k, tile) in [0x0461u32, 0x0463, 0x0465].into_iter().enumerate() {
-        wr32(x.b, at + COLUMN + 4 * k as u32, tile << 16);
+    for (k, tile) in [0x0461u16, 0x0463, 0x0465].into_iter().enumerate() {
+        Cell(at + COLUMN + 4 * k as u32).put(x.b, tile, 0);
     }
     for k in 0..8 {
-        wr32(x.b, at + COLUMN + 8 + (k + 1) * COLUMN, (0x0466 + k) << 16);
+        Cell(at + COLUMN + 8 + (k + 1) * COLUMN).put(x.b, 0x0466 + k as u16, 0);
     }
     let t = x.v16(a5::CLOCK);
-    tiles::duration(x.b, 0x912850, t);
-    tiles::number6(x.b, 0x912d50, v::BONUS, 0);
-    let bonus = rd32(x.b, v::BONUS);
+    tiles::duration(x.b, TEXT.at(0x850).0, t);
+    tiles::number6(x.b, TEXT.at(0xd50).0, v::BONUS.0, 0);
+    let bonus = v::BONUS.get(x.b);
     for k in 0..4 {
-        wr32(x.b, v::PAYOUT + 4 * k, bonus);
+        Long(v::PAYOUT + 4 * k).set(x.b, bonus);
     }
     Flow::Done
 }
@@ -421,7 +423,7 @@ fn player_totals(x: &mut Ctx) -> Flow {
         let total_at = panel_at(x, rom::TOTAL_AT.addr(), p, true);
         let label_at = panel_at(x, rom::LABEL_AT.addr(), p, true);
         tiles::label(x.b, label_at, rom::LABEL.addr());
-        tiles::number6(x.b, total_at, v::BONUS, 2);
+        tiles::number6(x.b, total_at, v::BONUS.0, 2);
     }
     Flow::Done
 }
@@ -481,8 +483,8 @@ fn best_hits(x: &mut Ctx) -> Flow {
 fn prime_value(x: &mut Ctx, src: u32) {
     let w = winner(x);
     let at = panel_at(x, rom::PANEL_VALUE_AT.addr(), w, false);
-    let value = rd32(x.b, src);
-    wr32(x.b, v::PRIME, value);
+    let value = tables::long(x.b, src);
+    v::PRIME.set(x.b, value);
     tiles::number6(x.b, at, src, 2);
 }
 
@@ -510,7 +512,7 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
         let Ok(Obj(o)) = crate::families::creators::set_15_pure(x.b, 19) else {
             return Flow::Done;
         };
-        let prime = rd32(x.b, v::PRIME);
+        let prime = v::PRIME.get(x.b);
         Obj(o).set_u32(x.b, obj::SIGNAL, prime);
         let w = winner(x);
         let character = Obj(w).u8(x.b, p::CHARACTER);
@@ -547,13 +549,13 @@ fn payout(x: &mut Ctx) -> Flow {
     let mut paying = false;
     for k in 0..4u32 {
         let p = super::PLAYERS + k * super::PLAYER_STRIDE;
-        let left = v::PAYOUT + 4 * k;
-        if rd8(x.b, p) == 0 || (Obj(p).u8(x.b, p::STATE) as i8) >= 4 || rd32(x.b, left) == 0 {
+        let left = Long(v::PAYOUT + 4 * k);
+        if Obj(p).u8(x.b, Obj::ACTIVE) == 0 || (Obj(p).u8(x.b, p::STATE) as i8) >= 4 || left.get(x.b) == 0 {
             continue;
         }
         paying = true;
-        let (rest, amount) = pay_digit(rd32(x.b, left));
-        wr32(x.b, left, rest);
+        let (rest, amount) = pay_digit(left.get(x.b));
+        left.set(x.b, rest);
         let character = Obj(p).u8(x.b, p::CHARACTER);
         crate::events::enqueue_points(x.b, ((character as u32) << 8 | amount) as u16);
         let mut i = 2 * character as u32;
@@ -561,7 +563,7 @@ fn payout(x: &mut Ctx) -> Flow {
             i += 8;
         }
         let at = LAYER.wrapping_add(rom::PAYOUT_AT.pc_word(x.b, i) as i16 as i32 as u32);
-        tiles::number6(x.b, at, left, 2);
+        tiles::number6(x.b, at, left.0, 2);
     }
     if !paying {
         next_sub_step(x);
