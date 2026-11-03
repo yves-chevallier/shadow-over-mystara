@@ -943,7 +943,12 @@ libre.
   * Fuzz (mêmes graines que main, `fuzz_player` fighter, cleric, elf, dwarf, mage, thief, spawn, player_action,
     300 tours ; `fuzz_player_shots` PSHL et PEFF, 200 tours, bot30k) : sorties identiques à main (écarts déjà
     connus de main seulement : PEFF 30, PSHL 18).
-  * Validation : VALIDATION_PLACEHOLDER
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; final (840f01c, main 6a340af fusionné, L8b compris) :
+    308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche),
+    `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; résidu sans aucune clé des joueurs dans les deux modes (restent les
+    clés d'images de L1) ; tests `ddsom-assets` (dont `player_tables_lossless`), `extract` (`to_data` : tables des
+    joueurs, `players.json`, `combat.json`), `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans
+    `tools` ; `examples/names` identique après (a). `mame_snapshots` non relancé (rendu non touché).
   * Pour les lots suivants : la fiche `player::Player` est la seule vue des joueurs (`Player::of(obj)` pour un
     objet désigné comme joueur) ; ses champs sont à lire par `p.hp(b)` ou `p.u8(b, Player::X)`. `families/player`
     garde ses constantes de champs par type. Restent dans la zone 141 constantes d'adresses de tables lues par
