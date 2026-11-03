@@ -248,9 +248,8 @@ PC, vue déchiffrée), taille des éléments (1, 2 ou 4 octets) et valeurs.
   `families/effects/tables.rs` ; au-delà des octets extraits, c'est le résidu (compté, `DDSOM_STRICT=1`).
 * Les tables à enregistrements de longueur variable (décalages puis fiches) sont une seule table ; une donnée
   désignée par une adresse rangée dans l'objet se lit par `held8`/`held16` (la table qui la contient).
-* Quelques palettes de la bibliothèque (`palettes.png`) copiées par les effets sont reprises en extraits
-  (`interface_palettes`, `purse_portraits`...) : les mêmes octets, en attendant que la bibliothèque soit une
-  donnée typée du jeu (lot L12).
+* Les palettes de la bibliothèque copiées par les effets (`interface_palettes`, `purse_portraits`...) ne sont plus
+  des extraits depuis le lot L12 : le jeu les lit dans `palettes.png` (`GameData::palettes`, `palette::library_excerpt!`).
 
 ## Tables des tirs, objets spéciaux, objets et caisses : `data/objects.json`
 
@@ -263,9 +262,9 @@ l'objet ; `box_byte` pour une boîte de collision désignée par adresse, dans `
 
 * Les tables de pointeurs (fiches des caisses, positions portées, délais et masques de la main du boss) sont deux
   tables : les adresses, puis la région qu'elles désignent.
-* Quelques octets sont aussi dans d'autres fichiers : les fiches des caisses, le butin et les chances de chute de
-  l'équipement (`data/boxes.json`), et des extraits de la bibliothèque de palettes (`sobj_palettes`,
-  `shot34_palettes`, `shot17_palette`, `shot41_palette`).
+* Depuis le lot L12, les fiches des caisses, le butin et les chances de chute de l'équipement ne sont plus que dans
+  `data/boxes.json` (chargé dans `GameData`), et les extraits de la bibliothèque de palettes (`sobj_palettes`,
+  `shot34_palettes`, `shot17_palette`, `shot41_palette`) sont lus dans `palettes.png`.
 * Le tir ESHL 5 lit `sprites/tables.json` (`shot5`, `frame_lists`), désormais chargé dans `GameData`
   (`sprite_tables`).
 
@@ -695,6 +694,20 @@ Tables des familles ajoutées par le lot L8b (`extract/src/enemies.rs`, fonction
 
 Le cercle des tourbillons (`0x1c94b6`, X et profondeur par angle) est une table de vitesses de `data/speeds.json`,
 lue par son adresse (`tables::circle`).
+
+### Moteur : `data/engine.json`
+
+Tables du moteur (lot L12, `extract/src/engine.rs`, lues par `ddsom-game/src/tables.rs`) : aides de l'IA (`ai/*` :
+critères de cible, masques de décision, postures, boîtes d'attaque, saisies, poussées, points de marche, tirages par
+ligne, seuils de PV en 16 blocs, routines d'atterrissage, débris, butin, objets spéciaux), direction (`aids/*`),
+placement (`placement/*`), caméras (`scroll/*`, `camera/*`, `camera2/*` : caméra en service et départ par scène, pas
+des bandes, ondulation, fondus de l'orage, blocs de la couche 3), vidéo (`video/*` : bancs des chargeurs de grilles,
+grilles hors des cartes, écrans fixes), sprites (`sprites/*` : boîtes et marques au-delà des tables, textes), petites
+routines et créateurs (`small/*`, `creators/*`), rang (`rank/presets`), palettes depuis l'adresse 0
+(`palette/from_zero`). Format `DataFile` (comme `set.json`) : une table d'adresses suivie des tables qu'elle désigne
+(`nom@0x…`), les autres de longueur connue ou étendues jusqu'à la table suivante ou au code exécuté. Les tables que
+le moteur lit dans d'autres fichiers (`enemies.json`, `scenes.json`, `rest.json`, `levels.json`, `terrain.json`,
+`scene_palettes.json`, `palettes.png`, `sprites/tables.json`, `texts.json`, `dialogs.json`) n'y sont pas recopiées.
 
 ### Caisses : `data/boxes.json`
 
