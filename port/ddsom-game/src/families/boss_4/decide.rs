@@ -9,61 +9,61 @@ use super::*;
 
 /// 0x8328e : combat, debout.
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set32(f::STATE, 0x0202_0000);
 }
 
 /// 0x8329e: about-face, then resumption of the current state.
 pub(super) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     let s = x.u32(f::STATE);
-    x.set32(SAVED_STATE, s);
+    x.set32(Boss::SAVED_STATE, s);
     x.set32(f::STATE, 0x0202_0200);
 }
 
 /// 0x832b2: walk toward the target, fast steps (shot 0x38).
 pub(super) fn walk<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(SHOT, 0x38);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Boss::SHOT, 0x38);
     x.set32(f::STATE, 0x0202_0400);
 }
 
 /// 0x832c8 : marche lente (tir 0x39).
 pub(super) fn walk_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(SHOT, 0x39);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Boss::SHOT, 0x39);
     x.set32(f::STATE, 0x0202_0600);
 }
 
 /// 0x832de / 0x832f0: charge toward the middle of the screen, or toward the target.
 pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>, at_target: bool) {
-    x.set8(VULNERABLE, 0);
-    x.set8(CHARGE_AT_TARGET, at_target as u8);
+    x.set8(Enemy::VULNERABLE, 0);
+    x.set8(Boss4::CHARGE_AT_TARGET, at_target as u8);
     x.set32(f::STATE, 0x0202_0800);
 }
 
 /// 0x83304: backward leap.
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     x.set32(f::STATE, 0x0202_0a00);
 }
 
 /// Attack `n` (`+6` = 2n of group 4), vulnerable or not.
 fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u8, vulnerable: bool) {
-    x.set8(VULNERABLE, vulnerable as u8);
+    x.set8(Enemy::VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, 0x0204_0000 | (n as u32 * 2) << 8);
 }
 
 /// 0x8333e: crossing the screen in flight (attack 3), invulnerable.
 pub(super) fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(INVULNERABLE, 1);
+    x.set8(Boss::INVULNERABLE, 1);
     attack(x, 3, false);
 }
 
 /// Is the first double busy (`+0xaf`)? The breaths then give way to another attack.
 fn double_busy<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let d = double(x, DOUBLE_A);
-    d.u8(x.b, 0xaf) != 0
+    let d = double(x, Boss4::DOUBLE_A);
+    Double(d).wounded(x.b) != 0
 }
 
 /// 0x833ac: waiting for a player.
@@ -88,7 +88,7 @@ fn enter<R: Bench>(x: &mut Cx<'_, R>, target: u32) {
                 return attack(x, 2, false);
             }
             if target == 0x83352 {
-                x.set8(INVULNERABLE, 1);
+                x.set8(Boss::INVULNERABLE, 1);
             }
             attack(x, 4, false);
         }
@@ -117,7 +117,7 @@ fn roll<R: Bench>(x: &mut Cx<'_, R>, r: u32, picks: &str, jumps: &str) {
 
 /// Phase `+0xaa` (byte extended to a word).
 fn phase<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
-    x.u8(PHASE) as i8 as i16 as u16
+    x.u8(Boss::PHASE) as i8 as i16 as u16
 }
 
 /// 0x830ce: the target is in the wide box (0x7ef4): table 0x830e4 (a single choice, the backward leap).

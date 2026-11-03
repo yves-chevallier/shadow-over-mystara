@@ -16,9 +16,12 @@
 //! Animations: 0x1790f6 (movements), 0x179116 (hits).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::objects::Obj;
+use crate::record::record;
 use super::boss_common::*;
+use super::boss_common::warrior::Warrior;
 use super::cx::handlers;
-use crate::mem::A5;
 
 mod aids;
 mod attacks;
@@ -26,50 +29,40 @@ mod fight;
 mod hit;
 mod moves;
 
-mod g {
-    pub const REACTION: u32 = 0x49;
-    pub const STUN: u32 = 0x56;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const SHOT: u32 = 0x79;
-    pub const HITS: u32 = 0x84;
-    pub const TIMER: u32 = 0xa0;
-    pub const ANIM_KIND: u32 = 0xa2;
-    pub const ANIM_LAST: u32 = 0xa3;
-    /// Substate and state to resume (`+0xa5`, long `+0xa6`).
-    pub const RESUME_SUB: u32 = 0xa5;
-    pub const RESUME_STATE: u32 = 0xa6;
-    pub const GRABBED: u32 = 0xaa;
-    pub const PHASE_TIMER: u32 = 0xab;
-    pub const VOLLEY: u32 = 0xac;
-    pub const PHASES: u32 = 0xad;
-    pub const HIT_ACK: u32 = 0xae;
-    pub const PICKED: u32 = 0xaf;
-    pub const SPAWN_TIME: u32 = 0xb4;
-    pub const WEAK_HP: u32 = 0xb6;
-    pub const SPAWNED: u32 = 0xb8;
-    /// Slow motion: active (`+0xb9`), step (`+0xba`), counter of the third attack (`+0xbb`).
-    pub const SLOW: u32 = 0xb9;
-    pub const SLOW_TICK: u32 = 0xba;
-    pub const THIRD: u32 = 0xbb;
-    pub const IDLE_TIME: u32 = 0xbc;
-    pub const IDLE_WAIT: u32 = 0xbe;
+/// Fields of this boss beyond those of `Enemy`, `Boss` and `Warrior` (`record!`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss8(pub Obj);
+
+impl Boss8 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss8 {
+        /// A player is grabbed by the boss (h).
+        grabbed, set_grabbed, GRABBED: u8 @ 0xaa;
+        /// Cleared every frame, read by no code of the port: the byte of the body shape of boss 3 (`Boss3::BODY_SHAPE`),
+        /// which `boss_common::push_out_of_boss` reads only for type 3 (h).
+        shape, set_shape, SHAPE: u8 @ 0xa4;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-const SET_BODY: u32 = 0x1790f6;
-const SET_STRIKE: u32 = 0x179116;
+const SET_BODY: RomAddr = RomAddr(0x1790f6);
+const SET_STRIKE: RomAddr = RomAddr(0x179116);
 
 const WAIT: u32 = 0x020a_0000;
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// The leftovers D2 to D5 (re-read by the following handlers); D0, D1 and D6 are re-read by no one.
@@ -112,30 +105,30 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             st::HIT => hit::run(x),
             _ => x.free(&pools::BOSS),
         }
-        if x.u8(0) == 0 {
+        if x.u8(Enemy::ACTIVE) == 0 {
             return;
         }
         // slow motion: the frame is replayed one time in three (counter +0xba: 2, 1, 0)
-        if x.u8(SLOW) != 0 {
-            let f = sub8(x, SLOW_TICK, 1);
+        if x.u8(Warrior::SLOW) != 0 {
+            let f = sub8(x, Warrior::SLOW_TICK, 1);
             if f.eq() {
-                x.set8(0x46, 1);
+                x.set8(Warrior::REPLAY, 1);
                 continue;
             }
             if f.mi() {
-                x.set8(SLOW_TICK, 2);
-                x.set8(0x46, 0);
+                x.set8(Warrior::SLOW_TICK, 2);
+                x.set8(Warrior::REPLAY, 0);
                 return x.reinsert();
             }
         }
         break;
     }
-    aids::phase(x);
-    if x.u8(0x43) == 0 {
-        let weak = x.u16(WEAK_HP);
+    hp_threshold(x);
+    if x.u8(Warrior::NO_THRESHOLD) == 0 {
+        let weak = x.u16(Warrior::WEAK_HP);
         let hp = x.u16(f::HP);
         if !Fl::sub16(hp, weak).gt() {
-            x.set8(SLOW, 1);
+            x.set8(Warrior::SLOW, 1);
         }
     }
     x.reinsert();
@@ -145,8 +138,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
@@ -155,48 +148,48 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::pick_target(x);
     lib::draw_stance(x);
     lib::draw_6b(x);
-    x.set8(0x2e, 0x28);
+    x.set8(Enemy::BOX_SET, 0x28);
     lib::initial_hp_boss(x);
-    for (off, v) in [(0x70, 0), (0x7e, 0x4f), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0x4f), (Enemy::EVENT_LOW, 0), (Enemy::AI_ROW_8E, 3), (Enemy::AI_SHOT, 0xff)] {
         x.set8(off, v);
     }
     var::SCENE_LEVEL.set(x.b, 0);
-    for (off, v) in [(0x68, 8), (0x69, 8), (0x6a, 0), (0x6c, 1), (0x6d, 2), (0x72, 1), (0x73, 1), (0x74, 4), (0x75, 0x40), (0x76, 1), (0x81, 0x22), (0x80, 0x2a)] {
+    for (off, v) in [(Enemy::AI_68, 8), (Enemy::AI_69, 8), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_WAIT_MASKS, 1), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 1), (Enemy::AI_DECISION_B, 1), (Enemy::AI_BOX_CHANCE, 4), (Enemy::AI_BOX_ANIM, 0x40), (Enemy::AI_BYTE_ROW, 1), (Enemy::LOOT, 0x22), (Enemy::LOOT_ROW, 0x2a)] {
         x.set8(off, v);
     }
-    x.set16(SPAWN_TIME, 0xf0);
-    x.set16(IDLE_WAIT, 0x50);
-    x.set16(IDLE_TIME, 0xf0);
-    x.set8(0, 2);
-    x.set_bit(0x1, 1, true);
+    x.set16(Warrior::SPAWN_TIME, 0xf0);
+    x.set16(Warrior::IDLE_WAIT, 0x50);
+    x.set16(Warrior::IDLE_TIME, 0xf0);
+    x.set8(Enemy::ACTIVE, 2);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     let py = var::SCROLL_Y.get(x.b).wrapping_add(0x69);
-    x.set16(0x8, px);
-    x.set16(0x10, py);
-    x.add16(0xc, 0x50);
-    x.set16(TIMER, 0x3c);
+    x.set16(Obj::X, px);
+    x.set16(Obj::Y, py);
+    x.add16(Obj::Z, 0x50);
+    x.set16(Warrior::TIMER, 0x3c);
     crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::VICTORY, None);
     // "weakened" hit points (slow-motion threshold) according to the number of players
-    let hp = x.u16(0x60);
+    let hp = x.u16(Enemy::HP_MAX);
     let (mut d1, d2) = (hp >> 1, hp >> 2);
     // D2.w (the quarter) stays in the register (`dispatch::Leftovers`)
     setw(x, 2, d2);
     let players = var::PLAYERS_ALIVE.get(x.b);
     if Fl::sub8(players, 1).gt() {
         if Fl::sub8(players, 2).ne() {
-            x.set8(PHASES, 3);
+            x.set8(Warrior::PHASES, 3);
             d1 = d1.wrapping_add(d1);
         } else {
-            x.set8(PHASES, 2);
+            x.set8(Warrior::PHASES, 2);
             d1 = d1.wrapping_add(d2);
         }
     } else {
-        x.set8(PHASES, 1);
+        x.set8(Warrior::PHASES, 1);
     }
-    x.set16(WEAK_HP, d1);
+    x.set16(Warrior::WEAK_HP, d1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set8(0x93, 1);
-    x.set8(0x9a, 0xff);
+    x.set8(Boss::DEATH_CREDIT, 1);
+    x.set8(Boss::DEATH_VALUE, 0xff);
     body(x, 0);
 }
 
@@ -206,12 +199,12 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         lib::pick_target(x);
     }
-    if tst8(x, SPAWNED).eq() && sub16(x, SPAWN_TIME, 1).mi() {
+    if tst8(x, Warrior::SPAWNED).eq() && sub16(x, Warrior::SPAWN_TIME, 1).mi() {
             if let Some(e) = x.alloc(&pools::SET) {
-                e.set_u8(x.b, 0, 1);
-                e.set_u8(x.b, 3, 0x72);
-                e.set_u8(x.b, 2, 2);
-                x.set8(SPAWNED, 1);
+                e.set_u8(x.b, Enemy::ACTIVE, 1);
+                e.set_u8(x.b, Enemy::VARIANT, 0x72);
+                e.set_u8(x.b, Enemy::KIND, 2);
+                x.set8(Warrior::SPAWNED, 1);
             }
         }
     if tst8(x, f::FREEZE).gt() {
@@ -229,14 +222,14 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             0xe => fight::stand_up(x),
             g => bad_index(g),
         }
-        if (x.u8(PHASE_TIMER) as i8) > 0 {
-            sub8(x, PHASE_TIMER, 1);
-            x.set8(0x38, 0);
+        if (x.u8(Warrior::PHASE_TIMER) as i8) > 0 {
+            sub8(x, Warrior::PHASE_TIMER, 1);
+            x.set8(Enemy::FRAME_TAG, 0);
         }
-        x.set8(0xa4, 0);
-        if sub16(x, IDLE_TIME, 1).le() {
+        x.set8(Boss8::SHAPE, 0);
+        if sub16(x, Warrior::IDLE_TIME, 1).le() {
             idle_reset(x);
-        } else if (x.u16(IDLE_WAIT) as i16) < 0 && x.u16(0xc) == 0 {
+        } else if (x.u16(Warrior::IDLE_WAIT) as i16) < 0 && x.u16(Obj::Z) == 0 {
             idle_attack(x);
             idle_reset(x);
         }
@@ -246,18 +239,18 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn idle_reset<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set16(IDLE_WAIT, 0x3c);
-    x.set16(IDLE_TIME, 0x12c);
+    x.set16(Warrior::IDLE_WAIT, 0x3c);
+    x.set16(Warrior::IDLE_TIME, 0x12c);
 }
 
 /// Too long without fighting: the boss straightens up and attacks (state 2, group 4, step drawn from 0x88294).
 fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_bit(0x1, 1, false);
-    x.set16(HITS, 0);
-    x.set8(0x86, 0);
-    x.set8(REACTION, 0);
-    x.set8(0, 1);
-    x.set8(PHASE_TIMER, 0xa);
+    x.set_bit(Enemy::DISPLAY, 1, false);
+    x.set16(Warrior::HITS, 0);
+    x.set8(Enemy::DOWNED, 0);
+    x.set8(Enemy::REACTION, 0);
+    x.set8(Enemy::ACTIVE, 1);
+    x.set8(Warrior::PHASE_TIMER, 0xa);
     x.set32(f::STATE, 0x0204_0000);
     let rng = x.random();
     let i = rng as u32 & 0xf;

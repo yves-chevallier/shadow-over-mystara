@@ -9,16 +9,17 @@
 //! | 10 | return to combat |
 
 use super::decide;
+use crate::data::RomAddr;
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
 /// Table of reaction routines, indexed by the hit code `+0x49` (longs).
-const REACTIONS: u32 = 0x82c8a;
+const REACTIONS: RomAddr = RomAddr(0x82c8a);
 /// The only routine specific to the boss (code 0x4c): shaking in place.
-const SHAKE_REACTION: u32 = 0x82d36;
+const SHAKE_REACTION: RomAddr = RomAddr(0x82d36);
 /// HP thresholds per phase (words, 128 bytes per row).
-const THRESHOLDS: u32 = 0x10ce2;
+const THRESHOLDS: RomAddr = RomAddr(0x10ce2);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -40,16 +41,16 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
-        x.set8(INVULNERABLE, 0);
+        x.set8(Boss::INVULNERABLE, 0);
         // 0x833fc
         if !tst16(x, f::HP).gt() {
             x.set8(f::SUB, 6);
-            x.set8(0, 2);
+            x.set8(Enemy::ACTIVE, 2);
             return death(x);
         }
     }
-    let routine = reaction_routine(x, REACTIONS);
-    if routine == SHAKE_REACTION {
+    let routine = reaction_routine(x, REACTIONS.0);
+    if routine == SHAKE_REACTION.0 {
         shake(x)
     } else {
         run_reaction(x, routine)
@@ -60,64 +61,64 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
 fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set8(0, 2);
-        let px = x.u16(0x8);
-        x.set16(0xa, px);
-        x.set16(HITS, 0);
-        let stun = x.u8(STUN);
+        x.set8(Enemy::ACTIVE, 2);
+        let px = x.u16(Obj::X);
+        x.set16(Enemy::X_SAVED, px);
+        x.set16(Boss4::HITS, 0);
+        let stun = x.u8(Enemy::STUN);
         x.set8(f::FREEZE, stun);
-        x.set8(SHAKE, 0x10);
-        x.anim_start(SET_HURT, 8);
+        x.set8(Boss::SHAKE, 0x10);
+        x.anim_start(SET_HURT.0, 8);
         return;
     }
-    if tst8(x, SHAKE).gt() {
-        sub8(x, SHAKE, 1);
+    if tst8(x, Boss::SHAKE).gt() {
+        sub8(x, Boss::SHAKE, 1);
         let mut d = 2u32;
-        if x.bit(SHAKE, 0) {
+        if x.bit(Boss::SHAKE, 0) {
             d = d & 0xffff_0000 | (d as u16).wrapping_neg() as u32;
         }
         if x.u8(f::FLIP) != 0 {
             d = d & 0xffff_0000 | (d as u16).wrapping_neg() as u32;
         }
-        x.add16(0x8, d as u16);
+        x.add16(Obj::X, d as u16);
         return;
     }
-    let px = x.u16(0xa);
-    x.set16(0x8, px);
-    x.set8(0, 1);
+    let px = x.u16(Enemy::X_SAVED);
+    x.set16(Obj::X, px);
+    x.set8(Enemy::ACTIVE, 1);
     x.set32(f::STATE, 0x0404_0200);
-    x.set32(0x58, 0);
+    x.set32(Enemy::HIT_LOCK, 0);
 }
 
 /// 0x82dae: knockback (0x14 frames backward, then 0x14 in place), then the crossing in flight.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            x.set16(TIMER, 0x14);
+            x.set16(Boss::TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.set8(Obj::SPEED_INDEX, angle);
-            x.set16(0x16, vy);
+            x.set16(Enemy::AX, vy);
             speed(x, 0x17);
             kind(x, 0x20);
             x.add8(f::SUB2, 2);
-            x.anim_start(SET_BODY, 9);
+            x.anim_start(SET_BODY.0, 9);
         }
         2 => {
-            if expired(x, TIMER) {
+            if expired(x, Boss::TIMER) {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 0x14);
-                x.set16(0x16, 0);
+                x.set16(Boss::TIMER, 0x14);
+                x.set16(Enemy::AX, 0);
             }
             x.move_x();
             x.anim_step();
         }
         _ => {
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 x.move_x();
                 x.anim_step();
                 return;
             }
-            x.set32(0x58, 0);
+            x.set32(Enemy::HIT_LOCK, 0);
             decide::swoop(x);
         }
     }
@@ -129,17 +130,17 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             lib::behaviour_by_kind(x);
-            x.set8(ANIM_LAST, 0xff);
-            x.anim_start(SET_BODY, 0xa);
+            x.set8(Boss::ANIM_LAST, 0xff);
+            x.anim_start(SET_BODY.0, 0xa);
         }
         2 => {
-            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, HITS, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, Boss4::HITS, 1).gt() {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
         }
         _ => {
             if var::PAUSE.get(x.b) != 0 || !x.anim_step() {
@@ -153,12 +154,12 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x82ea0: return to combat (also called by the common reactions, table 0x3e000): crosses the HP threshold,
 /// then crossing in flight if a player is very close, otherwise the walk.
 pub(crate) fn resume<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0, 1);
-    x.set8(ANIM_LAST, 0xff);
+    x.set8(Enemy::ACTIVE, 1);
+    x.set8(Boss::ANIM_LAST, 0xff);
     if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {
         return decide::wait(x);
     }
-    lib::next_threshold(x, THRESHOLDS);
+    lib::next_threshold(x, THRESHOLDS.0);
     if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::swoop(x);
     } else {
@@ -172,41 +173,37 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
-            let kind = x.u8(2);
-            let points = x.u8(0x7e);
-            let a5 = crate::mem::A5;
-            crate::mem::wr8(x.b, a5.wrapping_sub(0x557c), kind);
-            crate::mem::wr8(x.b, a5.wrapping_sub(0x557b), 0);
-            crate::mem::wr8(x.b, a5.wrapping_sub(0x557a), points);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
+            let kind = x.u8(Enemy::KIND);
+            record_defeat(x, kind);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, crate::sound::CMD_FF);
             lib::sound(x, crate::sound::CMD_30E);
             lib::drop_rewards(x);
-            x.set8(0, 2);
-            x.set16(0x16, 0);
-            x.set16(0x18, 0x500);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set8(Enemy::ACTIVE, 2);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, 0x500);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             let mid = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            let (vx, side) = if Fl::sub16(mid, x.u16(0x8)).ge() { (0x200u16, 0u8) } else { ((-0x200i16) as u16, 0x20) };
+            let (vx, side) = if Fl::sub16(mid, x.u16(Obj::X)).ge() { (0x200u16, 0u8) } else { ((-0x200i16) as u16, 0x20) };
             setw(x, 0, vx);
-            x.set16(0x14, vx);
+            x.set16(Enemy::VX, vx);
             x.set8(f::FLIP, side);
             x.move_xz();
-            x.anim_start(SET_HURT, 0);
+            x.anim_start(SET_HURT.0, 0);
         }
         2 => {
             x.move_xz();
-            if (x.u16(0xc) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set16(0xc, 0);
+            x.set16(Obj::Z, 0);
             lib::debris(x, 5);
             lib::sound(x, crate::sound::CMD_35D);
-            x.anim_start(SET_BODY, 0xb);
+            x.anim_start(SET_BODY.0, 0xb);
         }
         4 => {
             if x.anim_step() {

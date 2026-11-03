@@ -29,11 +29,11 @@ fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> 
     let rows = tables::table(shape.rows);
     let row = slice << 3;
     let height = rows.at16(b, row);
-    if (height as i16) < other.u16(b, 0xc) as i16 {
+    if (height as i16) < other.u16(b, Obj::Z) as i16 {
         return 0;
     }
     let depth = rows.at16(b, row + 2);
-    let mut dz = other.u16(b, 0x10).wrapping_sub(me.u16(b, 0x10));
+    let mut dz = other.u16(b, Obj::Y).wrapping_sub(me.u16(b, Obj::Y));
     if (dz as i16) < 0 {
         dz = dz.wrapping_neg();
     }
@@ -42,8 +42,8 @@ fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> 
 
 /// 0x818e6: shape 1: object `other` in front of boss `me` (up to 0x20 behind it) is pushed forward.
 pub(crate) fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
-    let ahead = me.u8(b, 0x2c) != 0;
-    let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
+    let ahead = me.u8(b, Enemy::FLIP) != 0;
+    let mut d = other.u16(b, Obj::X).wrapping_sub(me.u16(b, Obj::X));
     if !ahead {
         d = d.wrapping_neg();
     }
@@ -58,14 +58,14 @@ pub(crate) fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
     if !ahead {
         p = p.wrapping_neg();
     }
-    let ox = other.u16(b, 0x8);
-    other.set_u16(b, 0x8, ox.wrapping_add(p));
+    let ox = other.u16(b, Obj::X);
+    other.set_u16(b, Obj::X, ox.wrapping_add(p));
     true
 }
 
 /// 0x819e2: shape 2: object `other` is pushed away from boss `me`, on the side where it is.
 pub(crate) fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
-    let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
+    let mut d = other.u16(b, Obj::X).wrapping_sub(me.u16(b, Obj::X));
     if (d as i16) < 0 {
         d = d.wrapping_neg();
     }
@@ -73,25 +73,25 @@ pub(crate) fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
     if p == 0 {
         return false;
     }
-    let ox = other.u16(b, 0x8);
-    if (ox as i16) < me.u16(b, 0x8) as i16 {
+    let ox = other.u16(b, Obj::X);
+    if (ox as i16) < me.u16(b, Obj::X) as i16 {
         p = p.wrapping_neg();
     }
-    other.set_u16(b, 0x8, ox.wrapping_add(p));
+    other.set_u16(b, Obj::X, ox.wrapping_add(p));
     true
 }
 
 /// 0x818b2 (`shape` = 1) and 0x819b0 (2): the boss pushes each present player, except the elf (class 5) in its
 /// state 0x1a.
 pub(super) fn push_players<R: Bench>(x: &mut Cx<'_, R>, shape: u8) {
-    x.set8(BODY_SHAPE, shape);
+    x.set8(Boss3::BODY_SHAPE, shape);
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
-        if p.u8(x.b, 0) == 0 {
+        if p.u8(x.b, Enemy::ACTIVE) == 0 {
             continue;
         }
-        let class = p.u8(x.b, 3) >> 1;
-        if class == 5 && p.u8(x.b, 0x6a) == 0x1a {
+        let class = p.u8(x.b, Enemy::VARIANT) >> 1;
+        if class == 5 && p.u8(x.b, Enemy::AI_WANDER_ROW) == 0x1a {
             continue;
         }
         if shape == 1 {

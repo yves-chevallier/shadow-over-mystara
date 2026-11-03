@@ -23,15 +23,15 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// +6 = 0: placed to the right of the camera, it sets off in a leap toward the left.
 fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
-    x.set_bit(0x1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     let px = var::CAMERA1_X.get(x.b).wrapping_add(0x1e0);
     let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x48);
-    x.set16(0x8, px);
-    x.set16(0x10, py);
-    x.set16(0x14, (-0x500i16) as u16);
-    x.set16(0x16, 0);
-    x.set16(0x18, 0x400);
-    x.set16(0x1a, (-0x40i16) as u16);
+    x.set16(Obj::X, px);
+    x.set16(Obj::Y, py);
+    x.set16(Enemy::VX, (-0x500i16) as u16);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x400);
+    x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
     x.move_xz();
     fly(x, 7);
 }
@@ -66,10 +66,10 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set16(0xc, 0);
-    x.set16(TIMER, 0x12);
-    x.set16(COUNT, 0);
-    x.set16(0x16, 0x48);
+    x.set16(Obj::Z, 0);
+    x.set16(Boss::TIMER, 0x12);
+    x.set16(Boss6::COUNT, 0);
+    x.set16(Enemy::AX, 0x48);
     lib::shake_58(x, 0x1e);
     lib::sound(x, crate::sound::CMD_328_428_B);
     fly(x, 0xa);
@@ -77,13 +77,13 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 8: landing slide, with dust every 4 frames.
 fn roar_wait<R: Bench>(x: &mut Cx<'_, R>) {
-    if !sub16(x, COUNT, 1).gt() {
-        x.set16(COUNT, 4);
+    if !sub16(x, Boss6::COUNT, 1).gt() {
+        x.set16(Boss6::COUNT, 4);
         lib::debris(x, 3);
     }
-    if sub16(x, TIMER, 1).le() {
+    if sub16(x, Boss::TIMER, 1).le() {
         x.add8(f::SUB2, 2);
-        x.set16(TIMER, 0x14);
+        x.set16(Boss::TIMER, 0x14);
         return;
     }
     x.move_x();
@@ -92,7 +92,7 @@ fn roar_wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 10: pause before getting up.
 fn settle<R: Bench>(x: &mut Cx<'_, R>) {
-    if sub16(x, TIMER, 1).le() {
+    if sub16(x, Boss::TIMER, 1).le() {
         x.add8(f::SUB2, 2);
         lib::sound(x, crate::sound::CMD_30C_40C);
         body(x, 8);

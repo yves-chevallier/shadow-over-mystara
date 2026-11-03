@@ -31,8 +31,8 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn slash<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
-        x.set8(0x45, 5);
-        x.set8(0x44, 0x44);
+        x.set8(Enemy::STRIKE_POWER, 5);
+        x.set8(Enemy::STRIKE_KIND, 0x44);
         key(x, 0xa);
         strike(x, 0);
     } else {
@@ -46,7 +46,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             addq8(x, f::SUB3, 2);
             key(x, 0xb);
-            x.set8(PHASE_TIMER, 0x1e);
+            x.set8(Warrior::PHASE_TIMER, 0x1e);
             strike(x, 1);
         }
         2 => {
@@ -60,7 +60,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
         }
         4 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
                 eshl_burst_27(x);
@@ -69,10 +69,10 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_step();
         }
         _ => {
-            if x.u8(HIT_ACK) != 0 {
-                x.set8(VULNERABLE, 1);
+            if x.u8(Warrior::HIT_ACK) != 0 {
+                x.set8(Enemy::VULNERABLE, 1);
                 aids::after_attack(x);
-                x.set8(HIT_ACK, 0);
+                x.set8(Warrior::HIT_ACK, 0);
             }
             x.anim_step();
         }
@@ -89,14 +89,14 @@ fn shoot<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
 fn volley_start<R: Bench>(x: &mut Cx<'_, R>, kind: u8, rain: bool) {
     addq8(x, f::SUB3, 2);
     if !rain {
-        x.set8(PHASE_TIMER, 4);
-        x.set8(0x45, 5);
+        x.set8(Warrior::PHASE_TIMER, 4);
+        x.set8(Enemy::STRIKE_POWER, 5);
     }
-    x.set8(0x44, 0x45);
+    x.set8(Enemy::STRIKE_KIND, 0x45);
     key(x, kind);
-    x.set8(PICKED, 0);
+    x.set8(Warrior::PICKED, 0);
     if rain {
-        x.set8(BURSTS, 2);
+        x.set8(Boss7::BURSTS, 2);
     }
     strike(x, 3);
 }
@@ -109,18 +109,18 @@ fn volley_fire<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     lib::shake_58(x, 0x30);
     lib::sound(x, crate::sound::CMD_345);
     addq8(x, f::SUB3, 2);
-    x.set16(TIMER, 0x32);
+    x.set16(Warrior::TIMER, 0x32);
     crate::families::effects_creators::spell_ring(x.b, x.o, 2);
     let n = var::PLAYERS_ALIVE.get(x.b);
-    x.set8(VOLLEY, n);
-    sub8(x, VOLLEY, 1);
+    x.set8(Warrior::VOLLEY, n);
+    sub8(x, Warrior::VOLLEY, 1);
     shoot(x, pick);
     strike(x, 4);
 }
 
 /// One more shot as long as there are players left to aim at.
 fn volley_next<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
-    let f = sub8(x, VOLLEY, 1);
+    let f = sub8(x, Warrior::VOLLEY, 1);
     if !f.eq() && !f.mi() {
         shoot(x, pick);
     }
@@ -152,7 +152,7 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
             if !timer_done(x) {
                 return;
             }
-            if sub8(x, BURSTS, 1).mi() {
+            if sub8(x, Boss7::BURSTS, 1).mi() {
                 addq8(x, f::SUB3, 2);
                 strike(x, 5);
             } else {
@@ -173,9 +173,9 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             }
             addq8(x, f::SUB3, 2);
             let t = load_target(x);
-            let (tx, ty) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
-            x.set16(TARGET_X, tx);
-            x.set16(TARGET_Y, ty);
+            let (tx, ty) = (t.u16(x.b, Obj::X), t.u16(x.b, Obj::Y));
+            x.set16(Boss7::TARGET_X, tx);
+            x.set16(Boss7::TARGET_Y, ty);
             key(x, 0xd);
             strike(x, 2);
         }
@@ -196,9 +196,9 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             addq8(x, f::SUB3, 2);
-            x.set8(PHASE_TIMER, 4);
-            x.set8(0x45, 5);
-            x.set8(0x44, 0x46);
+            x.set8(Warrior::PHASE_TIMER, 4);
+            x.set8(Enemy::STRIKE_POWER, 5);
+            x.set8(Enemy::STRIKE_KIND, 0x46);
             key(x, 0xf);
             strike(x, 7);
         }
@@ -215,15 +215,15 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 d0 = d0.wrapping_neg();
                 d1 = d1.wrapping_neg();
             }
-            x.set16(0x14, d0 as u16);
-            x.set16(0x16, d1 as u16);
+            x.set16(Enemy::VX, d0 as u16);
+            x.set16(Enemy::AX, d1 as u16);
         }
         4 => {
             dust(x, 0);
             x.move_x();
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
-                x.set16(TIMER, 0x14);
+                x.set16(Warrior::TIMER, 0x14);
                 strike(x, 8);
             }
         }
@@ -231,19 +231,19 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             dust(x, 1);
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
-                x.set16(TIMER, 1);
-                let v = x.u16(0x14).wrapping_neg();
-                x.set16(0x14, v);
+                x.set16(Warrior::TIMER, 1);
+                let v = x.u16(Enemy::VX).wrapping_neg();
+                x.set16(Enemy::VX, v);
             }
             x.move_x();
             x.anim_step();
         }
         _ => {
             if timer_done(x) {
-                x.set16(TIMER, 0);
-                x.set16(0x14, 0);
-                x.set16(0x16, 0);
-                x.set8(0, 1);
+                x.set16(Warrior::TIMER, 0);
+                x.set16(Enemy::VX, 0);
+                x.set16(Enemy::AX, 0);
+                x.set8(Enemy::ACTIVE, 1);
                 return aids::after_attack(x);
             }
             x.move_x();
@@ -254,8 +254,8 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Every 4 frames, a puff of dust under the feet (`andi.w #3,(0x6e,A5) ; beq`), of kind `kind`.
 fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
-    let v = x.a5_u16(0x6e) & 3;
-    x.set_a5_u16(0x6e, v);
+    let v = var::FRAME_COUNTER.get(x.b) & 3;
+    var::FRAME_COUNTER.set(x.b, v);
     if v == 0 {
         lib::shock(x, kind, 1, 0xffe0, 0xffff);
     }
@@ -272,17 +272,17 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
 /// Start of the leap: horizontal momentum `vx` (reversed if the boss faces left).
 pub(super) fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
     addq8(x, f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     key(x, 0x10);
-    x.set8(0x44, 0x45);
-    x.set16(0x14, vx as u16);
+    x.set8(Enemy::STRIKE_KIND, 0x45);
+    x.set16(Enemy::VX, vx as u16);
     if x.u8(f::FLIP) != 0 {
-        let v = x.u16(0x14).wrapping_neg();
-        x.set16(0x14, v);
+        let v = x.u16(Enemy::VX).wrapping_neg();
+        x.set16(Enemy::VX, v);
     }
-    x.set16(0x16, 0);
-    x.set16(0x18, 0x900);
-    x.set16(0x1a, (-0x88i16) as u16);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x900);
+    x.set16(Enemy::GRAVITY, (-0x88i16) as u16);
     strike(x, 9);
 }
 
@@ -292,16 +292,16 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         2 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             x.anim_step();
         }
         4 => {
             x.move_xz();
-            if (x.u16(0x18) as i16) <= -0x300 {
-                x.set16(0x1a, (-0x98i16) as u16);
+            if (x.u16(Enemy::VZ) as i16) <= -0x300 {
+                x.set16(Enemy::GRAVITY, (-0x98i16) as u16);
                 addq8(x, f::SUB3, 2);
-                x.set16(0x30, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             }
             x.anim_step();
         }
@@ -313,11 +313,11 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             lib::shake_58(x, 0x14);
             lib::sound(x, crate::sound::CMD_327_427_C);
             aids::burst_small(x);
-            x.set32(0xc, 0);
+            x.set32(Obj::Z, 0);
             addq8(x, f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set16(0x30, 1);
-            x.set16(TIMER, 0x14);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set16(Obj::ANIM_TIMER, 1);
+            x.set16(Warrior::TIMER, 0x14);
             strike(x, 0xa);
         }
         8 => {
@@ -328,7 +328,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         }
         _ => {
             if x.anim_step() {
-                x.set16(TIMER, 0);
+                x.set16(Warrior::TIMER, 0);
                 aids::after_attack(x);
             }
         }
@@ -340,7 +340,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             addq8(x, f::SUB3, 2);
-            x.set8(0, 2);
+            x.set8(Enemy::ACTIVE, 2);
             key(x, 0x12);
             lib::sound(x, crate::sound::CMD_349);
             body(x, 4);
@@ -349,16 +349,16 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 aids::random_sidestep(x);
-                x.set_bit(0x1, 1, true);
-                x.set16(TIMER, 8);
+                x.set_bit(Enemy::DISPLAY, 1, true);
+                x.set16(Warrior::TIMER, 8);
                 body(x, 5);
             }
         }
         4 => {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
-                x.set_bit(0x1, 1, false);
-                x.set8(0, 1);
+                x.set_bit(Enemy::DISPLAY, 1, false);
+                x.set8(Enemy::ACTIVE, 1);
                 lib::sound(x, crate::sound::CMD_349);
             }
         }

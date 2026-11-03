@@ -239,6 +239,13 @@ impl Prey {
 
 record! {
     impl Prey {
+        /// Non-zero: the player is on the ground (the bosses 1 and 6 choose another hit or rest animation) (h).
+        grounded, set_grounded, GROUNDED: u8 @ 0x66;
+        /// Set by a boss that lets the player go: 1 when it releases the player (boss 1) or drops the player dying
+        /// (boss 5), 0 for a normal release (boss 5) (h).
+        released, set_released, RELEASED: u8 @ 0x6f;
+        /// Object that holds the player (word, RAM address), set by the bosses that grab.
+        holder, set_holder, HOLDER: u16 @ 0x186;
         /// Non-zero: the player is held by an enemy (`player::hurt`, reaction 0x32).
         held, set_held, HELD: u8 @ 0x188;
     }

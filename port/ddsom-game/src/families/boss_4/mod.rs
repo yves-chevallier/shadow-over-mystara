@@ -19,7 +19,10 @@
 //! in `decide`. Animations: 0x17557e (body), 0x175596 (flight and attacks), 0x1755ae (hits received).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::record::record;
 use super::boss_common::*;
+use super::enemy_double::Double;
 use super::cx::handlers;
 use crate::objects::Obj;
 
@@ -28,66 +31,56 @@ mod decide;
 mod fight;
 pub(crate) mod hit;
 
-/// Fields specific to this type.
-mod g {
-    /// Walk steps remaining (`+0x6b`), countdown before the next step (`+0x71`), standing wait (`+0x6e`).
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const IDLE_COUNT: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    pub const STUN: u32 = 0x56;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const SHOT: u32 = 0x79;
-    /// Shaking counter (reaction 0x4c).
-    pub const SHAKE: u32 = 0x90;
-    /// Current animation set and current animation.
-    pub const ANIM_KIND: u32 = 0xa0;
-    pub const ANIM_LAST: u32 = 0xa1;
-    /// Saved state (long) to resume after an about-face.
-    pub const SAVED_STATE: u32 = 0xa2;
-    /// Step timer and dust rhythm (or oscillation rhythm in flight).
-    pub const TIMER: u32 = 0xa6;
-    pub const DUST: u32 = 0xa8;
-    pub const PHASE: u32 = 0xaa;
-    pub const PHASES: u32 = 0xab;
-    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
-    pub const INVULNERABLE: u32 = 0xad;
-    /// Countdown between two jets of the breath, and rank of the jet in the angle table (`+0x42`).
-    pub const BREATH: u32 = 0xaf;
-    pub const BREATH_STEP: u32 = 0x42;
-    /// Charge: 0 toward the middle of the screen, 1 toward the target's retained X position (`+0xbc`).
-    pub const CHARGE_AT_TARGET: u32 = 0xb2;
-    pub const MARK_X: u32 = 0xbc;
-    /// Wing beat: alternated at each mark (0x11a36).
-    pub const WING: u32 = 0xb3;
-    /// The three doubles (words).
-    pub const DOUBLE_A: u32 = 0xb4;
-    pub const DOUBLE_B: u32 = 0xb6;
-    pub const DOUBLE_C: u32 = 0xb8;
-    /// Hits taken on the ground (word).
-    pub const HITS: u32 = 0x84;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss4(pub Obj);
+
+impl Boss4 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss4 {
+        breath_step, set_breath_step, BREATH_STEP: u8 @ 0x42;
+        /// Hits taken on the ground (word).
+        hits, set_hits, HITS: u16 @ 0x84;
+        dust, set_dust, DUST: u16 @ 0xa8;
+        /// Countdown between two jets of the breath, and rank of the jet in the angle table (`+0x42`).
+        breath, set_breath, BREATH: u8 @ 0xaf;
+        /// Charge: 0 toward the middle of the screen, 1 toward the target's retained X position (`+0xbc`).
+        charge_at_target, set_charge_at_target, CHARGE_AT_TARGET: u8 @ 0xb2;
+        /// Wing beat: alternated at each mark (0x11a36).
+        wing, set_wing, WING: u8 @ 0xb3;
+        /// The three doubles (words).
+        double_a, set_double_a, DOUBLE_A: u8 @ 0xb4;
+        double_b, set_double_b, DOUBLE_B: u8 @ 0xb6;
+        double_c, set_double_c, DOUBLE_C: u8 @ 0xb8;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
 /// Animation sets: body, flight and attacks, hits received.
-const SET_BODY: u32 = 0x17557e;
-const SET_AIR: u32 = 0x175596;
-const SET_HURT: u32 = 0x1755ae;
+const SET_BODY: RomAddr = RomAddr(0x17557e);
+const SET_AIR: RomAddr = RomAddr(0x175596);
+const SET_HURT: RomAddr = RomAddr(0x1755ae);
 
 /// Starts animation `n` of a set via the AI (0x103d6).
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_BODY, n);
+    lib::start(x, SET_BODY.0, n);
 }
 
 fn air<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_AIR, n);
+    lib::start(x, SET_AIR.0, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
 fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
-    x.set8(ANIM_KIND, k);
-    x.set8(ANIM_LAST, k);
+    x.set8(Boss::ANIM_KIND, k);
+    x.set8(Boss::ANIM_LAST, k);
 }
 
 /// Low-order word of a data register: only D2 to D5 are kept (leftovers re-read by the following handlers);
@@ -120,14 +113,14 @@ fn double<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
 
 /// Asks the first double to replay its gesture (`+0xb6` of the double).
 fn cue_double<R: Bench>(x: &mut Cx<'_, R>) {
-    let d = double(x, DOUBLE_A);
-    d.set_u8(x.b, 0xb6, 1);
+    let d = double(x, Boss4::DOUBLE_A);
+    Double(d).set_restart(x.b, 1);
 }
 
 /// Every 4 frames, a puff of dust (0x1172e, kind 3).
 fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
-    if !sub16(x, DUST, 1).gt() {
-        x.set16(DUST, 4);
+    if !sub16(x, Boss4::DUST, 1).gt() {
+        x.set16(Boss4::DUST, 4);
         lib::debris(x, 3);
     }
 }
@@ -137,8 +130,8 @@ fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
-        let w = x.u8(WING) ^ 1;
-        x.set8(WING, w);
+        let w = x.u8(Boss4::WING) ^ 1;
+        x.set8(Boss4::WING, w);
         lib::ground_debris(x, w);
     }
 }
@@ -159,10 +152,10 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         st::HIT => hit::run(x),
         _ => x.free(&pools::BOSS),
     }
-    if x.u8(INVULNERABLE) != 0 {
-        x.set8(0x38, 0);
+    if x.u8(Boss::INVULNERABLE) != 0 {
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -172,10 +165,10 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x81b74: boss setup, creation of the three doubles; in game, it enters from the top of the screen.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     pick_target(x);
-    x.set8(PHASES, 2);
+    x.set8(Boss::PHASES, 2);
     x.set8(f::BOX_SET, 0x24);
     lib::initial_hp_boss(x);
     var::SCENE_LEVEL.set(x.b, 0);
@@ -183,44 +176,44 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
-    for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 0), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 2), (Enemy::AI_BOX_ANIM, 0)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set8(0, 2);
-    x.set_bit(0x1, 1, true);
+    x.set8(Enemy::ACTIVE, 2);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     for (off, v) in [
-        (0x93, 1),
-        (0x9a, 0xff),
-        (0x72, 1),
-        (0x73, 1),
-        (0x6c, 6),
-        (0x6d, 1),
-        (0x74, 7),
-        (0x78, 0xff),
-        (0x8e, 3),
-        (0x68, 8),
-        (0x69, 1),
-        (VULNERABLE, 0),
-        (ANIM_KIND, 0),
-        (ANIM_LAST, 0xff),
-        (0x7e, 0x4d),
-        (0x7f, 0),
-        (0x80, 0x25),
-        (0x81, 0x1e),
+        (Boss::DEATH_CREDIT, 1),
+        (Boss::DEATH_VALUE, 0xff),
+        (Enemy::AI_DECISION_A, 1),
+        (Enemy::AI_DECISION_B, 1),
+        (Enemy::AI_WAIT_MASKS, 6),
+        (Enemy::AI_WAIT_ROW, 1),
+        (Enemy::AI_BOX_CHANCE, 7),
+        (Enemy::AI_SHOT, 0xff),
+        (Enemy::AI_ROW_8E, 3),
+        (Enemy::AI_68, 8),
+        (Enemy::AI_69, 1),
+        (Enemy::VULNERABLE, 0),
+        (Boss::ANIM_KIND, 0),
+        (Boss::ANIM_LAST, 0xff),
+        (Enemy::EVENT_KIND, 0x4d),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::LOOT_ROW, 0x25),
+        (Enemy::LOOT, 0x1e),
     ] {
         x.set8(off, v);
     }
     // two doubles with their own HP (the boss's minus 0xfa or 0x12c, at least 0x96 or 0x64), a third without
-    spawn_double(x, 0x16, Some((0xfa, 0x96, 0x43)), DOUBLE_A);
-    spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), DOUBLE_B);
-    spawn_double(x, 0x18, None, DOUBLE_C);
+    spawn_double(x, 0x16, Some((0xfa, 0x96, 0x43)), Boss4::DOUBLE_A);
+    spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), Boss4::DOUBLE_B);
+    spawn_double(x, 0x18, None, Boss4::DOUBLE_C);
     if var::GAME_ON.get(x.b) != 0 {
         body(x, 0);
         lib::sound(x, crate::sound::CMD_20);
     } else {
-        x.set8(0, 1);
-        x.set_bit(0x1, 1, false);
+        x.set8(Enemy::ACTIVE, 1);
+        x.set_bit(Enemy::DISPLAY, 1, false);
         decide::wait(x);
         lib::set_immunities(x);
         body(x, 0);
@@ -231,26 +224,26 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 /// (`link`). `life`: (deduction, minimum, box set) for a double that has its own HP.
 fn spawn_double<R: Bench>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
     let Some(d) = alloc_retry(x, &pools::ENEMY) else { return };
-    d.set_u8(x.b, 0, 1);
-    d.set_u8(x.b, 2, kind);
+    d.set_u8(x.b, Enemy::ACTIVE, 1);
+    d.set_u8(x.b, Enemy::KIND, kind);
     if let Some((cut, least, boxes)) = life {
-        let hp = x.u16(0x60);
+        let hp = x.u16(Enemy::HP_MAX);
         let mut v = hp.wrapping_sub(cut);
         if (v as i16) < 0 {
             v = least;
         }
-        for off in [0x60, 0x62, 0x64] {
+        for off in [Enemy::HP_MAX, Enemy::HP, Enemy::HP_LAST] {
             d.set_u16(x.b, off, v);
         }
         d.set_u8(x.b, f::BOX_SET, boxes);
     }
     d.set_u32(x.b, f::IMMUNITY, 0xffff_ffff);
     if life.is_some() {
-        for (off, v) in [(ANIM_KIND, 0), (ANIM_LAST, 0xff), (0x7f, 0), (0x80, 0), (0x81, 0)] {
+        for (off, v) in [(Boss::ANIM_KIND, 0), (Boss::ANIM_LAST, 0xff), (Enemy::EVENT_LOW, 0), (Enemy::LOOT_ROW, 0), (Enemy::LOOT, 0)] {
             d.set_u8(x.b, off, v);
         }
     }
-    d.set_u16(x.b, 0xb2, x.o.0 as u16);
+    Double(d).set_master(x.b, x.o.0 as u16);
     x.set16(link, d.0 as u16);
 }
 

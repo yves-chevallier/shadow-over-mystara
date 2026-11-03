@@ -19,6 +19,8 @@
 //! here (`go`). Animations: 0x172794 (body), 0x1727d4 (attacks), 0x1727e4 (hits received).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::record::record;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -26,72 +28,62 @@ use crate::objects::Obj;
 pub(crate) mod hit;
 mod moves;
 
-/// Fields specific to this type.
-mod g {
-    /// Leaps remaining in the walk, standing wait.
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const IDLE_COUNT: u32 = 0x6e;
-    pub const VULNERABLE: u32 = 0x67;
-    /// Time on the ground (word) and shaking counter (reaction 0x4c).
-    pub const DOWN_TIME: u32 = 0x84;
-    pub const SHAKE: u32 = 0x90;
-    /// X position saved during the shaking (word).
-    pub const SAVED_X: u32 = 0xa;
-    /// Kind of current animation and last one started.
-    pub const ANIM_KIND: u32 = 0xa0;
-    pub const ANIM_LAST: u32 = 0xa1;
-    /// Saved state (long) to resume after an about-face.
-    pub const SAVED_STATE: u32 = 0xa2;
-    /// Step timers (words).
-    pub const TIMER: u32 = 0xa6;
-    pub const TIMER2: u32 = 0xa8;
-    pub const PHASE: u32 = 0xaa;
-    pub const PHASES: u32 = 0xab;
-    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
-    pub const INVULNERABLE: u32 = 0xad;
-    /// Hits remaining in the attack chain.
-    pub const COMBO: u32 = 0xae;
-    /// Counter of the arrival's puffs.
-    pub const PUFFS: u32 = 0xaf;
-    /// Double (ENEMY 0x1a) created for the scissor leap (word, 0 = none).
-    pub const DOUBLE: u32 = 0xb0;
-    /// Grab attempts (index into the chance table).
-    pub const GRAB_TRIES: u32 = 0xb2;
-    /// Big leap: 0 toward the target, 1 toward the middle of the screen.
-    pub const LEAP_TO_CENTER: u32 = 0xb3;
-    /// First animation of the walking leap (7 or 15 depending on the direction).
-    pub const HOP_ANIM: u32 = 0xb4;
-    /// State of the previous frame (long).
-    pub const PREV_STATE: u32 = 0xb8;
-    /// Point aimed at by a leap (words).
-    pub const MARK_X: u32 = 0xbc;
-    pub const MARK_Z: u32 = 0xbe;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss1(pub Obj);
+
+impl Boss1 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss1 {
+        /// Hits remaining in the attack chain.
+        combo, set_combo, COMBO: u8 @ 0xae;
+        /// Counter of the arrival's puffs.
+        puffs, set_puffs, PUFFS: u8 @ 0xaf;
+        /// Double (ENEMY 0x1a) created for the scissor leap (word, 0 = none).
+        double, set_double, DOUBLE: u16 @ 0xb0;
+        /// Grab attempts (index into the chance table).
+        grab_tries, set_grab_tries, GRAB_TRIES: u8 @ 0xb2;
+        /// Big leap: 0 toward the target, 1 toward the middle of the screen.
+        leap_to_center, set_leap_to_center, LEAP_TO_CENTER: u8 @ 0xb3;
+        /// First animation of the walking leap (7 or 15 depending on the direction).
+        hop_anim, set_hop_anim, HOP_ANIM: u8 @ 0xb4;
+        /// State of the previous frame (long).
+        prev_state, set_prev_state, PREV_STATE: u32 @ 0xb8;
+        mark_z, set_mark_z, MARK_Z: u16 @ 0xbe;
+        /// Cleared at the start of each leap; read by no code of the port (h).
+        leap_flag, set_leap_flag, LEAP_FLAG: u8 @ 0xbb;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
 /// Animation sets: body, attacks, hits received.
-const SET_BODY: u32 = 0x172794;
-const SET_ATTACK: u32 = 0x1727d4;
-const SET_HURT: u32 = 0x1727e4;
+const SET_BODY: RomAddr = RomAddr(0x172794);
+const SET_ATTACK: RomAddr = RomAddr(0x1727d4);
+const SET_HURT: RomAddr = RomAddr(0x1727e4);
 
 /// HP thresholds of the phases (0x105b6).
-const THRESHOLDS: u32 = 0x10be2;
+const THRESHOLDS: RomAddr = RomAddr(0x10be2);
 
 /// Starts animation `n` of a set via the AI (0x103d6).
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_BODY, n);
+    lib::start(x, SET_BODY.0, n);
 }
 
 fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_ATTACK, n);
+    lib::start(x, SET_ATTACK.0, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
 fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
-    x.set8(ANIM_KIND, k);
-    x.set8(ANIM_LAST, k);
+    x.set8(Boss::ANIM_KIND, k);
+    x.set8(Boss::ANIM_LAST, k);
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
@@ -99,7 +91,7 @@ fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 fn next7<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
 }
 
 /// At least one player alive (0x10474).
@@ -138,17 +130,17 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.tick_counters();
     let s = x.u32(f::STATE);
-    x.set32(PREV_STATE, s);
+    x.set32(Boss1::PREV_STATE, s);
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
         _ => x.free(&pools::BOSS),
     }
-    if x.u8(INVULNERABLE) != 0 {
-        x.set8(0x38, 0);
+    if x.u8(Boss::INVULNERABLE) != 0 {
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -158,10 +150,10 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7ad2a: boss setup; it waits, in its pose, for the start of the arrival cutscene.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     pick_target(x);
-    x.set8(PHASES, 2);
+    x.set8(Boss::PHASES, 2);
     x.set8(f::BOX_SET, 0x21);
     lib::initial_hp_boss(x);
     var::SCENE_LEVEL.set(x.b, 0);
@@ -170,29 +162,29 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::clear_all_popups(x);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 0), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 2), (Enemy::AI_BOX_ANIM, 0)] {
         x.set8(off, v);
     }
-    x.set_bit(0x1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     for (off, v) in [
-        (0x93, 1),
-        (0x9a, 0xff),
-        (0x72, 1),
-        (0x73, 1),
-        (0x6c, 6),
-        (0x6d, 1),
-        (0x74, 7),
-        (0x78, 0xff),
-        (0x8e, 3),
-        (0x68, 8),
-        (0x69, 1),
-        (VULNERABLE, 0),
-        (ANIM_KIND, 0),
-        (ANIM_LAST, 0xff),
-        (0x7e, 0x25),
-        (0x7f, 0),
-        (0x80, 0x23),
-        (0x81, 0x1d),
+        (Boss::DEATH_CREDIT, 1),
+        (Boss::DEATH_VALUE, 0xff),
+        (Enemy::AI_DECISION_A, 1),
+        (Enemy::AI_DECISION_B, 1),
+        (Enemy::AI_WAIT_MASKS, 6),
+        (Enemy::AI_WAIT_ROW, 1),
+        (Enemy::AI_BOX_CHANCE, 7),
+        (Enemy::AI_SHOT, 0xff),
+        (Enemy::AI_ROW_8E, 3),
+        (Enemy::AI_68, 8),
+        (Enemy::AI_69, 1),
+        (Enemy::VULNERABLE, 0),
+        (Boss::ANIM_KIND, 0),
+        (Boss::ANIM_LAST, 0xff),
+        (Enemy::EVENT_KIND, 0x25),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::LOOT_ROW, 0x23),
+        (Enemy::LOOT, 0x1d),
     ] {
         x.set8(off, v);
     }
@@ -226,7 +218,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Sets the state long `+4..+7` and makes the boss vulnerable or not (`+0x67`).
 fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
-    x.set8(VULNERABLE, vulnerable as u8);
+    x.set8(Enemy::VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
 }
 
@@ -237,9 +229,9 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7c25a: about-face, the current state will be resumed.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     let s = x.u32(f::STATE);
-    x.set32(SAVED_STATE, s);
+    x.set32(Boss::SAVED_STATE, s);
     x.set32(f::STATE, 0x0202_0200);
 }
 
@@ -253,13 +245,13 @@ fn walk_b<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7c2a2: big leap, toward the target or (`center`) toward the middle of the screen.
 fn leap<R: Bench>(x: &mut Cx<'_, R>, center: bool) {
-    x.set8(LEAP_TO_CENTER, center as u8);
+    x.set8(Boss1::LEAP_TO_CENTER, center as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7c28a: big leap toward the target after a counterattack (invulnerable).
 fn leap_guarded<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(INVULNERABLE, 1);
+    x.set8(Boss::INVULNERABLE, 1);
     leap(x, false);
 }
 
@@ -268,23 +260,23 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }
-    x.set8(INVULNERABLE, 1);
+    x.set8(Boss::INVULNERABLE, 1);
     state(x, false, 0x0202_0a00);
 }
 
 /// 0x7c2de: first hit (a grabbable target receives hit 4).
 fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0400 } else { 0x0204_0000 };
-    x.set8(0x57, 0);
+    let s = if Prey(t).grounded(x.b) != 0 { 0x0204_0400 } else { 0x0204_0000 };
+    x.set8(Boss::HIT_FLAGS, 0);
     state(x, false, s);
 }
 
 /// 0x7c304: second hit (or hit 6 against a grabbable target).
 fn strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0600 } else { 0x0204_0200 };
-    x.set8(0x57, 0);
+    let s = if Prey(t).grounded(x.b) != 0 { 0x0204_0600 } else { 0x0204_0200 };
+    x.set8(Boss::HIT_FLAGS, 0);
     state(x, false, s);
 }
 
@@ -301,9 +293,9 @@ fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7c358: scissor leap with a double.
 fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0, 2);
+    x.set8(Enemy::ACTIVE, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set8(GRAB_TRIES, 0);
+    x.set8(Boss1::GRAB_TRIES, 0);
     x.set32(f::STATE, 0x0204_0a00);
 }
 
@@ -324,18 +316,18 @@ fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
         0x7c29e => leap(x, false),
         0x7c2b0 => back_step(x),
         0x7c2da => {
-            x.set8(COMBO, 0);
+            x.set8(Boss1::COMBO, 0);
             strike_a(x)
         }
         0x7c2de => strike_a(x),
         0x7c2fa => {
-            x.set8(INVULNERABLE, 1);
+            x.set8(Boss::INVULNERABLE, 1);
             combo(x)
         }
         0x7c300 => combo(x),
         0x7c304 => strike_b(x),
         0x7c344 => {
-            x.set8(INVULNERABLE, 1);
+            x.set8(Boss::INVULNERABLE, 1);
             grab(x)
         }
         0x7c34a => grab(x),
@@ -355,7 +347,7 @@ fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7c0e2: target very close; draw in the table of phase `+0xaa`.
 fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let phase = x.u8(PHASE) as i8 as i32 as u32;
+    let phase = x.u8(Boss::PHASE) as i8 as i32 as u32;
     let picks = ["boss_1/close_picks_0", "boss_1/close_picks_1", "boss_1/close_picks_2"][phase as usize % 3];
     let at = decide(x, picks, r, "boss_1/close_jumps");
     go(x, at)
@@ -364,7 +356,7 @@ fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7c14e and 0x7c1cc: the AI chose gesture `g` (1 or 2); draw in the phase's table.
 fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, picks: [&str; 6], jumps: &str) {
     let r = rand_and(x, 0xf);
-    let phase = x.u8(PHASE) as i8 as i32;
+    let phase = x.u8(Boss::PHASE) as i8 as i32;
     let i = (g as i32 - 1 + 2 * phase) as usize;
     let at = decide(x, picks[i.min(5)], r, jumps);
     go(x, at)
@@ -389,17 +381,17 @@ fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     players = players.saturating_sub(1);
     let i = level.wrapping_add(players);
     let n = byte(x, "boss_1/combo_counts", i as u32);
-    x.set8(COMBO, n);
+    x.set8(Boss1::COMBO, n);
 }
 
 /// 0x7c50c: scissor leap attempt (with no double in progress): a chance that grows with each try.
 fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    if x.u16(DOUBLE) != 0 {
+    if x.u16(Boss1::DOUBLE) != 0 {
         return false;
     }
-    x.add8(GRAB_TRIES, 1);
+    x.add8(Boss1::GRAB_TRIES, 1);
     let r = rand_and(x, 0xf);
-    let tries = x.u8(GRAB_TRIES) as u32;
+    let tries = x.u8(Boss1::GRAB_TRIES) as u32;
     let mask = word(x, "boss_1/split_leap_masks", 2 * tries);
     mask >> r & 1 != 0
 }
@@ -408,7 +400,7 @@ fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let r = rand_and(x, 0x1f);
     let n = byte(x, table, r);
-    x.set8(WALK_STEPS, n);
+    x.set8(Boss::WALK_STEPS, n);
 }
 
 /// 0x7c396 / 0x7c3b0: aimed point near the target (offsets drawn from `table`, `mask` + 1 entries), on the
@@ -419,16 +411,16 @@ fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: &str, mask: u32) {
     let dz = word(x, table, i + 2);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | dz as u32;
     let t = target_obj(x);
-    let tx = t.u16(x.b, 0x8);
+    let tx = t.u16(x.b, Obj::X);
     let mut px = dx;
-    if tx as i16 >= x.u16(0x8) as i16 {
+    if tx as i16 >= x.u16(Obj::X) as i16 {
         px = px.wrapping_neg();
     }
     let mx = px.wrapping_add(tx);
-    let mz = dz.wrapping_add(t.u16(x.b, 0x10));
+    let mz = dz.wrapping_add(t.u16(x.b, Obj::Y));
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | mz as u32;
-    x.set16(MARK_X, mx);
-    x.set16(MARK_Z, mz);
+    x.set16(Boss::MARK_X, mx);
+    x.set16(Boss1::MARK_Z, mz);
     aim_at_mark(x, (mx, mz));
 }
 
@@ -444,10 +436,10 @@ fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
     // `move.w (0x1c,A0),D3`: the high word of D3 is the one left by the direction 0x137e called just before by
     // both callers (`moveq #0,D3` then the step): zero
-    let d3 = abs(x.u16(0x1c)) as u32;
-    let mut d4 = abs(x.u16(0x14)) as u32;
-    let dz = abs(x.u16(MARK_Z).wrapping_sub(x.u16(0x10)));
-    let mut d2 = abs(x.u16(MARK_X).wrapping_sub(x.u16(0x8))) as u32;
+    let d3 = abs(x.u16(Enemy::VY)) as u32;
+    let mut d4 = abs(x.u16(Enemy::VX)) as u32;
+    let dz = abs(x.u16(Boss1::MARK_Z).wrapping_sub(x.u16(Obj::Y)));
+    let mut d2 = abs(x.u16(Boss::MARK_X).wrapping_sub(x.u16(Obj::X))) as u32;
     if (d2 as u16 as i16) < dz as i16 {
         d2 = dz as u32;
         d4 = d3;
@@ -463,7 +455,7 @@ fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
         }
         d1 = d1.wrapping_add(10);
     }
-    x.add16(0x18, d1);
+    x.add16(Enemy::VZ, d1);
     *x.c.d2() = d2;
     *x.c.d3() = d3;
     *x.c.d4() = d4;
@@ -471,29 +463,29 @@ fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7c4da: a puff (EFFCT 0x32, variant 4) every `n` + 1 frames.
 fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
-    x.add8(PUFFS, 1);
-    if (n as i8) > x.u8(PUFFS) as i8 {
+    x.add8(Boss1::PUFFS, 1);
+    if (n as i8) > x.u8(Boss1::PUFFS) as i8 {
         return;
     }
-    x.set8(PUFFS, 0);
+    x.set8(Boss1::PUFFS, 0);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
-    e.set_u8(x.b, 0, 1);
-    e.set_u8(x.b, 2, 0x32);
-    e.set_u8(x.b, 3, 4);
-    e.set_u16(x.b, 0x42, x.o.0 as u16);
+    e.set_u8(x.b, Enemy::ACTIVE, 1);
+    e.set_u8(x.b, Enemy::KIND, 0x32);
+    e.set_u8(x.b, Enemy::VARIANT, 4);
+    e.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
     let side = x.u8(f::FLIP);
-    e.set_u8(x.b, 0x2c, side);
+    e.set_u8(x.b, Enemy::FLIP, side);
 }
 
 /// 0x7c542: creates the double (ENEMY 0x1a) of the scissor leap, linked to the boss by `+0xb0`.
 fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(d) = x.alloc(&pools::ENEMY) else {
-        x.set16(DOUBLE, 0);
+        x.set16(Boss1::DOUBLE, 0);
         return;
     };
-    let active = x.u8(0);
-    d.set_u8(x.b, 0, active);
-    d.set_u8(x.b, 2, 0x1a);
+    let active = x.u8(Enemy::ACTIVE);
+    d.set_u8(x.b, Enemy::ACTIVE, active);
+    d.set_u8(x.b, Enemy::KIND, 0x1a);
     d.set_u32(x.b, f::IMMUNITY, 0xffff_ffff);
     d.set_u8(x.b, f::BOX_SET, 0x21);
     for off in [0x8, 0xc, 0x10] {
@@ -502,8 +494,8 @@ fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let side = x.u8(f::FLIP);
     d.set_u8(x.b, f::FLIP, side);
-    d.set_u16(x.b, DOUBLE, x.o.0 as u16);
-    x.set16(DOUBLE, d.0 as u16);
+    d.set_u16(x.b, Boss1::DOUBLE, x.o.0 as u16);
+    x.set16(Boss1::DOUBLE, d.0 as u16);
 }
 
 handlers! {

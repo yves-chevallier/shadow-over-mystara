@@ -1,17 +1,26 @@
 //! Elements shared by the handlers of the BOSS class (pool FFBA1E, 3 × 0xC0 bytes, table 0x39b12).
-//! Voir `docs/families/boss.md`.
+//! See `docs/familles/boss.md`.
 //!
 //! A boss has the same frame as an enemy (`enemy_common`): `+4` main state (0 creation,
 //! 2 active, 4 hit, 6 release), `+5`, `+6`, `+7` substates (even bytes that index jump
 //! tables). So the fields, states and loops of `enemy_common` are reused; this module adds the
-//! game variables specific to boss scenes, the 68000 flags for comparisons that depend on
-//! overflow (`Fl`) and the helpers of the AI library (0x103d6..0x105b6, still in 68000).
+//! fields shared by the bosses ([`records`]: `Boss`), the game variables of the boss scenes ([`vars`]), the reads of
+//! the boss tables of `data/enemies.json` (`decide`, `byte`, `word`, `long`, `per_rank`), the 68000 flags for
+//! comparisons that depend on overflow (`Fl`) and helpers of the AI library.
 
 use crate::families::cx::Bench;
+
+pub mod records;
+pub mod vars;
+pub mod warrior;
 
 pub use super::cx::Cx;
 pub use super::enemy_common::*;
 pub(crate) use super::effects::bad_index;
+pub use records::{Boss, Message};
+pub use warrior::hp_threshold;
+/// Work RAM variables read by the bosses (those of the enemies included).
+pub use vars as var;
 use crate::mem::A5;
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -150,10 +159,11 @@ pub fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<
     (turn != lib::Turn::None).then_some(turn as u32)
 }
 
-/// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)`: animation kind `k` (fields `+0xa0` and `+0xa1`).
+/// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)`: animation kind `k` (`Boss::ANIM_KIND` and
+/// `Boss::ANIM_LAST` of the template).
 pub fn anim_kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
-    x.set8(0xa0, k);
-    x.set8(0xa1, k);
+    x.set8(Boss::ANIM_KIND, k);
+    x.set8(Boss::ANIM_LAST, k);
 }
 
 /// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
@@ -202,8 +212,17 @@ pub fn camera_y<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     v.get(x.b)
 }
 
-/// Address of the "boss defeated" long (type, variant, score) read by the scene end.
+/// Address of the "boss defeated" record (`var::DEFEAT_NAME`...), for the bosses of L9b that still write it by
+/// address.
 pub const A5_DEATH: u32 = A5 - 0x557c;
+
+/// The "boss defeated" record of the stage tally (`var::DEFEAT_*`): the banner name `name` (the type of the boss),
+/// 0, then the index of the bonus (`Enemy::EVENT_KIND` of the boss).
+pub fn record_defeat<R: Bench>(x: &mut Cx<'_, R>, name: u8) {
+    var::DEFEAT_NAME_WORD.set(x.b, (name as u16) << 8);
+    let bonus = x.u8(Enemy::EVENT_KIND);
+    var::DEFEAT_BONUS.set(x.b, bonus);
+}
 
 /// Allocates an object of class `routine` (carry raised = pool full). The handlers that insist
 /// (`jsr alloc ; bcs retry`) loop here; the pool only empties with time, the original would stay
@@ -219,21 +238,19 @@ pub fn set_abs8<R: Bench>(x: &mut Cx<'_, R>, addr: u32, v: u8) {
 
 // --- common subroutines called by the original boss code -------------------------
 
-/// Boss registered as an obstacle for the other objects (word, RAM address; 0 / positive = none).
-const BODY: crate::ram::Word = crate::ram::Word(A5 - 0x5fb2);
 
-/// 0x81aa4: pushes the object out of the registered boss's body, if that boss is active, of class 3 and has a
+/// 0x81aa4: pushes the object out of the registered boss's body, if that boss is active, of type 3 and has a
 /// non-zero shape (the shape, `boss_3::body`, moves the object in X). True if the object was moved.
 pub fn push_out_of_boss<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let body = BODY.get(x.b);
+    let body = var::BODY_OWNER.get(x.b);
     if (body as i16) >= 0 {
         return false;
     }
     let boss = Obj(body as i16 as i32 as u32 & 0xff_ffff);
-    if boss.u8(x.b, 0) == 0 || boss.u8(x.b, 2) != 3 {
+    if Enemy(boss).active(x.b) == 0 || Enemy(boss).kind(x.b) != 3 {
         return false;
     }
-    let shape = boss.u8(x.b, 0xa4);
+    let shape = super::boss_3::Boss3(boss).body_shape(x.b);
     if shape == 0 {
         return false;
     }
@@ -248,40 +265,14 @@ const BOB_OFFSETS: &str = "boss/bob_offsets";
 pub fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d = long(x, BOB_OFFSETS, i);
-    if x.u16(0xa8) as i16 <= 36 {
+    if x.u16(Boss::BOB_TIMER) as i16 <= 36 {
         d = d.wrapping_neg();
     }
     x.add32(Obj::Z, d);
     // `subq.w #1` then `bgt`: exact signed comparison of the old value (0x8000 also restarts at 72)
-    let before = x.u16(0xa8);
-    x.set16(0xa8, before.wrapping_sub(1));
+    let before = x.u16(Boss::BOB_TIMER);
+    x.set16(Boss::BOB_TIMER, before.wrapping_sub(1));
     if before as i16 <= 1 {
-        x.set16(0xa8, 72);
+        x.set16(Boss::BOB_TIMER, 72);
     }
-}
-
-/// 0x87048: depending on the scene difficulty (`A5+0x5a`: 0 nothing, 3 always) and the shape `+0xad`
-/// (2 or 3: depending on HP), sets `+0x43` (no threshold) or, if half the HP `+0x62` exceeds 72,
-/// keeps that threshold in `+0xb6` and sets `+0x42`.
-pub fn hp_threshold<R: Bench>(x: &mut Cx<'_, R>) {
-    let level = var::SCENE_LEVEL.get(x.b);
-    if level == 0 {
-        return;
-    }
-    let by_hp = level != 3 && matches!(x.u8(0xad), 2 | 3);
-    if by_hp {
-        if x.u8(0x42) != 0 {
-            return;
-        }
-        let half = x.u16(f::HP) >> 1;
-        // the original computes the half in D1.w (output contract)
-        if half as i16 > 72 {
-            x.set8(0xb9, 0);
-            x.set16(0xb6, half);
-            x.set8(0x42, 1);
-            return;
-        }
-    }
-    x.set8(0x43, 1);
-    x.set8(0xb9, 0);
 }

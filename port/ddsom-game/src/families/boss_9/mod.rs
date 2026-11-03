@@ -19,73 +19,81 @@
 //! Animations: 0x17a276.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::record::record;
 use crate::objects::Current;
 use super::boss_common::*;
+use super::enemy_dbeast::DisplacerBeast;
 use crate::objects::Obj;
 
 mod hit;
 mod moves;
 
-/// Fields specific to this type.
-mod g {
-    /// Counter of the smoke puffs (`+0x42`: logical AND with a mask).
-    pub const PUFFS: u32 = 0x42;
-    /// Blinking after the loss of the crew: duration, in progress.
-    pub const BLINK_TIME: u32 = 0x43;
-    pub const BLINKING: u32 = 0x5c;
-    /// Damage smoke: set once (`+0x5d`), after `+0x78` frames (word).
-    pub const SMOKE_DONE: u32 = 0x5d;
-    pub const SMOKE_DELAY: u32 = 0x78;
-    /// Dialogue bubble in progress (word, SET object).
-    pub const MESSAGE: u32 = 0x68;
-    /// Passes remaining, wait before setting off again.
-    pub const PASSES: u32 = 0x6b;
-    pub const WAIT: u32 = 0x6e;
-    /// State to resume after a hit (long).
-    pub const RESUME: u32 = 0x8a;
-    /// Shake after a hit (frames).
-    pub const SHAKE: u32 = 0xa0;
-    /// Wheel pace (0 stopped, 1 fast, 2 at walking pace).
-    pub const GAIT: u32 = 0xa1;
-    /// Minuterie (mot).
-    pub const TIMER: u32 = 0xa2;
-    /// Damage (bits set by HP thresholds: 0x8b9ea), requests to the parts (bit 0 shot, 3 and 4 bombardment).
-    pub const DAMAGE: u32 = 0xa8;
-    pub const ORDERS: u32 = 0xa9;
-    /// Crew to create (3 at the entrance), then 4 when there are no gunners left.
-    pub const CREW_LOST: u32 = 0xaa;
-    /// Rushes remaining.
-    pub const DASHES: u32 = 0xab;
-    /// Driver and gunners (words).
-    pub const DRIVER: u32 = 0xac;
-    pub const CREW: u32 = 0xae;
-    /// Active gunners: bits, and number × 4.
-    pub const CREW_BITS: u32 = 0xb6;
-    pub const CREW_COUNT: u32 = 0xb7;
-    /// X position aimed at by the stop (word).
-    pub const STOP_X: u32 = 0xb8;
-    /// Counters: bombardments (`+0xb9`), stops (`+0xba`), descent/climb (`+0xbe`), wait for the shot (`+0xbd`),
-    /// crew before blinking (`+0xbf`).
-    pub const BOMBS: u32 = 0xb9;
-    pub const STOPS: u32 = 0xba;
-    pub const READY: u32 = 0xbd;
-    pub const COUNT: u32 = 0xbe;
-    pub const LIVES: u32 = 0xbf;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss9(pub Obj);
+
+impl Boss9 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss9 {
+        /// Counter of the smoke puffs (`+0x42`: logical AND with a mask).
+        puffs, set_puffs, PUFFS: u8 @ 0x42;
+        /// Blinking after the loss of the crew: duration, in progress.
+        blink_time, set_blink_time, BLINK_TIME: u8 @ 0x43;
+        blinking, set_blinking, BLINKING: u8 @ 0x5c;
+        /// Damage smoke: set once (`+0x5d`), after `+0x78` frames (word).
+        smoke_done, set_smoke_done, SMOKE_DONE: u8 @ 0x5d;
+        /// Dialogue bubble in progress (word, SET.0 object).
+        message, set_message, MESSAGE: u16 @ 0x68;
+        /// Passes remaining, wait before setting off again.
+        passes, set_passes, PASSES: u8 @ 0x6b;
+        wait, set_wait, WAIT: u8 @ 0x6e;
+        smoke_delay, set_smoke_delay, SMOKE_DELAY: u16 @ 0x78;
+        /// State to resume after a hit (long).
+        resume, set_resume, RESUME: u32 @ 0x8a;
+        /// Shake after a hit (frames).
+        shake, set_shake, SHAKE: u8 @ 0xa0;
+        /// Wheel pace (0 stopped, 1 fast, 2 at walking pace).
+        gait, set_gait, GAIT: u8 @ 0xa1;
+        /// Minuterie (mot).
+        timer, set_timer, TIMER: u16 @ 0xa2;
+        /// Damage (bits set by HP thresholds: 0x8b9ea), requests to the parts (bit 0 shot, 3 and 4 bombardment).
+        damage, set_damage, DAMAGE: u8 @ 0xa8;
+        orders, set_orders, ORDERS: u8 @ 0xa9;
+        /// Crew to create (3 at the entrance), then 4 when there are no gunners left.
+        crew_lost, set_crew_lost, CREW_LOST: u8 @ 0xaa;
+        /// Rushes remaining.
+        dashes, set_dashes, DASHES: u8 @ 0xab;
+        /// Driver and gunners (words).
+        driver, set_driver, DRIVER: u16 @ 0xac;
+        crew, set_crew, CREW: u16 @ 0xae;
+        /// Active gunners: bits, and number × 4.
+        crew_bits, set_crew_bits, CREW_BITS: u8 @ 0xb6;
+        crew_count, set_crew_count, CREW_COUNT: u8 @ 0xb7;
+        /// X position aimed at by the stop (word).
+        stop_x, set_stop_x, STOP_X: u16 @ 0xb8;
+        /// Counters: bombardments (`+0xb9`), stops (`+0xba`), descent/climb (`+0xbe`), wait for the shot (`+0xbd`),
+        /// crew before blinking (`+0xbf`).
+        bombs, set_bombs, BOMBS: u8 @ 0xb9;
+        stops, set_stops, STOPS: u8 @ 0xba;
+        ready, set_ready, READY: u8 @ 0xbd;
+        count, set_count, COUNT: u8 @ 0xbe;
+        lives, set_lives, LIVES: u8 @ 0xbf;
+        /// The two 0xd parts (words, `+0xa4` and `+0xa6`).
+        parts, set_parts, PARTS: u16 @ 0xa4;
+    }
+}
 use crate::objects::pools;
 
 /// Jeu d'animations.
-const SET: u32 = 0x17a276;
+const SET: RomAddr = RomAddr(0x17a276);
 
-/// Camera of the vehicle's plane (X, Y: `A5+0x556`, `A5+0x55a`).
-const CAM_X: u32 = 0x556;
-const CAM_Y: u32 = 0x55a;
-/// Free slots of the ENEMY and ESHL pools (words).
-const ENEMY_FREE: u32 = 0x7e62;
-const ESHL_FREE: u32 = 0x7e64;
-/// "Hard" mode (non-zero word): speeds from the fast table.
-const HARD: u32 = 0x70;
 
 /// One animation step (0x1a56).
 fn anim<R: Bench>(x: &mut Cx<'_, R>) {
@@ -97,23 +105,23 @@ fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 fn next7<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
 }
 fn steps<R: Bench>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
     x.set8(f::SUB2, s6);
-    x.set8(0x7, s7);
+    x.set8(Enemy::SUB_STEP, s7);
 }
 
 /// `bchg.b #1,(0xd,A0)` : l'engin cahote.
 fn jolt<R: Bench>(x: &mut Cx<'_, R>) {
-    let v = x.u8(0xd) ^ 2;
-    x.set8(0xd, v);
+    let v = x.u8(Boss::HEIGHT_LOW) ^ 2;
+    x.set8(Boss::HEIGHT_LOW, v);
 }
 
 /// One frame in `mask` + 1 (`+0x42`), true.
 fn every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) -> bool {
-    let n = x.u8(PUFFS).wrapping_add(1) & mask;
-    x.set8(PUFFS, n);
+    let n = x.u8(Boss9::PUFFS).wrapping_add(1) & mask;
+    x.set8(Boss9::PUFFS, n);
     n == 0
 }
 
@@ -138,13 +146,13 @@ fn smoke_every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) {
 
 /// Tighter smoke when the crew is reduced (more than two gunners: one frame in 4, otherwise in 8).
 fn crew_smoke<R: Bench>(x: &mut Cx<'_, R>) {
-    let mask = if (x.u8(CREW_COUNT) as i8) > 8 { 3 } else { 7 };
+    let mask = if (x.u8(Boss9::CREW_COUNT) as i8) > 8 { 3 } else { 7 };
     smoke_every(x, mask);
 }
 
 /// Has the vehicle left through the edge it is rolling toward (`+0x2c`: 0 toward the left)?
 fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let cam = x.a5_u16(CAM_X);
+    let cam = var::CAMERA_ALT_X.get(x.b);
     if x.u8(f::FLIP) == 0 {
         left_of(x, 0x80, cam)
     } else {
@@ -154,25 +162,25 @@ fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// `x + d - edge` negative (`sub.w ; bge`): the vehicle is to the left of the edge.
 fn left_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
-    let a = x.u16(0x8).wrapping_add(d);
+    let a = x.u16(Obj::X).wrapping_add(d);
     Fl::sub16(a, edge).lt()
 }
 
 /// `x - d - edge` positive (`sub.w ; ble`): the vehicle is to the right of the edge.
 fn right_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
-    let a = x.u16(0x8).wrapping_sub(d);
+    let a = x.u16(Obj::X).wrapping_sub(d);
     Fl::sub16(a, edge).gt()
 }
 
 /// No gunners for long enough (`+0xbf` negative): the vehicle blinks, and sets off on a pass.
 fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    if (x.u8(LIVES) as i8) >= 0 {
+    if (x.u8(Boss9::LIVES) as i8) >= 0 {
         return false;
     }
     steps(x, 0, 2);
-    x.set8(0, 2);
-    x.set8(BLINK_TIME, 0x3c);
-    x.set8(BLINKING, 1);
+    x.set8(Enemy::ACTIVE, 2);
+    x.set8(Boss9::BLINK_TIME, 0x3c);
+    x.set8(Boss9::BLINKING, 1);
     reset_lives(x);
     true
 }
@@ -201,37 +209,37 @@ fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: &str, mask: u32) -> u8 {
 /// 0x8c9ee: crew lost before blinking.
 fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_rank(x, "boss_9/lives").wrapping_sub(1);
-    x.set8(LIVES, n);
+    x.set8(Boss9::LIVES, n);
 }
 
 /// 0x8c9ba: wait before the shot.
 fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_rank(x, "boss_9/shot_waits").wrapping_add(5);
-    x.set8(COUNT, n);
+    x.set8(Boss9::COUNT, n);
 }
 
 /// 0x8c420: rushes allowed.
 fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_rank(x, "boss_9/dashes");
-    x.set8(DASHES, n);
+    x.set8(Boss9::DASHES, n);
 }
 
 /// 0x8beca: passes before a stop.
 fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, "boss_9/passes", 0x1f).wrapping_sub(1);
-    x.set8(PASSES, n);
+    x.set8(Boss9::PASSES, n);
 }
 
 /// 0x8c450 : bombardements.
 fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, "boss_9/bombs", 0xf).wrapping_sub(1);
-    x.set8(BOMBS, n);
+    x.set8(Boss9::BOMBS, n);
 }
 
 /// 0x8c576: stops.
 fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, "boss_9/stops", 0xf);
-    x.set8(STOPS, n);
+    x.set8(Boss9::STOPS, n);
 }
 
 /// 0x8bc0c: wait before setting off again, according to the number of players, the difficulty and the crew.
@@ -240,10 +248,10 @@ fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let list = long(x, "boss_9/waits", 4 * players);
     let d = difficulty(x);
     let mut n = tables::held8(x.b, list + d).wrapping_add(0xf);
-    if (x.u8(CREW_COUNT) as i8) >= 8 {
+    if (x.u8(Boss9::CREW_COUNT) as i8) >= 8 {
         n = n.wrapping_add(0xf);
     }
-    x.set8(WAIT, n);
+    x.set8(Boss9::WAIT, n);
 }
 
 /// 0x8bcd2: X position of the stop, drawn in front of the vehicle.
@@ -252,9 +260,9 @@ fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     let list = long(x, "boss_9/stop_xs", 4 * d);
     let r = rand_and(x, 0x1f);
     let k = tables::held8(x.b, list + r) as u16;
-    let cam = x.a5_u16(CAM_X);
+    let cam = var::CAMERA_ALT_X.get(x.b);
     let goal = if x.u8(f::FLIP) != 0 { cam.wrapping_add(k) } else { cam.wrapping_add(0x180).wrapping_sub(k) };
-    x.set16(STOP_X, goal);
+    x.set16(Boss9::STOP_X, goal);
 }
 
 /// 0x8be88: depth of the pass according to that of the target (three lanes).
@@ -263,7 +271,7 @@ fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
         1
     } else {
         let t = load_target(x);
-        let z = t.u16(x.b, 0x10) as i16;
+        let z = t.u16(x.b, Obj::Y) as i16;
         if z > 0x60 {
             0
         } else if z > 0x48 {
@@ -273,7 +281,7 @@ fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
         }
     };
     let z = word(x, "boss_9/lanes", 2 * lane);
-    x.set16(0x10, z);
+    x.set16(Obj::Y, z);
 }
 
 /// 0x8c988: new target (0x424e or 0x44ee, at random).
@@ -291,9 +299,9 @@ fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
 fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     let (mut bits, mut count) = (0u8, 0u8);
     for k in 0..4u32 {
-        let link = x.u16(CREW + 2 * k);
+        let link = x.u16(Boss9::CREW + 2 * k);
         let m = Obj(link as i16 as i32 as u32 & 0xff_ffff);
-        if m.u16(x.b, 4) == 0x0200 {
+        if m.u16(x.b, Enemy::STATE_WORD) == 0x0200 {
             count = count.wrapping_add(4);
             bits |= 1 << k;
         }
@@ -301,24 +309,24 @@ fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     *x.c.d3() = bits as u32; // re-read: D3 re-read afterwards (DDSOM_POISON : covb_long3p_02)
     *x.c.d4() = 4;
     *x.c.d5() = 0xffff;
-    x.set8(CREW_BITS, bits);
-    x.set8(CREW_COUNT, count);
+    x.set8(Boss9::CREW_BITS, bits);
+    x.set8(Boss9::CREW_COUNT, count);
     if count == 0 {
-        x.set8(CREW_LOST, 4);
+        x.set8(Boss9::CREW_LOST, 4);
     }
 }
 
 /// 0x8c026: rolling speed according to the crew (fast table in hard mode), wheel pace.
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
-    let hard = x.a5_u16(HARD) != 0;
+    let hard = var::DAMAGE_SETTING.get(x.b) != 0;
     let mut top = if hard { 0x800u16 } else { 0x680 };
     if x.u8(f::FLIP) == 0 {
         top = top.wrapping_neg();
     }
-    if top == x.u16(0x14) {
+    if top == x.u16(Enemy::VX) {
         return;
     }
-    let i = x.u8(CREW_COUNT) as u32 * 2;
+    let i = x.u8(Boss9::CREW_COUNT) as u32 * 2;
     let table = if hard { "boss_9/speeds_hard" } else { "boss_9/speeds" };
     let mut vx = word(x, table, i);
     let mut vz = word(x, table, 2 + i);
@@ -328,14 +336,14 @@ fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
         vx = vx.wrapping_neg();
         vz = vz.wrapping_neg();
     }
-    x.set8(GAIT, gait);
-    x.set16(0x14, vx);
-    x.set16(0x16, vz);
+    x.set8(Boss9::GAIT, gait);
+    x.set16(Enemy::VX, vx);
+    x.set16(Enemy::AX, vz);
 }
 
 /// 0x8c1a0: rush (full crew, draw by players and difficulty): full speed; true if launched.
 fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    if x.u8(CREW_COUNT) != 0x10 || x.u8(DASHES) == 0 {
+    if x.u8(Boss9::CREW_COUNT) != 0x10 || x.u8(Boss9::DASHES) == 0 {
         return false;
     }
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
@@ -347,38 +355,38 @@ fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if chances >> r & 1 == 0 {
         return false;
     }
-    x.set8(GAIT, 1);
-    let mut v = if x.a5_u16(HARD) != 0 { 0x800u16 } else { 0x680 };
+    x.set8(Boss9::GAIT, 1);
+    let mut v = if var::DAMAGE_SETTING.get(x.b) != 0 { 0x800u16 } else { 0x680 };
     if x.u8(f::FLIP) == 0 {
         v = v.wrapping_neg();
     }
-    x.set16(0x14, v);
-    x.add8(DASHES, 0xff);
+    x.set16(Enemy::VX, v);
+    x.add8(Boss9::DASHES, 0xff);
     true
 }
 
 /// 0x8c124 / 0x8c132: replaces the lost gunners (ENEMY 0x13, variant 2 with no gunner at all, 1 otherwise).
 fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
     if all {
-        if x.u8(CREW_COUNT) == 0x10 {
+        if x.u8(Boss9::CREW_COUNT) == 0x10 {
             return;
         }
-    } else if (x.a5_u16(ENEMY_FREE) as i16) < 4 || (x.u8(CREW_COUNT) as i8) > 4 {
+    } else if (pools::ENEMY.free_count(x.b) as i16) < 4 || (x.u8(Boss9::CREW_COUNT) as i8) > 4 {
         return;
     }
     let mut slot = 5u8;
     for k in 0..4u32 {
         *x.c.d4() = k;
-        if x.u8(CREW_BITS) >> k & 1 == 0 {
-            x.set16(CREW + 2 * k, 0);
+        if x.u8(Boss9::CREW_BITS) >> k & 1 == 0 {
+            x.set16(Boss9::CREW + 2 * k, 0);
             if let Some(m) = x.alloc(&pools::ENEMY) {
-                let variant = if x.u8(CREW_COUNT) == 0 { 2 } else { 1 };
-                m.set_u8(x.b, 3, variant);
-                m.set_u8(x.b, 0, 1);
-                m.set_u8(x.b, 0xbc, slot);
-                m.set_u8(x.b, 2, 0x13);
-                m.set_u16(x.b, 0x42, x.o.0 as u16);
-                x.set16(CREW + 2 * k, m.0 as u16);
+                let variant = if x.u8(Boss9::CREW_COUNT) == 0 { 2 } else { 1 };
+                m.set_u8(x.b, Enemy::VARIANT, variant);
+                m.set_u8(x.b, Enemy::ACTIVE, 1);
+                DisplacerBeast(m).set_part(x.b, slot);
+                m.set_u8(x.b, Enemy::KIND, 0x13);
+                m.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
+                x.set16(Boss9::CREW + 2 * k, m.0 as u16);
             }
         }
         slot = slot.wrapping_sub(1);
@@ -394,7 +402,7 @@ fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         2
     } else {
         let t = load_target(x);
-        if t.u16(x.b, 0xc) != 0 {
+        if t.u16(x.b, Obj::Z) != 0 {
             2
         } else if lib::target_in_box(x, -0x40, 0x40, 0x100) {
             1
@@ -412,12 +420,12 @@ fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     let k = rank_byte(x, "boss_9/halts").wrapping_add(base);
     x.set8(f::SUB2, k);
     x.set16(f::STATE, 0x0204);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 /// 0x8b9ea: damage by eighths of HP (bits of `+0xa8`, cumulative).
 fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
-    let q = x.u16(0x60) >> 3;
+    let q = x.u16(Enemy::HP_MAX) >> 3;
     let hp = x.u16(f::HP) as i16;
     let mut stage = 7u8;
     let mut d1 = q.wrapping_mul(6);
@@ -431,8 +439,8 @@ fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     const MASKS: [u8; 8] = [0, 0x40, 0xc0, 0xc4, 0xcc, 0xdc, 0xdd, 0xdd];
-    let v = x.u8(DAMAGE) | MASKS[stage as usize];
-    x.set8(DAMAGE, v);
+    let v = x.u8(Boss9::DAMAGE) | MASKS[stage as usize];
+    x.set8(Boss9::DAMAGE, v);
 }
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -452,20 +460,20 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let r = x.random() as u32;
-    x.set8(PUFFS, r as u8);
-    if (x.a5_u16(ESHL_FREE) as i16) < 0xa || (x.a5_u16(ENEMY_FREE) as i16) < 5 {
+    x.set8(Boss9::PUFFS, r as u8);
+    if (pools::ESHL.free_count(x.b) as i16) < 0xa || (pools::ENEMY.free_count(x.b) as i16) < 5 {
         return;
     }
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    crate::mem::wr16(x.b, 0xff8000 - 0x55ba, x.o.0 as u16);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::SCENE_ACTOR.set(x.b, x.o.0 as u16);
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
     lib::create_set_15(x);
-    x.set8(0x93, 1);
-    x.set8(0x9a, 1);
-    x.set8(0x6f, 2);
+    x.set8(Boss::DEATH_CREDIT, 1);
+    x.set8(Boss::DEATH_VALUE, 1);
+    x.set8(Enemy::AI_SPARE_ROW, 2);
     x.set8(f::BOX_SET, 0x29);
     lib::initial_hp_boss(x);
     lib::set_immunities(x);
@@ -474,43 +482,43 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         for k in (0..=last).rev() {
             *x.c.d5() = k as u32;
             let Some(p) = x.alloc(&pools::ESHL) else { break };
-            let active = x.u8(0);
-            p.set_u8(x.b, 0, active);
-            p.set_u8(x.b, 3, k);
-            p.set_u8(x.b, 2, kind);
+            let active = x.u8(Enemy::ACTIVE);
+            p.set_u8(x.b, Enemy::ACTIVE, active);
+            p.set_u8(x.b, Enemy::VARIANT, k);
+            p.set_u8(x.b, Enemy::KIND, kind);
             p.set_u16(x.b, f::OWNER, x.o.0 as u16);
             if linked {
-                x.set16(0xa4 + 2 * (last - k) as u32, p.0 as u16);
+                x.set16(Boss9::PARTS + 2 * (last - k) as u32, p.0 as u16);
             }
         }
     }
     if let Some(d) = x.alloc(&pools::ENEMY) {
-        let active = x.u8(0);
-        d.set_u8(x.b, 0, active);
-        d.set_u8(x.b, 0xbc, 6);
-        d.set_u8(x.b, 3, 1);
-        d.set_u8(x.b, 2, 0x13);
-        d.set_u16(x.b, 0x42, x.o.0 as u16);
-        x.set16(DRIVER, d.0 as u16);
+        let active = x.u8(Enemy::ACTIVE);
+        d.set_u8(x.b, Enemy::ACTIVE, active);
+        DisplacerBeast(d).set_part(x.b, 6);
+        d.set_u8(x.b, Enemy::VARIANT, 1);
+        d.set_u8(x.b, Enemy::KIND, 0x13);
+        d.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
+        x.set16(Boss9::DRIVER, d.0 as u16);
     }
-    x.set8(0x7e, 0x21);
-    x.set16(SMOKE_DELAY, 0x300);
-    for off in [SMOKE_DONE, DAMAGE, ORDERS, CREW_LOST, 0x38, 0x67] {
-        x.set8(off, 0);
+    x.set8(Enemy::EVENT_KIND, 0x21);
+    x.set16(Boss9::SMOKE_DELAY, 0x300);
+    for off in [Boss9::SMOKE_DONE, Boss9::DAMAGE, Boss9::ORDERS, Boss9::CREW_LOST, Enemy::FRAME_TAG, Enemy::VULNERABLE] {
+        x.set8(off, 0u8);
     }
-    x.set8(GAIT, 2);
-    x.set8(0, 2);
+    x.set8(Boss9::GAIT, 2);
+    x.set8(Enemy::ACTIVE, 2);
     x.set8(f::FLIP, 0x20);
-    x.set8(0x2d, 8);
-    x.set16(0x10, 0x48);
+    x.set8(Enemy::HEADING, 8);
+    x.set16(Obj::Y, 0x48);
     // `move.w #-0x8000,D3 ; swap ; asr.l #16`: minus half a unit
     *x.c.d3() = 0xffff_8000;
-    let z = x.u32(0x10).wrapping_add(0xffff_8000);
-    x.set32(0x10, z);
-    x.set16(0x8, 0x80);
+    let z = x.u32(Obj::Y).wrapping_add(0xffff_8000);
+    x.set32(Obj::Y, z);
+    x.set16(Obj::X, 0x80);
     lib::pick_target_any(x);
-    x.set32(0xc, 0);
-    x.anim_start(SET, 6);
+    x.set32(Obj::Z, 0);
+    x.anim_start(SET.0, 6);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------
@@ -527,10 +535,10 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         if var::PAUSE.get(x.b) != 0 {
             return;
         }
-        if x.u8(BLINKING) != 0 && sub8(x, BLINK_TIME, 1).mi() {
-            x.set8(0, 1);
-            x.set8(BLINKING, 0);
-            x.set8(BLINK_TIME, 0);
+        if x.u8(Boss9::BLINKING) != 0 && sub8(x, Boss9::BLINK_TIME, 1).mi() {
+            x.set8(Enemy::ACTIVE, 1);
+            x.set8(Boss9::BLINKING, 0);
+            x.set8(Boss9::BLINK_TIME, 0);
         }
         match x.u8(f::SUB) {
             0 => moves::intro(x),
@@ -540,8 +548,8 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         }
         lib::collide_terrain(x);
     }
-    let rolling = x.u8(GAIT) != 2;
-    x.set8(0x3a, rolling as u8);
+    let rolling = x.u8(Boss9::GAIT) != 2;
+    x.set8(Boss::SHADOW_B, rolling as u8);
     if x.u16(f::TARGET) == 0 || var::PLAYERS_ALIVE.get(x.b) == 0 {
         retarget(x);
         x.set32(f::STATE, 0x0206_0000);

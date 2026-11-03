@@ -12,7 +12,7 @@ use crate::objects::Current;
 /// 0x8699e: the boss fades out (common start of the dodges).
 fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
-    x.set8(0, 2);
+    x.set8(Enemy::ACTIVE, 2);
     key(x, 0x12);
     lib::sound(x, crate::sound::CMD_349);
     body(x, 4);
@@ -22,8 +22,8 @@ fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
 fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     if timer_done(x) {
         addq8(x, f::SUB3, 2);
-        x.set_bit(0x1, 1, false);
-        x.set8(0, 1);
+        x.set_bit(Enemy::DISPLAY, 1, false);
+        x.set8(Enemy::ACTIVE, 1);
         lib::sound(x, crate::sound::CMD_349);
     }
 }
@@ -37,8 +37,8 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
 
 /// Reappearance: the boss is invisible (`bset 1`) for 8 frames, animation 5.
 fn reappear<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_bit(0x1, 1, true);
-    x.set16(TIMER, 8);
+    x.set_bit(Enemy::DISPLAY, 1, true);
+    x.set16(Warrior::TIMER, 8);
     body(x, 5);
 }
 
@@ -50,7 +50,7 @@ fn back_off<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
         }
-        x.add16(0x8, d);
+        x.add16(Obj::X, d);
         aids::clamp(x);
         reappear(x);
     }
@@ -112,9 +112,9 @@ fn short_walk<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             if aids::must_turn(x) {
-                x.set32(RESUME_STATE, 0x0208_0004);
+                x.set32(Warrior::RESUME_STATE, 0x0208_0004);
                 let b6 = x.u8(f::SUB2);
-                x.set8(RESUME_SUB, b6);
+                x.set8(Warrior::RESUME_SUB, b6);
                 x.set32(f::STATE, 0x0202_0200);
                 return;
             }
@@ -123,15 +123,15 @@ fn short_walk<R: Bench>(x: &mut Cx<'_, R>) {
         t => {
             if t == 0 {
                 addq8(x, f::SUB3, 2);
-                x.set16(TIMER, 0x14);
+                x.set16(Warrior::TIMER, 0x14);
             } else {
                 x.add8(f::SUB3, 0xfe);
             }
-            x.set8(VULNERABLE, 1);
-            x.set8(ANIM_KIND, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Warrior::ANIM_KIND, 0);
             setb(x, 2, 0);
-            if x.u8(ANIM_LAST) != 0 {
-                x.set8(ANIM_LAST, 0);
+            if x.u8(Warrior::ANIM_LAST) != 0 {
+                x.set8(Warrior::ANIM_LAST, 0);
             }
             body(x, 0);
         }

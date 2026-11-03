@@ -9,11 +9,12 @@
 //! | 10 | return to combat |
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::*;
 use crate::objects::Current;
 
 /// Table of reaction routines, indexed by the hit code `+0x49` (longs, all common).
-const REACTIONS: u32 = 0x80b0a;
+const REACTIONS: RomAddr = RomAddr(0x80b0a);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 && !tst16(x, f::HP).gt() {
@@ -39,15 +40,15 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x80ae8: first pass: the type's immunities; then the common routine of the hit code.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(HOVER, 0xff);
+    x.set8(Boss3::HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
-        x.set_bit(0x1, 1, false);
+        x.set_bit(Enemy::DISPLAY, 1, false);
         lib::set_immunities(x);
     }
     // The original indexes the table by D0.w of which only the low byte is set: the high byte comes from the `moveq #0`
     // of
     // the group dispatch, or from the index returned by 0xfe5a (at most (32 + type) × 4 < 0x100): it is zero.
-    let routine = reaction_routine(x, REACTIONS);
+    let routine = reaction_routine(x, REACTIONS.0);
     run_reaction(x, routine);
 }
 
@@ -55,10 +56,10 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
-        x.set8(0x68, 1);
-        x.set8(0x69, 1);
-        x.set16(0x14, 0x400);
-        x.set16(0x16, (-0x88i16) as u16);
+        x.set8(Enemy::AI_68, 1);
+        x.set8(Enemy::AI_69, 1);
+        x.set16(Enemy::VX, 0x400);
+        x.set16(Enemy::AX, (-0x88i16) as u16);
         if x.u8(f::FLIP) != 0 {
             negate(x, 0x14);
             negate(x, 0x16);
@@ -66,15 +67,15 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
         return body_anim(x, 9);
     }
     x.move_x();
-    if (x.u8(0x14) as i8) < 0 {
+    if (x.u8(Enemy::VX) as i8) < 0 {
         return stop(x);
     }
     if !lib::step(x) {
         return;
     }
-    x.set32(0x58, 0);
+    x.set32(Enemy::HIT_LOCK, 0);
     x.set32(f::STATE, 0x0204_0400);
-    x.set8(INVULNERABLE, 6);
+    x.set8(Boss3::INVULNERABLE, 6);
 }
 
 /// 0x80c2c: on the ground (`+0x84` frames outside pause), then getting up or counterattack.
@@ -86,13 +87,13 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             body_anim(x, 0x11);
         }
         2 => {
-            if var::PAUSE.get(x.b) != 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, Boss::DOWN_TIME, 1).gt() {
                 return;
             }
-            x.set16(DOWN_TIME, 0);
+            x.set16(Boss::DOWN_TIME, 0);
             next6(x);
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
             // 0x80cb0: counterattack 6 chances in 16
             let r = rand_and(x, 0xf);
             if 0xfc00u32 >> r & 1 == 0 {
@@ -102,19 +103,19 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             let k = byte(x, "boss_3/counter_steps", r);
             x.set8(f::SUB2, k);
             x.set16(f::STATE, 0x0204);
-            x.set8(0x7, 0);
-            x.set8(0x86, 0);
-            x.set8(VULNERABLE, 1);
-            x.set8(INVULNERABLE, 6);
-            x.set8(0x38, 0);
-            x.set8(0, 1);
+            x.set8(Enemy::SUB_STEP, 0);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Boss3::INVULNERABLE, 6);
+            x.set8(Enemy::FRAME_TAG, 0);
+            x.set8(Enemy::ACTIVE, 1);
         }
         _ => {
             if var::PAUSE.get(x.b) != 0 || !lib::step(x) {
                 return;
             }
-            x.set8(VULNERABLE, 1);
-            x.set8(0, 1);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Enemy::ACTIVE, 1);
             x.set32(f::STATE, 0x0202_0400);
             body_anim(x, 0);
         }
@@ -126,27 +127,25 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
-            crate::mem::wr16(x.b, A5_DEATH, 0x300);
-            let score = x.u8(0x7e);
-            set_abs8(x, A5_DEATH + 2, score);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
+            record_defeat(x, 3);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, crate::sound::CMD_FF);
             lib::flash_and_shake(x);
-            x.set8(0, 2);
-            let f = x.u8(0x56);
+            x.set8(Enemy::ACTIVE, 2);
+            let f = x.u8(Enemy::STUN);
             x.set8(f::FREEZE, f);
             stop(x);
-            x.set16(0x18, 0x400);
-            x.set16(0x1a, (-0x40i16) as u16);
+            x.set16(Enemy::VZ, 0x400);
+            x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
             let mut v = 0x200u16;
             if x.u8(f::FLIP) != 0 {
                 v = v.wrapping_neg();
             }
-            x.set16(0x14, v);
-            x.anim_start(SET_DEATH, 2);
+            x.set16(Enemy::VX, v);
+            x.anim_start(SET_DEATH.0, 2);
             falling(x)
         }
         2 => falling(x),
@@ -156,7 +155,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             next6(x);
-            x.anim_start(SET_DEATH, 0x16);
+            x.anim_start(SET_DEATH.0, 0x16);
         }
         _ => {}
     }
@@ -166,18 +165,16 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
 fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_xz();
-    if (x.u16(0xc) as i16) >= 0 {
+    if (x.u16(Obj::Z) as i16) >= 0 {
         return;
     }
-    x.set16(0xc, 0);
-    let v = ((x.u16(0x14) as i16) >> 2) as u16;
-    x.set16(0x14, v);
-    x.set32(0x1c, 0);
-    x.set32(0x18, 0);
+    x.set16(Obj::Z, 0);
+    let v = ((x.u16(Enemy::VX) as i16) >> 2) as u16;
+    x.set16(Enemy::VX, v);
+    x.set32(Enemy::VY_LONG, 0);
+    x.set32(Enemy::VZ_LONG, 0);
     next6(x);
-    x.anim_start(SET_DEATH, 0x10);
+    x.anim_start(SET_DEATH.0, 0x10);
     lib::sound(x, crate::sound::CMD_AA);
 }
 
-/// Defeated boss: type and variant (word), score (`A5-0x557c..`), read by the end of the stage.
-const A5_DEATH: u32 = 0xff8000 - 0x557c;

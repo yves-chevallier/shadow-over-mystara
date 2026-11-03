@@ -19,6 +19,8 @@
 //! Animations: 0x174776 (body), 0x1747c4 (attacks), 0x1747f0 (death).
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use super::boss_common::*;
 use crate::objects::Obj;
 
@@ -27,56 +29,60 @@ pub mod body;
 mod fight;
 mod hit;
 
-/// Fields specific to this type.
-pub(crate) mod g {
-    pub const VULNERABLE: u32 = 0x67;
-    /// Leaps remaining in the walk, standing wait, countdown before the next target choice.
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const IDLE_COUNT: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    /// Kind of aiming requested from 0xe76c.
-    pub const AIM: u32 = 0x79;
-    /// Time on the ground (word).
-    pub const DOWN_TIME: u32 = 0x84;
-    /// Byte reset to 0xff every frame outside pause, to 0 when the boss hovers (h).
-    pub const HOVER: u32 = 0xa0;
-    /// Flight (1) or ground (0) mode: set by the steps, and by the HP thresholds of table 0x81712 (`wound_changed`);
-    /// in flight, the attacks are drawn from another table.
-    pub const FLYING: u32 = 0xa2;
-    /// Step of the dive (attack 20).
-    pub const DIVE: u32 = 0xa3;
-    /// Body shape that pushes back (0 none, 1 front, 2 sideways), reset to zero every frame.
-    pub const BODY_SHAPE: u32 = 0xa4;
-    /// Invulnerability frames remaining (`+0x38` reset to zero).
-    pub const INVULNERABLE: u32 = 0xa5;
-    /// Step timer (byte or word depending on the step).
-    pub const TIMER: u32 = 0xa6;
-    /// State to resume after an about-face (long).
-    pub const SAVED_STATE: u32 = 0xaa;
-    /// Patrol waypoint (words) and direction in which the angle turns.
-    pub const GOAL_X: u32 = 0xb0;
-    pub const GOAL_Z: u32 = 0xb2;
-    pub const GOAL_TURN: u32 = 0xb5;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss3(pub Obj);
+
+impl Boss3 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss3 {
+        /// Kind of aiming requested from 0xe76c.
+        aim, set_aim, AIM: u8 @ 0x79;
+        /// Byte reset to 0xff every frame outside pause, to 0 when the boss hovers (h).
+        hover, set_hover, HOVER: u8 @ 0xa0;
+        /// Flight (1) or ground (0) mode: set by the steps, and by the HP thresholds of table 0x81712 (`wound_changed`);
+        /// in flight, the attacks are drawn from another table.
+        flying, set_flying, FLYING: u8 @ 0xa2;
+        /// Step of the dive (attack 20).
+        dive, set_dive, DIVE: u8 @ 0xa3;
+        /// Body shape that pushes back (0 none, 1 front, 2 sideways), reset to zero every frame.
+        body_shape, set_body_shape, BODY_SHAPE: u8 @ 0xa4;
+        /// Invulnerability frames remaining (`+0x38` reset to zero).
+        invulnerable, set_invulnerable, INVULNERABLE: u8 @ 0xa5;
+        /// Step timer (byte or word depending on the step).
+        timer, set_timer, TIMER: u8 @ 0xa6;
+        /// State to resume after an about-face (long).
+        saved_state, set_saved_state, SAVED_STATE: u32 @ 0xaa;
+        /// Patrol waypoint (words) and direction in which the angle turns.
+        goal_x, set_goal_x, GOAL_X: u16 @ 0xb0;
+        goal_z, set_goal_z, GOAL_Z: u16 @ 0xb2;
+        goal_turn, set_goal_turn, GOAL_TURN: u8 @ 0xb5;
+        /// Set to 2 when the boss reaches its target in the approach; read by no code of the port (h).
+        approached, set_approached, APPROACHED: u8 @ 0xaf;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
 /// Jeux d'animations : corps, attaques, mort.
-const SET_BODY: u32 = 0x174776;
-const SET_ATTACK: u32 = 0x1747c4;
-const SET_DEATH: u32 = 0x1747f0;
+const SET_BODY: RomAddr = RomAddr(0x174776);
+const SET_ATTACK: RomAddr = RomAddr(0x1747c4);
+const SET_DEATH: RomAddr = RomAddr(0x1747f0);
 
-/// Boss registered as an obstacle for the other objects (word, address; see `boss_common`).
-const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Starts animation `n` of a set via the AI (0x103d6).
 fn body_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_BODY, n);
+    lib::start(x, SET_BODY.0, n);
 }
 
 fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_ATTACK, n);
+    lib::start(x, SET_ATTACK.0, n);
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
@@ -84,7 +90,7 @@ fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 fn next7<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
 }
 
 /// `move.w #v,(6,A0)`: steps `+6` and `+7` in one go.
@@ -94,9 +100,9 @@ fn set_steps<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
 
 /// 0x8188e: speeds and accelerations (`+0x14..+0x1f`) to zero.
 fn stop<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set32(0x14, 0);
-    x.set32(0x18, 0);
-    x.set32(0x1c, 0);
+    x.set32(Enemy::VX_LONG, 0);
+    x.set32(Enemy::VZ_LONG, 0);
+    x.set32(Enemy::VY_LONG, 0);
 }
 
 /// 0x8189e: record of the camera in use (A2: 0xff84fe, or 0xff854e if `A5+0x36`).
@@ -117,7 +123,7 @@ fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return true;
     }
     let t = load_target(x);
-    let mut d = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8));
+    let mut d = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
@@ -131,11 +137,11 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return true;
     }
     let t = load_target(x);
-    let dz = t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)).wrapping_add(0x20);
+    let dz = t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
     if dz <= 0x40 {
         false
     } else {
-        let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
+        let dx = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xc0);
         dx > 0x180
     }
 }
@@ -143,7 +149,7 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x81722: sixteenths of HP remaining (0 to 15).
 fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut d1 = x.u16(f::HP) << 4;
-    let max = x.u16(0x60);
+    let max = x.u16(Enemy::HP_MAX);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | max as u32;
     let mut d0 = 0xfu32;
     loop {
@@ -163,9 +169,9 @@ fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
     let w = byte(x, "boss_3/wounds", n);
-    let changed = w != x.u8(FLYING);
+    let changed = w != x.u8(Boss3::FLYING);
     if changed {
-        x.set8(FLYING, w);
+        x.set8(Boss3::FLYING, w);
     }
     changed
 }
@@ -176,12 +182,12 @@ fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let k = rank_byte(x, table);
     x.set8(f::SUB2, k);
     x.set16(f::STATE, 0x0204);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 /// 0x80e1c / 0x80e22: attack drawn for a nearby target (`far`: at a distance); when wounded, the wounded table.
 fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
-    let table = if x.u8(FLYING) != 0 {
+    let table = if x.u8(Boss3::FLYING) != 0 {
         "boss_3/wounded_attacks"
     } else if far {
         "boss_3/far_attacks"
@@ -194,12 +200,12 @@ fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
 /// 0x81462: end of an attack: new attack if the target is very close, otherwise resumption of the flight (or wait).
 fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
-        let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
+        let s = if x.u8(Boss3::FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         return x.set32(f::STATE, s);
     }
     load_target(x);
     let close = lib::target_in_box(x, -0x40, 0x40, 0x20);
-    if x.u8(FLYING) != 0 {
+    if x.u8(Boss3::FLYING) != 0 {
         return x.set32(f::STATE, 0x0202_0a00);
     }
     if close {
@@ -214,15 +220,15 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.tick_counters();
     if var::PAUSE.get(x.b) == 0 {
-        x.set8(HOVER, 0xff);
+        x.set8(Boss3::HOVER, 0xff);
     }
-    x.set8(BODY_SHAPE, 0);
+    x.set8(Boss3::BODY_SHAPE, 0);
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
         _ => {
-            crate::mem::wr16(x.b, BODY_OWNER, 0);
+            var::BODY_OWNER.set(x.b, 0);
             x.free(&pools::BOSS);
         }
     }
@@ -236,35 +242,35 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     var::SCENE_LEVEL.set(x.b, 0);
-    x.set8(0x93, 1);
-    x.set8(0x9a, 0xff);
+    x.set8(Boss::DEATH_CREDIT, 1);
+    x.set8(Boss::DEATH_VALUE, 0xff);
     pick_target(x);
     lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x23);
     lib::initial_hp_boss(x);
     lib::create_set_14(x);
     lib::create_set_15(x);
-    for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 1), (0x69, 1)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::AI_ROW_8E, 3), (Enemy::AI_SHOT, 0xff), (Enemy::AI_68, 1), (Enemy::AI_69, 1)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    for (off, v) in [(0x6a, 3), (0x6c, 4), (0x6d, 8)] {
+    for (off, v) in [(Enemy::AI_WANDER_ROW, 3), (Enemy::AI_WAIT_MASKS, 4), (Enemy::AI_WAIT_ROW, 8)] {
         x.set8(off, v);
     }
     let mut n = 6;
     if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 {
         n = 7;
     }
-    x.set8(0x72, n);
-    x.set8(0x73, n);
-    for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x21), (0x7f, 0), (0x81, 0), (0x80, 0x19), (0xbf, 0)] {
+    x.set8(Enemy::AI_DECISION_A, n);
+    x.set8(Enemy::AI_DECISION_B, n);
+    for (off, v) in [(Enemy::AI_BOX_CHANCE, 1), (Enemy::AI_BOX_ANIM, 0x44), (Enemy::AI_BYTE_ROW, 6), (Enemy::EVENT_KIND, 0x21), (Enemy::EVENT_LOW, 0), (Enemy::LOOT, 0), (Enemy::LOOT_ROW, 0x19), (Enemy::ANIM_VARIANT, 0)] {
         x.set8(off, v);
     }
-    x.set8(INVULNERABLE, 0);
-    crate::mem::wr16(x.b, BODY_OWNER, x.o.0 as u16);
+    x.set8(Boss3::INVULNERABLE, 0);
+    var::BODY_OWNER.set(x.b, x.o.0 as u16);
     crate::families::effects_creators::mirrored_pair(x.b, x.o);
     body_anim(x, 0);
     lib::empty_popups(x);
@@ -289,9 +295,9 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             12 => fight::carrying(x),
             _ => fight::counter(x),
         }
-        if tst8(x, INVULNERABLE).gt() {
-            sub8(x, INVULNERABLE, 1);
-            x.set8(0x38, 0);
+        if tst8(x, Boss3::INVULNERABLE).gt() {
+            sub8(x, Boss3::INVULNERABLE, 1);
+            x.set8(Enemy::FRAME_TAG, 0);
         }
     }
     if x.u8(f::SUB) == 0 {
@@ -316,10 +322,10 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     // index `(d8,PC,D1.w)`: sign-extended word
     let mask = word(x, "boss_3/counter_masks", level as i16 as i32 as u32);
     if mask >> r & 1 != 0 {
-        x.set8(INVULNERABLE, 8);
+        x.set8(Boss3::INVULNERABLE, 8);
         x.set32(f::STATE, 0x0204_1800);
-        x.set8(VULNERABLE, 1);
-        x.set8(0, 1);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Enemy::ACTIVE, 1);
     }
     (r, mask)
 }
