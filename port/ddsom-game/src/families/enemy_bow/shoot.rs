@@ -17,8 +17,8 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         0 => first(x),
         2 => second(x),
         4 => {
-            x.set16(RESUME_STATE, 0x0204);
-            x.set16(RESUME_SUB2, 0x0202);
+            x.set16(Bow::RESUME_STATE, 0x0204);
+            x.set16(Bow::RESUME_SUB2, 0x0202);
             set_state_long(x, 0x020c_0000);
             turn_to_resume(x);
         }
@@ -37,12 +37,12 @@ fn turn_to_resume<R: Bench>(x: &mut Cx<'_, R>) {
 fn first<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            let action = row_byte(x, FIRST_ACTIONS);
+            let action = rank_byte(x, FIRST_ACTIONS);
             match action {
                 0 => shoot_or_approach(x),
                 2 => {
-                    x.set8(SAVED_STEP, 2);
-                    x.set8(TIMER, 0x20);
+                    x.set8(Bow::SAVED_STEP, 2);
+                    x.set8(Bow::TIMER, 0x20);
                     x.set8(Obj::SPEED_INDEX, 8);
                     if x.u8(f::FLIP) == 0 {
                         x.set8(Obj::SPEED_INDEX, 0x1c);
@@ -53,7 +53,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 4 => {
                     let d6 = if rand_and(x, 1) != 0 { 3 } else { 2 };
-                    x.set8(AI_WANDER, d6 as u8);
+                    x.set8(Enemy::AI_WANDER, d6 as u8);
                     set_speed(x, 0x21);
                     x.set8(f::SUB3, 0xa);
                     reload_shot(x);
@@ -63,7 +63,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
                     stance_begin(x);
                 }
                 8 => {
-                    x.set8(REPEAT, 1);
+                    x.set8(Bow::REPEAT, 1);
                     x.set8(f::SUB3, 4);
                     mv(x, 1);
                 }
@@ -74,10 +74,10 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
         4 => fire_loop(x),
         6 => side_walk(x),
         8 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Bow::TIMER).wrapping_sub(1);
+            x.set8(Bow::TIMER, n);
             if (n as i8) < 0 {
-                let saved = x.u8(SAVED_STEP);
+                let saved = x.u8(Bow::SAVED_STEP);
                 x.set8(f::SUB3, saved);
             }
             x.move_by_table_xy();
@@ -99,28 +99,28 @@ fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
     if shoot_roll(x) {
         return aim_again(x);
     }
-    x.set8(SHOT_KIND, 4);
+    x.set8(Enemy::AI_POINT_SET, 4);
     approach_target(x);
 }
 
 /// 0x5c44e: a shot in place: number of shots drawn from the row, then shot animation.
 fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    let n = row_byte(x, SHOT_REPEATS);
-    x.set8(REPEAT, n);
+    let n = rank_byte(x, SHOT_REPEATS);
+    x.set8(Bow::REPEAT, n);
     reload_shot(x);
 }
 
 /// 0x5c472: the shot animation (0 or 5 according to profile `+0x2f`).
 fn reload_shot<R: Bench>(x: &mut Cx<'_, R>) {
-    let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
+    let anim = if x.u8(Enemy::GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);
 }
 
 /// 0x5c418: faces the living target, or goes to wait if it has fallen.
 fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
-    if target.u8(x.b, 0) == 0 {
+    if target.u8(x.b, Enemy::ACTIVE) == 0 {
         set_state_long(x, IDLE);
         return;
     }
@@ -139,8 +139,8 @@ fn fire_loop<R: Bench>(x: &mut Cx<'_, R>) {
         }
         return;
     }
-    let n = x.u8(REPEAT).wrapping_sub(1);
-    x.set8(REPEAT, n);
+    let n = x.u8(Bow::REPEAT).wrapping_sub(1);
+    x.set8(Bow::REPEAT, n);
     if n != 0 {
         return reload_shot(x);
     }
@@ -155,21 +155,21 @@ fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
     if mine >= target.u16(x.b, Obj::Y) {
         x.add8(Obj::SPEED_INDEX, 0x10);
     }
-    let n = x.u8(AI_WANDER).wrapping_sub(1);
-    x.set8(AI_WANDER, n);
+    let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+    x.set8(Enemy::AI_WANDER, n);
     if (n as i8) >= 0 {
-        x.set8(TIMER, 0x20);
+        x.set8(Bow::TIMER, 0x20);
         let step = x.u8(f::SUB3);
-        x.set8(SAVED_STEP, step);
+        x.set8(Bow::SAVED_STEP, step);
         x.add8(f::SUB3, 2);
-        let anim = 0x10 + x.u8(GROUP) as u32;
+        let anim = 0x10 + x.u8(Enemy::GROUP) as u32;
         return mv(x, anim);
     }
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     if want as u8 != x.u8(f::FLIP) {
         let state = x.u32(f::STATE);
-        x.set32(RESUME_STATE, state);
+        x.set32(Bow::RESUME_STATE, state);
         x.set8(f::SUB, 0xc);
         x.set16(f::SUB2, 0);
         return turn_to_resume(x);
@@ -183,22 +183,22 @@ fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
 fn second<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            let action = row_byte(x, SECOND_ACTIONS);
+            let action = rank_byte(x, SECOND_ACTIONS);
             match action {
                 0 => {
                     x.set8(f::SUB3, 2);
                     if shoot_roll(x) {
                         return start_shot(x);
                     }
-                    x.set8(SHOT_KIND, 5);
+                    x.set8(Enemy::AI_POINT_SET, 5);
                     approach_target(x);
                 }
                 2 => {
-                    x.set8(SAVED_STEP, 2);
+                    x.set8(Bow::SAVED_STEP, 2);
                     dash_start(x);
                 }
                 4 => {
-                    x.set8(SAVED_STEP, 6);
+                    x.set8(Bow::SAVED_STEP, 6);
                     dash_start(x);
                 }
                 6 => {
@@ -231,14 +231,14 @@ fn second<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
         }
         12 => {
-            x.set8(SHOT_KIND, 4);
+            x.set8(Enemy::AI_POINT_SET, 4);
             approach_target(x);
         }
         14 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Bow::TIMER).wrapping_sub(1);
+            x.set8(Bow::TIMER, n);
             if (n as i8) < 0 {
-                let saved = x.u8(SAVED_STEP);
+                let saved = x.u8(Bow::SAVED_STEP);
                 x.set8(f::SUB3, saved);
             }
             x.move_by_table_xy();
@@ -260,7 +260,7 @@ fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5c5f6: sideways run-up (speed 0xb, animation 2) for `0x23` frames.
 fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(TIMER, 0x23);
+    x.set8(Bow::TIMER, 0x23);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
         x.set8(Obj::SPEED_INDEX, 0x1c);
@@ -273,10 +273,10 @@ fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5c59e: a point-blank shot (arrow of type 0xa, strength 4).
 pub(super) fn start_shot<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(AI_SHOT, 3);
-    x.set8(STRIKE_KIND, 0xa);
-    x.set8(STRIKE_POWER, 4);
-    x.set32(FLAGS, 0x0204_0202);
+    x.set8(Enemy::AI_SHOT, 3);
+    x.set8(Enemy::STRIKE_KIND, 0xa);
+    x.set8(Enemy::STRIKE_POWER, 4);
+    x.set32(Enemy::RESUME_STATE, 0x0204_0202);
     shot(x, 1);
 }
 
@@ -318,7 +318,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(AI_WANDER, 0xc);
+            x.set8(Enemy::AI_WANDER, 0xc);
             x.set8(Obj::SPEED_INDEX, 0);
             if rand_and(x, 1) != 0 {
                 x.add8(Obj::SPEED_INDEX, 0x10);
@@ -329,8 +329,8 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             x.move_by_table_xy();
             x.anim_step();
-            let n = x.u8(AI_WANDER).wrapping_sub(1);
-            x.set8(AI_WANDER, n);
+            let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+            x.set8(Enemy::AI_WANDER, n);
             if (n as i8) >= 0 {
                 return;
             }

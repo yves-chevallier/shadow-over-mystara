@@ -7,7 +7,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(NO_ZONE) != 0 || grabbed(x) {
+    if x.u8(Goblin::NO_ZONE) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return grab(x);
     }
@@ -26,7 +26,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6de46: (re)starts the walk toward the target.
 pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_speed(x, 0x12);
     mv(x, 1);
     pick_target(x);
@@ -37,19 +37,19 @@ pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
 /// +6 = 0: walks toward the player; chooses a move as soon as it is in range.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
-        x.set8(SHOT_KIND, 0x1a);
+        x.set8(Enemy::AI_POINT_SET, 0x1a);
         return approach_start(x);
     }
     lib::approach_target(x);
-    let n = x.u8(AI_CHARGE).wrapping_sub(1);
-    x.set8(AI_CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
-        let m = x.u8(AI_WANDER).wrapping_sub(1);
-        x.set8(AI_WANDER, m);
+        let m = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, m);
         if m == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -68,11 +68,11 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if lib::guard_in_front_strict(x, -0x38, 0x38, 0xc) {
         let chosen = x.u8(f::SUB2);
-        x.set8(CHOSEN, chosen);
+        x.set8(Goblin::CHOSEN, chosen);
         x.set16(f::SUB2, 0);
         return lib::pick_byte(x);
     }
-    x.set8(LOOK_PREV, 0x80);
+    x.set8(Goblin::LOOK_PREV, 0x80);
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         x.move_by_table_xy();
@@ -87,7 +87,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 2);
     }
     if x.anim_step() {
@@ -102,11 +102,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         x.set16(f::SUB2, 0);
     }
@@ -159,11 +159,11 @@ pub(super) fn walk_off<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         x.set8(f::SUB, 2);
         x.set16(f::SUB2, 0);

@@ -67,8 +67,8 @@ pub(super) fn disintegrate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         next(x);
         x.set8(E::SUB, 6);
         x.set8(E::ACTIVE, 2);
-        x.set8(E::FLAG_81, 0);
-        x.set8(E::FLAG_80, 0);
+        x.set8(E::LOOT, 0);
+        x.set8(E::LOOT_ROW, 0);
         anim(x, 12);
         let sound = if x.u8(E::KIND) == 1 { crate::sound::CMD_304_404 } else { crate::sound::CMD_370_470 };
         lib::sound(x, sound);

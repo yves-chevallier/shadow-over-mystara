@@ -20,8 +20,8 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// End of a walk-in: when timer `+0xa4` ends, stand and make the first choice (0x5c17e).
 fn end_of_walk<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Bow::TIMER).wrapping_sub(1);
+    x.set8(Bow::TIMER, n);
     if n == 0 {
         x.set8(f::SUB, 2);
         x.set16(f::SUB2, 0);
@@ -38,7 +38,7 @@ pub(super) fn walk_in<R: Bench>(x: &mut Cx<'_, R>, timer: u8, speed: u32) {
         return end_of_walk(x);
     }
     x.add8(f::SUB2, 2);
-    x.set8(TIMER, timer);
+    x.set8(Bow::TIMER, timer);
     walk_angle(x);
     set_speed(x, speed);
     mv(x, 2);
@@ -99,7 +99,7 @@ fn appear<R: Bench>(x: &mut Cx<'_, R>) {
 fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set8(TIMER, 0x20);
+        x.set8(Bow::TIMER, 0x20);
         x.set8(Obj::SPEED_INDEX, 0xf);
         set_speed(x, 0xd);
         return mv(x, 5);

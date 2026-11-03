@@ -20,8 +20,8 @@ fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
-            x.set8(FLAG, 0);
+            x.set_bit(Enemy::DISPLAY, 1, false);
+            x.set8(WarMachine::FLAG, 0);
             lib::set_immunities(x);
             let cam = camera_x(x).wrapping_add(0xc0);
             x.set8(f::FLIP, 0);
@@ -69,8 +69,8 @@ fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x77f48: start of the arrival leap (vertical thrust ±0x20, animation 9).
 pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x1e);
-    x.set16(TIMER2, 0);
+    x.set16(WarMachine::TIMER, 0x1e);
+    x.set16(WarMachine::TIMER2, 0);
     let v: i16 = if x.u8(f::FLIP) != 0 { -0x20 } else { 0x20 };
     x.set16(Obj::AX, v as u16);
     lib::sound(x, crate::sound::CMD_376_476);
@@ -80,14 +80,14 @@ pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x77f7e / 0x78470 / 0x78670: leap: spark every 4 frames, timer `+0xa6`, then animation 0xa.
 pub(super) fn hop_loop<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u16(TIMER2).wrapping_sub(1);
-    x.set16(TIMER2, n);
+    let n = x.u16(WarMachine::TIMER2).wrapping_sub(1);
+    x.set16(WarMachine::TIMER2, n);
     if (n as i16) <= 0 {
-        x.set16(TIMER2, 4);
+        x.set16(WarMachine::TIMER2, 4);
         spark(x, 0);
     }
-    let t = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, t);
+    let t = x.u16(WarMachine::TIMER).wrapping_sub(1);
+    x.set16(WarMachine::TIMER, t);
     if (t as i16) > 0 {
         x.move_x();
         lib::step(x);
@@ -102,8 +102,8 @@ fn wait_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
-            x.set8(FLAG, 0);
+            x.set_bit(Enemy::DISPLAY, 1, false);
+            x.set8(WarMachine::FLAG, 0);
             lib::set_immunities(x);
             look(x, 0x31);
             mv(x, 2);
@@ -123,8 +123,8 @@ fn wait_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
-            x.set8(FLAG, 0);
+            x.set_bit(Enemy::DISPLAY, 1, false);
+            x.set8(WarMachine::FLAG, 0);
             lib::set_immunities(x);
             look(x, 0x32);
             mv(x, 0);

@@ -31,7 +31,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x696b0: the elf starts walking toward its target.
 pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
     body(x, 1);
     pick_target(x);
@@ -42,23 +42,23 @@ pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x696a0: start of the walk counting one more step.
 pub(super) fn begin_walk_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(WALK_ANIM, 0xf0);
-    x.set8(0x79, 0x1a);
+    x.set8(Elf::WALK_ANIM, 0xf0);
+    x.set8(Enemy::AI_POINT_SET, 0x1a);
     begin_walk(x);
 }
 
 /// 0x696de: walk; turns around, waits or attacks.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
-    let n = x.u8(AI_WALK).wrapping_sub(1);
-    x.set8(AI_WALK, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
-        let n = x.u8(AI_CHOICE).wrapping_sub(1);
-        x.set8(AI_CHOICE, n);
+        let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, n);
         if n == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -74,7 +74,7 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         x.set16(f::STATE, 0x204);
         let n = rand_and(x, 1) * 2 + 4;
-        x.set8(NEXT_ATTACK, n as u8);
+        x.set8(Elf::NEXT_ATTACK, n as u8);
         return x.set16(f::SUB2, 0);
     }
     if front_box(x) {
@@ -87,7 +87,7 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if lib::guard_in_front_strict(x, -0x38, 0x38, 0xc) {
         let hint = x.u8(f::SUB2);
-        x.set8(NEXT_ATTACK, hint);
+        x.set8(Elf::NEXT_ATTACK, hint);
         x.set16(f::SUB2, 0);
         return lib::pick_byte(x);
     }
@@ -131,13 +131,11 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 /// 0x6a706 / 0x6a70c: the attack to play after the approach is drawn from the difficulty row; it is returned (D0.b of
 /// the original).
-pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = (var::RANK.get(x.b) >> 1) << 5;
-    let n = rand_and(x, 0x1f);
-    let mv = x.data8(table + row as u32 + n);
+pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
+    let mv = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
-    x.set8(NEXT_ATTACK, mv);
+    x.set8(Elf::NEXT_ATTACK, mv);
     mv
 }
 
@@ -156,7 +154,7 @@ pub(super) fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return body(x, 2);
     }
     if step(x) {
@@ -171,11 +169,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return body(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         x.set16(f::SUB2, 0);
     }
@@ -186,7 +184,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return body(x, 0);
     }
     if var::PLAYERS_ALIVE.get(x.b) != 0 {

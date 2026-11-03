@@ -31,11 +31,11 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// The wanted look `v`; animation `anim` is started (and true returned) only if the look changes.
 fn set_look<R: Bench>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
-    x.set8(LOOK, v);
-    if v == x.u8(LOOK_PREV) {
+    x.set8(Ghoul::LOOK, v);
+    if v == x.u8(Ghoul::LOOK_PREV) {
         return false;
     }
-    x.set8(LOOK_PREV, v);
+    x.set8(Ghoul::LOOK_PREV, v);
     body(x, anim);
     true
 }
@@ -43,7 +43,7 @@ fn set_look<R: Bench>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
 /// 0x5fcec: the ghoul starts walking toward its target.
 pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_look(x, 0, 2);
     set_speed(x, 0xd);
     pick_target(x);
@@ -54,21 +54,21 @@ pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5fd3e: walk; turns around, waits or attacks.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
-        x.set8(AI_SHOT, 0);
+        x.set8(Enemy::AI_POINT_SET, 0);
         lib::walk_near_point(x);
     } else {
-        x.set8(AI_SHOT, 9);
+        x.set8(Enemy::AI_POINT_SET, 9);
         lib::approach_target(x);
     }
-    let n = x.u8(AI_WALK).wrapping_sub(1);
-    x.set8(AI_WALK, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
-        let n = x.u8(AI_CHOICE).wrapping_sub(1);
-        x.set8(AI_CHOICE, n);
+        let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, n);
         if n == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -105,7 +105,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         look(x, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return body(x, 1);
     }
     if step(x) {
@@ -118,13 +118,13 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         if set_look(x, 4, 0) {
             return;
         }
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         x.set16(f::SUB2, 0);
     }
@@ -136,17 +136,17 @@ pub(super) fn patrol<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(TIMER, 0x20);
+            x.set8(Ghoul::TIMER, 0x20);
             set_angle(x, 8, 0x18);
             set_speed(x, 3);
             body(x, 2);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(TIMER, 0x40);
+                x.set8(Ghoul::TIMER, 0x40);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
                 body(x, 1);

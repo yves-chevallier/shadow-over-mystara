@@ -9,10 +9,10 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Delay tables (bytes) read by `charge_delay` and `wander_delay`.
-const CHARGE_A: u32 = 0x78e8c;
-const CHARGE_B: u32 = 0x78eac;
-const WANDER_A: u32 = 0x78ef0;
-const WANDER_B: u32 = 0x78f10;
+const CHARGE_A: &str = "warmachine/charge_a";
+const CHARGE_B: &str = "warmachine/charge_b";
+const WANDER_A: &str = "warmachine/wander_a";
+const WANDER_B: &str = "warmachine/wander_b";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -46,18 +46,18 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         pick_wait(x);
-        x.set8(LOOK, 0);
-        if x.u8(LOOK_PREV) == 0 {
+        x.set8(WarMachine::LOOK, 0);
+        if x.u8(WarMachine::LOOK_PREV) == 0 {
             return;
         }
-        x.set8(LOOK_PREV, 0);
+        x.set8(WarMachine::LOOK_PREV, 0);
         return mv(x, 4);
     }
     if lib::outside_band(x, -0x30, 0x1b0) {
         return go::charge(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) <= 0 {
         return go::fire_a(x);
     }
@@ -67,17 +67,9 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x79f6: sets the wait delay `+0x6e` from the difficulty and returns control (D0 = 1).
+/// 0x79f6: sets the wait delay `+0x6e` from the difficulty and returns control (D0 = 1): `enemy_lib::draw_6e`.
 fn pick_wait<R: Bench>(x: &mut Cx<'_, R>) {
-    if !x.in_arena(0) {
-        x.set8(AI_WAIT, 1);
-        return;
-    }
-    let group = x.u8(0x6d) as u32;
-    let list = x.data32(0x7a50 + group * 4);
-    let r = rand_and(x, 0x1f);
-    let v = x.data8(list + r);
-    x.set8(AI_WAIT, v);
+    lib::draw_6e(x);
 }
 
 /// 0x78142 : demi-tour.
@@ -86,7 +78,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        x.set8(LOOK, 1);
+        x.set8(WarMachine::LOOK, 1);
         return mv(x, 5);
     }
     if !lib::step(x) {
@@ -95,11 +87,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if gate(x) {
         return;
     }
-    let state = x.u32(RESUME_STATE);
+    let state = x.u32(WarMachine::RESUME_STATE);
     x.set32(f::STATE, state);
-    let prev = x.u8(LOOK_PREV);
+    let prev = x.u8(WarMachine::LOOK_PREV);
     if prev == 2 || prev == 3 {
-        x.set8(LOOK, prev);
+        x.set8(WarMachine::LOOK, prev);
         return walk_anim(x);
     }
     mv(x, 4);
@@ -113,7 +105,7 @@ fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7831e: switches to the flight animation with the same key, according to the direction of the walk.
 fn fly_anim<R: Bench>(x: &mut Cx<'_, R>) {
-    let set = if lib::moving_forward(x) { SET_FLY_B } else { SET_FLY_A };
+    let set = if lib::moving_forward(x) { SET_FLY_B.0 } else { SET_FLY_A.0 };
     lib::switch_keeping_time(x, set);
 }
 
@@ -128,11 +120,11 @@ fn march<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     if first {
         wander_delay(x, WANDER_A);
         charge_delay(x, CHARGE_A);
-        x.set8(LOOK, 2);
+        x.set8(WarMachine::LOOK, 2);
     } else {
         wander_delay(x, WANDER_B);
         charge_delay(x, CHARGE_B);
-        x.set8(LOOK, 3);
+        x.set8(WarMachine::LOOK, 3);
     }
     x.add8(f::SUB3, 2);
     x.set16(Obj::AX, 0);
@@ -142,36 +134,36 @@ fn march<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     }
     lib::approach_target(x);
     set_speed(x, 8);
-    if matches!(x.u8(LOOK_PREV), 2 | 3) {
-        let look = x.u8(LOOK);
-        x.set8(LOOK_PREV, look);
+    if matches!(x.u8(WarMachine::LOOK_PREV), 2 | 3) {
+        let look = x.u8(WarMachine::LOOK);
+        x.set8(WarMachine::LOOK_PREV, look);
         return fly_anim(x);
     }
-    let look = x.u8(LOOK);
-    x.set8(LOOK_PREV, look);
+    let look = x.u8(WarMachine::LOOK);
+    x.set8(WarMachine::LOOK_PREV, look);
     walk_anim(x);
 }
 
 /// 0x7827c: walk: charge delay, then shot decisions.
 fn march_step<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(AI_CHARGE).wrapping_sub(1);
-    x.set8(AI_CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
-        let m = x.u8(AI_WANDER).wrapping_sub(1);
-        x.set8(AI_WANDER, m);
+        let m = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, m);
         if (m as i8) <= 0 {
             return go::fire_b(x);
         }
         lib::approach_target(x);
         set_speed(x, 8);
-        let table = if x.u8(LOOK) == 3 { CHARGE_B } else { CHARGE_A };
+        let table = if x.u8(WarMachine::LOOK) == 3 { CHARGE_B } else { CHARGE_A };
         charge_delay(x, table);
         return fly_anim(x);
     }
     if lib::outside_band(x, -0x30, 0x1b0) {
         return go::charge(x, 0);
     }
-    if x.u8(LOOK) == 3 {
+    if x.u8(WarMachine::LOOK) == 3 {
         let g = gate_near(x);
         if g != 0 {
             return near_decision(x, g);
@@ -203,7 +195,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set16(Obj::AX, 0);
             let mut angle = 0x18;
-            if x.u8(AIMED) == 0 {
+            if x.u8(WarMachine::AIMED) == 0 {
                 let cam = camera_x(x);
                 x.set8(f::FLIP, 0);
                 if (x.u16(Obj::X) as i16) <= cam as i16 {
@@ -213,7 +205,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 let target = load_target(x);
                 let goal = target.u16(x.b, Obj::X);
-                x.set16(GOAL_X, goal);
+                x.set16(WarMachine::GOAL_X, goal);
                 if x.u8(f::FLIP) != 0 {
                     angle = 8;
                 }
@@ -235,13 +227,13 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 lib::sound(x, crate::sound::CMD_376_476);
             }
             let (mut d0, mut d1);
-            if x.u8(AIMED) == 0 {
+            if x.u8(WarMachine::AIMED) == 0 {
                 let cam = camera_x(x);
                 let reach = if (x.u16(Obj::VX) as i16) < 0 { 0xe0 } else { 0xa0 };
                 d0 = cam.wrapping_add(reach);
                 d1 = x.u16(Obj::X);
             } else {
-                d0 = x.u16(GOAL_X);
+                d0 = x.u16(WarMachine::GOAL_X);
                 d1 = x.u16(Obj::X);
             }
             if (x.u16(Obj::VX) as i16) < 0 {

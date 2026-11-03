@@ -14,6 +14,8 @@
 //! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -23,34 +25,39 @@ mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const GROUP: u32 = 0x2f;
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const TIMER: u32 = 0xa0;
-    pub const LOOK: u32 = 0xa1;
-    pub const LOOK_PREV: u32 = 0xa2;
-    /// Substate to resume after a turn-around or a move.
-    pub const RESUME_SUB2: u32 = 0xa4;
-    pub const RESUME_STATE: u32 = 0xa6;
-    pub const TIMER_W: u32 = 0xaa;
-    pub const SCRIPT: u32 = 0xac;
-    pub const GUARD: u32 = 0xad;
-    pub const NO_ZONE: u32 = 0xaf;
-    pub const BITES: u32 = 0xb0;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Hellhound(pub Obj);
+
+impl Hellhound {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Hellhound {
+        /// Second value of the current step of the flame script (low byte of the word `Enemy::CREATOR`) (h).
+        flame_arg, set_flame_arg, FLAME_ARG: u8 @ 0x43;
+        timer, set_timer, TIMER: u8 @ 0xa0;
+        look, set_look, LOOK: u8 @ 0xa1;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa2;
+        /// Substate to resume after a turn-around or a move.
+        resume_sub2, set_resume_sub2, RESUME_SUB2: u8 @ 0xa4;
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa6;
+        timer_w, set_timer_w, TIMER_W: u8 @ 0xaa;
+        script, set_script, SCRIPT: u8 @ 0xac;
+        guard, set_guard, GUARD: u8 @ 0xad;
+        no_zone, set_no_zone, NO_ZONE: u8 @ 0xaf;
+        bites, set_bites, BITES: u8 @ 0xb0;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x162126;
-const SET_STRIKE: u32 = 0x162148;
+const SET_MOVE: RomAddr = RomAddr(0x162126);
+const SET_STRIKE: RomAddr = RomAddr(0x162148);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -69,17 +76,17 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// The wanted look: `+0xa1` and its twin `+0xa2`.
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(Hellhound::LOOK, v);
+    x.set8(Hellhound::LOOK_PREV, v);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
@@ -96,7 +103,7 @@ fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     x.anim_step();
 }
@@ -116,7 +123,7 @@ fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, crate::sound::CMD_35F_45F);
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 0xc);
     mv(x, 0xc);
 }
@@ -130,8 +137,8 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// One smoke step every `mask + 1` frames (`A5+0x6e` is the frame counter, which the original masks in place).
 fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
-    let v = x.a5_u16(0x6e) & mask;
-    x.set_a5_u16(0x6e, v);
+    let v = var::FRAME_COUNTER.get(x.b) & mask;
+    var::FRAME_COUNTER.set(x.b, v);
     if v == 0 {
         lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
     }
@@ -139,7 +146,7 @@ fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i
 
 /// 0x639fe: the enemy must turn around to face its target (false without a target or a saved look).
 fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
+    if x.u8(Hellhound::LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
     let target = x.linked(f::TARGET);
@@ -165,11 +172,11 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x62f1e / 0x62f26: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 8 for the far
 /// series.
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
-    let profile = x.u8(GROUP) as u32;
-    let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
+    let profile = x.u8(Enemy::GROUP) as u32;
+    let list = tables::table("hellhound/move_lists").at32(x.b, bias as u32 + 4 * profile);
+    let row = rank_row(x);
     let r = rand_and(x, 0x1f);
-    let mv = x.data8(list + row + r);
+    let mv = tables::held8(x.b, list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
     x.set8(f::SUB3, 0);
@@ -178,7 +185,7 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     }
 }
 
-/// 0x63790: end of a move: if the target is in a range box, an attack of series `0x637fe` follows; otherwise standing.
+/// 0x63790: end of a move: if the target is in a range box, an attack of the table `follow_moves` follows; otherwise standing.
 fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -187,9 +194,7 @@ fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = rand_and(x, 0x1f);
-    let mv = x.data8(0x637fe + row + r);
+    let mv = rank_byte(x, "hellhound/follow_moves");
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, 0x0208);
     x.set8(f::SUB3, 0);
@@ -206,18 +211,18 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::STATE, 2);
-    x.set8(0x6f, 1);
+    x.set8(Enemy::AI_SPARE_ROW, 1);
     x.set8(f::BOX_SET, 0x12);
     lib::initial_hp(x);
-    for (off, v) in [(0x70, 0), (0x7e, 0xf), (0x7f, 0), (0x8e, 0), (0x78, 0xff), (0x81, 0xf), (0x80, 0x10)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0xf), (Enemy::EVENT_LOW, 0), (Enemy::AI_ROW_8E, 0), (Enemy::AI_SHOT, 0xff), (Enemy::LOOT, 0xf), (Enemy::LOOT_ROW, 0x10)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);
     lib::set_immunities(x);
-    let params: [(u32, u8); 10] = if x.u8(GROUP) == 0 {
-        [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 3), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x24), (0x76, 4)]
+    let params: [(u32, u8); 10] = if x.u8(Enemy::GROUP) == 0 {
+        [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x24), (Enemy::AI_BYTE_ROW, 4)]
     } else {
-        [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 4), (0x6d, 2), (0x72, 5), (0x73, 4), (0x74, 2), (0x75, 0x28), (0x76, 6)]
+        [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_WAIT_MASKS, 4), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 5), (Enemy::AI_DECISION_B, 4), (Enemy::AI_BOX_CHANCE, 2), (Enemy::AI_BOX_ANIM, 0x28), (Enemy::AI_BYTE_ROW, 6)]
     };
     for (off, v) in params {
         x.set8(off, v);
@@ -244,7 +249,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     };
     set_state_long(x, state);
     look(x, look_v);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     mv(x, anim);
 }
 

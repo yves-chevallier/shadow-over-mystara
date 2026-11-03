@@ -27,15 +27,15 @@ fn side_step<R: Bench>(x: &mut Cx<'_, R>, depth: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         look(x, 6);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         if !depth {
-            x.set8(TIMER, 0x10);
+            x.set8(Ghoul::TIMER, 0x10);
             if rand_and(x, 1) != 0 {
                 return body(x, 0);
             }
             return strike(x, 3);
         }
-        x.set8(TIMER, 0xc);
+        x.set8(Ghoul::TIMER, 0xc);
         load_target(x);
         x.set8(Obj::SPEED_INDEX, 0);
         if rand_and(x, 1) != 0 {
@@ -44,8 +44,8 @@ fn side_step<R: Bench>(x: &mut Cx<'_, R>, depth: bool) {
         set_speed(x, 0xd);
         return body(x, 2);
     }
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+    x.set8(Ghoul::TIMER, t);
     if t == 0 {
         set_state_long(x, STANCE);
     }
@@ -61,13 +61,13 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             look(x, 6);
-            x.set8(TIMER, 4);
-            x.set8(VULNERABLE, 1);
+            x.set8(Ghoul::TIMER, 4);
+            x.set8(Enemy::VULNERABLE, 1);
             body(x, 3);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t != 0 {
                 return;
             }
@@ -104,8 +104,8 @@ fn two_strikes<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             look(x, 6);
-            x.set8(VULNERABLE, 1);
-            x.set8(TIMER, 0xc);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Ghoul::TIMER, 0xc);
             load_target(x);
             x.set8(Obj::SPEED_INDEX, 0);
             if rand_and(x, 1) != 0 {
@@ -115,11 +115,11 @@ fn two_strikes<R: Bench>(x: &mut Cx<'_, R>) {
             body(x, 2);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 x.add8(f::SUB3, 2);
-                x.set8(STRIKE_KIND, 0x11);
+                x.set8(Enemy::STRIKE_KIND, 0x11);
                 return strike(x, 0);
             }
             move_xy(x);
@@ -128,7 +128,7 @@ fn two_strikes<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if step(x) {
                 x.add8(f::SUB3, 2);
-                x.set8(STRIKE_KIND, 0x12);
+                x.set8(Enemy::STRIKE_KIND, 0x12);
                 strike(x, 1);
             }
         }
@@ -193,8 +193,8 @@ fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
         (0, Axis::None) => {
             x.add8(f::SUB3, 2);
             look(x, 8);
-            x.set8(VULNERABLE, 1);
-            x.set8(TIMER, 0x10);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Ghoul::TIMER, 0x10);
             if needs_turn_around(x) {
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
@@ -210,8 +210,8 @@ fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
             }
         }
         (4, Axis::None) => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 set_state_long(x, STANCE);
             }
@@ -220,8 +220,8 @@ fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
         (0, _) => {
             x.add8(f::SUB3, 2);
             look(x, 8);
-            x.set8(VULNERABLE, 1);
-            x.set8(TIMER, if axis == Axis::Horizontal { 0x18 } else { 0x10 });
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Ghoul::TIMER, if axis == Axis::Horizontal { 0x18 } else { 0x10 });
             if needs_turn_around(x) {
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
@@ -235,8 +235,8 @@ fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
             }
         }
         (4, _) => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 set_state_long(x, STANCE);
             }
@@ -281,7 +281,7 @@ fn wake<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     look(x, 8);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     body(x, 0);
     if box_attack(x, 0, 0x50, 8, CLOSE_ATTACKS, 0) {
         return;

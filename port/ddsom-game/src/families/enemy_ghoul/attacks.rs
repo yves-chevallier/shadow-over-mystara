@@ -17,7 +17,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         4 => leap(x, Leap { kind: Some(0x13), speed: 0x200, rise: 0x200, gravity: 0x38, then: Then::EndAttack }),
         6 => {
             set_state_long(x, 0x0202_0600);
-            x.set8(LOOK, 6);
+            x.set8(Ghoul::LOOK, 6);
             begin_walk(x);
         }
         8 => guard(x),
@@ -33,9 +33,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn claw<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(STRIKE_KIND, kind);
+        x.set8(Enemy::STRIKE_KIND, kind);
         look(x, 6);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return strike(x, anim);
     }
     if step(x) {
@@ -66,16 +66,16 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>, l: Leap) {
         0 => {
             x.add8(f::SUB3, 2);
             if let Some(k) = l.kind {
-                x.set8(STRIKE_KIND, k);
+                x.set8(Enemy::STRIKE_KIND, k);
             }
             look(x, 4);
-            x.set8(TIMER, 4);
-            x.set8(VULNERABLE, 1);
+            x.set8(Ghoul::TIMER, 4);
+            x.set8(Enemy::VULNERABLE, 1);
             body(x, 3);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t != 0 {
                 return;
             }
@@ -103,7 +103,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>, l: Leap) {
                     Then::EndAttack => end_attack(x),
                     Then::Walk => {
                         set_state_long(x, 0x0202_0600);
-                        x.set8(LOOK, 6);
+                        x.set8(Ghoul::LOOK, 6);
                     }
                 }
             }
@@ -117,13 +117,13 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         look(x, 6);
-        x.set8(VULNERABLE, 1);
-        x.set8(TIMER, 0x78);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Ghoul::TIMER, 0x78);
         return strike(x, 3);
     }
     step(x);
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+    x.set8(Ghoul::TIMER, t);
     if t == 0 {
         end_attack(x);
     }
@@ -133,8 +133,8 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>) {
 fn begin_charge<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     look(x, 6);
-    x.set8(VULNERABLE, 1);
-    x.set8(TIMER, 0x18);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Ghoul::TIMER, 0x18);
     set_angle(x, 8, 0x18);
     set_speed(x, 0xd);
     body(x, 2);
@@ -145,8 +145,8 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return begin_charge(x);
     }
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+    x.set8(Ghoul::TIMER, t);
     if t == 0 {
         end_attack(x);
         if box_attack(x, 0, 0x50, 8, CLOSE_ATTACKS, 0) || box_attack(x, -0x80, 0x30, 8, FAR_ATTACKS, 0xa) {
@@ -162,11 +162,11 @@ fn feint<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_charge(x),
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 x.add8(f::SUB3, 2);
-                x.set8(TIMER, 0x10);
+                x.set8(Ghoul::TIMER, 0x10);
                 if rand_and(x, 1) == 0 {
                     return body(x, 0);
                 }
@@ -176,8 +176,8 @@ fn feint<R: Bench>(x: &mut Cx<'_, R>) {
             step(x);
         }
         4 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+            x.set8(Ghoul::TIMER, t);
             if t == 0 {
                 end_attack(x);
             } else {

@@ -16,6 +16,8 @@
 //! Animations 0x1649d0 (movements, `+0xa6` added to the taunt animation) and 0x1649e8 (attacks).
 
 use crate::families::cx::Bench;
+use crate::record::record;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -25,33 +27,36 @@ mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Timer (byte) of a gesture.
-    pub const TIMER: u32 = 0xa2;
-    pub const COOLDOWN: u32 = 0xa4;
-    /// Chosen move (value of `+6` to resume).
-    pub const CHOSEN: u32 = 0xa5;
-    /// The weapon is in hand (the taunt and the get-up use animation +1).
-    pub const WEAPON: u32 = 0xa6;
-    /// Same flag, used by the hit state (fall animations).
-    pub const ARMED: u32 = 0xbf;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Gnoll(pub Obj);
+
+impl Gnoll {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Gnoll {
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Timer (byte) of a gesture.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        cooldown, set_cooldown, COOLDOWN: u8 @ 0xa4;
+        /// Chosen move (value of `+6` to resume).
+        chosen, set_chosen, CHOSEN: u8 @ 0xa5;
+        /// The weapon is in hand (the taunt and the get-up use animation +1).
+        weapon, set_weapon, WEAPON: u8 @ 0xa6;
+        /// Same flag, used by the hit state (fall animations).
+        armed, set_armed, ARMED: u8 @ 0xbf;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x1649d0;
-const SET_STRIKE: u32 = 0x1649e8;
+const SET_MOVE: RomAddr = RomAddr(0x1649d0);
+const SET_STRIKE: RomAddr = RomAddr(0x1649e8);
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 
@@ -79,18 +84,18 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// Starts attack `n`: attack type `kind` and strength `power`.
 fn strike_with<R: Bench>(x: &mut Cx<'_, R>, n: u32, kind: u8, power: u8) {
-    x.set8(STRIKE_KIND, kind);
-    x.set8(STRIKE_POWER, power);
+    x.set8(Enemy::STRIKE_KIND, kind);
+    x.set8(Enemy::STRIKE_POWER, power);
     strike(x, n);
 }
 
@@ -102,14 +107,6 @@ fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, crate::sound::CMD_335_435);
     mv(x, 4);
-}
-
-/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
-    let r = rand_and(x, 0x1f);
-    x.data8(at + r)
 }
 
 /// 0x6c01a: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
@@ -127,7 +124,7 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
         return false;
     }
     let target = load_target(x);
-    let facing = target.u8(x.b, 0x2c);
+    let facing = target.u8(x.b, Enemy::FLIP);
     if facing == x.u8(f::FLIP) && !lib::decision_b(x) {
             return false;
         }
@@ -158,24 +155,24 @@ fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     want as u8 != x.u8(f::FLIP)
 }
 
-const NEAR_TABLE: u32 = 0x6c0d6;
-const FAR_TABLE: u32 = 0x6c2d6;
+const NEAR_TABLE: &str = "gnoll/near_moves";
+const FAR_TABLE: &str = "gnoll/far_moves";
 /// Rows of moves that follow a series (substate 8).
-const FOLLOW_TABLE: u32 = 0x6be1a;
+const FOLLOW_TABLE: &str = "gnoll/follow_moves";
 
 /// 0x6c0a6 (near series) / 0x6c0a0 (far series): chooses the move (`+5 = 4`, `+6 = 0`).
-fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let b = row_byte(x, table);
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
+    let b = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
-    x.set8(CHOSEN, b);
+    x.set8(Gnoll::CHOSEN, b);
     b
 }
 
 /// 0x6bdec: after a series, chooses the fallback move (substate 8).
 fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
-    let b = row_byte(x, FOLLOW_TABLE);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    let b = rank_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
     x.set8(f::SUB3, 0);
@@ -208,33 +205,33 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::initial_hp(x);
     lib::set_immunities(x);
     for (off, v) in [
-        (0x68, 4),
-        (0x69, 1),
-        (0x70, 0),
-        (0x6a, 1),
-        (0x6c, 3),
-        (0x6d, 3),
-        (0x72, 3),
-        (0x73, 2),
-        (0x74, 3),
-        (0x75, 0x38),
-        (0x76, 3),
-        (TIMER, 0x20),
-        (LOOK_PREV, 0),
-        (COOLDOWN, 2),
-        (VULNERABLE, 1),
-        (0x8e, 0),
-        (0x7f, 0),
-        (0x7e, 0xe),
+        (Enemy::AI_68, 4),
+        (Enemy::AI_69, 1),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 1),
+        (Enemy::AI_WAIT_MASKS, 3),
+        (Enemy::AI_WAIT_ROW, 3),
+        (Enemy::AI_DECISION_A, 3),
+        (Enemy::AI_DECISION_B, 2),
+        (Enemy::AI_BOX_CHANCE, 3),
+        (Enemy::AI_BOX_ANIM, 0x38),
+        (Enemy::AI_BYTE_ROW, 3),
+        (Gnoll::TIMER, 0x20),
+        (Gnoll::LOOK_PREV, 0),
+        (Gnoll::COOLDOWN, 2),
+        (Enemy::VULNERABLE, 1),
+        (Enemy::AI_ROW_8E, 0),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::EVENT_KIND, 0xe),
     ] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
-    x.set8(WEAPON, 0);
-    x.set8(ARMED, 0);
-    x.set8(AI_SHOT, 0xff);
-    x.set8(0x80, 0xd);
-    x.set8(0x81, 0xb);
+    x.set32(Enemy::RESUME_STATE, 0);
+    x.set8(Gnoll::WEAPON, 0);
+    x.set8(Gnoll::ARMED, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
+    x.set8(Enemy::LOOT_ROW, 0xd);
+    x.set8(Enemy::LOOT, 0xb);
     true
 }
 

@@ -41,11 +41,11 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +7 = 0 (0x72e80): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0);
-    if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
-        x.set8(CUR_ANIM, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 0);
+    if x.u8(DisplacerBeast::WANT_ANIM) != x.u8(DisplacerBeast::CUR_ANIM) {
+        x.set8(DisplacerBeast::CUR_ANIM, 0);
         play(x, 0);
     }
 }
@@ -53,15 +53,15 @@ pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
 /// +7 = 2 (0x72ffc / 0x72ff0): it follows its target with its gaze for `+0x77` frames (turns around if needed, then
 /// resumes the attack `resume`).
 pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
-    x.set32(RESUME_STATE, resume);
-    let n = x.u8(AI_KICK).wrapping_sub(1);
-    x.set8(AI_KICK, n);
+    x.set32(DisplacerBeast::RESUME_STATE, resume);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) < 0 {
-        return x.add8(0x7, 2);
+        return x.add8(Enemy::SUB_STEP, 2);
     }
     if player_ahead(x) {
         let sub2 = x.u8(f::SUB2);
-        x.set8(RESUME_SUB2, sub2);
+        x.set8(DisplacerBeast::RESUME_SUB2, sub2);
         set_state_long(x, 0x0202_0200);
     }
     step(x);
@@ -69,7 +69,7 @@ pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
 
 /// The first three common steps, then `later(step)` for the others.
 pub(super) fn phased<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => ready(x),
         2 => track(x, resume),
         n => later(x, n),
@@ -87,13 +87,13 @@ pub(super) enum Replay {
 }
 
 pub(super) fn replay<R: Bench>(x: &mut Cx<'_, R>) -> Replay {
-    let want = x.u8(WANT_ANIM);
-    if want != x.u8(CUR_ANIM) {
-        x.set8(CUR_ANIM, want);
+    let want = x.u8(DisplacerBeast::WANT_ANIM);
+    if want != x.u8(DisplacerBeast::CUR_ANIM) {
+        x.set8(DisplacerBeast::CUR_ANIM, want);
         return Replay::New;
     }
-    let left = x.u8(REPEAT_LEFT).wrapping_sub(1);
-    x.set8(REPEAT_LEFT, left);
+    let left = x.u8(DisplacerBeast::REPEAT_LEFT).wrapping_sub(1);
+    x.set8(DisplacerBeast::REPEAT_LEFT, left);
     if left == 0 {
         set_state_long(x, ACTIVE_STANCE);
         return Replay::End;
@@ -103,11 +103,11 @@ pub(super) fn replay<R: Bench>(x: &mut Cx<'_, R>) -> Replay {
 
 /// Start of an attack: next step, vulnerability, wanted animation, strength of the attack.
 fn strike_begin<R: Bench>(x: &mut Cx<'_, R>, vulnerable: u8, want: u8, power: u8, kind: u8) {
-    x.add8(0x7, 2);
-    x.set8(VULNERABLE, vulnerable);
-    x.set8(STRIKE_POWER, power);
-    x.set8(STRIKE_KIND, kind);
-    x.set8(WANT_ANIM, want);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Enemy::VULNERABLE, vulnerable);
+    x.set8(Enemy::STRIKE_POWER, power);
+    x.set8(Enemy::STRIKE_KIND, kind);
+    x.set8(DisplacerBeast::WANT_ANIM, want);
 }
 
 /// Starts animation `n` of the attack series, unless the series of repetitions is over.
@@ -149,7 +149,7 @@ fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn random_bit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    (x.random() as u32) & 1 != 0
+    rand_and(x, 1) != 0
 }
 
 // --- the attacks ----------------------------------------------------------------------------------
@@ -182,33 +182,33 @@ fn jab_b<R: Bench>(x: &mut Cx<'_, R>) {
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set8(TIMER, 0x14);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0x16);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(DisplacerBeast::TIMER, 0x14);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0x16);
             walk_angle(x);
             play(x, 0xd);
             speed(x, 0x17);
         }
         6 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set8(DisplacerBeast::TIMER, t);
             if (t as i8) >= 0 {
                 step(x);
                 return move_xy(x);
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             let flip = x.u8(f::FLIP) != 0;
-            x.set16(0x14, if flip { -0x180i16 } else { 0x180 } as u16);
-            x.set16(0x16, if flip { 0x10 } else { -0x10i16 } as u16);
+            x.set16(Enemy::VX, if flip { -0x180i16 } else { 0x180 } as u16);
+            x.set16(Enemy::AX, if flip { 0x10 } else { -0x10i16 } as u16);
             play_b(x, 0);
         }
         8 => {
-            if x.u8(0x14) != 0 {
+            if x.u8(Enemy::VX) != 0 {
                 x.move_x();
             }
             if x.anim_step() {
-                x.set32(0x14, 0);
+                x.set32(Enemy::VX_LONG, 0);
                 next_move(x);
             }
         }
@@ -221,7 +221,7 @@ fn double_strike<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             let count = if random_bit(x) { 3 } else { 2 };
-            x.set8(REPEAT, count);
+            x.set8(DisplacerBeast::REPEAT, count);
             strike_begin(x, 0, 0x2d, 5, 0);
             match replay(x) {
                 Replay::New => play_b(x, 3),
@@ -235,8 +235,8 @@ fn double_strike<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             if x.anim_step() {
                 play(x, 0);
-                let left = x.u8(REPEAT).wrapping_sub(1);
-                x.set8(REPEAT, left);
+                let left = x.u8(DisplacerBeast::REPEAT).wrapping_sub(1);
+                x.set8(DisplacerBeast::REPEAT, left);
                 if left == 0 {
                     return next_move(x);
                 }
@@ -255,8 +255,8 @@ fn claw_pair<R: Bench>(x: &mut Cx<'_, R>) {
             strike_begin(x, 0, 0x2a, 5, 1);
             play_b(x, 1);
             if random_bit(x) {
-                x.add8(0x7, 2);
-                x.set8(WANT_ANIM, 0x2b);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(DisplacerBeast::WANT_ANIM, 0x2b);
                 play_b(x, 2);
             }
             replay(x);
@@ -316,9 +316,9 @@ fn jump_in<R: Bench>(x: &mut Cx<'_, R>) {
 fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(TIMER, 0xe);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::TIMER, 0xe);
             play(x, 8);
             speed(x, 0x11);
         }
@@ -336,19 +336,18 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Draws the number of jumps in place (ROM table at 0x73516).
+/// Draws the number of jumps in place (table `pounce_counts`).
 pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
-    const COUNTS: u32 = 0x73516;
-    let r = (x.random() as u32) & 0x1f;
-    let count = x.data8(COUNTS + r);
-    x.set8(REPEAT, count);
+    let r = rand_and(x, 0x1f);
+    let count = tables::table("dbeast/pounce_counts").at8(x.b, r);
+    x.set8(DisplacerBeast::REPEAT, count);
 }
 
 /// 0x734bc: start of a series of jumps in place.
 fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 7);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 7);
     roll_pounces(x);
     if !matches!(replay(x), Replay::End) {
         play(x, 7);
@@ -357,18 +356,17 @@ fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x73536: a jump in place is over; at random a cry accompanies the key frame.
 pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
-    const SOUNDS: u32 = 0x73584;
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        let r = (x.random() as u32) & 0xf;
-        let sound = x.rom8(SOUNDS + r);
+        let r = rand_and(x, 0xf);
+        let sound = tables::table("dbeast/pounce_cries").at8(x.b, r);
         if sound != 0 {
             lib::sound(x, crate::sound::CMD_31B_41B);
         }
     }
     if x.anim_step() {
-        let left = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, left);
+        let left = x.u8(DisplacerBeast::REPEAT).wrapping_sub(1);
+        x.set8(DisplacerBeast::REPEAT, left);
         if left == 0 {
             return next_move(x);
         }
@@ -380,13 +378,13 @@ pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
 fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(STRIKE_POWER, 6);
-            x.set8(STRIKE_KIND, 2);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x380);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Enemy::STRIKE_POWER, 6);
+            x.set8(Enemy::STRIKE_KIND, 2);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x380);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             play(x, 6);
         }
         6 | 10 => bound_wait(x),
@@ -394,14 +392,14 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
             if x.move_xz().gt() {
                 return step(x);
             }
-            x.set32(0xc, 0);
-            x.add8(0x7, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0x18);
-            x.set8(CUR_ANIM, 0x18);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x380);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set32(Obj::Z, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0x18);
+            x.set8(DisplacerBeast::CUR_ANIM, 0x18);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x380);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             play(x, 6);
         }
         12 => bound_land(x),
@@ -414,31 +412,31 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set8(VULNERABLE, 1);
-            let ahead = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::VULNERABLE, 1);
+            let ahead = target(x).is_some_and(|t| (t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16) >= 0);
             x.set8(Obj::SPEED_INDEX, if ahead { 0x18 } else { 8 });
             play(x, 5);
         }
         6 => {
             if x.anim_step() {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
-                x.set8(WANT_ANIM, 0x16);
-                x.set8(TIMER, 0x2a);
+                x.set8(DisplacerBeast::WANT_ANIM, 0x16);
+                x.set8(DisplacerBeast::TIMER, 0x2a);
                 play(x, 0xd);
                 speed(x, 0x17);
             }
         }
         8 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set8(DisplacerBeast::TIMER, t);
             if (t as i8) >= 0 {
                 step(x);
                 return move_xy(x);
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             play(x, 5);
         }
         10 => {
@@ -446,7 +444,7 @@ fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
                 set_state_long(x, 0x0202_0002);
-                x.set8(WANT_ANIM, 0xc);
+                x.set8(DisplacerBeast::WANT_ANIM, 0xc);
                 play(x, 8);
                 engage(x);
             }
@@ -457,9 +455,9 @@ fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Start of a claw (0x73786, 0x7382c): animation 4 of the attack series.
 fn claw_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
-    x.set8(WANT_ANIM, 0x2e);
-    x.set8(VULNERABLE, 1);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x2e);
+    x.set8(Enemy::VULNERABLE, 1);
     strike_play(x, 4);
 }
 
@@ -492,8 +490,8 @@ fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::
     key_throw(x, throw);
     if x.anim_step() {
         play_b(x, 4);
-        let left = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, left);
+        let left = x.u8(DisplacerBeast::REPEAT).wrapping_sub(1);
+        x.set8(DisplacerBeast::REPEAT, left);
         if left == 0 {
             play(x, 0);
         }
@@ -505,7 +503,7 @@ fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::
 fn claw_series<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.set8(REPEAT, 1);
+            x.set8(DisplacerBeast::REPEAT, 1);
             claw_begin(x);
         }
         6 => series_end(x, eshl_creators::throw_1),
@@ -518,7 +516,7 @@ fn claw_series_b<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             let count = if random_bit(x) { 2 } else { 1 };
-            x.set8(REPEAT, count);
+            x.set8(DisplacerBeast::REPEAT, count);
             claw_begin(x);
         }
         6 => series_end(x, eshl_creators::throw_2),
@@ -533,7 +531,7 @@ fn claw_leap<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             key_throw(x, eshl_creators::throw_2);
             if x.anim_step() {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 play_b(x, 5);
             }
         }

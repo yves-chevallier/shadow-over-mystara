@@ -51,15 +51,15 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
         return;
     }
     x.add8(f::SUB3, 2);
-    x.set8(0x3b, 0);
-    x.set_bit(1, 1, true);
-    x.set8(TIMER, ticks);
+    x.set8(Enemy::GROUND_MARK, 0);
+    x.set_bit(Enemy::DISPLAY, 1, true);
+    x.set8(Goblin::TIMER, ticks);
 }
 
 /// Common step "moves by `dist`" (0x6e100, 0x6e34a, 0x6e522): after the crouch, jumps sideways.
 fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+    x.set8(Goblin::TIMER, n);
     if n != 0 {
         return;
     }
@@ -67,7 +67,7 @@ fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
     let d = if x.u8(f::FLIP) != 0 { -dist } else { dist };
     let at = x.u16(Obj::X).wrapping_add(d as u16);
     x.set16(Obj::X, at);
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     mv(x, 3);
 }
 
@@ -88,18 +88,18 @@ fn swing_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         lib::pick_byte(x);
-        if x.u8(AI_LUNGE) == 0 {
+        if x.u8(Enemy::AI_BYTE) == 0 {
             x.set8(f::SUB3, 0);
-            let chosen = x.u8(CHOSEN);
+            let chosen = x.u8(Goblin::CHOSEN);
             x.set8(f::SUB2, chosen);
         }
         return mv(x, 0);
     }
     x.anim_step();
-    let n = x.u8(AI_LUNGE).wrapping_sub(1);
-    x.set8(AI_LUNGE, n);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) >= 0 {
         return;
     }
@@ -107,7 +107,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
     } else {
-        let chosen = x.u8(CHOSEN);
+        let chosen = x.u8(Goblin::CHOSEN);
         x.set8(f::SUB2, chosen);
     }
 }
@@ -116,7 +116,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 2);
     }
     if x.anim_step() {
@@ -139,15 +139,15 @@ fn series_begin<R: Bench>(x: &mut Cx<'_, R>) {
 fn series<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        let t = row_byte(x, SERIES_TABLE);
-        x.set8(TIMER, t);
+        let t = rank_byte(x, SERIES_TABLE);
+        x.set8(Goblin::TIMER, t);
         return strike(x, 0);
     }
     if !swing_key(x) {
         return;
     }
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+    x.set8(Goblin::TIMER, n);
     if n != 0 {
         return strike(x, 0);
     }
@@ -164,7 +164,7 @@ fn maybe_series<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 14, 16 (and 10 on a draw): back to standing and resume walking, `kind` = saved shot type.
 fn again<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
-    x.set8(SHOT_KIND, kind);
+    x.set8(Enemy::AI_POINT_SET, kind);
     set_state_long(x, STANCE);
     approach_start(x);
 }
@@ -176,9 +176,9 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
         2 | 8 => next_when_done(x),
         4 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, true);
-            x.set8(0x3b, 0);
-            x.set8(TIMER, 0x14);
+            x.set_bit(Enemy::DISPLAY, 1, true);
+            x.set8(Enemy::GROUND_MARK, 0);
+            x.set8(Goblin::TIMER, 0x14);
         }
         6 => shift(x, 0x40),
         10 => {
@@ -196,7 +196,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(TIMER, 0x40);
+        x.set8(Goblin::TIMER, 0x40);
         let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
         x.set8(Obj::SPEED_INDEX, angle);
         set_speed(x, 0x12);
@@ -204,8 +204,8 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.move_by_table_xy();
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+    x.set8(Goblin::TIMER, n);
     if (n as i8) < 0 {
         x.set16(f::SUB2, 0x400);
     }
@@ -215,12 +215,12 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(TIMER, 0x1e);
+        x.set8(Goblin::TIMER, 0x1e);
         return mv(x, 0);
     }
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+    x.set8(Goblin::TIMER, n);
     if n != 0 {
         follow_up(x);
     }
@@ -256,13 +256,13 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
         4 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+            x.set8(Goblin::TIMER, n);
             if n != 0 {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             mv(x, 3);
         }
         6 => {
@@ -283,8 +283,8 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                let t = row_byte(x, SERIES_TABLE);
-                x.set8(TIMER, t);
+                let t = rank_byte(x, SERIES_TABLE);
+                x.set8(Goblin::TIMER, t);
                 strike(x, 0);
             }
         }
@@ -292,8 +292,8 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
             if !swing_key(x) {
                 return;
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+            x.set8(Goblin::TIMER, n);
             if n != 0 {
                 return strike(x, 0);
             }
@@ -304,8 +304,8 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Arrival positions (X then depth) of the teleportation, relative to the target.
-const TELEPORT_X: u32 = 0x6e44c;
-const TELEPORT_Y: u32 = 0x6e43e;
+const TELEPORT_X: &str = "goblin/teleport_x";
+const TELEPORT_Y: &str = "goblin/teleport_y";
 
 /// +6 = 12: the Goblin reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
@@ -316,12 +316,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_X + r);
+            let off = tables::table(TELEPORT_X).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::X));
             x.set16(Obj::X, at);
             let r = rand_and(x, 7) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_Y + r);
+            let off = tables::table(TELEPORT_Y).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::Y));
             x.set16(Obj::Y, at);
             x.set8(f::FLIP, 0x20);
@@ -346,12 +346,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(TIMER, 0x10);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Goblin::TIMER, 0x10);
         return mv(x, 0);
     }
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+    x.set8(Goblin::TIMER, n);
     if (n as i8) < 0 {
         set_state_long(x, STANCE);
     }
@@ -381,7 +381,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 return next_and_start(x);
             }
             x.add8(f::SUB3, 0xc);
-            x.set8(TIMER, 0x10);
+            x.set8(Goblin::TIMER, 0x10);
             set_speed(x, 0xd);
             x.set8(Obj::SPEED_INDEX, 0);
             let target = load_target(x);
@@ -416,8 +416,8 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         12 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+            x.set8(Goblin::TIMER, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -430,7 +430,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6: chooses a move again; changes move only if the new one differs from the previous one or after a delay.
 fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_state_long(x, IDLE);
     let table = if near_box(x) {
         NEAR_TABLE
@@ -440,14 +440,14 @@ fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     };
     let b = pick_attack(x, table);
-    if b != x.u8(LOOK_PREV) {
-        x.set8(LOOK_PREV, b);
-        x.set8(COOLDOWN, 2);
+    if b != x.u8(Goblin::LOOK_PREV) {
+        x.set8(Goblin::LOOK_PREV, b);
+        x.set8(Goblin::COOLDOWN, 2);
         return;
     }
-    let n = x.u8(COOLDOWN).wrapping_sub(1);
-    x.set8(COOLDOWN, n);
+    let n = x.u8(Goblin::COOLDOWN).wrapping_sub(1);
+    x.set8(Goblin::COOLDOWN, n);
     if (n as i8) < 0 {
-        x.set8(COOLDOWN, 2);
+        x.set8(Goblin::COOLDOWN, 2);
     }
 }
