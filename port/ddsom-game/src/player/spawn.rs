@@ -14,7 +14,7 @@ use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::player::ram;
-use crate::player::tables::{player_data, players, pc8, Read};
+use crate::player::tables::{player_data, players, Read, Table};
 
 /// Bytes of the created object.
 mod field {
@@ -556,7 +556,7 @@ fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
 /// 0x5336a (flames, kind 0xe) and 0x535f2 (stars, kind 0x10): a row of shots in front of the magic-user, as long as no
 /// previous row is alive. The number of shots comes from the level (bytes at `counts`), each 0x28 pixels further
 /// than the previous one, with its variant and a delay (`+0x5c`) increasing. A full pool stops the row.
-fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
+fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: &Table) {
     cov!();
     if rd16(g.b, rod.counter) != 0 {
         return;
@@ -566,7 +566,7 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     let mut offset = if forward { first_offset } else { first_offset.wrapping_neg() };
     let level = p.u8(g, Player::LEVEL) as u32;
     // `subq.w #1` on a zero count would give 65,536 iterations: the full pool stops them
-    let mut left = (pc8(g.b, counts + level) as u16).wrapping_sub(1);
+    let mut left = (counts.at8(g.b, level) as u16).wrapping_sub(1);
     while let Some(o) = create(g, p, &pools::PSHL, rod.kind) {
         let alive = rd16(g.b, rod.counter);
         wr16(g.b, rod.counter, alive.wrapping_add(1));
@@ -602,9 +602,9 @@ pub enum RodShot {
 /// Shot of the held wand.
 pub fn rod_shot(g: &mut Ctx, p: Player, shot: RodShot) {
     match shot {
-        RodShot::Flame => rod_row(g, p, &ROD_FLAME, 0x38, 0x533f4),
+        RodShot::Flame => rod_row(g, p, &ROD_FLAME, 0x38, &player_data().rod_flame_counts),
         RodShot::Ball => rod_ball(g, p),
-        RodShot::Star => rod_row(g, p, &ROD_STAR, 0x48, 0x5367c),
+        RodShot::Star => rod_row(g, p, &ROD_STAR, 0x48, &player_data().rod_star_counts),
     }
 }
 
@@ -613,7 +613,7 @@ pub fn rod_shot(g: &mut Ctx, p: Player, shot: RodShot) {
 fn rod_ball(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
-    let most = pc8(g.b, 0x534b8 + level) as i16;
+    let most = player_data().rod_ball_limits.at8(g.b, level) as i16;
     let alive = rd16(g.b, ROD_BALL.counter) as i16;
     if most <= alive {
         return;

@@ -1,6 +1,7 @@
 //! Player effects (PEFF), fifth series: types 12 (freeze), 13 (blessing) and 14 (reflect).
 //! See `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -34,6 +35,15 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 mod ice {
     use super::*;
 
+    /// Countdown of the current phase.
+    const TIMER: u32 = 0x54;
+    /// Low byte of `TIMER`.
+    const TIMER_LOW: u32 = 0x55;
+    /// Gesture of the player when the effect started.
+    const GESTURE: u32 = 0x56;
+    /// Parent effect (16-bit pointer).
+    const PARENT: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1b6350;
     const OFFSETS: u32 = 0x4bd0e;
     const SFX: crate::sound::Sound = crate::sound::CMD_165_265;
@@ -57,8 +67,8 @@ mod ice {
     fn shard<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4bc90) {
             0 => {
-                x.add16(0x54, 0xffff);
-                if x.u16(0x54) != 0 {
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) != 0 {
                     return;
                 }
                 x.add8(Obj::STATE, 2);
@@ -72,7 +82,7 @@ mod ice {
                 x.add16(Obj::Y, dy);
                 let r = x.rand_and_b(0x1f);
                 x.set8(Obj::SPEED_INDEX, r);
-                x.set8(0x54, r.wrapping_add(1));
+                x.set8(TIMER, r.wrapping_add(1));
                 let n = 0x2b;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.anim(ANIMS, 0);
@@ -81,21 +91,21 @@ mod ice {
                     o.set_u8(x.b, Obj::ACTIVE, 1);
                     o.set_u8(x.b, Obj::KIND, 0xc);
                     o.set_u8(x.b, Obj::VARIANT, 1);
-                    o.set_u16(x.b, 0x5c, x.o.0 as u16);
+                    o.set_u16(x.b, PARENT, x.o.0 as u16);
                     let owner = x.u16(f::OWNER);
                     o.set_u16(x.b, f::OWNER, owner);
                 }
             }
             2 => {
-                x.add8(0x54, 0xff);
-                if x.u8(0x54) == 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) == 0 {
                     let w = x.rand_and_b_word(0x1f);
                     x.set8(Obj::SPEED_INDEX, w as u8);
                     // Original glitch: `andi.b #0xf,D0` then index D0.w: the high byte of the draw enters the delay
                     // index
                     let index = (w & 0xff00 | w & 0xf) as i16 as i32 as u32;
                     let delay = player_data().ice_delays.at8(x.b, index);
-                    x.set8(0x54, delay);
+                    x.set8(TIMER, delay);
                 }
                 bounce(x);
                 x.anim_step();
@@ -109,7 +119,7 @@ mod ice {
                     x.add8(Obj::STATE, 2);
                 }
                 x.set_bit(Obj::FLAGS, 1, true);
-                let t = x.u8(0x54);
+                let t = x.u8(TIMER);
                 if t & 2 != 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
@@ -133,7 +143,7 @@ mod ice {
             x.set16(Obj::X, d1);
             let a = player_data().ice_bounce_left.at8(x.b, d2);
             x.set8(Obj::SPEED_INDEX, a);
-            x.set8(0x54, 0x18);
+            x.set8(TIMER, 0x18);
             return;
         }
         let d1 = cx.wrapping_add(0x178);
@@ -142,7 +152,7 @@ mod ice {
             x.set16(Obj::X, d1);
             let a = player_data().ice_bounce_right.at8(x.b, d2);
             x.set8(Obj::SPEED_INDEX, a);
-            x.set8(0x54, 0x18);
+            x.set8(TIMER, 0x18);
             return;
         }
         let d0 = x.u16(Obj::Y);
@@ -152,7 +162,7 @@ mod ice {
             x.set16(Obj::Y, d1);
             let a = player_data().ice_bounce_top.at8(x.b, d2);
             x.set8(Obj::SPEED_INDEX, a);
-            x.set8(0x54, 0x18);
+            x.set8(TIMER, 0x18);
         }
         let d1 = cy.wrapping_add(0xc0);
         if d1 <= d0 {
@@ -160,7 +170,7 @@ mod ice {
             x.set16(Obj::Y, d1);
             let a = player_data().ice_bounce_bottom.at8(x.b, d2);
             x.set8(Obj::SPEED_INDEX, a);
-            x.set8(0x54, 0x18);
+            x.set8(TIMER, 0x18);
         }
     }
 
@@ -170,14 +180,14 @@ mod ice {
         match x.state(0x4be9e) {
             0 => {
                 x.add8(Obj::STATE, 2);
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 x.add16(Obj::Y, 0xffff);
                 x.anim(ANIMS, 1);
             }
             2 => {
                 x.anim_step();
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 let flags = parent.u8(x.b, Obj::FLAGS);
                 x.set8(Obj::FLAGS, flags);
                 x.copy_pos(parent);
@@ -198,10 +208,10 @@ mod ice {
             0 => {
                 x.add8(Obj::STATE, 2);
                 crate::sound::play(x.b, SFX, x.o);
-                x.set16(0x54, 0x168);
+                x.set16(TIMER, 0x168);
                 let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, Player::SPECIAL_KIND) != 0x1a {
-                    x.set16(0x54, 0x78);
+                    x.set16(TIMER, 0x78);
                 }
                 mist_tick(x);
             }
@@ -211,12 +221,12 @@ mod ice {
     }
 
     fn mist_tick<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x54, 0xffff);
-        if x.u16(0x54) == 0 {
+        x.add16(TIMER, 0xffff);
+        if x.u16(TIMER) == 0 {
             x.add8(Obj::STATE, 2);
         }
-        let t = x.u16(0x54);
-        let d0 = x.u8(0x55);
+        let t = x.u16(TIMER);
+        let d0 = x.u8(TIMER_LOW);
         let mut mask = 1u8;
         if t <= 0x78 {
             mask = 3;
@@ -279,8 +289,8 @@ mod ice {
     fn falling<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c076) {
             0 => {
-                x.add16(0x54, 0xffff);
-                if x.u16(0x54) != 0 {
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) != 0 {
                     return;
                 }
                 x.add8(Obj::STATE, 2);
@@ -323,7 +333,7 @@ mod ice {
                 if frozen {
                     let owner = x.linked(f::OWNER);
                     let gesture = owner.u8(x.b, Player::STEP);
-                    if gesture == x.u8(0x56) {
+                    if gesture == x.u8(GESTURE) {
                         return x.reinsert();
                     }
                 }
@@ -380,6 +390,11 @@ mod blessing {
 mod banish {
     use super::*;
 
+    /// Hold delay of the frame.
+    const HOLD: u32 = 0x58;
+    /// Target of the banishment (16-bit pointer).
+    const TARGET: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1b67f2;
     const SFX: crate::sound::Sound = crate::sound::CMD_18E;
     const POWER_TABLE: u32 = 0x1042e2;
@@ -418,11 +433,11 @@ mod banish {
 
     fn init_beam<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        let target = Obj(x.u16(0x5c) as i16 as i32 as u32 & 0xff_ffff);
+        let target = Obj(x.u16(TARGET) as i16 as i32 as u32 & 0xff_ffff);
         let (tx, ty) = (target.u16(x.b, Enemy::X), target.u16(x.b, Enemy::Y));
         x.set16(Obj::X, tx);
         x.set16(Obj::Y, ty);
-        target.set_u16(x.b, 0x12, 0x4000);
+        target.set_u16(x.b, Shot::Y_FRACTION, 0x4000);
         let k = x.u8(Shot::SETTING);
         let priority = if k & 2 != 0 { 0x8000 } else { 0 };
         x.set16(Shot::Y_FRACTION, priority);
@@ -430,7 +445,7 @@ mod banish {
         let z = cy.wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
         x.set16(Obj::Z, z);
         let hold = player_data().banish_alt_bank.at8(x.b, k as u32);
-        x.set8(0x58, hold);
+        x.set8(HOLD, hold);
         let kind = target.u8(x.b, Enemy::KIND) as u32;
         let row = kind * 2;
         let mut frame = player_data().banish_frames_a.at16(x.b, row);
@@ -447,8 +462,8 @@ mod banish {
 
     fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         let k = x.u8(Shot::SETTING);
-        if x.u8(0x58) != 0 {
-            x.add8(0x58, 0xff);
+        if x.u8(HOLD) != 0 {
+            x.add8(HOLD, 0xff);
         } else if k & 1 != 0 {
             if x.u16(Obj::Z) > 0x60 {
                 x.add16(Obj::Z, 0xfffd);
@@ -472,9 +487,9 @@ mod banish {
         let player = x.linked(f::OWNER);
         let v = player.u16(x.b, Player::SPELL_KILLS).wrapping_add(2);
         player.set_u16(x.b, Player::SPELL_KILLS, v);
-        let monster = Obj(x.u16(0x5c) as i16 as i32 as u32 & 0xff_ffff);
-        let hits = monster.u8(x.b, 0x9c).wrapping_add(1);
-        monster.set_u8(x.b, 0x9c, hits);
+        let monster = Obj(x.u16(TARGET) as i16 as i32 as u32 & 0xff_ffff);
+        let hits = monster.u8(x.b, Victim::HITS_TAKEN).wrapping_add(1);
+        monster.set_u8(x.b, Victim::HITS_TAKEN, hits);
         if monster.u8(x.b, Enemy::REACTION) == 0x5c {
             return;
         }
@@ -482,8 +497,8 @@ mod banish {
         monster.set_u8(x.b, Enemy::DISPLAY, 1);
         monster.set_u8(x.b, Enemy::REACTION, 0x5c);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        monster.set_u8(x.b, 0x48, class_id);
-        monster.set_u8(x.b, 0x4b, variant_id);
+        monster.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
+        monster.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
         monster.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         monster.set_u8(x.b, Enemy::ATTACKER_FLIP, 0);
         if x.rand_and_b(1) != 0 {
@@ -500,9 +515,9 @@ mod banish {
         if monster.u8(x.b, Enemy::CLASS) != 4 && matches!(monster.u8(x.b, Enemy::KIND), 0 | 0x13) {
             monster.set_u16(x.b, Enemy::HP, 0);
         }
-        if monster.u16(x.b, Enemy::HP) == 0 && monster.u8(x.b, 0x93) != 0 {
+        if monster.u16(x.b, Enemy::HP) == 0 && monster.u8(x.b, Victim::DEATH_CREDIT) != 0 {
             player.set_u8(x.b, Player::HOLY, 1);
-            let v = monster.u8(x.b, 0x9a);
+            let v = monster.u8(x.b, Victim::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
         let mut d0 = (player.u8(x.b, Player::INDEX) as u16) << 8;

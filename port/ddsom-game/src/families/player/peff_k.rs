@@ -44,6 +44,13 @@ fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, source: u32) {
 mod meteors {
     use super::*;
 
+    /// Countdown (word); low byte: delay between meteors.
+    const TIMER: u32 = 0x58;
+    /// Delay before the next meteor.
+    const DELAY: u32 = 0x59;
+    /// Parent shower (16-bit pointer).
+    const PARENT: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1bc790;
     const PALETTE: u32 = 0x25a780;
     const SFX: crate::sound::Sound = crate::sound::CMD_191;
@@ -59,13 +66,13 @@ mod meteors {
                 follow_owner(x);
                 x.add16(Obj::Z, 0);
                 x.add16(Obj::Y, 1);
-                x.set16(0x58, 0x510);
+                x.set16(TIMER, 0x510);
                 x.anim(ANIMS, 0);
                 x.reinsert();
             }
             0 => {
                 x.add8(Obj::STATE, 2);
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 let (px, pz) = (parent.u16(x.b, Obj::X), parent.u16(x.b, Obj::Z));
                 x.set16(Obj::X, px);
                 x.set16(Obj::Z, pz);
@@ -85,8 +92,8 @@ mod meteors {
                     _ => {
                         let hidden = x.u8(Obj::FLAGS) & 2 == 0;
                         x.set_bit(Obj::FLAGS, 1, hidden);
-                        x.add16(0x58, 0xffff);
-                        if (x.u16(0x58) as i16) < 0 {
+                        x.add16(TIMER, 0xffff);
+                        if (x.u16(TIMER) as i16) < 0 {
                             x.free_peff();
                         }
                     }
@@ -105,14 +112,14 @@ mod meteors {
         let owner = x.linked(f::OWNER);
         if owner.u16(x.b, Player::ACTION_TIMER) <= 0x20 {
             x.add8(Shot::SUB_STATE, 4);
-            x.set16(0x58, 0x20);
+            x.set16(TIMER, 0x20);
             return;
         }
-        x.add8(0x59, 0xff);
-        if (x.u8(0x59) as i8) < 0 {
-            x.set8(0x59, 0x20);
-            x.add8(0x58, 0xff);
-            if (x.u8(0x58) as i8) >= 0 {
+        x.add8(DELAY, 0xff);
+        if (x.u8(DELAY) as i8) < 0 {
+            x.set8(DELAY, 0x20);
+            x.add8(TIMER, 0xff);
+            if (x.u8(TIMER) as i8) >= 0 {
                 crate::sound::play(x.b, SFX, x.o);
             }
         }
@@ -129,7 +136,7 @@ mod meteors {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, Obj::ACTIVE, 1);
             o.set_u8(x.b, Obj::KIND, KIND);
-            o.set_u16(x.b, 0x5c, x.o.0 as u16);
+            o.set_u16(x.b, PARENT, x.o.0 as u16);
             let owner = x.u16(f::OWNER);
             o.set_u16(x.b, f::OWNER, owner);
             o.set_u8(x.b, Obj::VARIANT, 1);
@@ -141,6 +148,9 @@ mod meteors {
 /// palette effect launched when the script signals it.
 mod lamp {
     use super::*;
+
+    /// Step of the player's move when the lamp was created.
+    const MOVE_STEP: u32 = 0x5d;
 
     const ANIMS: u32 = 0x1be8b8;
     const PALETTE_A: u32 = 0x25b200;
@@ -166,14 +176,14 @@ mod lamp {
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
-        if x.u8(0x5d) != owner.u8(x.b, Player::STEP) {
+        if x.u8(MOVE_STEP) != owner.u8(x.b, Player::STEP) {
             x.add8(Obj::STATE, 2);
             return crate::palette::restore_flash(x.b);
         }
         x.copy_pos(owner);
         x.add16(Obj::Z, 0x40);
         x.add16(Obj::Y, 0xffff);
-        let row = (x.u8(0x38) as u32) * 2;
+        let row = (x.u8(Obj::FRAME_DATA_A) as u32) * 2;
         let dx = player_data().lamp_offsets_x.at16(x.b, row);
         let dz = player_data().lamp_offsets_z.at16(x.b, row);
         *x.c.d2() = dz as u32;
@@ -200,7 +210,7 @@ mod lamp {
 
     /// `0x519b0`: palette effect of the variant.
     fn palette_effect<R: Bench>(x: &mut Cx<'_, R>) {
-        let v = x.u8(0x38);
+        let v = x.u8(Obj::FRAME_DATA_A);
         match v {
             0 => { crate::palette::flash(x.b, crate::palette::Flash::Gray); },
             1 => {

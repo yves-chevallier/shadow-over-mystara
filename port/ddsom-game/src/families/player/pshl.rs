@@ -4,6 +4,7 @@
 //! The shots are born from a creator (`player/spawn.rs`) that sets their kind, their owner (`+0x50`), their boxes
 //! (`+0x2e`), the power (`+0x45`, `+0x46`) and the speed; the handler makes them live.
 
+use crate::families::enemy_common::records::Enemy;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -46,13 +47,18 @@ fn blink_by_timer<R: Bench>(x: &mut Cx<'_, R>) {
 mod marker {
     use super::*;
 
+    /// Reaction of the carrier when the marker was placed (h).
+    const REACTION_SEEN: u32 = 0x42;
+    /// Carrier followed by the marker (16-bit pointer).
+    const CARRIER: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15ad38;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51c72) {
             0 => {
                 x.add8(Obj::STATE, 2);
-                let carrier = x.linked(0x5c);
+                let carrier = x.linked(CARRIER);
                 x.set8(f::BOX_SET, 6);
                 let kind = carrier.u8(x.b, Obj::KIND) as u32;
                 x.copy_pos(carrier);
@@ -61,13 +67,13 @@ mod marker {
                 x.reinsert();
             }
             2 => {
-                let carrier = x.linked(0x5c);
+                let carrier = x.linked(CARRIER);
                 for off in [0x8, 0x10] {
                     let v = carrier.u16(x.b, off);
                     x.set16(off, v);
                 }
-                let id = carrier.u8(x.b, 0x49);
-                if id != x.u8(0x42) {
+                let id = carrier.u8(x.b, Enemy::REACTION);
+                if id != x.u8(REACTION_SEEN) {
                     return x.free_pshl();
                 }
                 let z = carrier.u16(x.b, Obj::Z);
@@ -279,6 +285,9 @@ mod flung {
 mod arc {
     use super::*;
 
+    /// Countdown of the arc (h).
+    const TIMER: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15af62;
     const SFX_BURST: crate::sound::Sound = crate::sound::CMD_125_225;
     const SFX_MID: crate::sound::Sound = crate::sound::CMD_12E_22E;
@@ -325,30 +334,30 @@ mod arc {
                 }
                 x.add8(Shot::SUB_STATE, 2);
                 x.set32(Obj::Z, 0);
-                x.set16(0x5c, 0x50);
+                x.set16(TIMER, 0x50);
                 x.anim(ANIMS, 1);
                 crate::sound::play(x.b, SFX_BURST, x.o);
             }
             2 => {
-                if x.u16(0x5c) == 0x48 {
+                if x.u16(TIMER) == 0x48 {
                     crate::sound::play(x.b, SFX_MID, x.o);
                 }
-                x.add16(0x5c, 0xffff);
-                if x.u16(0x5c) == 0 {
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) == 0 {
                     x.add8(Shot::SUB_STATE, 2);
-                    x.set16(0x5c, 0x50);
+                    x.set16(TIMER, 0x50);
                     x.anim(ANIMS, 2);
                 }
                 x.anim_step();
             }
             _ => {
                 x.anim_step();
-                x.add16(0x5c, 0xffff);
-                if x.u16(0x5c) == 0 {
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
                 x.set_bit(Obj::FLAGS, 1, true);
-                let t = x.u16(0x5c);
+                let t = x.u16(TIMER);
                 if t & 1 != 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
@@ -362,6 +371,13 @@ mod arc {
 mod bouncer {
     use super::*;
 
+    /// Bounces left.
+    const BOUNCES: u32 = 0x5c;
+    /// Countdown of the burn-out blinking.
+    const BURN_TIMER: u32 = 0x5d;
+    /// Frames drawn in front (`Obj::ACTIVE` = 2) after a bounce (h).
+    const FRONT_TIMER: u32 = 0x5e;
+
     const ANIMS: u32 = 0x15b0a2;
     const SFX_START: crate::sound::Sound = crate::sound::CMD_11D_21D;
 
@@ -370,8 +386,8 @@ mod bouncer {
             0 => {
                 x.add8(Obj::STATE, 2);
                 x.set8(Shot::HIT_FLAGS, 0);
-                x.set8(0x5e, 0);
-                x.set8(0x5c, 2);
+                x.set8(FRONT_TIMER, 0);
+                x.set8(BOUNCES, 2);
                 x.set8(f::BOX_SET, 6);
                 let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
@@ -407,8 +423,8 @@ mod bouncer {
             return burn(x);
         }
         x.set8(Obj::ACTIVE, 1);
-        if x.u8(0x5e) != 0 {
-            x.add8(0x5e, 0xff);
+        if x.u8(FRONT_TIMER) != 0 {
+            x.add8(FRONT_TIMER, 0xff);
             x.set8(Obj::ACTIVE, 2);
         }
         x.anim_step();
@@ -436,13 +452,13 @@ mod bouncer {
         x.set16(Obj::VZ, 0x600);
         x.set16(Obj::AZ, -0x40i16 as u16);
         x.set8(Obj::ACTIVE, 2);
-        x.set8(0x5e, 8);
+        x.set8(FRONT_TIMER, 8);
         x.set8(Shot::HIT_FLAGS, 0);
-        x.add8(0x5c, 0xff);
-        if x.u8(0x5c) == 0 {
+        x.add8(BOUNCES, 0xff);
+        if x.u8(BOUNCES) == 0 {
             x.set8(Shot::SUB_STATE, 2);
             x.set8(Obj::ACTIVE, 2);
-            x.set8(0x5d, 0x20);
+            x.set8(BURN_TIMER, 0x20);
         }
         finish(x);
     }
@@ -456,12 +472,12 @@ mod bouncer {
 
     /// End of life: blinks 0x20 frames, falls back then disappears.
     fn burn<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x5d, 0xff);
-        if x.u8(0x5d) == 0 {
+        x.add8(BURN_TIMER, 0xff);
+        if x.u8(BURN_TIMER) == 0 {
             return x.free_pshl();
         }
         x.set_bit(Obj::FLAGS, 1, true);
-        let t = x.u8(0x5d);
+        let t = x.u8(BURN_TIMER);
         if t & 1 != 0 {
             x.set_bit(Obj::FLAGS, 1, false);
         }
@@ -477,6 +493,11 @@ mod bouncer {
 /// by the bursting, offset according to its rank `+0x2f`).
 mod burst {
     use super::*;
+
+    /// Delay before the shot starts (set by the creator).
+    const DELAY: u32 = 0x5c;
+    /// Countdown of the screen flash.
+    const FLASH_TIMER: u32 = 0x5e;
 
     const ANIMS: u32 = 0x15b13c;
     const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_168_B;
@@ -517,11 +538,11 @@ mod burst {
                 x.reinsert();
             }
             2 => {
-                if x.u8(0x5e) != 0 {
-                    x.add8(0x5e, 0xff);
-                    if x.u8(0x5e) == 0 {
+                if x.u8(FLASH_TIMER) != 0 {
+                    x.add8(FLASH_TIMER, 0xff);
+                    if x.u8(FLASH_TIMER) == 0 {
                         vars::SCROLL_Y_PLANE1.set(x.b, 0);
-                    } else if x.u8(0x5e) == 2 {
+                    } else if x.u8(FLASH_TIMER) == 2 {
                         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                 }
@@ -534,8 +555,8 @@ mod burst {
     }
 
     fn flame_init<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x5c, 0xff);
-        if x.u8(0x5c) != 0 {
+        x.add8(DELAY, 0xff);
+        if x.u8(DELAY) != 0 {
             return;
         }
         x.add8(Obj::STATE, 2);
@@ -549,7 +570,7 @@ mod burst {
         *x.c.d2() = dy as u32;
         x.add16(Obj::X, dx);
         x.add16(Obj::Y, dy);
-        x.set8(0x5e, 4);
+        x.set8(FLASH_TIMER, 4);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
@@ -583,7 +604,7 @@ mod burst {
             o.set_u16(x.b, Obj::Y, py);
             o.set_u32(x.b, Obj::Z, 0);
             o.set_u8(x.b, Shot::SETTING, rank);
-            o.set_u8(x.b, 0x5c, delay);
+            o.set_u8(x.b, DELAY, delay);
             rank = rank.wrapping_add(1);
             delay = delay.wrapping_add(4);
             let count = rd16(x.b, FLAMES).wrapping_add(1);

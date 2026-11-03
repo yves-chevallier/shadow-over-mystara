@@ -11,6 +11,9 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::player::tables::{player_data, Read};
 
+/// Blinking phase.
+const BLINK: u32 = 0x5c;
+
 /// Sign: `neg.w` when the object's facing equals `flip_means_neg` (0: left, 1: right).
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -26,8 +29,8 @@ fn gesture_changed<R: Bench>(x: &mut Cx<'_, R>, field: u32) -> bool {
 /// Makes the object blink: hidden every other frame (`+0x5c` toggles). `hidden_when_zero` chooses the hidden phase.
 fn flicker<R: Bench>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
     x.set_bit(Obj::FLAGS, 1, true);
-    let v = x.u8(0x5c) ^ 1;
-    x.set8(0x5c, v);
+    let v = x.u8(BLINK) ^ 1;
+    x.set8(BLINK, v);
     if (v == 0) != hidden_when_zero {
         x.set_bit(Obj::FLAGS, 1, false);
     }
@@ -37,6 +40,9 @@ fn flicker<R: Bench>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
 /// variants 1 and 2: ends (according to byte `+0x15e` read *beyond* the object, as in the original).
 mod beam {
     use super::*;
+
+    /// Original glitch: `+0x15e` read on the effect, past its 0x60 bytes (the special kind is a field of the player record).
+    const FOLLOWING_SPECIAL_KIND: u32 = 0x15e;
 
     const ANIMS: u32 = 0x1b5ab8;
     const OFFSETS: u32 = 0x4b2dc;
@@ -81,7 +87,7 @@ mod beam {
 
     fn init_tip<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        if x.u8(0x15e) == 0x17 {
+        if x.u8(FOLLOWING_SPECIAL_KIND) == 0x17 {
             let owner = follow_owner(x);
             let _ = owner;
             let dx = signed(-0x30i16 as u16, x.u8(f::FLIP) != 0);
@@ -171,11 +177,14 @@ mod spark {
 mod glow {
     use super::*;
 
+    /// Countdown (h).
+    const TIMER: u32 = 0x5c;
+
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4b53e) {
             0 => {
                 x.add8(Obj::STATE, 2);
-                x.set8(0x5c, 8);
+                x.set8(TIMER, 8);
                 follow_owner(x);
                 let dx = signed(-0x16i16 as u16, x.u8(f::FLIP) != 0);
                 x.add16(Obj::X, dx);
@@ -184,8 +193,8 @@ mod glow {
                 x.anim(0x1b5d8e, 0);
             }
             2 => {
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) == 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
                 x.reinsert();
@@ -199,6 +208,13 @@ mod glow {
 /// fires shots (PSHL 6) according to the player.
 mod ray {
     use super::*;
+
+    /// Parent ray (16-bit pointer).
+    const PARENT: u32 = 0x5c;
+    /// Shots fired (h).
+    const SHOTS: u32 = 0x5d;
+    /// Phase of the ray (h).
+    const PHASE: u32 = 0x5e;
 
     const ANIMS: u32 = 0x1b5db2;
 
@@ -219,7 +235,7 @@ mod ray {
                 match x.u8(Shot::SUB_STATE) {
                     0 => fire(x),
                     _ => {
-                        if x.u8(0x5d) == 0 {
+                        if x.u8(SHOTS) == 0 {
                             x.add8(Obj::STATE, 2);
                             let owner = x.linked(f::OWNER);
                             owner.set_u16(x.b, Player::ACTION_TIMER, 1);
@@ -258,8 +274,8 @@ mod ray {
     fn fire<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Shot::SUB_STATE, 2);
         let owner = x.linked(f::OWNER);
-        x.set8(0x5d, 0);
-        x.set8(0x5e, 0);
+        x.set8(SHOTS, 0);
+        x.set8(PHASE, 0);
         let player = owner.u8(x.b, Player::LEVEL);
         let mut remaining = player_data().ray_shot_counts.at8(x.b, player as u32);
         *x.c.d4() = remaining as u32;
@@ -268,7 +284,7 @@ mod ray {
             shot.set_u8(x.b, Obj::ACTIVE, 1);
             shot.set_u8(x.b, Obj::KIND, 6);
             shot.set_u16(x.b, f::OWNER, owner.0 as u16);
-            shot.set_u16(x.b, 0x5c, x.o.0 as u16);
+            shot.set_u16(x.b, PARENT, x.o.0 as u16);
             shot.set_u8(x.b, Obj::VARIANT, remaining);
             created += 1;
             if remaining == 0 {
@@ -277,7 +293,7 @@ mod ray {
             remaining -= 1;
         }
         *x.c.d5() = created as u32;
-        x.set8(0x5d, created);
+        x.set8(SHOTS, created);
     }
 }
 

@@ -2,7 +2,7 @@
 
 use crate::player::Player;
 use super::*;
-use crate::player::tables::{pc16};
+use crate::player::tables::{player_data, pc16, Read};
 
 // ---- guard (actions 0x16 and 0x18, 0x35d52 and 0x35dca) ---------------------------------------------
 
@@ -313,8 +313,8 @@ pub(super) fn push_dust(g: &mut Ctx, p: Player) {
     if !dust_turn(g, p) || p.u8(g, field::GESTURE) == 0 {
         return;
     }
-    let at = 0x36eea + 8 * p.class(g) as u32;
-    let (d0, d1, d2, d3) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4), pc16(g.b, at + 6));
+    let (t, at) = (&player_data().slow_end_dust, 8 * p.class(g) as u32);
+    let (d0, d1, d2, d3) = (t.at16(g.b, at), t.at16(g.b, at + 2), t.at16(g.b, at + 4), t.at16(g.b, at + 6));
     // D4.w: the offset of the row (leftover of the original)
     let row_offset = 8 * p.class(g) as u16;
     crate::mem::set_low_word(&mut g.leftovers.d4, row_offset);

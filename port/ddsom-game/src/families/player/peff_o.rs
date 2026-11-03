@@ -38,6 +38,11 @@ fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
 mod coins {
     use super::*;
 
+    /// Low byte of `Obj::AX`, used as flags (h).
+    const AX_LOW: u32 = 0x17;
+    /// Linked coin (16-bit pointer).
+    const LINKED: u32 = 0x5c;
+
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Obj::STATE) {
             0 => {
@@ -65,16 +70,16 @@ mod coins {
 
     /// `0x4d7ac`
     fn check<R: Bench>(x: &mut Cx<'_, R>) {
-        let linked = x.linked(0x5c);
-        let flags = x.u8(0x17);
+        let linked = x.linked(LINKED);
+        let flags = x.u8(AX_LOW);
         let had = flags & 1 != 0;
-        x.set8(0x17, flags & !1);
+        x.set8(AX_LOW, flags & !1);
         if had {
             x.set16(Obj::AZ, 0);
         }
-        let d0 = linked.u16(x.b, 0x5c);
+        let d0 = linked.u16(x.b, LINKED);
         if d0 == 0 && x.u16(Obj::AZ) != 0 {
-            x.set8(0x17, 1);
+            x.set8(AX_LOW, 1);
         } else {
             x.set16(Obj::AZ, d0);
         }
@@ -90,7 +95,7 @@ mod coins {
             x.set8(Obj::AX, 1);
             return x.anim(ANIMS, 0x2c);
         }
-        if x.u8(0x17) == 0 {
+        if x.u8(AX_LOW) == 0 {
             return;
         }
         sell(x);

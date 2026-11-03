@@ -20,6 +20,11 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod hit_spark {
     use super::*;
 
+    /// Gesture of the player when the spark was created.
+    const GESTURE: u32 = 0x5c;
+    /// Blinking phase.
+    const BLINK: u32 = 0x5d;
+
     const ANIMS: u32 = 0x1bb146;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -29,7 +34,7 @@ mod hit_spark {
                 x.add8(Obj::STATE, 2);
                 let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, Player::STEP);
-                x.set8(0x5c, gesture);
+                x.set8(GESTURE, gesture);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
@@ -48,14 +53,14 @@ mod hit_spark {
             2 if !child => {
                 x.anim_step();
                 x.set_bit(Obj::FLAGS, 1, true);
-                let v = x.u8(0x5d) ^ 1;
-                x.set8(0x5d, v);
+                let v = x.u8(BLINK) ^ 1;
+                x.set8(BLINK, v);
                 if v == 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
                 let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, Player::STEP);
-                if gesture != x.u8(0x5c) {
+                if gesture != x.u8(GESTURE) {
                     x.add8(Obj::STATE, 2);
                 }
             }
@@ -74,6 +79,9 @@ mod hit_spark {
 mod prayer {
     use super::*;
 
+    /// Lifetime (word).
+    const TIMER: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1bb240;
     const KIND: u8 = 0x16;
 
@@ -88,8 +96,8 @@ mod prayer {
             2 => match variant {
                 0 => {
                     x.anim_step();
-                    x.add16(0x5c, 0xffff);
-                    if x.u16(0x5c) == 0 {
+                    x.add16(TIMER, 0xffff);
+                    if x.u16(TIMER) == 0 {
                         x.add8(Obj::STATE, 2);
                     }
                 }
@@ -118,7 +126,7 @@ mod prayer {
         }
         let class = owner.u8(x.b, Player::LEVEL) as u32;
         let life = player_data().prayer_durations.at16(x.b, class * 2);
-        x.set16(0x5c, life);
+        x.set16(TIMER, life);
         x.anim(ANIMS, 0);
         x.reinsert();
     }
@@ -128,11 +136,11 @@ mod prayer {
             x.add8(Obj::STATE, 2);
             let owner = x.linked(f::OWNER);
             let life = owner.u16(x.b, Player::ACTION_TIMER).wrapping_sub(0x1e);
-            x.set16(0x5c, life);
+            x.set16(TIMER, life);
             return;
         }
         x.add8(Obj::STATE, 2);
-        x.set16(0x5c, 0x28);
+        x.set16(TIMER, 0x28);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -160,12 +168,12 @@ mod prayer {
 
     fn rays<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(Shot::SETTING) == 0 {
-            x.add16(0x5c, 0xffff);
-            if x.u16(0x5c) == 0 {
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
                 x.add8(Obj::STATE, 2);
                 return;
             }
-            if x.u16(0x5c) & 7 == 0 {
+            if x.u16(TIMER) & 7 == 0 {
                 for rank in (0..5u32).rev() {
                     let Some(o) = x.alloc(&pools::PEFF) else { break };
                     o.set_u8(x.b, Obj::ACTIVE, 1);
@@ -181,13 +189,13 @@ mod prayer {
             return;
         }
         x.set_bit(Obj::FLAGS, 1, true);
-        let d = x.u16(0x5c).wrapping_add(x.counter());
+        let d = x.u16(TIMER).wrapping_add(x.counter());
         if d & 1 != 0 {
             x.set_bit(Obj::FLAGS, 1, false);
         }
         if x.u8(Shot::SUB_STATE) == 0 {
-            x.add16(0x5c, 0xffff);
-            if x.u16(0x5c) == 0 {
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
                 x.add8(Shot::SUB_STATE, 2);
                 x.anim(ANIMS, 2);
             }
@@ -207,6 +215,9 @@ mod prayer {
 /// Type 23 (0x4d682): prayer glow (kind 0x17), stuck to the caster; variant 1 is higher.
 mod glow {
     use super::*;
+
+    /// Gesture of the player when the glow was created.
+    const GESTURE: u32 = 0x5d;
 
     const ANIMS: u32 = 0x1bb402;
 
@@ -230,7 +241,7 @@ mod glow {
             2 => {
                 let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, Player::STEP);
-                if gesture != x.u8(0x5d) {
+                if gesture != x.u8(GESTURE) {
                     x.add8(Obj::STATE, 2);
                 }
                 x.anim_step();

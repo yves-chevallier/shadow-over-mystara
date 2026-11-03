@@ -74,7 +74,7 @@ fn holding(a: u32, program: bool) -> Option<(&'static Table, u32)> {
 }
 
 fn residue(a: u32, program: bool) -> Missing {
-    Missing { table: if program { "players (program, by address)" } else { "players (by address)" }, key: a }
+    Missing { table: if program { "players by address (program)" } else { "players by address" }, key: a }
 }
 
 /// Byte of the collision boxes (`sprites/tables.json`) at the address `a`, if a box block holds it.
@@ -110,8 +110,15 @@ pub(crate) fn pc32(b: &mut Cps2Bus, a: u32) -> u32 {
     }
 }
 
+/// First address of the work RAM: an address the original computes there is read on the bus (a table row may be
+/// designated in RAM, like the player's equipment).
+const RAM: u32 = 0xff_0000;
+
 /// Byte at the address `a` of a table (data space).
 pub(crate) fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
+    if a & 0xff_ffff >= RAM {
+        return crate::mem::rd8(b, a);
+    }
     match holding(a, false) {
         Some((t, off)) => t.at8(b, off),
         None => match box_byte(a).or_else(|| speed_byte(a)) {
@@ -123,6 +130,9 @@ pub(crate) fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
 
 /// Word at the address `a` of a table (data space).
 pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
+    if a & 0xff_ffff >= RAM {
+        return crate::mem::rd16(b, a);
+    }
     match holding(a, false) {
         Some((t, off)) => t.at16(b, off),
         None => match data().speeds.at(RomAddr(a)) {
@@ -137,6 +147,9 @@ pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
 
 /// Long at the address `a` of a table (data space).
 pub(crate) fn long(b: &mut Cps2Bus, a: u32) -> u32 {
+    if a & 0xff_ffff >= RAM {
+        return crate::mem::rd32(b, a);
+    }
     match holding(a, false) {
         Some((t, off)) => t.at32(b, off),
         None => match box_set(a) {

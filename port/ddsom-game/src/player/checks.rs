@@ -17,7 +17,7 @@ use super::states::{action, main, state, sub, State};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8, A5};
 use crate::objects::pools;
-use crate::player::tables::{player_data, players, long, Read};
+use crate::player::tables::{player_data, players, byte, long, Read};
 
 /// Buttons (bits of `KEYS_*`).
 pub mod key {
@@ -389,12 +389,12 @@ fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
         return false;
     }
     let body_index = rd8(b, o + 0x2e) as u32;
-    let body_set = crate::mem::rd32(b, boxes::BODY + 4 * body_index);
+    let body_set = long(b, boxes::BODY + 4 * body_index);
     let body_box = body_set + 8 * rd8(b, o + 0x38) as u32;
     // depth (Y)
     let (ya, yb) = (sbyte(b, attack_box + 4), sbyte(b, body_box + 4));
     let (pya, pyb) = (rd16(b, p.0 + 0x10), rd16(b, o + 0x10));
-    if !overlap(ya, yb, pya, pyb, rd8(b, attack_box + 5), rd8(b, body_box + 5)) {
+    if !overlap(ya, yb, pya, pyb, byte(b, attack_box + 5), byte(b, body_box + 5)) {
         return false;
     }
     // abscissa (X), offsets inverted according to the orientation of each
@@ -406,18 +406,18 @@ fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
         xb = xb.wrapping_neg();
     }
     let (pxa, pxb) = (rd16(b, p.0 + 8), rd16(b, o + 8));
-    if !overlap(xa, xb, pxa, pxb, rd8(b, attack_box + 1), rd8(b, body_box + 1)) {
+    if !overlap(xa, xb, pxa, pxb, byte(b, attack_box + 1), byte(b, body_box + 1)) {
         return false;
     }
     // altitude (Z)
     let (za, zb) = (sbyte(b, attack_box + 2), sbyte(b, body_box + 2));
     let (pza, pzb) = (rd16(b, p.0 + 0xc), rd16(b, o + 0xc));
-    overlap(za, zb, pza, pzb, rd8(b, attack_box + 3), rd8(b, body_box + 3))
+    overlap(za, zb, pza, pzb, byte(b, attack_box + 3), byte(b, body_box + 3))
 }
 
 /// Signed byte extended to 16 bits.
 fn sbyte(b: &mut cps2::Cps2Bus, a: u32) -> i16 {
-    rd8(b, a) as i8 as i16
+    byte(b, a) as i8 as i16
 }
 
 /// Overlap on one axis, in 16-bit arithmetic like the original: `h` is the sum (on 8 bits)

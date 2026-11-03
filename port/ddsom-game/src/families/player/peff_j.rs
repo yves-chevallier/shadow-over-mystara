@@ -109,6 +109,9 @@ mod swap {
 mod dash {
     use super::*;
 
+    /// Strike kind of the player when the effect was created.
+    const SUBACTION: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1bc6f4;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -124,7 +127,7 @@ mod dash {
                 if owner.u8(x.b, Player::SUB) != 0
                     || owner.u8(x.b, Player::STEP) != 2
                     || owner.u16(x.b, Player::HP) == 0
-                    || owner.u8(x.b, Player::SUBACTION) != x.u8(0x5c)
+                    || owner.u8(x.b, Player::SUBACTION) != x.u8(SUBACTION)
                     || owner.u8(x.b, Player::POWER_10F) != 0
                 {
                     return x.free_peff();
@@ -193,6 +196,9 @@ mod chip {
 mod chunk {
     use super::*;
 
+    /// Player whose hand holds the chunk (16-bit pointer) (h).
+    const HOST: u32 = 0x42;
+
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ffea) {
@@ -201,11 +207,11 @@ mod chunk {
                     x.add8(Obj::STATE, 2);
                     x.set16(Obj::ANIM_TIMER, 0x14);
                 } else {
-                    let host = x.linked(0x42);
+                    let host = x.linked(HOST);
                     x.add8(Obj::STATE, 2);
-                    let class = host.u8(x.b, 0x10e) as u32;
+                    let class = host.u8(x.b, Player::WEAPON_B) as u32;
                     let set = player_data().overlay_animations.at32(x.b, 4 * class);
-                    let row = (host.u16(x.b, 0x42) as u32) << 3 & 0xffff;
+                    let row = (host.u16(x.b, HOST) as u32) << 3 & 0xffff;
                     let d0 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row);
                     let d2 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row + 2);
                     let d3 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row + 4);
@@ -246,13 +252,18 @@ mod chunk {
 mod rain {
     use super::*;
 
+    /// Delay before the drop (word).
+    const DELAY: u32 = 0x58;
+    /// Lifetime (word).
+    const TIMER: u32 = 0x5a;
+
     const ANIMS: u32 = 0x1be8b8;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51ae4) {
             0 => {
                 x.add8(Obj::STATE, 2);
-                x.set16(0x5a, 0x70);
+                x.set16(TIMER, 0x70);
                 let (cx, cy) = (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b));
                 x.set16(Obj::X, cx);
                 x.set16(Obj::Y, cy);
@@ -261,24 +272,24 @@ mod rain {
                 let dz = player_data().rain_offsets.at16(x.b, row + 2);
                 let delay = player_data().rain_offsets.at16(x.b, row + 4);
                 x.set16(Obj::Z, dz);
-                x.set16(0x58, delay);
+                x.set16(DELAY, delay);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Y, 0x100);
                 x.anim(ANIMS, 1);
             }
             2 => {
-                x.add16(0x5a, 0xffff);
-                if x.u16(0x58) != 0 {
-                    x.add16(0x58, 0xffff);
+                x.add16(TIMER, 0xffff);
+                if x.u16(DELAY) != 0 {
+                    x.add16(DELAY, 0xffff);
                     x.set_bit(Obj::FLAGS, 1, true);
                     return;
                 }
                 if x.anim_step() {
                     let r = x.rand_and(3) * 2;
                     let d = player_data().rain_delays.at16(x.b, r);
-                    x.set16(0x58, d);
+                    x.set16(DELAY, d);
                     x.anim(ANIMS, 1);
-                    if (x.u16(0x5a) as i16) < 0 {
+                    if (x.u16(TIMER) as i16) < 0 {
                         x.add8(Obj::STATE, 2);
                     }
                 }

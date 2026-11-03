@@ -10,7 +10,7 @@ use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::player::tables::{byte};
+use crate::player::tables::byte;
 
 /// Base damage.
 pub enum Damage {

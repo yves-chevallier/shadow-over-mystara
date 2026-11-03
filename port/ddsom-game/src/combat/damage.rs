@@ -269,7 +269,7 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
         let class = (p.u8(w.b, f::VARIANT) >> 1) as u16;
         let idx = (class << 5).wrapping_sub(1).wrapping_add(p.u16(w.b, f::HP));
         let t = table::LOW_HP_SHIELD[(ram::DAMAGE_SETTING.get(w.b) == 6) as usize];
-        let n = rd8(w.b, t.wrapping_add(idx as i16 as i32 as u32));
+        let n = byte(w.b, t.wrapping_add(idx as i16 as i32 as u32));
         if n == 0 {
             None
         } else {

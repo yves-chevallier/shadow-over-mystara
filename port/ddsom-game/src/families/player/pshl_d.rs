@@ -1,6 +1,7 @@
 //! Player shots (PSHL), fourth series: types 19 to 24 (chain lightning, projectiles of the elf and the wizard: arrow,
 //! knife, fireball). See `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -33,6 +34,23 @@ fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 mod chain {
     use super::*;
 
+    /// Lifetime of the link (word); 4 when it goes out.
+    const LIFE: u32 = 0x42;
+    /// Victim reached (16-bit pointer).
+    const TARGET: u32 = 0x52;
+    /// Value given to the end shard (h).
+    const END_SPARK: u32 = 0x54;
+    /// History of the angles: the latest (0x58) then the three before (0x59-0x5b).
+    const ANGLES: u32 = 0x58;
+    /// Angle of the previous frame.
+    const ANGLE_1: u32 = 0x59;
+    /// Angle two frames back.
+    const ANGLE_2: u32 = 0x5a;
+    /// Angle three frames back.
+    const ANGLE_3: u32 = 0x5b;
+    /// Previous link of the chain, then the victim (16-bit pointer) (h).
+    const LINK: u32 = 0x5c;
+
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
@@ -58,7 +76,7 @@ mod chain {
             return release(x);
         }
         x.add8(Obj::STATE, 2);
-        x.set16(0x42, 0x12c);
+        x.set16(LIFE, 0x12c);
         x.set8(f::BOX_SET, 6);
         let owner = x.linked(f::OWNER);
         for off in [0x8, 0xc, 0x10] {
@@ -78,9 +96,9 @@ mod chain {
             dx = dx.wrapping_neg();
         }
         x.add16(Obj::X, dx);
-        x.set8(0x47, 2);
+        x.set8(Shot::BLOW_ID, 2);
         x.set32(Obj::SPEED_TABLE, SPEEDS);
-        x.set32(0x58, 0xffff_ffff);
+        x.set32(ANGLES, 0xffff_ffff);
         // four sparks, sorted by address then chained
         let mut sparks = [0u16; 4];
         for s in sparks.iter_mut() {
@@ -99,7 +117,7 @@ mod chain {
             let spark = Obj(*s as i16 as i32 as u32 & 0xff_ffff);
             spark.set_u8(x.b, Obj::VARIANT, 0);
             spark.set_u8(x.b, Shot::SETTING, rank as u8);
-            spark.set_u16(x.b, 0x5c, previous);
+            spark.set_u16(x.b, LINK, previous);
             spark.set_u16(x.b, Shot::ATTACK_POWER, x.o.0 as u16);
             previous = *s;
         }
@@ -111,59 +129,59 @@ mod chain {
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         'follow: {
-            if x.u16(0x42) != 0 {
-                x.add16(0x42, 0xffff);
-                if x.u16(0x42) == 0 {
-                    x.set16(0x5c, 0);
+            if x.u16(LIFE) != 0 {
+                x.add16(LIFE, 0xffff);
+                if x.u16(LIFE) == 0 {
+                    x.set16(LINK, 0);
                 }
-                x.add8(0x47, 0xff);
-                if x.u8(0x47) != 0 {
+                x.add8(Shot::BLOW_ID, 0xff);
+                if x.u8(Shot::BLOW_ID) != 0 {
                     break 'follow;
                 }
-                x.set8(0x47, 2);
-                if x.u16(0x5c) != 0 {
-                    let target = x.linked(0x5c);
+                x.set8(Shot::BLOW_ID, 2);
+                if x.u16(LINK) != 0 {
+                    let target = x.linked(LINK);
                     if target.u16(x.b, Enemy::HP) != 0 {
                         if target.u8(x.b, Enemy::DOWNED) == 0 {
                             steer(x, target);
                         } else {
                             // target in transit: another one is sought
-                            x.set16(0x52, target.0 as u16);
+                            x.set16(TARGET, target.0 as u16);
                             find_target(x, target.0 as u16);
-                            let now = x.linked(0x5c);
-                            if now.0 as u16 == x.u16(0x52) {
+                            let now = x.linked(LINK);
+                            if now.0 as u16 == x.u16(TARGET) {
                                 steer(x, now);
                             }
                         }
                         break 'follow;
                     }
-                    x.set16(0x5c, 0);
+                    x.set16(LINK, 0);
                 }
             }
             // no more target (or no more life): removal if the object leaves the screen
             if !off_screen(x) {
-                if x.u16(0x42) != 0 {
+                if x.u16(LIFE) != 0 {
                     find_target(x, 0);
                 }
             } else {
                 x.set8(Shot::SUB_STATE, 0);
                 x.add8(Obj::STATE, 2);
-                if x.u16(0x5c) != 0 {
-                    let target = x.linked(0x5c);
-                    let n = target.u8(x.b, 0x92).wrapping_sub(1);
-                    target.set_u8(x.b, 0x92, n);
+                if x.u16(LINK) != 0 {
+                    let target = x.linked(LINK);
+                    let n = target.u8(x.b, Victim::CHAIN_LINKS).wrapping_sub(1);
+                    target.set_u8(x.b, Victim::CHAIN_LINKS, n);
                 }
                 return;
             }
         }
         // history of the angles, elevation toward the target, movement
-        let (a, b, c) = (x.u8(0x58), x.u8(0x59), x.u8(0x5a));
-        x.set8(0x59, a);
-        x.set8(0x5a, b);
-        x.set8(0x5b, c);
+        let (a, b, c) = (x.u8(ANGLES), x.u8(ANGLE_1), x.u8(ANGLE_2));
+        x.set8(ANGLE_1, a);
+        x.set8(ANGLE_2, b);
+        x.set8(ANGLE_3, c);
         rise(x);
         let angle = x.u8(Obj::SPEED_INDEX);
-        x.set8(0x58, angle);
+        x.set8(ANGLES, angle);
         x.set8(Obj::SPEED_INDEX, angle & 0x1f);
         x.move_by_table_xy();
         x.set8(f::FLIP, 0);
@@ -187,10 +205,10 @@ mod chain {
 
     /// Climbs or descends one notch of 3 pixels toward the height of the target (`0x54090`).
     fn rise<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u16(0x5c) == 0 {
+        if x.u16(LINK) == 0 {
             return;
         }
-        let target = x.linked(0x5c);
+        let target = x.linked(LINK);
         let d0 = target.u16(x.b, Enemy::HEIGHT).wrapping_add(0x20).wrapping_sub(x.u16(Obj::Z)).wrapping_add(8);
         if d0 < 0x10 {
             return;
@@ -233,16 +251,16 @@ mod chain {
             loop {
                 let o = Obj(a1);
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
-                    let candidate = o.u8(x.b, 0x97) & 2 == 0
-                        && o.u16(x.b, 0x62) != 0
+                    let candidate = o.u8(x.b, Victim::CHAIN_GUARD) & 2 == 0
+                        && o.u16(x.b, Enemy::HP) != 0
                         && o.u8(x.b, Obj::FLAGS) & 2 == 0
-                        && o.u8(x.b, 0x86) == 0;
+                        && o.u8(x.b, Enemy::DOWNED) == 0;
                     if candidate {
-                        let taken = o.u8(x.b, 0x92);
+                        let taken = o.u8(x.b, Victim::CHAIN_LINKS);
                         if taken != 0 {
                             let keep = best_priority != 0 && {
                                 let b = Obj(0xff0000 | best_priority as u32);
-                                b.u8(x.b, 0x92) < taken
+                                b.u8(x.b, Victim::CHAIN_LINKS) < taken
                             };
                             if !keep {
                                 best_priority = o.0 as u16;
@@ -269,11 +287,11 @@ mod chain {
         }
         *x.c.d5() = nearest as u32;
         let chosen = if nearest != 0 { nearest } else { best_priority };
-        x.set16(0x5c, chosen);
+        x.set16(LINK, chosen);
         if chosen != 0 {
             let target = Obj(chosen as i16 as i32 as u32 & 0xff_ffff);
-            let n = target.u8(x.b, 0x92).wrapping_add(1);
-            target.set_u8(x.b, 0x92, n);
+            let n = target.u8(x.b, Victim::CHAIN_LINKS).wrapping_add(1);
+            target.set_u8(x.b, Victim::CHAIN_LINKS, n);
         }
     }
 
@@ -282,13 +300,13 @@ mod chain {
         if x.u8(Shot::SUB_STATE) == 0 {
             x.add8(Shot::SUB_STATE, 2);
             x.set8(Obj::ACTIVE, 2);
-            x.set8(0x42, 4);
+            x.set8(LIFE, 4);
             x.unlink();
-            if x.u16(0x54) != 0 {
-                x.set32(0x58, 0x8080_8080);
+            if x.u16(END_SPARK) != 0 {
+                x.set32(ANGLES, 0x8080_8080);
                 if let Some(spark) = crate::families::effects_creators::attack(x.b, x.o, 6, 0) {
-                    let v = x.u16(0x54);
-                    spark.set_u16(x.b, 0x54, v);
+                    let v = x.u16(END_SPARK);
+                    spark.set_u16(x.b, END_SPARK, v);
                     let (px, pz) = (x.u32(Obj::X), x.u32(Obj::Z));
                     spark.set_u32(x.b, Obj::X, px);
                     spark.set_u32(x.b, Obj::Z, pz);
@@ -297,9 +315,9 @@ mod chain {
                 }
                 crate::sound::play(x.b, SFX_END, x.o);
             } else {
-                x.set32(0x58, 0x8080_8080);
+                x.set32(ANGLES, 0x8080_8080);
             }
-        } else if x.u8(0x42) == 0 {
+        } else if x.u8(LIFE) == 0 {
             x.add8(Obj::STATE, 2);
             release(x);
         }
@@ -310,6 +328,13 @@ mod chain {
 /// of the screen in steps of 16 pixels then goes out.
 mod wall {
     use super::*;
+
+    /// Delay before the flame rises.
+    const DELAY: u32 = 0x5a;
+    /// Rest of the 0x40 frames after the delay (h).
+    const REST: u32 = 0x5b;
+    /// Countdown of the current phase.
+    const TIMER: u32 = 0x5c;
 
     const ANIMS: u32 = 0x15d00c;
 
@@ -329,9 +354,9 @@ mod wall {
                 let rank = x.u8(Obj::VARIANT) as u32;
                 x.set16(Shot::Y_FRACTION, rank as u16);
                 let delay = (rank << 2) as u8;
-                x.set8(0x5a, delay);
-                x.set8(0x5c, delay);
-                x.set8(0x5b, 0x40u8.wrapping_sub(delay));
+                x.set8(DELAY, delay);
+                x.set8(TIMER, delay);
+                x.set8(REST, 0x40u8.wrapping_sub(delay));
                 let class = owner.u8(x.b, Player::LEVEL) as u32;
                 let p1 = players("magic_damage/1").at8(x.b, class);
                 let p2 = players("magic_damage/1").at8(x.b, 30 + class);
@@ -344,17 +369,17 @@ mod wall {
             2 => {
                 match x.u8(Shot::SUB_STATE) {
                     0 => {
-                        if x.u8(0x5a) == 0 {
+                        if x.u8(DELAY) == 0 {
                             x.add8(Shot::SUB_STATE, 2);
                         } else {
-                            x.add8(0x5a, 0xff);
+                            x.add8(DELAY, 0xff);
                             let dx = signed(0x10, x.u8(f::FLIP) == 0);
                             x.add16(Obj::X, dx);
                         }
                     }
                     2 => {
-                        x.add8(0x5b, 0xff);
-                        if x.u8(0x5b) == 0 {
+                        x.add8(REST, 0xff);
+                        if x.u8(REST) == 0 {
                             x.add8(Shot::SUB_STATE, 2);
                             if x.u8(Obj::VARIANT) == 0 {
                                 x.add8(Obj::STATE, 2);
@@ -362,10 +387,10 @@ mod wall {
                         }
                     }
                     _ => {
-                        if x.u8(0x5c) == 0 {
+                        if x.u8(TIMER) == 0 {
                             x.add8(Obj::STATE, 2);
                         } else {
-                            x.add8(0x5c, 0xff);
+                            x.add8(TIMER, 0xff);
                             let dx = signed(0x10, x.u8(f::FLIP) != 0);
                             x.add16(Obj::X, dx);
                         }
@@ -434,6 +459,11 @@ mod knife {
 mod fireball {
     use super::*;
 
+    /// Bounces left (h).
+    const BOUNCES: u32 = 0x56;
+    /// Parent fireball (16-bit pointer).
+    const PARENT: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15d15e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -470,14 +500,14 @@ mod fireball {
             }
             0 => {
                 x.add8(Obj::STATE, 2);
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 let flip = parent.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 let (p1, p2) = (parent.u8(x.b, f::POWER), parent.u8(x.b, f::POWER2));
                 x.set8(f::POWER, p1);
                 x.set8(f::POWER2, p2);
-                x.set8(0x56, 4);
+                x.set8(BOUNCES, 4);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
@@ -499,7 +529,7 @@ mod fireball {
                             o.set_u8(x.b, Obj::ACTIVE, 1);
                             o.set_u8(x.b, Obj::KIND, 0x16);
                             o.set_u8(x.b, Obj::VARIANT, 1);
-                            o.set_u16(x.b, 0x5c, x.o.0 as u16);
+                            o.set_u16(x.b, PARENT, x.o.0 as u16);
                             let owner = x.u16(f::OWNER);
                             o.set_u16(x.b, f::OWNER, owner);
                         }
@@ -508,11 +538,11 @@ mod fireball {
                 }
             }
             2 => {
-                if x.u8(0x56) != 0 {
-                    x.add8(0x56, 0xff);
-                    if x.u8(0x56) == 0 {
+                if x.u8(BOUNCES) != 0 {
+                    x.add8(BOUNCES, 0xff);
+                    if x.u8(BOUNCES) == 0 {
                         vars::SCROLL_Y_PLANE1.set(x.b, 0);
-                    } else if x.u8(0x56) == 2 {
+                    } else if x.u8(BOUNCES) == 2 {
                         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                 }
@@ -574,6 +604,9 @@ mod bolt {
 mod spark {
     use super::*;
 
+    /// Parent shot (16-bit pointer).
+    const PARENT: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15ad38;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -581,7 +614,7 @@ mod spark {
             0 => {
                 x.add8(Obj::STATE, 2);
                 x.set8(f::BOX_SET, 6);
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 let n = 0x1du32.wrapping_add(x.u8(Obj::VARIANT) as u32) & 0xff;
                 x.anim(ANIMS, n);
@@ -589,7 +622,7 @@ mod spark {
                 x.reinsert();
             }
             2 => {
-                let parent = x.linked(0x5c);
+                let parent = x.linked(PARENT);
                 x.copy_pos(parent);
                 x.reinsert();
             }

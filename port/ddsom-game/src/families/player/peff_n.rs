@@ -1,6 +1,7 @@
 //! Player effects (PEFF), fourteenth series: type 41 (the guardian summoned by the wall magic, created by
 //! `player/spawn.rs::wall_target`). See `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -34,8 +35,23 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod guardian {
     use super::*;
 
+    /// Set on the object it touches (h).
+    const TOUCHED: u32 = 0x43;
+    /// Lifetime of the guardian (word).
+    const LIFE: u32 = 0x42;
+    /// Delay between two attacks.
+    const ATTACK_DELAY: u32 = 0x48;
+    /// Strikes of the current attack.
+    const STRIKES: u32 = 0x4a;
+    /// Countdown of the current step.
+    const TIMER: u32 = 0x4b;
+    /// Scene of creation (the guardian leaves when it changes).
+    const SCENE: u32 = 0x5b;
+    /// Target (16-bit pointer).
+    const TARGET: u32 = 0x5c;
+
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        if vars::SCENE.get(x.b) != x.u8(0x5b) {
+        if vars::SCENE.get(x.b) != x.u8(SCENE) {
             return gone(x);
         }
         match x.state(0x50362) {
@@ -69,9 +85,9 @@ mod guardian {
         }
         let y = x.u32(Obj::Y).wrapping_sub(1);
         x.set32(Obj::Y, y);
-        x.set8(0x4a, 0);
+        x.set8(STRIKES, 0);
         x.set8(Shot::ATTACK_POWER, 0xa);
-        x.set8(0x48, 0x3c);
+        x.set8(ATTACK_DELAY, 0x3c);
         x.set32(Obj::SPEED_TABLE, SPEEDS);
         x.set16(Obj::VZ, 0x400);
         x.set16(Obj::AZ, -0x40i16 as u16);
@@ -92,7 +108,7 @@ mod guardian {
         x.add16(Obj::X, dx);
         x.set16(Obj::VX, vx);
         x.set8(Obj::SPEED_INDEX, angle);
-        x.set16(0x42, 0x4b0);
+        x.set16(LIFE, 0x4b0);
         x.anim(ANIMS, 0);
         x.reinsert();
     }
@@ -132,17 +148,17 @@ mod guardian {
                 x.move_xyz();
                 if (x.u16(Obj::VZ) as i16) <= 0 {
                     x.add8(Shot::STEP, 2);
-                    x.set8(0x4b, 0x1e);
+                    x.set8(TIMER, 0x1e);
                 }
             }
             2 => {
-                x.add8(0x4b, 0xff);
-                if x.u8(0x4b) == 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) == 0 {
                     x.add8(Shot::STEP, 2);
                     x.set8(Shot::OWN_PALETTE, 1);
                     x.set8(Shot::PALETTE, 0xc);
                     x.anim(ANIMS, 6);
-                } else if x.u8(0x4b) & 1 != 0 {
+                } else if x.u8(TIMER) & 1 != 0 {
                     dust(x);
                 }
             }
@@ -168,7 +184,7 @@ mod guardian {
     /// Dust of the arrival (`0xb10c8`): EFFCT 7 effect at a slightly higher height.
     fn dust<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(o) = crate::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
-        o.set_u8(x.b, 0x43, 1);
+        o.set_u8(x.b, TOUCHED, 1);
         let z = o.u16(x.b, Obj::Z).wrapping_add(0x18);
         o.set_u16(x.b, Obj::Z, z);
     }
@@ -176,17 +192,17 @@ mod guardian {
     // --- substate 2: heads for its target ----------------------------------------------------------------
 
     fn seek<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             return leave(x);
         }
-        if x.u8(0x4a) != 0 {
+        if x.u8(STRIKES) != 0 {
             return flip_turn(x);
         }
         if x.u8(Shot::STEP) == 0 {
             x.anim(ANIMS, 3);
             find_target(x);
-            if x.u16(0x5c) != 0 {
+            if x.u16(TARGET) != 0 {
                 x.add8(Shot::STEP, 2);
             } else {
                 x.set8(Shot::SUB_STATE, 4);
@@ -200,13 +216,13 @@ mod guardian {
             x.set8(Shot::ATTACK_POWER, 2);
             // A1: the target, or the last object examined by the search (original glitch: not necessarily the new
             // target)
-            let mut toward = x.linked(0x5c);
+            let mut toward = x.linked(TARGET);
             let mut lost = false;
             if toward.u16(x.b, Enemy::HP) == 0 {
                 if let Some(o) = find_target(x) {
                     toward = o;
                 }
-                lost = x.u16(0x5c) == 0;
+                lost = x.u16(TARGET) == 0;
                 if lost {
                     x.set8(Shot::SUB_STATE, 4);
                     x.set8(Shot::STEP, 0);
@@ -230,18 +246,18 @@ mod guardian {
         }
         let f = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, f);
-        x.set8(0x4a, 0);
+        x.set8(STRIKES, 0);
         x.anim(ANIMS, 3);
     }
 
     // --- substate 4: wandering without a target ---------------------------------------------------------------------
 
     fn wander<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             return leave(x);
         }
-        if x.u8(0x4a) != 0 {
+        if x.u8(STRIKES) != 0 {
             return flip_turn(x);
         }
         x.anim_step();
@@ -249,7 +265,7 @@ mod guardian {
         if x.u8(Shot::ATTACK_POWER) == 0 {
             x.set8(Shot::ATTACK_POWER, 2);
             find_target(x);
-            if x.u16(0x5c) != 0 {
+            if x.u16(TARGET) != 0 {
                 x.add8(Shot::SUB_STATE, 0xfe);
                 x.set8(Shot::STEP, 2);
                 return;
@@ -265,8 +281,8 @@ mod guardian {
     // --- substate 6: leap onto the target -----------------------------------------------------------------------
 
     fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             return leave(x);
         }
         match x.u8(Shot::SUB_STEP) {
@@ -305,9 +321,9 @@ mod guardian {
                 x.anim(ANIMS, 5);
             }
             _ => {
-                x.add8(0x4b, 0xff);
-                let t = x.u8(0x4b) & 3;
-                x.set8(0x4b, t);
+                x.add8(TIMER, 0xff);
+                let t = x.u8(TIMER) & 3;
+                x.set8(TIMER, t);
                 if t == 0 {
                     crate::effects_aids::shock(x.b, x.o, 1, 1, 0xfff0, 0xffff);
                 }
@@ -325,7 +341,7 @@ mod guardian {
         match x.u8(Shot::SUB_STATE) {
             0 => {
                 x.add8(Shot::SUB_STATE, 2);
-                x.set8(0x4b, 0x1e);
+                x.set8(TIMER, 0x1e);
                 fade_dust(x);
             }
             2 => fade_dust(x),
@@ -357,12 +373,12 @@ mod guardian {
 
     /// `0x507bc`: dust of the disappearance for 0x1e frames, then the guardian sinks.
     fn fade_dust<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x4b, 0xff);
-        if x.u8(0x4b) == 0 {
+        x.add8(TIMER, 0xff);
+        if x.u8(TIMER) == 0 {
             x.add8(Shot::SUB_STATE, 2);
             x.set8(Shot::OWN_PALETTE, 0);
             x.anim(ANIMS, 0);
-        } else if x.u8(0x4b) & 1 != 0 {
+        } else if x.u8(TIMER) & 1 != 0 {
             dust(x);
         }
     }
@@ -384,7 +400,7 @@ mod guardian {
                 let o = Obj(a1);
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
                     last = Some(o);
-                    if o.u16(x.b, 0x62) != 0 && o.u8(x.b, 0x95) & 2 == 0 && o.u8(x.b, Obj::FLAGS) & 2 == 0 {
+                    if o.u16(x.b, Enemy::HP) != 0 && o.u8(x.b, Victim::GUARD_FLAGS) & 2 == 0 && o.u8(x.b, Obj::FLAGS) & 2 == 0 {
                         let mut d = 0u32;
                         for off in [0x8u32, 0xc, 0x10] {
                             d = d.wrapping_add(o.u32(x.b, off).abs_diff(x.u32(off)));
@@ -402,7 +418,7 @@ mod guardian {
                 a1 += 0xc0;
             }
         }
-        x.set16(0x5c, found);
+        x.set16(TARGET, found);
         last
     }
 
@@ -415,7 +431,7 @@ mod guardian {
         x.set8(Obj::SPEED_INDEX, angle);
         let want: u8 = if (angle as i8) > 0x10 { 0 } else { 0x20 };
         if want != x.u8(f::FLIP) {
-            x.set8(0x4a, 1);
+            x.set8(STRIKES, 1);
             x.anim(ANIMS, 2);
         }
     }
@@ -462,7 +478,7 @@ mod guardian {
                 }
                 let frame = frame_of(x, m);
                 if overlap(x, m, frame, BOX_ENGAGE, false) {
-                    x.set16(0x5c, m.0 as u16);
+                    x.set16(TARGET, m.0 as u16);
                     x.set16(Obj::STATE, 0x206);
                     x.set16(Shot::STEP, 0);
                     return;
@@ -511,9 +527,9 @@ mod guardian {
         m.set_u16(x.b, Enemy::HP, hp.wrapping_sub(damage));
         m.set_u32(x.b, Enemy::STATE_LONG, 0x0400_0000);
         m.set_u16(x.b, Enemy::HP, 0);
-        if m.u8(x.b, Enemy::CLASS) == 4 && m.u8(x.b, 0x93) != 0 {
+        if m.u8(x.b, Enemy::CLASS) == 4 && m.u8(x.b, Victim::DEATH_CREDIT) != 0 {
             owner.set_u8(x.b, Player::HOLY, 1);
-            let v = m.u8(x.b, 0x9a);
+            let v = m.u8(x.b, Victim::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
     }

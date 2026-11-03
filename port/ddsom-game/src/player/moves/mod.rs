@@ -14,7 +14,7 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::player::external as ext;
-use crate::player::tables::{pc16};
+use crate::player::tables::{player_data, Read};
 
 mod climb;
 pub use climb::*;
@@ -262,8 +262,9 @@ fn throw(g: &mut Ctx, p: Player) {
 
 /// 0x35ca8: puts the object in front of the player (offsets per class, table 0x35ce2).
 fn put_down(g: &mut Ctx, p: Player, held: u32) {
-    let at = 0x35ce2 + 4 * p.class(g) as u32;
-    let (mut dx, dz) = (pc16(g.b, at), pc16(g.b, at + 2));
+    let at = 4 * p.class(g) as u32;
+    let t = &player_data().put_down_offsets;
+    let (mut dx, dz) = (t.at16(g.b, at), t.at16(g.b, at + 2));
     if p.faces_left(g) {
         dx = dx.wrapping_neg();
     }

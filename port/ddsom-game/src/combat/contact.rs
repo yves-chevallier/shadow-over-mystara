@@ -3,7 +3,7 @@
 use crate::player::Player;
 use super::*;
 use crate::machine::Machine;
-use crate::player::tables::{pc8, pc16, byte};
+use crate::player::tables::{player_data, combat, Read, Table};
 
 // ---------------------------------------------------------------------------------------------
 // Parries: a player's attack crosses that of an enemy or an enemy shot
@@ -74,7 +74,7 @@ pub(super) fn clash_with_enemy_shot(w: &mut World, p: Obj, s: Obj) {
         return;
     }
     let kind = s.u8(w.b, f::KIND) as u32;
-    let need = pc8(w.b, 0x27fd6 + kind);
+    let need = player_data().shot_parry_weapons.at8(w.b, kind);
     let weapon = p.u8(w.b, f::WEAPON_10E);
     let ok = match need {
         1 => true,
@@ -175,9 +175,14 @@ pub(super) struct Reaction {
     power_hell: u8,
 }
 
-pub(super) fn reaction(w: &mut World, table: u32, id: u8) -> Reaction {
-    let at = table + 4 * id as u32;
-    Reaction { ground: byte(w.b, at), air: byte(w.b, at + 1), power: byte(w.b, at + 2), power_hell: byte(w.b, at + 3) }
+pub(super) fn reaction(w: &mut World, table: &Table, id: u8) -> Reaction {
+    let at = 4 * id as u32;
+    Reaction {
+        ground: table.at8(w.b, at),
+        air: table.at8(w.b, at + 1),
+        power: table.at8(w.b, at + 2),
+        power_hell: table.at8(w.b, at + 3),
+    }
 }
 
 /// Attack power: "hell" value beyond difficulty 5.
@@ -210,7 +215,7 @@ pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
     trace!("enemy {:06x} hits {:06x}", e.0, p.0);
     hurt_setup(w, p, e, 2);
     let id = e.u8(w.b, f::ATTACK_ID_ENEMY);
-    let r = reaction(w, rom::ENEMY_ATTACK_REACTIONS, id);
+    let r = reaction(w, combat("enemy_attack_reactions"), id);
     let airborne = p.u16(w.b, f::Z) != 0;
     p.set_u8(w.b, f::ACTION, if airborne { r.air } else { r.ground });
     let power = attack_power(w, &r);
@@ -239,7 +244,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
     cov::hit("enemy_shot_hits_player");
     trace!("enemy shot {:06x} on {:06x}", s.0, p.0);
     let id = s.u8(w.b, f::ATTACK_ID_ENEMY);
-    let r = reaction(w, rom::ENEMY_SHOT_REACTIONS, id);
+    let r = reaction(w, combat("enemy_shot_reactions"), id);
     let action = if p.u16(w.b, f::Z) != 0 { r.air } else { r.ground };
     let power = attack_power(w, &r);
     s.set_u8(w.b, f::POWER_A, power);
@@ -255,7 +260,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
         return;
     }
     // protections according to equipment: table by shot type (bytes in ROM), 1 = parryable, 2 = magic
-    let guard = byte(w.b, rom::SHOT_GUARD + kind as u32);
+    let guard = combat("shot_guard").at8(w.b, kind as u32);
     if p.u8(w.b, f::GEAR_165) == 2 && guard == 1 {
         return;
     }
@@ -286,8 +291,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
     if (armor as i8) >= 0 {
         // reduction by (armour, class): words in ROM, 8 per class
         let class = (p.u8(w.b, f::VARIANT) >> 1) as u32;
-        let at = 0x27732 + 2 * armor as u32 + 8 * class;
-        let reduction = pc16(w.b, at);
+        let reduction = player_data().armor_reductions.at16(w.b, 2 * armor as u32 + 8 * class);
         dmg = dmg.wrapping_sub(reduction);
     }
     if (dmg as i16) < 0 {
@@ -308,7 +312,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
 pub(super) fn box_damage(w: &mut World, bx: Obj) -> u16 {
     let row = (bx.u8(w.b, f::HP_MAX) as u32) << 4;
     let tick = (ram::TICK.get(w.b) >> 1) & 0xf;
-    pc16(w.b, 0x28334 + row + 2 * tick as u32)
+    player_data().crate_damage.at16(w.b, row + 2 * tick as u32)
 }
 
 /// 0x2806a: (thrown) crates hurt the players.
@@ -807,7 +811,7 @@ pub(super) fn item_taken_by_walking(w: &mut World, p: Obj, item: Obj) {
         return;
     }
     let kind = item.u8(w.b, f::KIND) as u32;
-    if pc8(w.b, 0x285e0 + kind) == 0 {
+    if player_data().pickup_kinds.at8(w.b, kind) == 0 {
         return;
     }
     item.set_u8(w.b, f::HIT_MARK, 2);

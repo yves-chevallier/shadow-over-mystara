@@ -278,7 +278,7 @@ tables! {
     /// `hit_reactions`: Same, for the victims that are not ordinary enemies (bosses...).
     reaction_rows_other: data 4 @ 0xf266e;
     /// `hit_reactions`: The per-class pointer tables and the reaction rows they designate.
-    reaction_rows: data 1 @ 0xf2686 .. 0x1010b2;
+    reaction_rows: data 1 @ 0xf2686 .. 0x101166;
     /// `hurt`: Reactions of the hit state: one offset (from the table) per action `+6`.
     hurt_actions: prog 2 @ 0x3a0f4;
     /// `hurt`: Reactions of the downed state: one offset per action `+6`.
@@ -309,8 +309,9 @@ tables! {
     overlay_body: data 4 @ 0x395d4;
     /// `overlays`: Raised shield frames, per character (pointers).
     overlay_shield_high: data 4 @ 0x39604;
-    /// `overlays`: Frames designated by the per-character pointers of `overlay_body` and `overlay_shield_high`.
-    overlay_frames: data 2 @ 0x39634 .. 0x396e8;
+    /// `overlays`: Frames designated by the per-character pointers of `overlay_body` and `overlay_shield_high`
+    /// (8 bytes per frame: animation, dx, dz, flip, behind).
+    overlay_frames: data 2 @ 0x1147ce .. 0x11bffa;
     /// `overlays`: Palettes of the power-up sparkle, 0x20 bytes per step.
     power_palettes: data 2 @ 0x397e0 .. 0x398e0;
     /// `scripted`: Steps of the revival.
@@ -329,6 +330,19 @@ tables! {
     thrown_rows: prog 2 @ 0x23e58;
     /// `scripted`: Offsets of the players around the frozen focus.
     frozen_offsets: prog 2 @ 0x23d04;
+    /// `combat/damage`: Shield of the players at low hit points: by class (32 bytes) and hit points (difficulty < 6).
+    damage_low_hp_shield: data 1 @ 0x40aa .. 0x416a;
+    /// `combat/damage`: Same, at difficulty 6.
+    damage_low_hp_shield_hard: data 1 @ 0x416a .. 0x422a;
+    /// `combat/damage`: Damage rows of the enemies against the players, designated by `damage_enemy_scale`.
+    damage_enemy_rows: data 1 @ 0x3f92 .. 0x3fea;
+    /// `init`: Rows of minimum characteristics designated by `init_minima` (10 bytes per level).
+    init_minimum_rows: data 1 @ 0xcf1c8 .. 0xcf3a8;
+    /// `hit_reactions`: Stagger chances by hit, designated by `hit_reactions_stun_class`.
+    stun_chances: data 1 @ 0xf1cc4 .. 0xf1d2e;
+    /// `peff_h`: A word of the code of the lightning handler (0x4e038 + 0x168), that the original re-reads as the
+    /// player's timer (original glitch).
+    lightning_code_word: data 2 @ 0x4e1a0 .. 0x4e1a2;
     /// `combat/damage`: Party bonus by weapon (4 bytes per row).
     damage_party_bonus: data 1 @ 0x3d8e;
     /// `combat/damage`: Damage scale of the enemies by setting (words).
@@ -338,7 +352,7 @@ tables! {
     /// `peff`: Zones of the shop of each scene (first series, 8 bytes per scene).
     shop_zones_a: data 2 @ 0x51306;
     /// `peff`: Zones of the shop of each scene (second series).
-    shop_zones_b: data 2 @ 0x51376;
+    shop_zones_b: data 2 @ 0x51376 .. 0x51420;
     /// `peff_c`: Offsets (dx, dz) of the cure effect.
     cure_offsets: prog 2 @ 0x4a93a;
     /// `peff_c`: Offsets of the follower effect (first series).
@@ -415,4 +429,220 @@ tables! {
     ring1_speeds: prog 4 @ 0x4a84c;
     /// `pshl_e`: Turn rows of the fountain: (angle, animation) pairs.
     orbit_turn_table: data 1 @ 0x52b32;
+    // ---- step and row tables of the cinematics and reactions, designated by their address (the key that the
+    // dispatch passes around); each runs up to the next table or code ----
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_23ad6: prog 2 @ 0x23ad6;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24138: prog 2 @ 0x24138;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_241b8: prog 2 @ 0x241b8;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_242dc: prog 2 @ 0x242dc;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2436c: prog 2 @ 0x2436c;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_243f4: prog 2 @ 0x243f4;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2449c: prog 2 @ 0x2449c;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_244fe: prog 2 @ 0x244fe;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24590: prog 2 @ 0x24590;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2460a: prog 2 @ 0x2460a;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24660: prog 2 @ 0x24660;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_247d0: prog 2 @ 0x247d0;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24864: prog 2 @ 0x24864;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_248fa: prog 2 @ 0x248fa;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2497a: prog 2 @ 0x2497a;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_249fe: prog 2 @ 0x249fe;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24a74: prog 2 @ 0x24a74;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h). Read up to 0x24aea: a player arriving with action 0x10 reads the word 0x6702 of the code (original glitch, `cinematics::STRAY_HEX_DUMP`).
+    cinematic_24ad8: prog 2 @ 0x24ad8 .. 0x24aea;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24b36: prog 2 @ 0x24b36;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24bb0: prog 2 @ 0x24bb0;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24c00: prog 2 @ 0x24c00;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24c88: prog 2 @ 0x24c88;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24d50: prog 2 @ 0x24d50;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24e04: prog 2 @ 0x24e04;
+    /// `cinematics`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24e66: prog 2 @ 0x24e66;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_24ff0: prog 2 @ 0x24ff0;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25066: prog 2 @ 0x25066;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_250be: prog 2 @ 0x250be;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25154: prog 2 @ 0x25154;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_251ce: prog 2 @ 0x251ce;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2523c: prog 2 @ 0x2523c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2528c: prog 2 @ 0x2528c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_252ba: prog 2 @ 0x252ba;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25348: prog 2 @ 0x25348;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25350: prog 2 @ 0x25350;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_253ae: prog 2 @ 0x253ae;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25428: prog 2 @ 0x25428;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25492: prog 2 @ 0x25492;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25512: prog 2 @ 0x25512;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2558e: prog 2 @ 0x2558e;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_255f8: prog 2 @ 0x255f8;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25658: prog 2 @ 0x25658;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25690: prog 2 @ 0x25690;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_256d0: prog 2 @ 0x256d0;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25732: prog 2 @ 0x25732;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_257b2: prog 2 @ 0x257b2;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25822: prog 2 @ 0x25822;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2584c: prog 2 @ 0x2584c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_2589a: prog 2 @ 0x2589a;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_258ec: prog 2 @ 0x258ec;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25962: prog 2 @ 0x25962;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_259b0: prog 2 @ 0x259b0;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25a6c: prog 2 @ 0x25a6c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25ab0: prog 2 @ 0x25ab0;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25b4c: prog 2 @ 0x25b4c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25bae: prog 2 @ 0x25bae;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25bf6: prog 2 @ 0x25bf6;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25c4a: prog 2 @ 0x25c4a;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25cac: prog 2 @ 0x25cac;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25d4e: prog 2 @ 0x25d4e;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25dc2: prog 2 @ 0x25dc2;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25e36: prog 2 @ 0x25e36;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25e82: prog 2 @ 0x25e82;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25f12: prog 2 @ 0x25f12;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_25f8c: prog 2 @ 0x25f8c;
+    /// `cinematics/entries`: Step offsets or rows (positions, delays) of a scene script (h).
+    cinematic_26004: prog 2 @ 0x26004;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a1fc: prog 2 @ 0x3a1fc;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a280: prog 2 @ 0x3a280;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a584: prog 2 @ 0x3a584;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a636: prog 2 @ 0x3a636;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a802: prog 2 @ 0x3a802;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a87a: prog 2 @ 0x3a87a;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a89c: prog 2 @ 0x3a89c;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a8be: prog 2 @ 0x3a8be;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3a9e6: prog 2 @ 0x3a9e6;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3aa04: prog 2 @ 0x3aa04;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3ab22: prog 2 @ 0x3ab22;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3ab5e: prog 2 @ 0x3ab5e;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3ada2: prog 2 @ 0x3ada2;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3ae96: prog 2 @ 0x3ae96;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3af50: prog 2 @ 0x3af50;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b0d8: prog 2 @ 0x3b0d8;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b16c: prog 2 @ 0x3b16c;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b1f0: prog 2 @ 0x3b1f0;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b31a: prog 2 @ 0x3b31a;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b4d0: prog 2 @ 0x3b4d0;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b57c: prog 2 @ 0x3b57c;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b67a: prog 2 @ 0x3b67a;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b738: prog 2 @ 0x3b738;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b7c6: prog 2 @ 0x3b7c6;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b8b2: prog 2 @ 0x3b8b2;
+    /// `hurt`: Step offsets of a reaction (by step `+7`).
+    hurt_steps_3b8d0: prog 2 @ 0x3b8d0;
+    /// `combat/contact`: Weapon needed to parry, by enemy shot kind (h).
+    shot_parry_weapons: prog 1 @ 0x27fd6;
+    /// `combat/contact`: Damage reduction by (armor, class): words, 8 bytes per class.
+    armor_reductions: prog 2 @ 0x27732;
+    /// `combat/contact`: Damage of the crates: by crate type (16 words) and phase of the counter `TICK`.
+    crate_damage: prog 2 @ 0x28334;
+    /// `combat/contact`: Non-zero: the item kind can be picked up by contact (h).
+    pickup_kinds: prog 1 @ 0x285e0;
+    /// `combat/shots`: Non-zero: the player shot kind kills the small enemies at once.
+    small_kill_shots: prog 1 @ 0x26856;
+    /// `moves`: Offsets (dx, dz) of the object put down, per class.
+    put_down_offsets: prog 2 @ 0x35ce2;
+    /// `moves/poses`: Dust of the slow end (action 0x28): four words per class.
+    slow_end_dust: prog 2 @ 0x36eea;
+    /// `moves/leaps`: Animation of the leap attack per character.
+    leap_attacks: prog 1 @ 0x376d6;
+    /// `moves/leaps`: Animation of the leap attack per character, down key held.
+    leap_attacks_down: prog 1 @ 0x376e2;
+    /// `peff_ring`: Items shown by the second ring, per page (other characters).
+    ring1_counts: prog 1 @ 0x4a470;
+    /// `peff_ring`: Items shown by the second ring, per page (magic-user).
+    ring1_counts_magic_user: prog 1 @ 0x4a474;
+    /// `spawn`: Shots of a flame row of the wand, by level.
+    rod_flame_counts: prog 1 @ 0x533f4;
+    /// `spawn`: Wand balls alive at most, by level.
+    rod_ball_limits: prog 1 @ 0x534b8;
+    /// `spawn`: Shots of a star row of the wand, by level.
+    rod_star_counts: prog 1 @ 0x5367c;
+    /// `combos`: Code of the gate variants, whose `move.l` immediates (three longs at +0x16, +0x1a, +0x1e of each variant) are read as data.
+    combo_gates: prog 2 @ 0xf19c2 .. 0xf1b22;
 }

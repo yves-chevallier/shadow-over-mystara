@@ -108,8 +108,8 @@ fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
 fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     cov!();
     let set = player_data().overlay_animations.at32(g.b, 4 * weapon);
-    let off = rd16(g.b, set.wrapping_add(2 * n as u32)) as i16 as i32 as u32;
-    load_entry(g.b, o, set.wrapping_add(off), false);
+    let script = crate::objects::anim::script_of(g.b, set, n);
+    load_entry(g.b, o, script, false);
     if rd8(g.b, o.at(0x38)) != 0 {
         let facing = rd8(g.b, o.at(0x2c)) ^ 0x20;
         wr8(g.b, o.at(0x2c), facing);

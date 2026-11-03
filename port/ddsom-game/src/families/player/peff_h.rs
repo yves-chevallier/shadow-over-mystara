@@ -1,6 +1,7 @@
 //! Player effects (PEFF), eighth series: types 25 to 29 (downpour, wizard's lightning, ring, moon, prayer aura). See
 //! `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -10,7 +11,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, pc16, byte, word, long, Read};
+use crate::player::tables::{player_data, pc16, byte, long, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -27,6 +28,11 @@ fn gesture_changed<R: Bench>(x: &mut Cx<'_, R>, field: u32) -> bool {
 /// (rank `+2f`) that launch the lightning (PSHL 19) on the frame of the move.
 mod shower {
     use super::*;
+
+    /// Original glitch: `+0x15e` read on the effect, past its 0x60 bytes (the special kind is a field of the player record).
+    const FOLLOWING_SPECIAL_KIND: u32 = 0x15e;
+    /// Blinking phase.
+    const BLINK: u32 = 0x5c;
 
     const ANIMS: u32 = 0x1bb4c0;
     const OFFSETS_A: u32 = 0x4dd84;
@@ -47,7 +53,7 @@ mod shower {
             }
             0 => {
                 x.add8(Obj::STATE, 2);
-                if x.u8(0x15e) == 0x18 {
+                if x.u8(FOLLOWING_SPECIAL_KIND) == 0x18 {
                     place(x, OFFSETS_B, true);
                 } else {
                     place(x, OFFSETS_C, false);
@@ -60,8 +66,8 @@ mod shower {
                     x.add8(Obj::STATE, 2);
                 }
                 x.set_bit(Obj::FLAGS, 1, false);
-                let v = x.u8(0x5c) ^ 1;
-                x.set8(0x5c, v);
+                let v = x.u8(BLINK) ^ 1;
+                x.set8(BLINK, v);
                 if v != 0 {
                     x.set_bit(Obj::FLAGS, 1, true);
                 }
@@ -96,7 +102,7 @@ mod shower {
 
     /// Variant 1, state 2: a drop brings down a lightning bolt at the end of its animation.
     fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
-        let wide = x.u8(0x15e) == 0x18;
+        let wide = x.u8(FOLLOWING_SPECIAL_KIND) == 0x18;
         if x.anim_step() {
             x.add8(Obj::STATE, 2);
         }
@@ -131,6 +137,9 @@ mod shower {
 /// the zone when it hits.
 mod strike {
     use super::*;
+
+    /// Step of the player's move when the strike was created.
+    const MOVE_STEP: u32 = 0x59;
 
     const ANIMS: u32 = 0x1bb5ea;
     const FRAMES: u32 = 0x11bffa;
@@ -175,7 +184,7 @@ mod strike {
                 if x.u8(Shot::SUB_STATE) == 0 {
                     x.anim_step();
                     let owner = x.linked(f::OWNER);
-                    let same = owner.u8(x.b, Player::STEP) == x.u8(0x59);
+                    let same = owner.u8(x.b, Player::STEP) == x.u8(MOVE_STEP);
                     if !same {
                         x.add8(Shot::SUB_STATE, 2);
                         x.set_bit(Obj::FLAGS, 1, false);
@@ -198,7 +207,7 @@ mod strike {
                     x.set_bit(Obj::FLAGS, 1, true);
                     // Original glitch: the original re-reads `(0x168,A1)` with the A1 left by the dispatch loop, the
                     // address of the handler (0x4e038): a word of its code, and not the player
-                    let timer = word(x.b, 0x4e038 + 0x168) & 1;
+                    let timer = player_data().lightning_code_word.at16(x.b, 0) & 1;
                     if timer != 0 {
                         x.set_bit(Obj::FLAGS, 1, false);
                     }
@@ -221,7 +230,7 @@ mod strike {
     }
 
     fn hit<R: Bench>(x: &mut Cx<'_, R>, player: Obj, m: Obj, power: u32) {
-        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Enemy::FRAME_TAG) == 0 || m.u8(x.b, 0x40) != 0 {
+        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Enemy::FRAME_TAG) == 0 || m.u8(x.b, Victim::BOXES_OFF) != 0 {
             return;
         }
         if m.u32(x.b, Enemy::IMMUNITY) >> 11 & 1 != 0 {
@@ -248,14 +257,14 @@ mod strike {
         // hit
         let v = player.u16(x.b, Player::SPELL_KILLS).wrapping_add(2);
         player.set_u16(x.b, Player::SPELL_KILLS, v);
-        let hits = m.u8(x.b, 0x9c).wrapping_add(1);
-        m.set_u8(x.b, 0x9c, hits);
+        let hits = m.u8(x.b, Victim::HITS_TAKEN).wrapping_add(1);
+        m.set_u8(x.b, Victim::HITS_TAKEN, hits);
         m.set_u32(x.b, Enemy::STATE_LONG, 0x0400_0000);
         m.set_u8(x.b, Enemy::DISPLAY, 1);
         m.set_u8(x.b, Enemy::REACTION, 0x84);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        m.set_u8(x.b, 0x48, class_id);
-        m.set_u8(x.b, 0x4b, variant_id);
+        m.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
+        m.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
         m.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         let class = player.u8(x.b, Player::LEVEL) as u32;
         let mut d0 = byte(x.b, power + class) as u16;
@@ -273,9 +282,9 @@ mod strike {
         if m.u8(x.b, Enemy::CLASS) != 4 && matches!(m.u8(x.b, Enemy::KIND), 0 | 0x13) {
             m.set_u16(x.b, Enemy::HP, 0);
         }
-        if m.u16(x.b, Enemy::HP) == 0 && m.u8(x.b, 0x93) != 0 {
+        if m.u16(x.b, Enemy::HP) == 0 && m.u8(x.b, Victim::DEATH_CREDIT) != 0 {
             player.set_u8(x.b, Player::HOLY, 1);
-            let v = m.u8(x.b, 0x9a);
+            let v = m.u8(x.b, Victim::DEATH_VALUE);
             vars::KILL_FLAG.set(x.b, v);
         }
     }
@@ -285,6 +294,15 @@ mod strike {
 /// that blazes and shakes the screen at the end of the move.
 mod ring {
     use super::*;
+
+    /// Blinking phase.
+    const BLINK: u32 = 0x5a;
+    /// Countdown of the current phase.
+    const TIMER: u32 = 0x5c;
+    /// Repetitions left (h).
+    const COUNT: u32 = 0x5d;
+    /// Phase of the ring (h).
+    const PHASE: u32 = 0x5e;
 
     const ANIMS: u32 = 0x1bb80a;
 
@@ -302,7 +320,7 @@ mod ring {
                     let (mut dx, mut dz) = (0x17u16, 0x26u16);
                     if child {
                         (dx, dz) = (4, 0x50);
-                        if weapon == 0x15 && owner.u8(x.b, 0x1ee) != 0 {
+                        if weapon == 0x15 && owner.u8(x.b, Player::SPELL_AREA) != 0 {
                             (dx, dz) = (-0x37i16 as u16, 0x36);
                         }
                     }
@@ -324,8 +342,8 @@ mod ring {
             }
             2 if !child => {
                 x.set_bit(Obj::FLAGS, 1, true);
-                let v = x.u8(0x5a) ^ 1;
-                x.set8(0x5a, v);
+                let v = x.u8(BLINK) ^ 1;
+                x.set8(BLINK, v);
                 if v != 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
@@ -340,9 +358,9 @@ mod ring {
                 }
                 x.add8(Obj::STATE, 2);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
-                x.set8(0x5c, 8);
-                x.set8(0x5d, 3);
-                x.set8(0x5e, 1);
+                x.set8(TIMER, 8);
+                x.set8(COUNT, 3);
+                x.set8(PHASE, 1);
                 let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, Player::SPECIAL_KIND) == 0x16 {
                     crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_YELLOW);
@@ -351,20 +369,20 @@ mod ring {
                 }
             }
             4 if child => {
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) != 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) != 0 {
                     return;
                 }
-                x.set8(0x5c, 4);
+                x.set8(TIMER, 4);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0);
-                let v = x.u8(0x5e) ^ 1;
-                x.set8(0x5e, v);
+                let v = x.u8(PHASE) ^ 1;
+                x.set8(PHASE, v);
                 if v != 0 {
                     vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
-                    x.set8(0x5c, 8);
+                    x.set8(TIMER, 8);
                 }
-                x.add8(0x5d, 0xff);
-                if x.u8(0x5d) == 0 {
+                x.add8(COUNT, 0xff);
+                if x.u8(COUNT) == 0 {
                     x.add8(Obj::STATE, 2);
                     vars::SCROLL_Y_PLANE1.set(x.b, 0);
                 }
@@ -377,6 +395,11 @@ mod ring {
 /// Type 28 (0x4e4fa): moon (magic 12, kind 0x1c), its glow (variant 1) placed on the caster.
 mod moon {
     use super::*;
+
+    /// Frame counter (word).
+    const FRAMES: u32 = 0x58;
+    /// Phase of the moon (h).
+    const PHASE: u32 = 0x5c;
 
     const ANIMS: u32 = 0x1bb8f4;
 
@@ -408,16 +431,16 @@ mod moon {
                     return x.anim(ANIMS, if child { 5 } else { 4 });
                 }
                 if !child {
-                    x.add16(0x58, 1);
+                    x.add16(FRAMES, 1);
                     if x.u8(Shot::ANIM_EVENT) != 0 {
                         x.set8(Shot::ANIM_EVENT, 0);
                         x.set_bit(Obj::FLAGS, 1, false);
-                        x.set8(0x5c, 1);
+                        x.set8(PHASE, 1);
                     }
-                    if x.u8(0x5c) != 0 {
+                    if x.u8(PHASE) != 0 {
                         x.add16(Obj::X, 2);
                         x.add16(Obj::Z, 1);
-                        if x.u16(0x58) & 1 == 0 {
+                        if x.u16(FRAMES) & 1 == 0 {
                             x.add16(Obj::X, 0xfffc);
                             x.add16(Obj::Z, 0xfffe);
                         }
@@ -426,8 +449,8 @@ mod moon {
                     }
                 } else {
                     x.set_bit(Obj::FLAGS, 1, true);
-                    x.add16(0x58, 1);
-                    let t = x.u16(0x58) & 1;
+                    x.add16(FRAMES, 1);
+                    let t = x.u16(FRAMES) & 1;
                     if t == 0 {
                         x.set_bit(Obj::FLAGS, 1, false);
                     }
@@ -438,8 +461,8 @@ mod moon {
                     x.add8(Obj::STATE, 2);
                 }
                 x.set_bit(Obj::FLAGS, 1, true);
-                x.add16(0x58, 1);
-                let t = x.u16(0x58) & 1;
+                x.add16(FRAMES, 1);
+                let t = x.u16(FRAMES) & 1;
                 if t == 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
@@ -450,7 +473,7 @@ mod moon {
 
     fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_bit(Obj::FLAGS, 1, true);
-        let t = x.u16(0x58) & 1;
+        let t = x.u16(FRAMES) & 1;
         if t == 0 {
             x.set_bit(Obj::FLAGS, 1, false);
         }

@@ -517,6 +517,12 @@ crate::record::record! {
         dying_timer, set_dying_timer, DYING_TIMER: u8 @ 0x196;
         /// Nine recognizers of special moves of 6 bytes (`combos`).
         recognizers, set_recognizers, RECOGNIZERS: u8 @ 0x1a0;
+        /// Level of the spell or item in use (chosen with the up and down keys; read by its effects).
+        spell_level, set_spell_level, SPELL_LEVEL: u8 @ 0x1e9;
+        /// A strike already landed during the action (fighter, thief; read by the shadow shot) (h).
+        strike_landed, set_strike_landed, STRIKE_LANDED: u8 @ 0x1ec;
+        /// The spell hits an ally in range (1) or only the caster (0).
+        spell_area, set_spell_area, SPELL_AREA: u8 @ 0x1ee;
         /// Timer of the scripts (`scripted`, word) (h).
         script_timer, set_script_timer, SCRIPT_TIMER: u16 @ 0x1e0;
         /// Parity of the double update under the speed aura.

@@ -2,7 +2,7 @@
 
 use crate::player::Player;
 use super::*;
-use crate::player::tables::{player_data, players, pc8, long, Read};
+use crate::player::tables::{player_data, players, long, Read};
 
 // ---- action 0x12 of the characters: leaps ---------------------------------------------------------
 
@@ -56,8 +56,9 @@ pub(super) fn air_attack(g: &mut Ctx, p: Player) {
         return;
     }
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let table = if p.u8(g, Player::KEYS_HELD) & 4 != 0 { 0x376e2 } else { 0x376d6 };
-    let anim = pc8(g.b, table + character);
+    let d = player_data();
+    let table = if p.u8(g, Player::KEYS_HELD) & 4 != 0 { &d.leap_attacks_down } else { &d.leap_attacks };
+    let anim = table.at8(g.b, character);
     animation::start_plain(g, p, anim as u16);
     item_curse(g, p);
 }

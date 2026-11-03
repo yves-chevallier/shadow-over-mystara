@@ -18,6 +18,11 @@ use crate::player::tables::{word};
 mod slot_icon {
     use super::*;
 
+    /// Quantity shown.
+    const COUNT: u32 = 0x58;
+    /// Linked icon (16-bit pointer).
+    const ICON: u32 = 0x5c;
+
     /// Offset tables (X, Y) per player, then per rank: two versions according to `A5+0x20`.
     const PLAYER_A: u32 = 0x4cabe;
     const SLOT_A: u32 = 0x4cae2;
@@ -54,10 +59,10 @@ mod slot_icon {
         x.add8(Obj::STATE, 2);
         x.set8(TAKEN, 0);
         let at = slot(x);
-        let item = at.u8(x.b, 0x140);
-        let count = at.u8(x.b, 0x148);
+        let item = at.u8(x.b, Player::INVENTORY);
+        let count = at.u8(x.b, Player::QUANTITIES);
         x.set8(Shot::HIT_FLAGS, item);
-        x.set8(0x58, count);
+        x.set8(COUNT, count);
         let (player_table, slot_table) = if vars::VERSION.get(x.b) == 1 { (PLAYER_A, SLOT_A) } else { (PLAYER_B, SLOT_B) };
         let (mut d1, mut d2) = (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b));
         let owner = x.linked(f::OWNER);
@@ -78,8 +83,8 @@ mod slot_icon {
     /// `0x4cb16`: icon frame from the current equipment.
     fn choose_icon<R: Bench>(x: &mut Cx<'_, R>) {
         let at = slot(x);
-        let item = at.u8(x.b, 0x140) as u32;
-        let count = at.u8(x.b, 0x148) as u32;
+        let item = at.u8(x.b, Player::INVENTORY) as u32;
+        let count = at.u8(x.b, Player::QUANTITIES) as u32;
         let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
         x.anim_start(set, (((item << 4) + count) & 0xffff) as u16);
     }
@@ -95,9 +100,9 @@ mod slot_icon {
     /// `0x4cb50`: the equipment has changed: new frame (the icon of a removed item goes back to its place).
     fn refresh<R: Bench>(x: &mut Cx<'_, R>) {
         let at = slot(x);
-        let item = at.u8(x.b, 0x140);
-        let count = at.u8(x.b, 0x148);
-        if item == x.u8(Shot::HIT_FLAGS) && count == x.u8(0x58) {
+        let item = at.u8(x.b, Player::INVENTORY);
+        let count = at.u8(x.b, Player::QUANTITIES);
+        if item == x.u8(Shot::HIT_FLAGS) && count == x.u8(COUNT) {
             return;
         }
         if item == 0x56 {
@@ -106,7 +111,7 @@ mod slot_icon {
             x.set16(Obj::Z, hy);
         }
         x.set8(Shot::HIT_FLAGS, item);
-        x.set8(0x58, count);
+        x.set8(COUNT, count);
         let set = if vars::ALT_PALETTE.get(x.b) != 0 { ICONS_ALT } else { ICONS };
         x.anim_start(set, ((((item as u32) << 4) + count as u32) & 0xffff) as u16);
     }
@@ -116,7 +121,7 @@ mod slot_icon {
         if x.u8(TAKEN) != 0 {
             return;
         }
-        let item = x.linked(0x5c);
+        let item = x.linked(ICON);
         let dx = item.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x10);
         if dx > 0x20 {
             return;
@@ -125,19 +130,19 @@ mod slot_icon {
         if dy > 0x10 {
             return;
         }
-        if item.u8(x.b, 0x58) == 0 {
+        if item.u8(x.b, COUNT) == 0 {
             return;
         }
-        item.set_u8(x.b, 0x58, 0);
+        item.set_u8(x.b, COUNT, 0);
         x.set8(TAKEN, 1);
-        item.set_u16(x.b, 0x5c, x.o.0 as u16);
+        item.set_u16(x.b, ICON, x.o.0 as u16);
     }
 
     /// `0x4cbb2`: reaches its place at eight pixels per frame; once taken, it follows the item.
     fn approach<R: Bench>(x: &mut Cx<'_, R>) {
         let taken = x.u8(TAKEN) as i8;
         if taken > 0 {
-            let item = x.linked(0x5c);
+            let item = x.linked(ICON);
             let (ix, iz) = (item.u16(x.b, Obj::X), item.u16(x.b, Obj::Z));
             x.set16(Obj::X, ix);
             x.set16(Obj::Z, iz);

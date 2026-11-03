@@ -33,6 +33,9 @@ fn decrement<R: Bench>(x: &mut Cx<'_, R>, address: u32) {
 mod jet {
     use super::*;
 
+    /// Delay before the jet starts (word).
+    const DELAY: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15c698;
     const SFX: crate::sound::Sound = crate::sound::CMD_13C_23C;
     const KIND: u8 = 0xc;
@@ -67,8 +70,8 @@ mod jet {
                 active(x);
             }
             0 => {
-                x.add16(0x5c, 0xffff);
-                if x.u16(0x5c) == 0 {
+                x.add16(DELAY, 0xffff);
+                if x.u16(DELAY) == 0 {
                     x.add8(Obj::STATE, 2);
                     x.anim(ANIMS, 1);
                     x.reinsert();
@@ -105,7 +108,7 @@ mod jet {
             o.set_u8(x.b, f::POWER2, 0x10);
             let owner = x.u16(f::OWNER);
             o.set_u16(x.b, f::OWNER, owner);
-            o.set_u16(x.b, 0x5c, delay);
+            o.set_u16(x.b, DELAY, delay);
             offset = offset.wrapping_add(signed(0x28, x.u8(f::FLIP) == 0));
             delay += 8;
             *x.c.d4() = offset as u32;
@@ -163,14 +166,17 @@ mod item {
 mod flame {
     use super::*;
 
+    /// Lifetime countdown (h).
+    const TIMER: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15c7a6;
     const SFX: crate::sound::Sound = crate::sound::CMD_14E_24E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53420) {
             0 => {
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) != 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) != 0 {
                     return;
                 }
                 x.add8(Obj::STATE, 2);
@@ -197,6 +203,9 @@ mod flame {
 /// Type 15 (0x534d6): thrower projectile (counter `A5-0x5fb8`), which advances 4 pixels per frame for `+0x5c` frames.
 mod volley {
     use super::*;
+
+    /// Lifetime of the shot (by class).
+    const LIFE: u32 = 0x5c;
 
     const ANIMS: u32 = 0x15c85a;
 
@@ -230,15 +239,15 @@ mod volley {
                 x.add16(Obj::Y, 0xffff);
                 let class = owner.u8(x.b, Player::LEVEL) as u32;
                 let life = player_data().volley_lifetimes.at8(x.b, class);
-                x.set8(0x5c, life);
+                x.set8(LIFE, life);
                 x.anim(ANIMS, 0);
                 x.reinsert();
             }
             2 => {
                 let dx = signed(4, x.u8(f::FLIP) == 0);
                 x.add16(Obj::X, dx);
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) == 0 {
+                x.add8(LIFE, 0xff);
+                if x.u8(LIFE) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
                 x.anim_step();
@@ -258,21 +267,26 @@ mod volley {
 mod star {
     use super::*;
 
+    /// Countdown of the current phase.
+    const TIMER: u32 = 0x5c;
+    /// Phase of the star (h).
+    const PHASE: u32 = 0x5d;
+
     const ANIMS: u32 = 0x15c8a2;
     const SFX: crate::sound::Sound = crate::sound::CMD_14F_24F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x536a8) {
             0 => {
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) != 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) != 0 {
                     return;
                 }
                 x.add8(Obj::STATE, 2);
-                x.set8(0x5d, 0);
+                x.set8(PHASE, 0);
                 x.set8(Shot::PALETTE, 0x12);
                 x.set8(Shot::OWN_PALETTE, 1);
-                x.set8(0x5c, 0x10);
+                x.set8(TIMER, 0x10);
                 x.set8(f::BOX_SET, 6);
                 x.set8(f::POWER, 6);
                 x.set8(f::POWER2, 6);
@@ -283,14 +297,14 @@ mod star {
                 }
             }
             2 => {
-                x.add8(0x5c, 0xff);
-                if x.u8(0x5c) == 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
                 let frame = vars::FRAME_COUNTER.get(x.b) & 3;
                 if frame == 0 {
-                    let n = x.u8(0x5d).wrapping_add(1) & 7;
-                    x.set8(0x5d, n);
+                    let n = x.u8(PHASE).wrapping_add(1) & 7;
+                    x.set8(PHASE, n);
                     let c = player_data().star_colors.at8(x.b, n as u32);
                     x.set8(Shot::PALETTE, c);
                 }
@@ -308,14 +322,17 @@ mod star {
 mod stone {
     use super::*;
 
+    /// Countdown of the current phase (word).
+    const TIMER: u32 = 0x5c;
+
     const ANIMS: u32 = 0x15c90a;
     const SFX: crate::sound::Sound = crate::sound::CMD_169;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53808) {
             0 => {
-                x.add16(0x5c, 0xffff);
-                if x.u16(0x5c) != 0 {
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) != 0 {
                     return;
                 }
                 x.add8(Obj::STATE, 2);
@@ -343,34 +360,34 @@ mod stone {
                     }
                     x.add8(Shot::SUB_STATE, 2);
                     x.set32(Obj::Z, 0);
-                    x.set16(0x5c, 4);
+                    x.set16(TIMER, 4);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 8);
                     x.anim(ANIMS, 1);
                     crate::sound::play(x.b, SFX, x.o);
                 }
                 2 => {
-                    x.add16(0x5c, 0xffff);
-                    if x.u16(0x5c) == 0 {
+                    x.add16(TIMER, 0xffff);
+                    if x.u16(TIMER) == 0 {
                         x.add8(Shot::SUB_STATE, 2);
-                        x.set16(0x5c, 4);
+                        x.set16(TIMER, 4);
                         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
                     }
                     x.anim_step();
                 }
                 4 => {
-                    x.add16(0x5c, 0xffff);
-                    if x.u16(0x5c) == 0 {
+                    x.add16(TIMER, 0xffff);
+                    if x.u16(TIMER) == 0 {
                         x.add8(Shot::SUB_STATE, 2);
-                        x.set16(0x5c, 2);
+                        x.set16(TIMER, 2);
                         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                     x.anim_step();
                 }
                 _ => {
-                    if x.u16(0x5c) != 0 {
-                        x.add16(0x5c, 0xffff);
-                        if x.u16(0x5c) != 0 {
+                    if x.u16(TIMER) != 0 {
+                        x.add16(TIMER, 0xffff);
+                        if x.u16(TIMER) != 0 {
                             return;
                         }
                         vars::SCROLL_Y_PLANE1.set(x.b, 0);

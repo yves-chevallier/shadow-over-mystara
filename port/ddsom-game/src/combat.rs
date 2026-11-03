@@ -16,7 +16,7 @@ use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
-use crate::player::tables::{long};
+use crate::player::tables::{byte, long};
 
 /// Call counters of the rewritten routines (validation coverage).
 pub(crate) mod cov {
@@ -180,12 +180,6 @@ mod rom {
     pub const BODY: u32 = 0x11bffa;
     pub const PUSH: u32 = 0x11c11a;
     pub const ATTACK: u32 = 0x11c23a;
-    /// Reaction of the players to hits and enemy shots: by attack identifier, 4 bytes
-    /// (action on the ground, action in the air, power, power at difficulty > 5).
-    pub const ENEMY_ATTACK_REACTIONS: u32 = 0x1067a4;
-    pub const ENEMY_SHOT_REACTIONS: u32 = 0x106912;
-    /// Guard by enemy shot type (bytes): 1 parryable with certain equipment, 2 magic.
-    pub const SHOT_GUARD: u32 = 0x27690;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -361,8 +355,8 @@ impl Pair {
     /// Gap of the centres on an axis: (box offset + position) of `a` minus that of `b`.
     /// `flip`: the offsets follow the object's orientation (X axis).
     fn probe(&self, w: &mut World, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
-        let mut ao = rd8(w.b, self.abox.0 + off) as i8 as i16 as u16;
-        let mut bo = rd8(w.b, self.bbox.0 + off) as i8 as i16 as u16;
+        let mut ao = byte(w.b, self.abox.0 + off) as i8 as i16 as u16;
+        let mut bo = byte(w.b, self.bbox.0 + off) as i8 as i16 as u16;
         if flip {
             if self.a.u8(w.b, f::FLIP) != 0 {
                 ao = ao.wrapping_neg();

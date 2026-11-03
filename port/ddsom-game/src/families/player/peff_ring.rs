@@ -14,7 +14,7 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, pc8, pc16, pc32, byte, word, Read};
+use crate::player::tables::{player_data, pc16, pc32, byte, word, Read};
 
 /// Icon animation sets: normal, alternate palette.
 const ICONS: u32 = 0x1aef78;
@@ -127,6 +127,9 @@ fn for_children<R: Bench>(x: &mut Cx<'_, R>, n: u32, mut f: impl FnMut(&mut Cx<'
 mod ring0 {
     use super::*;
 
+    /// Lifetime of the ring (word).
+    const LIFE: u32 = 0x3e;
+
     const OFFSETS: u32 = 0x49f88;
     const SPEEDS: u32 = 0x4a20a;
 
@@ -183,7 +186,7 @@ mod ring0 {
         x.add8(Obj::STATE, 2);
         let gen = vars::SCENE.get(x.b);
         x.set8(g::GENERATION, gen);
-        x.set16(0x3e, 0x258);
+        x.set16(LIFE, 0x258);
         x.set8(g::DELAY, 0x10);
         let player = x.linked(f::OWNER);
         player.set_u8(x.b, Player::SPECIAL_COUNT, 2);
@@ -237,8 +240,8 @@ mod ring0 {
 
     /// The ring is open: the button rotates the equipment row, the end closes the ring.
     fn open<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x3e, 0xffff);
-        if x.u16(0x3e) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             return close(x);
         }
         if vars::PAUSED.get(x.b) != 0 {
@@ -257,12 +260,12 @@ mod ring0 {
         x.set8(g::DELAY, 0x10);
         for_children(x, 6, |x, child| child.set_u8(x.b, Shot::SUB_STATE, 2));
         // rotation of the equipment row (6 slots, quantities at +8)
-        let last = player.u8(x.b, 0x145);
-        let last_count = player.u8(x.b, 0x14d);
+        let last = player.u8(x.b, Player::INVENTORY + 5);
+        let last_count = player.u8(x.b, Player::QUANTITIES + 5);
         for k in (0..5u32).rev() {
             let (a, b) = (player.u8(x.b, Player::INVENTORY + k), player.u8(x.b, Player::QUANTITIES + k));
-            player.set_u8(x.b, 0x141 + k, a);
-            player.set_u8(x.b, 0x149 + k, b);
+            player.set_u8(x.b, Player::INVENTORY + 1 + k, a);
+            player.set_u8(x.b, Player::QUANTITIES + 1 + k, b);
         }
         player.set_u8(x.b, Player::INVENTORY, last);
         player.set_u8(x.b, Player::QUANTITIES, last_count);
@@ -330,6 +333,13 @@ mod ring0 {
 /// Equipment ring of type 1 (0x4a21e): variant of 0 that reads the player's quantities.
 mod ring1 {
     use super::*;
+
+    /// Lifetime of the ring (word).
+    const LIFE: u32 = 0x40;
+    /// Set when an item is chosen (h).
+    const CHOSEN: u32 = 0x56;
+    /// Delay of the cursor (h).
+    const DELAY: u32 = 0x5a;
 
     const OFFSETS: u32 = 0x4a3ac;
     const SPEEDS: u32 = 0x4a84c;
@@ -462,14 +472,14 @@ mod ring1 {
         x.add8(Shot::SUB_STATE, 2);
         let gen = vars::SCENE.get(x.b);
         x.set8(GENERATION, gen);
-        x.set16(0x40, 0x258);
+        x.set16(LIFE, 0x258);
         x.set8(g::DELAY, 0x10);
         let player = x.linked(f::OWNER);
         let page = player.u8(x.b, Player::SPECIAL_COUNT);
         x.set8(MODE, page);
-        let mut count = pc8(x.b, 0x4a474 + page as u32);
+        let mut count = player_data().ring1_counts_magic_user.at8(x.b, page as u32);
         if !matches!(player.u8(x.b, Player::CHARACTER), 8 | 9) {
-            count = pc8(x.b, 0x4a470 + page as u32);
+            count = player_data().ring1_counts.at8(x.b, page as u32);
         }
         x.set8(CHILD_COUNT, count);
         let mut a2 = x.o.0 + g::CHILDREN;
@@ -494,8 +504,8 @@ mod ring1 {
     }
 
     fn rotate_or_close<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x40, 0xffff);
-        if x.u16(0x40) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             return shut(x, 8);
         }
         if vars::PAUSED.get(x.b) != 0 {
@@ -563,7 +573,7 @@ mod ring1 {
             2 => {
                 x.add8(Shot::SUB_STATE, 2);
                 let parent = x.linked(g::PARENT);
-                x.set8(0x56, 1);
+                x.set8(CHOSEN, 1);
                 let n = x.u8(Obj::VARIANT).wrapping_add(1);
                 let n = if n > parent.u8(x.b, CHILD_COUNT) { 0 } else { n };
                 x.set8(Obj::VARIANT, n);
@@ -603,7 +613,7 @@ mod ring1 {
             6 => {
                 if x.u8(g::STEP) == 0 {
                     x.set8(Shot::SUB_STATE, 0xa);
-                    x.set8(0x5a, 4);
+                    x.set8(DELAY, 4);
                     set_speeds(x, SPEEDS, 0);
                 } else {
                     x.add8(g::STEP, 0xff);
@@ -612,10 +622,10 @@ mod ring1 {
                 }
             }
             0xa => {
-                if x.u8(0x5a) == 0 {
+                if x.u8(DELAY) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
-                x.add8(0x5a, 0xff);
+                x.add8(DELAY, 0xff);
             }
             0xc => {
                 if x.u8(g::STEP) == 0 {

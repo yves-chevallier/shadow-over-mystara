@@ -62,6 +62,9 @@ mod halo {
 mod slash {
     use super::*;
 
+    /// Step of the player's move when the trail was created.
+    const MOVE_STEP: u32 = 0x5c;
+
     const ANIMS: u32 = 0x1b5590;
     const OFFSETS_A: u32 = 0x4aa90;
     const OFFSETS_B: u32 = 0x4ab2a;
@@ -104,7 +107,7 @@ mod slash {
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
-        if owner.u8(x.b, Player::SUB) != 0 || x.u8(0x5c) != owner.u8(x.b, Player::STEP) {
+        if owner.u8(x.b, Player::SUB) != 0 || x.u8(MOVE_STEP) != owner.u8(x.b, Player::STEP) {
             return x.free_peff();
         }
         if x.u8(Obj::VARIANT) == 0 {
@@ -121,6 +124,11 @@ mod slash {
 /// (`cure`, `potion`).
 mod cure {
     use super::*;
+
+    /// Countdown of the current phase.
+    const TIMER: u32 = 0x5c;
+    /// Step of the palette cycle (0..7).
+    const PALETTE_STEP: u32 = 0x5f;
 
     const ANIMS: u32 = 0x1b56da;
     const OFFSETS_PRAYER: u32 = 0x4acb2;
@@ -148,7 +156,7 @@ mod cure {
         x.add8(Obj::STATE, 2);
         let owner = follow_owner(x);
         let (mut dx, mut dz) = (4i16, 0x65i16);
-        if owner.u8(x.b, 0x1ee) != 0 {
+        if owner.u8(x.b, Player::SPELL_AREA) != 0 {
             (dx, dz) = (-0x36, 0x4e);
         }
         if x.u8(f::FLIP) != 0 {
@@ -182,7 +190,7 @@ mod cure {
         x.set16(Obj::AZ, 0);
         let r = x.rand_and(7);
         let t = player_data().cure_spark_times.at8(x.b, r);
-        x.set8(0x5c, t);
+        x.set8(TIMER, t);
         let r = x.rand_and(1);
         x.set8(Shot::SETTING, r as u8);
         x.anim_start(ANIMS, (r + 2) as u16);
@@ -192,7 +200,7 @@ mod cure {
     fn init_potion<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
         let owner = x.linked(f::OWNER);
-        let source = if owner.u8(x.b, 0x1ee) == 0 {
+        let source = if owner.u8(x.b, Player::SPELL_AREA) == 0 {
             let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
             let (dx, dz) = offset(x, OFFSETS_PRAYER, row);
             Some((owner, dx, dz))
@@ -248,8 +256,8 @@ mod cure {
             o.set_u8(x.b, Obj::KIND, 4);
             o.set_u8(x.b, Obj::VARIANT, 1);
             o.set_u16(x.b, f::OWNER, x.o.0 as u16);
-            let v = x.u8(0x5f).wrapping_add(1) & 7;
-            x.set8(0x5f, v);
+            let v = x.u8(PALETTE_STEP).wrapping_add(1) & 7;
+            x.set8(PALETTE_STEP, v);
         }
     }
 
@@ -261,8 +269,8 @@ mod cure {
                 x.add8(Obj::STATE, 2);
             }
         } else {
-            x.add8(0x5c, 0xff);
-            if x.u8(0x5c) == 0 {
+            x.add8(TIMER, 0xff);
+            if x.u8(TIMER) == 0 {
                 x.add8(Obj::STATE, 2);
             }
         }
@@ -274,6 +282,17 @@ mod cure {
 /// screen shakes according to a ROM script; variant 1: halo placed on the ground, +2f = 0 in front, 1 behind).
 mod holy {
     use super::*;
+
+    /// Player action when the effect started.
+    const ACTION: u32 = 0x56;
+    /// Frame counter (word).
+    const TIMER: u32 = 0x58;
+    /// Current script command.
+    const COMMAND: u32 = 0x5a;
+    /// Countdown of the current command.
+    const DURATION: u32 = 0x5b;
+    /// Script of the shakes (long: address).
+    const SCRIPT: u32 = 0x5c;
 
     const ANIMS: u32 = 0x1b598c;
     const SFX_START: crate::sound::Sound = crate::sound::CMD_192;
@@ -299,7 +318,7 @@ mod holy {
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x58, 0);
+        x.set16(TIMER, 0);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -337,14 +356,14 @@ mod holy {
 
     /// Column that blinks more and more slowly, then rises when the player changes move.
     fn rise<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x58, 1);
+        x.add16(TIMER, 1);
         x.set_bit(Obj::FLAGS, 1, false);
-        let t = x.u16(0x58);
+        let t = x.u16(TIMER);
         if t > 0x40 {
             x.anim_step();
             let owner = x.linked(f::OWNER);
             let action = owner.u8(x.b, Player::STEP);
-            if action != x.u8(0x56) {
+            if action != x.u8(ACTION) {
                 x.add8(Shot::SUB_STATE, 2);
                 x.set16(Obj::VZ, -0x400i16 as u16);
                 x.set16(Obj::AZ, -0x80i16 as u16);
@@ -371,7 +390,7 @@ mod holy {
             return;
         }
         x.add8(Shot::SUB_STATE, 2);
-        x.set16(0x58, 0x50);
+        x.set16(TIMER, 0x50);
         x.set16(Obj::Z, 8);
         x.anim_start(ANIMS, 0);
         crate::families::small::peff_5_pair(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
@@ -381,21 +400,21 @@ mod holy {
         let player = owner.u8(x.b, Player::LEVEL) as u32;
         let row = player_data().holy_script_by_player.at8(x.b, player) as u32;
         let script = player_data().holy_scripts.at32(x.b, row);
-        x.set32(0x5c, script);
-        x.set16(0x58, 8);
-        x.set8(0x5b, 0);
+        x.set32(SCRIPT, script);
+        x.set16(TIMER, 8);
+        x.set8(DURATION, 0);
     }
 
     /// Screen shake script: (command, duration) pairs read in sequence in the ROM.
     fn script<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x5b) == 0 {
-            let mut at = x.u32(0x5c);
+        if x.u8(DURATION) == 0 {
+            let mut at = x.u32(SCRIPT);
             let command = byte(x.b, at);
             let duration = byte(x.b, at + 1);
             at += 2;
-            x.set8(0x5a, command);
-            x.set8(0x5b, duration);
-            x.set32(0x5c, at);
+            x.set8(COMMAND, command);
+            x.set8(DURATION, duration);
+            x.set32(SCRIPT, at);
             if command == 0xff {
                 x.add8(Obj::STATE, 2);
                 let owner = x.linked(f::OWNER);
@@ -407,10 +426,10 @@ mod holy {
                 crate::camera_modes::start_shake(x.b, mode, duration as u16);
             }
         }
-        x.add8(0x5b, 0xff);
-        x.add16(0x58, 0xffff);
+        x.add8(DURATION, 0xff);
+        x.add16(TIMER, 0xffff);
         x.set_bit(Obj::FLAGS, 1, true);
-        let t = x.u16(0x58);
+        let t = x.u16(TIMER);
         if (t as i16) >= 0 && t & 1 != 0 {
             x.set_bit(Obj::FLAGS, 1, false);
         }

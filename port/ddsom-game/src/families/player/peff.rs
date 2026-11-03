@@ -16,6 +16,9 @@ use crate::player::tables::{player_data, byte, word, Read};
 mod badge {
     use super::*;
 
+    /// Animation byte chosen by the badge.
+    const ANIM_BYTE: u32 = 0x42;
+
     /// Animation bytes per `+0x2f` (RAM).
     const ANIM_BYTES: u32 = 0xff2478;
     const ANIMS: u32 = 0x1bcbbe;
@@ -40,7 +43,7 @@ mod badge {
         x.set32(Obj::Y, 0);
         let which = x.u8(Shot::SETTING) as u32;
         let byte = byte(x.b, ANIM_BYTES + which);
-        x.set8(0x42, byte);
+        x.set8(ANIM_BYTE, byte);
         let n = (which * 2 + byte as u32) & 0xffff;
         let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT } else { ANIMS };
         x.anim_start(set, n as u16);
@@ -60,6 +63,9 @@ mod badge {
 /// interpreter 0x514ac / 0x514cc: `peff_shop.rs`). The object follows the screen scroll at half speed.
 mod shop {
     use super::*;
+
+    /// Second dialogue script of the scene shop (long).
+    const SCRIPT_B: u32 = 0x58;
 
     /// Per scene (from 0x45): (offset, width) in X and in depth of the two zones (words, in the clear).
     const ZONES_A: u32 = 0x51306;
@@ -99,7 +105,7 @@ mod shop {
         let a = player_data().shop_scripts_a.at32(x.b, index);
         x.set32(Obj::VY, a);
         let b = player_data().shop_scripts_b.at32(x.b, index);
-        x.set32(0x58, b);
+        x.set32(SCRIPT_B, b);
         let variant = x.u8(Obj::VARIANT) as u32;
         x.anim(ANIMS, variant);
         x.reinsert();

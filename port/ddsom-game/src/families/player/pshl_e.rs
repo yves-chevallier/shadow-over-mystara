@@ -21,6 +21,19 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod orbit {
     use super::*;
 
+    /// Frames between two rotation steps.
+    const TURN_DELAY: u32 = 0x58;
+    /// Countdown to the next rotation step.
+    const TURN_TIMER: u32 = 0x59;
+    /// Row of the turn table (even).
+    const ARC_ROW: u32 = 0x5a;
+    /// Half of the turn table: 0 or 0x10.
+    const ARC_SIDE: u32 = 0x5b;
+    /// Bearer of the orbit (16-bit pointer).
+    const BEARER: u32 = 0x5c;
+    /// Orbiting shots of the bearer (h).
+    const ORBITS: u32 = 0x5d;
+
     const ANIMS: u32 = 0x15b346;
     const SPEEDS: u32 = 0x1c89b6;
     const SFX: crate::sound::Sound = crate::sound::CMD_33A_43A;
@@ -41,9 +54,9 @@ mod orbit {
                 x.reinsert();
             }
             _ => {
-                let parent = x.linked(0x5c);
-                let n = parent.u8(x.b, 0x5d).wrapping_sub(1);
-                parent.set_u8(x.b, 0x5d, n);
+                let parent = x.linked(BEARER);
+                let n = parent.u8(x.b, ORBITS).wrapping_sub(1);
+                parent.set_u8(x.b, ORBITS, n);
                 x.free_pshl();
             }
         }
@@ -51,13 +64,13 @@ mod orbit {
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        let parent = x.linked(0x5c);
+        let parent = x.linked(BEARER);
         x.copy_pos(parent);
         let flip = parent.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         let v = x.u8(Obj::VARIANT) as u32;
         let delay = player_data().orbit_delays.at8(x.b, v);
-        x.set8(0x53, delay);
+        x.set8(Obj::COUNTER_53, delay);
         x.set8(f::BOX_SET, 8);
         let row = v << 3;
         let dx = player_data().orbit_offsets.at16(x.b, row);
@@ -81,10 +94,10 @@ mod orbit {
     /// Substate 0: waits for delay `+0x53`, then moves on to the opening animation.
     fn wait<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(Shot::STEP) == 0 {
-            let delay = x.u8(0x53);
+            let delay = x.u8(Obj::COUNTER_53);
             if delay != 0 {
-                x.add8(0x53, 0xff);
-                if x.u8(0x53) != 0 {
+                x.add8(Obj::COUNTER_53, 0xff);
+                if x.u8(Obj::COUNTER_53) != 0 {
                     return;
                 }
             }
@@ -107,22 +120,22 @@ mod orbit {
                 x.set8(Shot::SUB_STEP, 0);
                 x.set32(Obj::SPEED_TABLE, SPEEDS);
                 x.set8(Obj::SPEED_INDEX, 0x18);
-                x.set8(0x5a, 0);
+                x.set8(ARC_ROW, 0);
                 x.set8(Shot::SETTING, 0);
                 if x.u8(f::FLIP) != 0 {
                     x.set8(Obj::SPEED_INDEX, 8);
-                    x.set8(0x5a, 8);
+                    x.set8(ARC_ROW, 8);
                     x.add8(Shot::SETTING, 2);
                 }
-                x.set8(0x5b, 0);
+                x.set8(ARC_SIDE, 0);
                 let owner = x.linked(f::OWNER);
                 let cam_y = if vars::USE_CAM2.get(x.b) != 0 { vars::CAM2_Y.get(x.b) } else { vars::CAM_Y.get(x.b) };
                 let d0 = owner.u16(x.b, Obj::Y).wrapping_sub(cam_y);
                 if d0 < 0x60 {
-                    x.set8(0x5b, 0x10);
+                    x.set8(ARC_SIDE, 0x10);
                     x.add8(Shot::SETTING, 1);
                 }
-                x.set16(0x58, 0x202);
+                x.set16(TURN_DELAY, 0x202);
                 x.anim_step();
             }
             _ => match x.u8(Shot::SUB_STEP) {
@@ -144,7 +157,7 @@ mod orbit {
                     let k = (x.u8(Shot::SETTING) as u32) << 1;
                     let want_a = player_data().orbit_target_angles.at8(x.b, k);
                     let want_b = player_data().orbit_target_angles.at8(x.b, k + 1);
-                    if want_a == x.u8(0x5b) && want_b == x.u8(Obj::SPEED_INDEX) {
+                    if want_a == x.u8(ARC_SIDE) && want_b == x.u8(Obj::SPEED_INDEX) {
                         x.add8(Shot::SUB_STEP, 2);
                     }
                     x.anim_step();
@@ -161,35 +174,35 @@ mod orbit {
     /// `0x52a9e`: advances one rotation step every `+0x58` frames.
     fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
-        x.add8(0x59, 0xff);
-        if x.u8(0x59) != 0 {
+        x.add8(TURN_TIMER, 0xff);
+        if x.u8(TURN_TIMER) != 0 {
             return;
         }
-        let mut d3 = ((x.u8(0x5a) & 8) >> 3) as u32;
-        let d4 = (x.u8(0x5b) >> 3) as u32;
+        let mut d3 = ((x.u8(ARC_ROW) & 8) >> 3) as u32;
+        let d4 = (x.u8(ARC_SIDE) >> 3) as u32;
         d3 += d4;
         let step = player_data().orbit_turn_steps.at8(x.b, d3);
-        let timer = x.u8(0x58);
-        x.set8(0x59, timer);
+        let timer = x.u8(TURN_DELAY);
+        x.set8(TURN_TIMER, timer);
         let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step) & 0x1f;
         x.set8(Obj::SPEED_INDEX, angle);
         let low = angle & 0xf;
-        let row = x.u8(0x5a).wrapping_add(x.u8(0x5b)) as u32;
+        let row = x.u8(ARC_ROW).wrapping_add(x.u8(ARC_SIDE)) as u32;
         let at = TURN_TABLE + row;
         let expected = byte(x.b, at);
         if low != expected {
             return;
         }
-        let d5 = x.u8(0x5a) & 6;
+        let d5 = x.u8(ARC_ROW) & 6;
         *x.c.d5() = d5 as u32;
         if d5 == 6 && low == byte(x.b, at) {
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
-            let v = x.u8(0x5b) ^ 0x10;
-            x.set8(0x5b, v);
+            let v = x.u8(ARC_SIDE) ^ 0x10;
+            x.set8(ARC_SIDE, v);
         }
-        let next = x.u8(0x5a).wrapping_add(2) & 0xf;
-        x.set8(0x5a, next);
+        let next = x.u8(ARC_ROW).wrapping_add(2) & 0xf;
+        x.set8(ARC_ROW, next);
         let anim = byte(x.b, at + 1);
         x.anim_start(ANIMS, (anim as u32) as u16);
     }
@@ -199,6 +212,15 @@ mod orbit {
 /// creations; 2: spark; 3: ember; 4: ring that turns around the caster.
 mod fountain {
     use super::*;
+
+    /// Countdown of the current phase (word).
+    const TIMER: u32 = 0x5a;
+    /// Creations left (h).
+    const SPAWNS: u32 = 0x5c;
+    /// Rotation step of the ring.
+    const TURN_STEP: u32 = 0x5d;
+    /// Countdown of the screen flash (word).
+    const FLASH_TIMER: u32 = 0x5e;
 
     const ANIMS: u32 = 0x15cb54;
 
@@ -228,7 +250,7 @@ mod fountain {
 
     fn init_ring<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x5a, 0x10);
+        x.set16(TIMER, 0x10);
         let owner = x.linked(f::OWNER);
         x.copy_pos(owner);
         let n = 0x45;
@@ -240,8 +262,8 @@ mod fountain {
 
     fn init_ball<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x5a, 1);
-        x.set8(0x5c, 2);
+        x.set16(TIMER, 1);
+        x.set8(SPAWNS, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -257,7 +279,7 @@ mod fountain {
         x.add16(Obj::X, dx);
         x.add16(Obj::Y, 0xffff);
         x.anim(ANIMS, 3);
-        x.set16(0x5e, 6);
+        x.set16(FLASH_TIMER, 6);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
@@ -276,9 +298,9 @@ mod fountain {
 
     fn init_ember<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x5a, 0x90);
+        x.set16(TIMER, 0x90);
         let r = x.rand_and(7);
-        x.add16(0x5a, r as u16);
+        x.add16(TIMER, r as u16);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -290,8 +312,8 @@ mod fountain {
 
     fn init_halo<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x5a, 1);
-        x.set8(0x5c, 4);
+        x.set16(TIMER, 1);
+        x.set8(SPAWNS, 4);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -307,7 +329,7 @@ mod fountain {
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.move_xy();
         x.anim(ANIMS, 3);
-        x.set16(0x5e, 6);
+        x.set16(FLASH_TIMER, 6);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
@@ -317,14 +339,14 @@ mod fountain {
 
     fn ring<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(Shot::SUB_STATE) == 0 {
-            x.add16(0x5a, 0xffff);
-            if x.u16(0x5a) == 0 {
-                x.set16(0x5a, 0x10);
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
+                x.set16(TIMER, 0x10);
                 x.add8(Shot::SETTING, 1);
                 let step = x.u8(Shot::SETTING);
                 let mut play = step == 1;
                 if !play {
-                    x.set16(0x5a, 0x20);
+                    x.set16(TIMER, 0x20);
                     play = step == 2;
                 }
                 if play {
@@ -332,23 +354,23 @@ mod fountain {
                     return;
                 }
                 x.add8(Shot::SUB_STATE, 2);
-                x.set16(0x5a, 0x14);
-                let mut i = x.u8(0x5d) as u32;
+                x.set16(TIMER, 0x14);
+                let mut i = x.u8(TURN_STEP) as u32;
                 if x.u8(f::FLIP) != 0 {
                     i += 6;
                 }
                 let v = player_data().fountain_turn.at8(x.b, i);
-                x.set8(0x5d, v);
+                x.set8(TURN_STEP, v);
             }
             x.anim_step();
         } else {
-            x.add16(0x5a, 0xffff);
-            if x.u16(0x5a) == 0 {
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
                 x.add8(Obj::STATE, 2);
             }
             let want: u8 = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             if want != x.u8(Obj::SPEED_INDEX) {
-                let step = x.u8(0x5d);
+                let step = x.u8(TURN_STEP);
                 let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step) & 0x1f;
                 x.set8(Obj::SPEED_INDEX, angle);
                 let owner = x.linked(f::OWNER);
@@ -362,24 +384,24 @@ mod fountain {
     }
 
     fn ball<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u16(0x5e) != 0 {
-            x.add16(0x5e, 0xffff);
-            if x.u16(0x5e) == 0 {
+        if x.u16(FLASH_TIMER) != 0 {
+            x.add16(FLASH_TIMER, 0xffff);
+            if x.u16(FLASH_TIMER) == 0 {
                 vars::SCROLL_Y_PLANE1.set(x.b, 0);
-            } else if x.u16(0x5e) == 2 {
+            } else if x.u16(FLASH_TIMER) == 2 {
                 crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_END);
             }
         }
         x.move_x();
-        x.add16(0x5a, 0xffff);
-        let t = x.u16(0x5a) & 3;
-        x.set16(0x5a, t);
+        x.add16(TIMER, 0xffff);
+        let t = x.u16(TIMER) & 3;
+        x.set16(TIMER, t);
         if t == 0 {
             spawn(x, 2, None);
         }
-        x.add8(0x5c, 0xff);
-        let t = x.u8(0x5c) & 3;
-        x.set8(0x5c, t);
+        x.add8(SPAWNS, 0xff);
+        let t = x.u8(SPAWNS) & 3;
+        x.set8(SPAWNS, t);
         if t == 0 {
             let r = x.rand_and(0xf);
             if 0x3f >> r & 1 != 0 {
@@ -410,8 +432,8 @@ mod fountain {
     }
 
     fn ember<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add16(0x5a, 0xffff);
-        if x.u16(0x5a) == 0 {
+        x.add16(TIMER, 0xffff);
+        if x.u16(TIMER) == 0 {
             x.add8(Obj::STATE, 2);
         }
         x.anim_step();
@@ -419,22 +441,22 @@ mod fountain {
 
     fn halo<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(Shot::SUB_STATE) == 0 {
-            if x.u16(0x5e) != 0 {
-                x.add16(0x5e, 0xffff);
-                if x.u16(0x5e) == 0 {
+            if x.u16(FLASH_TIMER) != 0 {
+                x.add16(FLASH_TIMER, 0xffff);
+                if x.u16(FLASH_TIMER) == 0 {
                     x.add8(Shot::SUB_STATE, 2);
-                    x.set16(0x5a, 1);
-                    x.set8(0x5c, 4);
+                    x.set16(TIMER, 1);
+                    x.set8(SPAWNS, 4);
                     vars::SCROLL_Y_PLANE1.set(x.b, 0);
-                } else if x.u16(0x5e) == 2 {
+                } else if x.u16(FLASH_TIMER) == 2 {
                     crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_END);
                 }
             }
             x.anim_step();
         } else {
-            x.add16(0x5a, 0xffff);
-            if x.u16(0x5a) == 0 {
-                x.set16(0x5a, 1);
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
+                x.set16(TIMER, 1);
                 let step: u8 = if x.u8(f::FLIP) != 0 { 0xff } else { 1 };
                 let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step) & 0x1f;
                 x.set8(Obj::SPEED_INDEX, angle);
@@ -452,9 +474,9 @@ mod fountain {
                     x.add8(Obj::STATE, 2);
                 }
             }
-            x.add8(0x5c, 0xff);
-            let t = x.u8(0x5c) & 3;
-            x.set8(0x5c, t);
+            x.add8(SPAWNS, 0xff);
+            let t = x.u8(SPAWNS) & 3;
+            x.set8(SPAWNS, t);
             if t == 0 {
                 spawn(x, 2, None);
             }

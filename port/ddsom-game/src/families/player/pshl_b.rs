@@ -20,6 +20,13 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod ground {
     use super::*;
 
+    /// Spell level the animation was started for.
+    const LEVEL_SHOWN: u32 = 0x5c;
+    /// Phase of the effect (h).
+    const PHASE: u32 = 0x5d;
+    /// Non-zero while the effect hits (h).
+    const ACTIVE_HIT: u32 = 0x5e;
+
     const ANIMS: u32 = 0x15b5fe;
     const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_164_B;
     const SFX_LEFT: crate::sound::Sound = crate::sound::CMD_164_C;
@@ -34,11 +41,11 @@ mod ground {
                 if owner.u16(x.b, Player::ACTION_TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
-                let spell = owner.u8(x.b, 0x1e9);
-                if x.u8(0x5c) != spell {
-                    x.set8(0x5c, spell);
+                let spell = owner.u8(x.b, Player::SPELL_LEVEL);
+                if x.u8(LEVEL_SHOWN) != spell {
+                    x.set8(LEVEL_SHOWN, spell);
                     pose(x);
-                    let mut anim = x.u8(0x5c);
+                    let mut anim = x.u8(LEVEL_SHOWN);
                     if owner.u8(x.b, Player::LEVEL) > 0x14 {
                         anim = anim.wrapping_add(5);
                     }
@@ -53,10 +60,10 @@ mod ground {
                 if owner.u16(x.b, Player::ACTION_TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
-                let spell = owner.u8(x.b, 0x1e9);
-                x.set8(0x3a, spell.wrapping_add(0x18));
-                if x.u8(0x5c) != spell {
-                    x.set8(0x5c, spell);
+                let spell = owner.u8(x.b, Player::SPELL_LEVEL);
+                x.set8(Shot::ATTACK_BOX, spell.wrapping_add(0x18));
+                if x.u8(LEVEL_SHOWN) != spell {
+                    x.set8(LEVEL_SHOWN, spell);
                     pose(x);
                 }
                 x.set32(Obj::FRAME, 0);
@@ -71,12 +78,12 @@ mod ground {
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        x.set8(0x5d, 0);
-        x.set8(0x5e, 1);
+        x.set8(PHASE, 0);
+        x.set8(ACTIVE_HIT, 1);
         x.set8(Shot::OWN_PALETTE, 1);
         x.set8(Shot::PALETTE, 0x14);
-        let spell = owner.u8(x.b, 0x1e9);
-        x.set8(0x5c, spell);
+        let spell = owner.u8(x.b, Player::SPELL_LEVEL);
+        x.set8(LEVEL_SHOWN, spell);
         pose(x);
         let anim = if owner.u8(x.b, Player::LEVEL) > 0x14 { 0xb } else { 0xa };
         x.anim(ANIMS, anim);
@@ -94,8 +101,8 @@ mod ground {
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        let spell = owner.u8(x.b, 0x1e9);
-        x.set8(0x5c, spell);
+        let spell = owner.u8(x.b, Player::SPELL_LEVEL);
+        x.set8(LEVEL_SHOWN, spell);
         let class = owner.u8(x.b, Player::LEVEL) as u32;
         let p1 = players("magic_damage/3").at8(x.b, class);
         let p2 = players("magic_damage/3").at8(x.b, 30 + class);
@@ -115,7 +122,7 @@ mod ground {
         if owner.u8(x.b, Player::SPECIAL_KIND) == 0x1a {
             let half = owner.u8(x.b, Player::CHARACTER) >> 1;
             let extra = if half == 2 { 0 } else { 0x14 };
-            let row = ((x.u8(0x5c) as u32) << 2) + extra;
+            let row = ((x.u8(LEVEL_SHOWN) as u32) << 2) + extra;
             let dx = player_data().ground_pose_a.at16(x.b, row);
             let dz = player_data().ground_pose_a.at16(x.b, row + 2);
             *x.c.d2() = dz as u32;
@@ -135,16 +142,16 @@ mod ground {
 
     /// `0x52df0`: changes colour every 4 frames (`+0x2b`).
     fn colors<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x5e, 0xff);
-        if x.u8(0x5e) != 0 {
+        x.add8(ACTIVE_HIT, 0xff);
+        if x.u8(ACTIVE_HIT) != 0 {
             return;
         }
-        x.set8(0x5e, 4);
-        x.add8(0x5d, 1);
-        if x.u8(0x5d) > 5 {
-            x.set8(0x5d, 0);
+        x.set8(ACTIVE_HIT, 4);
+        x.add8(PHASE, 1);
+        if x.u8(PHASE) > 5 {
+            x.set8(PHASE, 0);
         }
-        let k = x.u8(0x5d) as u32;
+        let k = x.u8(PHASE) as u32;
         let c = player_data().ground_colors.at8(x.b, k);
         x.set8(Shot::PALETTE, c);
     }
@@ -154,6 +161,9 @@ mod ground {
 /// from the thief; 4 = shadow that waits and strikes.
 mod shadow {
     use super::*;
+
+    /// Rank of the shadow (countdown before it moves) (h).
+    const RANK: u32 = 0x5c;
 
     const ANIMS: u32 = 0x15c4a8;
     const SFX_FALL: crate::sound::Sound = crate::sound::CMD_13A_23A;
@@ -225,8 +235,8 @@ mod shadow {
     }
 
     fn init_wait<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x5c, 0xff);
-        if x.u8(0x5c) != 0 {
+        x.add8(RANK, 0xff);
+        if x.u8(RANK) != 0 {
             return;
         }
         x.add8(Obj::STATE, 2);
@@ -255,8 +265,8 @@ mod shadow {
             x.reinsert();
         } else {
             let owner = x.linked(f::OWNER);
-            if owner.u8(x.b, 0x1ec) == 0 && x.u8(f::HIT_FLAGS) & 2 != 0 {
-                owner.set_u8(x.b, 0x1ec, 1);
+            if owner.u8(x.b, Player::STRIKE_LANDED) == 0 && x.u8(f::HIT_FLAGS) & 2 != 0 {
+                owner.set_u8(x.b, Player::STRIKE_LANDED, 1);
                 let hp = owner.u16(x.b, Player::HP).wrapping_sub(0xc);
                 owner.set_u16(x.b, Player::HP, if (hp as i16) > 0 { hp } else { 1 });
             }
@@ -287,7 +297,7 @@ mod shadow {
             o.set_u16(x.b, Obj::X, px.wrapping_add(offset));
             let py = x.u16(Obj::Y);
             o.set_u16(x.b, Obj::Y, py);
-            o.set_u8(x.b, 0x5c, rank);
+            o.set_u8(x.b, RANK, rank);
             let step = signed(0x28, x.u8(f::FLIP) == 0);
             offset = offset.wrapping_add(step);
             rank = rank.wrapping_add(8);

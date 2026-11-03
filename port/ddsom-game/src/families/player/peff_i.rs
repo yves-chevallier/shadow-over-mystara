@@ -1,6 +1,7 @@
 //! Player effects (PEFF), ninth series: types 30 (storm), 31 (whirlwind) and 32 (lightning target). See
 //! `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -24,6 +25,16 @@ fn signed(v: u16, negate: bool) -> u16 {
 /// bolts reach a random point of the target.
 mod storm {
     use super::*;
+
+    /// Target point of the bolt: abscissa, depth.
+    const TARGET_X: u32 = 0x54;
+    const TARGET_Y: u32 = 0x56;
+    /// Countdown of the current phase (word).
+    const TIMER: u32 = 0x58;
+    /// Bolts alive (counted down by the bolts).
+    const BOLTS: u32 = 0x5a;
+    /// Parent cloud (16-bit pointer).
+    const PARENT: u32 = 0x5c;
 
     const ANIMS: u32 = 0x1bbe14;
     const SFX_RUMBLE: crate::sound::Sound = crate::sound::CMD_188;
@@ -54,17 +65,17 @@ mod storm {
         follow_owner(x);
         x.add16(Obj::Z, 0x20);
         x.add16(Obj::Y, 2);
-        x.set16(0x58, 0x20);
+        x.set16(TIMER, 0x20);
         x.anim(ANIMS, 0);
         x.reinsert();
     }
 
     fn init_bolt<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        let parent = x.linked(0x5c);
+        let parent = x.linked(PARENT);
         let (px, py) = (parent.u16(x.b, Obj::X), parent.u16(x.b, Obj::Y));
-        x.set16(0x54, px);
-        x.set16(0x56, py.wrapping_add(1));
+        x.set16(TARGET_X, px);
+        x.set16(TARGET_Y, py.wrapping_add(1));
         x.set16(Obj::X, px);
         x.set16(Obj::Y, py);
         let a = x.rand_and(0x1ff).wrapping_sub(0xff) as u16;
@@ -96,7 +107,7 @@ mod storm {
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, dy);
         x.set32(Obj::SPEED_TABLE, SPEEDS);
-        x.set16(0x58, 2);
+        x.set16(TIMER, 2);
         let angle = x.u8(Shot::SETTING).wrapping_shl(3) & 0x1f;
         x.set8(Obj::SPEED_INDEX, angle);
         let n = x.u8(Shot::SETTING) as u32;
@@ -109,8 +120,8 @@ mod storm {
     fn cloud<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Shot::SUB_STATE) {
             0 => {
-                x.add16(0x58, 0xffff);
-                if (x.u16(0x58) as i16) < 0 {
+                x.add16(TIMER, 0xffff);
+                if (x.u16(TIMER) as i16) < 0 {
                     x.add8(Shot::SUB_STATE, 4);
                     return spawn_bolts(x);
                 }
@@ -128,18 +139,18 @@ mod storm {
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, Player::ACTION_TIMER);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, d0);
-                if x.u8(0x5a) != 0 {
+                if x.u8(BOLTS) != 0 {
                     return;
                 }
-                x.set16(0x58, 0x20);
+                x.set16(TIMER, 0x20);
                 x.add8(Shot::SUB_STATE, 4);
                 crate::sound::play(x.b, SFX_BEGIN, x.o);
             }
             8 => {
                 toggle(x, 0x9, 1 << 1);
                 toggle(x, 0xd, 1);
-                x.add16(0x58, 0xffff);
-                if (x.u16(0x58) as i16) < 0 {
+                x.add16(TIMER, 0xffff);
+                if (x.u16(TIMER) as i16) < 0 {
                     x.add8(Shot::SUB_STATE, 4);
                     let owner = x.linked(f::OWNER);
                     let d0 = owner.u16(x.b, Player::ACTION_TIMER);
@@ -181,10 +192,10 @@ mod storm {
             o.set_u8(x.b, Obj::KIND, KIND);
             o.set_u8(x.b, Obj::VARIANT, 1);
             o.set_u8(x.b, Shot::SETTING, rank);
-            o.set_u16(x.b, 0x5c, x.o.0 as u16);
+            o.set_u16(x.b, PARENT, x.o.0 as u16);
             let owner = x.u16(f::OWNER);
             o.set_u16(x.b, f::OWNER, owner);
-            x.add8(0x5a, 1);
+            x.add8(BOLTS, 1);
         }
     }
 
@@ -196,7 +207,7 @@ mod storm {
             o.set_u8(x.b, Obj::KIND, KIND);
             o.set_u8(x.b, Obj::VARIANT, 2);
             o.set_u8(x.b, Shot::SETTING, rank);
-            o.set_u16(x.b, 0x5c, x.o.0 as u16);
+            o.set_u16(x.b, PARENT, x.o.0 as u16);
             let owner = x.u16(f::OWNER);
             o.set_u16(x.b, f::OWNER, owner);
         }
@@ -225,7 +236,7 @@ mod storm {
     fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
         x.reinsert();
         if x.u8(Shot::SUB_STATE) != 0 {
-            let parent = x.linked(0x5c);
+            let parent = x.linked(PARENT);
             let k = (x.u8(Shot::SETTING) as u32) << 2;
             let (dx, dz) = (player_data().storm_offsets_b.at16(x.b, k), player_data().storm_offsets_b.at16(x.b, k + 2));
             x.set16(Obj::X, dx);
@@ -247,24 +258,24 @@ mod storm {
         let d0 = (((vz as u32) << 16) as i32 >> 8) as u32;
         let z = x.u32(Obj::Z).wrapping_add(d0);
         x.set32(Obj::Z, z);
-        let tx = x.u16(0x54);
-        let ty = x.u16(0x56);
+        let tx = x.u16(TARGET_X);
+        let ty = x.u16(TARGET_Y);
         move_towards(x, 0x8, tx, 0x60000);
         move_towards(x, 0x10, ty, 0x8000);
         if x.u16(Obj::X) != tx || x.u16(Obj::Y) != ty {
             return;
         }
         x.add8(Shot::SUB_STATE, 2);
-        let parent = x.linked(0x5c);
-        let n = parent.u8(x.b, 0x5a).wrapping_sub(1);
-        parent.set_u8(x.b, 0x5a, n);
+        let parent = x.linked(PARENT);
+        let n = parent.u8(x.b, BOLTS).wrapping_sub(1);
+        parent.set_u8(x.b, BOLTS, n);
         x.set8(Shot::SETTING, n);
         crate::sound::play(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
         let (dx, dz) = (player_data().storm_offsets_b.at16(x.b, k), player_data().storm_offsets_b.at16(x.b, k + 2));
         x.set16(Obj::X, dx);
         x.set16(Obj::Z, dz);
-        let parent = x.linked(0x5c);
+        let parent = x.linked(PARENT);
         let (px, pz) = (parent.u16(x.b, Obj::X), parent.u16(x.b, Obj::Z));
         let py = parent.u16(x.b, Obj::Y);
         x.set16(Obj::Y, py);
@@ -278,11 +289,11 @@ mod storm {
             x.add8(Obj::STATE, 2);
             return;
         }
-        x.add16(0x58, 0xffff);
-        if (x.u16(0x58) as i16) < 0 {
+        x.add16(TIMER, 0xffff);
+        if (x.u16(TIMER) as i16) < 0 {
             let a = x.u8(Obj::SPEED_INDEX).wrapping_add(1) & 0x1f;
             x.set8(Obj::SPEED_INDEX, a);
-            x.set16(0x58, 2);
+            x.set16(TIMER, 2);
         }
         x.reinsert();
         x.move_by_table_xy();
@@ -303,6 +314,19 @@ mod storm {
 mod whirl {
     use super::*;
 
+    /// Countdown (h).
+    const TIMER: u32 = 0x58;
+    /// Row of the spawn table (0..0x1f).
+    const ROW: u32 = 0x59;
+    /// Spawned pieces (h).
+    const COUNT: u32 = 0x5a;
+    /// Delay of the blinking.
+    const BLINK_DELAY: u32 = 0x5b;
+    /// Blinks left.
+    const BLINKS: u32 = 0x5c;
+    /// Blinking phase.
+    const BLINK: u32 = 0x5d;
+
     const ANIMS: u32 = 0x1bbfda;
     const SFX_START: crate::sound::Sound = crate::sound::CMD_187;
     const SFX_LOOP: crate::sound::Sound = crate::sound::CMD_173_C;
@@ -316,8 +340,8 @@ mod whirl {
             2 if !child => eye(x),
             2 => {
                 x.move_xz();
-                x.add8(0x58, 0xff);
-                if x.u8(0x58) == 0 {
+                x.add8(TIMER, 0xff);
+                if x.u8(TIMER) == 0 {
                     x.add8(Obj::STATE, 2);
                 }
             }
@@ -327,7 +351,7 @@ mod whirl {
 
     fn init_eye<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set8(0x59, 0);
+        x.set8(ROW, 0);
         let owner = follow_owner(x);
         x.add16(Obj::Y, 0xffff);
         let (mut dx, mut dz) = (-0x37i16 as u16, 0x4au16);
@@ -348,11 +372,11 @@ mod whirl {
         x.add8(Obj::STATE, 2);
         let owner = x.linked(f::OWNER);
         x.copy_pos(owner);
-        x.set8(0x58, 8);
+        x.set8(TIMER, 8);
         let k = x.u8(Obj::SPEED_INDEX) as u32;
         let flip = player_data().whirl_flips.at8(x.b, k);
         x.set8(f::FLIP, flip);
-        let n = x.u8(0x5a) as i32;
+        let n = x.u8(COUNT) as i32;
         let (mut d4, mut d5) = (0u16, 0u16);
         let mut left = n;
         loop {
@@ -385,9 +409,9 @@ mod whirl {
             let owner = x.linked(f::OWNER);
             if owner.u16(x.b, Player::ACTION_TIMER) <= 0x10 {
                 x.add8(Shot::SUB_STATE, 2);
-                x.set8(0x5b, 4);
-                x.set8(0x5c, 3);
-                x.set8(0x5d, 1);
+                x.set8(BLINK_DELAY, 4);
+                x.set8(BLINKS, 3);
+                x.set8(BLINK, 1);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::sound::play(x.b, SFX_LOOP, x.o);
@@ -395,35 +419,35 @@ mod whirl {
                 return x.reinsert();
             }
             // the whirlwind forms: one satellite per frame
-            let k = x.u8(0x59) as u32;
-            x.add8(0x59, 1);
-            let n = x.u8(0x59) & 0x1f;
-            x.set8(0x59, n);
+            let k = x.u8(ROW) as u32;
+            x.add8(ROW, 1);
+            let n = x.u8(ROW) & 0x1f;
+            x.set8(ROW, n);
             let angle = player_data().whirl_spawn_table.at8(x.b, 2 * k);
             let count = player_data().whirl_spawn_table.at8(x.b, 2 * k + 1);
             if let Some(o) = x.alloc(&pools::PEFF) {
                 o.set_u8(x.b, Obj::ACTIVE, 1);
                 o.set_u8(x.b, Obj::KIND, KIND);
                 o.set_u8(x.b, Obj::VARIANT, 1);
-                o.set_u8(x.b, 0x5a, count);
+                o.set_u8(x.b, COUNT, count);
                 o.set_u8(x.b, Obj::SPEED_INDEX, angle);
                 o.set_u16(x.b, f::OWNER, x.o.0 as u16);
             }
             return;
         }
-        if x.u8(0x5c) != 0 {
-            x.add8(0x5b, 0xff);
-            if x.u8(0x5b) != 0 {
+        if x.u8(BLINKS) != 0 {
+            x.add8(BLINK_DELAY, 0xff);
+            if x.u8(BLINK_DELAY) != 0 {
                 return;
             }
-            x.set8(0x5b, 4);
+            x.set8(BLINK_DELAY, 4);
             vars::SCROLL_Y_PLANE1.set(x.b, 0);
-            let v = x.u8(0x5d) ^ 1;
-            x.set8(0x5d, v);
+            let v = x.u8(BLINK) ^ 1;
+            x.set8(BLINK, v);
             if v != 0 {
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
             }
-            x.add8(0x5c, 0xff);
+            x.add8(BLINKS, 0xff);
             return;
         }
         if !x.anim_step() {
@@ -447,7 +471,7 @@ mod whirl {
     }
 
     fn hit<R: Bench>(x: &mut Cx<'_, R>, player: Obj, m: Obj) {
-        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u8(x.b, Enemy::DISPLAY) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, 0x40) != 0 {
+        if m.u8(x.b, Enemy::ACTIVE) == 0 || m.u8(x.b, Enemy::DISPLAY) == 0 || m.u16(x.b, Enemy::HP) == 0 || m.u8(x.b, Victim::BOXES_OFF) != 0 {
             return;
         }
         if m.u32(x.b, Enemy::IMMUNITY) >> 16 & 1 != 0 {
@@ -473,8 +497,8 @@ mod whirl {
         m.set_u8(x.b, Enemy::DISPLAY, 1);
         m.set_u8(x.b, Enemy::REACTION, 0x68);
         let (class_id, variant_id) = (player.u8(x.b, Player::INDEX), player.u8(x.b, Player::CHARACTER));
-        m.set_u8(x.b, 0x48, class_id);
-        m.set_u8(x.b, 0x4b, variant_id);
+        m.set_u8(x.b, Victim::HIT_BY_KIND, class_id);
+        m.set_u8(x.b, Victim::HIT_BY_VARIANT, variant_id);
         m.set_u16(x.b, Enemy::HOLDER, player.0 as u16);
         m.set_u8(x.b, Enemy::GRABBED, 0x78);
         if player.u8(x.b, Player::SPECIAL_KIND) == 0x25 {
@@ -489,6 +513,9 @@ mod whirl {
 /// stays on screen before disappearing after `+0x58` frames.
 mod target {
     use super::*;
+
+    /// Lifetime (word).
+    const TIMER: u32 = 0x58;
 
     const ANIMS: u32 = 0x1bc23e;
 
@@ -522,7 +549,7 @@ mod target {
                     x.move_xz();
                     if (x.u16(Obj::Z) as i16) <= 0 {
                         x.add8(Shot::SUB_STATE, 2);
-                        x.set16(0x58, 0x78);
+                        x.set16(TIMER, 0x78);
                         x.set32(Obj::Z, 0);
                         let cam_x = if vars::USE_CAM2.get(x.b) != 0 { vars::CAM2_X.get(x.b) } else { vars::CAM_X.get(x.b) };
                         let low = cam_x.wrapping_add(0x20);
@@ -536,8 +563,8 @@ mod target {
                         }
                     }
                 } else {
-                    x.add16(0x58, 0xffff);
-                    if x.u16(0x58) == 0 {
+                    x.add16(TIMER, 0xffff);
+                    if x.u16(TIMER) == 0 {
                         x.add8(Obj::STATE, 2);
                     }
                 }

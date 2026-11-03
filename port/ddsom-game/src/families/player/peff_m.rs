@@ -1,6 +1,7 @@
 //! Player effects (PEFF), thirteenth series: type 34 (the familiar of the cleric's prayer,
 //! `player/spawn.rs::swarm`). See `docs/families/joueur.md`.
 
+use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
@@ -34,8 +35,27 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod pet {
     use super::*;
 
+    /// Lifetime of the creature (word).
+    const LIFE: u32 = 0x42;
+    /// Orientation the creature compares with its target (h).
+    const FACING_SEEN: u32 = 0x48;
+    /// Damage of a bite.
+    const DAMAGE: u32 = 0x49;
+    /// Table of states of the creature (long: address).
+    const STATES: u32 = 0x52;
+    /// Countdown of the current step.
+    const TIMER: u32 = 0x58;
+    /// Steps left (h).
+    const STEPS: u32 = 0x5a;
+    /// Scene of creation (the creature leaves when it changes).
+    const SCENE: u32 = 0x5b;
+    /// Target (16-bit pointer).
+    const TARGET: u32 = 0x5c;
+    /// Phase of the creature (h).
+    const PHASE: u32 = 0x5e;
+
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        if vars::SCENE.get(x.b) != x.u8(0x5b) {
+        if vars::SCENE.get(x.b) != x.u8(SCENE) {
             return gone(x);
         }
         match x.state(0x4f2c8) {
@@ -45,7 +65,7 @@ mod pet {
             _ => gone(x),
         }
         let states = x.u32(Obj::STATE);
-        x.set32(0x52, states);
+        x.set32(STATES, states);
     }
 
     fn gone<R: Bench>(x: &mut Cx<'_, R>) {
@@ -61,7 +81,7 @@ mod pet {
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set8(0x5e, 0);
+        x.set8(PHASE, 0);
         let owner = x.linked(f::OWNER);
         for off in [0x8, 0xc, 0x10] {
             let v = owner.u32(x.b, off);
@@ -69,7 +89,7 @@ mod pet {
         }
         let y = x.u32(Obj::Y).wrapping_sub(1);
         x.set32(Obj::Y, y);
-        x.set8(0x47, 0xff);
+        x.set8(Shot::BLOW_ID, 0xff);
         x.set16(Obj::VZ, 0x400);
         x.set16(Obj::AZ, -0x40i16 as u16);
         let (mut dx, mut vx, mut angle) = (-0x1ci16 as u16, -0x200i16 as u16, 0x18u8);
@@ -92,7 +112,7 @@ mod pet {
         pose(x);
         let class = owner.u8(x.b, Player::LEVEL);
         let life = if class <= 0xe { 0x2d0 } else { 0x348 };
-        x.set16(0x42, life);
+        x.set16(LIFE, life);
         x.anim(ANIMS, 0);
         x.reinsert();
     }
@@ -101,13 +121,13 @@ mod pet {
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         let step = owner.u8(x.b, Player::ANIM_EVENT);
-        if step == x.u8(0x47) {
+        if step == x.u8(Shot::BLOW_ID) {
             return;
         }
         let (px, pz) = (owner.u16(x.b, Obj::X), owner.u16(x.b, Obj::Z));
         x.set16(Obj::X, px);
         x.set16(Obj::Z, pz);
-        x.set8(0x47, step);
+        x.set8(Shot::BLOW_ID, step);
         let row = (step as u32) << 2;
         let dx = player_data().peff_m_offsets.at16(x.b, row);
         let dz = player_data().peff_m_offsets.at16(x.b, row + 2);
@@ -172,15 +192,15 @@ mod pet {
     // --- substate 2: heads for its target ------------------------------------------------------------
 
     fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             leave(x);
             return true;
         }
         if x.u8(Shot::STEP) == 0 {
             x.anim(ANIMS, 9);
             find_target(x);
-            if x.u16(0x5c) != 0 {
+            if x.u16(TARGET) != 0 {
                 x.add8(Shot::STEP, 2);
             } else {
                 x.set8(Shot::SUB_STATE, 4);
@@ -193,12 +213,12 @@ mod pet {
                 x.set8(Shot::ATTACK_POWER, 2);
                 // A1: the target, or the last object examined by the search (original glitch: not necessarily the new
                 // target)
-                let mut toward = x.linked(0x5c);
+                let mut toward = x.linked(TARGET);
                 if toward.u16(x.b, Enemy::HP) == 0 {
                     if let Some(o) = find_target(x) {
                         toward = o;
                     }
-                    lost = x.u16(0x5c) == 0;
+                    lost = x.u16(TARGET) == 0;
                     if lost {
                         x.set8(Shot::SUB_STATE, 4);
                         x.set8(Shot::STEP, 0);
@@ -220,8 +240,8 @@ mod pet {
     // --- substate 4: wandering without a target ----------------------------------------------------------------
 
     fn chase<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             leave(x);
             return true;
         }
@@ -230,7 +250,7 @@ mod pet {
         if x.u8(Shot::ATTACK_POWER) == 0 {
             x.set8(Shot::ATTACK_POWER, 2);
             find_target(x);
-            if x.u16(0x5c) != 0 {
+            if x.u16(TARGET) != 0 {
                 x.add8(Shot::SUB_STATE, 0xfe);
                 x.set8(Shot::STEP, 2);
                 return true;
@@ -258,14 +278,14 @@ mod pet {
             x.set8(Shot::SUB_STEP, 0);
             x.set16(Obj::VZ, 0x400);
             x.set16(Obj::AZ, -0x40i16 as u16);
-            let target = x.linked(0x5c);
+            let target = x.linked(TARGET);
             let angle = crate::aids::direction_to(x.b, x.o, target);
             x.set8(Obj::SPEED_INDEX, angle);
             flip_by_angle(x);
             x.anim(ANIMS, 0xa);
             return true;
         }
-        let target = x.linked(0x5c);
+        let target = x.linked(TARGET);
         if target.u16(x.b, Enemy::STATE_WORD) == 0x406 || vars::PAUSED.get(x.b) != 0 {
             die(x);
             return true;
@@ -278,8 +298,8 @@ mod pet {
     }
 
     fn leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             leave(x);
             return true;
         }
@@ -298,8 +318,8 @@ mod pet {
     }
 
     fn land<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-        x.add16(0x42, 0xffff);
-        if x.u16(0x42) == 0 {
+        x.add16(LIFE, 0xffff);
+        if x.u16(LIFE) == 0 {
             leave(x);
             return true;
         }
@@ -336,27 +356,27 @@ mod pet {
         x.add16(Obj::Z, vz);
         let mut d0 = x.u16(Obj::VX);
         let t_flip = target.u8(x.b, f::FLIP);
-        if t_flip != x.u8(0x47) {
-            let own = x.u8(0x48) ^ 0x20;
+        if t_flip != x.u8(Shot::BLOW_ID) {
+            let own = x.u8(FACING_SEEN) ^ 0x20;
             x.set8(f::FLIP, own);
             d0 = d0.wrapping_neg();
         }
         x.add16(Obj::X, d0);
         x.anim_step();
         if target.u16(x.b, Enemy::STATE_WORD) == 0x200
-            || target.u8(x.b, 0x95) & 2 != 0
+            || target.u8(x.b, Victim::GUARD_FLAGS) & 2 != 0
             || target.u8(x.b, Enemy::REACTION) == 0x84
             || target.u8(x.b, Enemy::REACTION) == 0x64
         {
             return true;
         }
-        x.add8(0x58, 0xff);
-        if x.u8(0x58) != 0 {
+        x.add8(TIMER, 0xff);
+        if x.u8(TIMER) != 0 {
             return true;
         }
-        x.set8(0x58, 0x1e);
-        let left = x.u8(0x5a).wrapping_sub(1);
-        x.set8(0x5a, left);
+        x.set8(TIMER, 0x1e);
+        let left = x.u8(STEPS).wrapping_sub(1);
+        x.set8(STEPS, left);
         if (left as i8) < 0 {
             die(x);
             *x.c.d2() = 0x10;
@@ -365,10 +385,10 @@ mod pet {
             return true;
         }
         if left == 0 {
-            x.set8(0x58, 5);
+            x.set8(TIMER, 5);
         }
         crate::sound::play(x.b, SFX_BITE, x.o);
-        let damage = x.u8(0x49) as u16;
+        let damage = x.u8(DAMAGE) as u16;
         let hp = target.u16(x.b, Enemy::HP).wrapping_sub(damage);
         target.set_u16(x.b, Enemy::HP, hp);
         if (hp as i16) <= 0 {
@@ -379,10 +399,10 @@ mod pet {
             target.set_u8(x.b, Enemy::ATTACKER_FLIP, flip);
             let owner = x.u16(f::OWNER);
             target.set_u16(x.b, Enemy::HOLDER, owner);
-            if target.u8(x.b, Enemy::CLASS) == 4 && target.u8(x.b, 0x93) != 0 {
+            if target.u8(x.b, Enemy::CLASS) == 4 && target.u8(x.b, Victim::DEATH_CREDIT) != 0 {
                 let player = x.linked(f::OWNER);
                 player.set_u8(x.b, Player::HOLY, 1);
-                let v = target.u8(x.b, 0x9a);
+                let v = target.u8(x.b, Victim::DEATH_VALUE);
                 vars::KILL_FLAG.set(x.b, v);
             }
             die(x);
@@ -398,10 +418,10 @@ mod pet {
     fn back<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Shot::SUB_STATE) {
             0 => {
-                if x.u8(0x5e) != 0 {
-                    let target = x.linked(0x5c);
-                    let n = target.u8(x.b, 0x9b).wrapping_sub(1);
-                    target.set_u8(x.b, 0x9b, n);
+                if x.u8(PHASE) != 0 {
+                    let target = x.linked(TARGET);
+                    let n = target.u8(x.b, Victim::BITES).wrapping_sub(1);
+                    target.set_u8(x.b, Victim::BITES, n);
                 }
                 x.add8(Shot::SUB_STATE, 2);
                 x.set16(Obj::VZ, 0x400);
@@ -449,9 +469,9 @@ mod pet {
                 let o = Obj(a1);
                 if o.u8(x.b, Obj::ACTIVE) != 0 {
                     last = Some(o);
-                    if o.u16(x.b, 0x62) != 0
-                        && o.u8(x.b, 0x95) & 2 == 0
-                        && o.u8(x.b, 0x9b) < 3
+                    if o.u16(x.b, Enemy::HP) != 0
+                        && o.u8(x.b, Victim::GUARD_FLAGS) & 2 == 0
+                        && o.u8(x.b, Victim::BITES) < 3
                         && o.u8(x.b, Obj::FLAGS) & 2 == 0
                     {
                         let mut d = 0u32;
@@ -471,7 +491,7 @@ mod pet {
                 a1 += 0xc0;
             }
         }
-        x.set16(0x5c, found);
+        x.set16(TARGET, found);
         last
     }
 
@@ -532,7 +552,7 @@ mod pet {
                 if set == 0 {
                     continue;
                 }
-                if bite && (m.u8(x.b, 0x95) & 2 != 0 || m.u8(x.b, 0x9b) >= 3 || m.u8(x.b, Enemy::REACTION) == 0x84) {
+                if bite && (m.u8(x.b, Victim::GUARD_FLAGS) & 2 != 0 || m.u8(x.b, Victim::BITES) >= 3 || m.u8(x.b, Enemy::REACTION) == 0x84) {
                     continue;
                 }
                 let boxes = (m.u8(x.b, Enemy::BOX_SET) as u32) << 2;
@@ -550,7 +570,7 @@ mod pet {
     /// `0x4f95a`: engages the attack (substate 6) when a monster touches the familiar.
     fn attack_test<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(m) = search_hit(x, false) {
-            x.set16(0x5c, m.0 as u16);
+            x.set16(TARGET, m.0 as u16);
             x.set16(Obj::STATE, 0x206);
             x.set16(Shot::STEP, 0);
         }
@@ -567,16 +587,16 @@ mod pet {
         x.set16(Obj::VX, dx);
         let y = m.u32(x.b, Obj::Y).wrapping_sub(1);
         x.set32(Obj::Y, y);
-        x.set16(0x5c, m.0 as u16);
-        x.set8(0x5e, 1);
+        x.set16(TARGET, m.0 as u16);
+        x.set8(PHASE, 1);
         let flip = m.u8(x.b, f::FLIP);
-        x.set8(0x47, flip);
+        x.set8(Shot::BLOW_ID, flip);
         let own = x.u8(f::FLIP);
-        x.set8(0x48, own);
+        x.set8(FACING_SEEN, own);
         x.set32(Obj::STATE, 0x0206_0204);
-        x.set8(0x58, 5);
-        let hits = m.u8(x.b, 0x9b).wrapping_add(1);
-        m.set_u8(x.b, 0x9b, hits);
+        x.set8(TIMER, 5);
+        let hits = m.u8(x.b, Victim::BITES).wrapping_add(1);
+        m.set_u8(x.b, Victim::BITES, hits);
         let owner = x.linked(f::OWNER);
         let class = owner.u8(x.b, Player::LEVEL);
         let (d1, d2) = if class <= 0xe {
@@ -589,8 +609,8 @@ mod pet {
             (8, 2)
         };
         *x.c.d2() = d2 as u32;
-        x.set8(0x5a, d1);
-        x.set8(0x49, d2);
+        x.set8(STEPS, d1);
+        x.set8(DAMAGE, d2);
         true
     }
 }

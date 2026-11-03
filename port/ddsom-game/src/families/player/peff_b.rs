@@ -17,6 +17,9 @@ use crate::player::tables::{player_data, word, Read};
 mod hail {
     use super::*;
 
+    /// Set when the hailstone lands; read by its parent (h).
+    const LANDED: u32 = 0x5a;
+
     const ANIMS: u32 = 0x1b609a;
     const KIND: u8 = 0xb;
     /// Wait duration before the fall: `+0x58` (byte), table turn: `+0x59`.
@@ -48,7 +51,7 @@ mod hail {
         x.add8(TIMER, 0xff);
         if x.u8(TIMER) == 0 {
             x.add8(Obj::STATE, 2);
-            x.set8(0x5a, 1);
+            x.set8(LANDED, 1);
         }
         x.add8(PHASE, 0xff);
         let phase = x.u8(PHASE) & 7;
@@ -129,7 +132,7 @@ mod hail {
 
     fn child_active<R: Bench>(x: &mut Cx<'_, R>) {
         let parent = x.linked(PARENT);
-        if parent.u8(x.b, 0x5a) == 0 {
+        if parent.u8(x.b, LANDED) == 0 {
             x.anim_step();
             let step: u8 = if x.u8(Shot::SETTING) != 0 { 0xfe } else { 2 };
             let angle = x.u8(ANGLE).wrapping_add(step) & 0x1f;
@@ -179,6 +182,9 @@ mod hail {
 mod spark {
     use super::*;
 
+    /// Countdown (word).
+    const TIMER: u32 = 0x58;
+
     const ANIMS: u32 = 0x1bc298;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -198,7 +204,7 @@ mod spark {
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
-        x.set16(0x58, 1);
+        x.set16(TIMER, 1);
         let cam = if vars::USE_CAM2.get(x.b) != 0 { 0x54e } else { 0x4fe };
         let right = x.u8(Obj::VARIANT) & 1 != 0;
         let shift = if right { 0 } else { 0x180 };
@@ -226,8 +232,8 @@ mod spark {
     fn flight<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_xz();
-        let t = (x.u16(0x58) as i16).wrapping_sub(1);
-        x.set16(0x58, t as u16);
+        let t = (x.u16(TIMER) as i16).wrapping_sub(1);
+        x.set16(TIMER, t as u16);
         if t >= 0 {
             return;
         }
@@ -247,6 +253,17 @@ mod spark {
 /// shard (variant 1) every frame; the shard flies in an arc from the edge of the screen.
 mod witch {
     use super::*;
+
+    /// Frame counter (word).
+    const TIMER: u32 = 0x58;
+    /// Delay of the blinking.
+    const BLINK_DELAY: u32 = 0x5b;
+    /// Blinking phase.
+    const BLINK: u32 = 0x5c;
+    /// Set when the witch lands (h).
+    const LANDED: u32 = 0x5d;
+    /// Rank of the shard (from its parent).
+    const RANK: u32 = 0x5e;
 
     const ANIMS: u32 = 0x1bb058;
     const KIND: u8 = 0x14;
@@ -269,9 +286,9 @@ mod witch {
         set.set_u8(x.b, Obj::VARIANT, 0x4e);
         set.set_u8(x.b, Shot::SETTING, 2);
         x.add8(Obj::STATE, 2);
-        x.set8(0x5c, 0);
-        x.set8(0x5e, 0);
-        x.set8(0x5b, 0x1e);
+        x.set8(BLINK, 0);
+        x.set8(RANK, 0);
+        x.set8(BLINK_DELAY, 0x1e);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -298,7 +315,7 @@ mod witch {
         x.set16(Obj::Z, 0xe8);
         let r = x.rand_mask(0x1f);
         x.add16(Obj::Z, r);
-        let mut d2 = (x.u8(0x5e) as u32 & 0xf) * 2;
+        let mut d2 = (x.u8(RANK) as u32 & 0xf) * 2;
         if owner.u8(x.b, f::FLIP) != 0 {
             let vx = x.u16(Obj::VX);
             x.set16(Obj::VX, vx.wrapping_neg());
@@ -330,8 +347,8 @@ mod witch {
                 o.set_u8(x.b, Obj::ACTIVE, 1);
                 o.set_u8(x.b, Obj::KIND, KIND);
                 o.set_u8(x.b, Obj::VARIANT, 1);
-                let rank = x.u8(0x5e);
-                o.set_u8(x.b, 0x5e, rank);
+                let rank = x.u8(RANK);
+                o.set_u8(x.b, RANK, rank);
                 let owner = x.u16(f::OWNER);
                 o.set_u16(x.b, f::OWNER, owner);
                 false
@@ -347,38 +364,38 @@ mod witch {
         } else {
             if x.u8(Shot::ANIM_EVENT) != 0 {
                 x.set8(Shot::ANIM_EVENT, 0);
-                x.set8(0x5d, 1);
+                x.set8(LANDED, 1);
             }
-            if x.u8(0x5d) != 0 {
+            if x.u8(LANDED) != 0 {
                 x.add16(Obj::X, 2);
                 x.add16(Obj::Z, 1);
-                if x.u16(0x58) & 1 == 0 {
+                if x.u16(TIMER) & 1 == 0 {
                     x.add16(Obj::X, 0xfffc);
                     x.add16(Obj::Z, 0xfffe);
                 }
             }
-            x.add16(0x58, 1);
-            let t = x.u16(0x58);
+            x.add16(TIMER, 1);
+            let t = x.u16(TIMER);
             if t > 0x140 {
                 x.set_bit(Obj::FLAGS, 1, true);
                 if t & 1 == 0 {
                     x.set_bit(Obj::FLAGS, 1, false);
                 }
             }
-            x.add8(0x5b, 0xff);
-            if x.u8(0x5b) == 0 {
-                x.set8(0x5b, 2);
+            x.add8(BLINK_DELAY, 0xff);
+            if x.u8(BLINK_DELAY) == 0 {
+                x.set8(BLINK_DELAY, 2);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
-                let v = x.u8(0x5c) ^ 1;
-                x.set8(0x5c, v);
+                let v = x.u8(BLINK) ^ 1;
+                x.set8(BLINK, v);
                 if v == 0 {
-                    x.set8(0x5b, 0x60);
+                    x.set8(BLINK_DELAY, 0x60);
                     vars::SCROLL_Y_PLANE1.set(x.b, 0);
                 }
             }
         }
-        if x.u8(0x5d) != 0 && !spawn_spark(x) {
-            x.add8(0x5e, 1);
+        if x.u8(LANDED) != 0 && !spawn_spark(x) {
+            x.add8(RANK, 1);
         }
         x.anim_step();
     }

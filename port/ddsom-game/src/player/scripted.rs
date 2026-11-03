@@ -22,7 +22,7 @@ use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::player::external as ext;
-use crate::player::tables::{player_data, pc16, pc32, Read};
+use crate::player::tables::{player_data, pc16, Read};
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -304,8 +304,7 @@ fn scene1_dash_start(g: &mut Ctx, p: Player) {
     next_action(g, p);
     p.set_u16(g, Player::SCRIPT_TIMER, 0x70);
     p.set_u8(g, Obj::SPEED_INDEX, 0xa);
-    let table = pc32(g.b, 0x1b84 + 4 * 0x21);
-    crate::objects::motion::select_speed_table(g.b, p.obj(), table);
+    crate::objects::motion::select_speed(g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 0x21);
     animation::start(g, p, 7);
 }
 
