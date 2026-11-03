@@ -1271,7 +1271,9 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     `screens::tables::Rom` et les 141 constantes d'adresses de tables des joueurs (`player/tables.rs` : `pc*`/`byte`...
     par adresse, une table pouvant être lue au-delà de sa fin), et les natives `Body::Memory` restées dans les modules
     du jeu (listes `NATIVES`, lues par les seuls outils : L17).
-  * Validation : VALIDATION_PLACEHOLDER
+  * Validation (code de da35373, inchangé depuis) : 309/309 VALID en mode par défaut et avec `DDSOM_ASSETS`
+    (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; `DDSOM_CHECK=1` (bot30k) ; tests
+    `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans `tools` (et `ddsom`).
 
 **L14. Le jeu sans image ROM** (moyen)
 * Préalable : L1, L5 à L13. `rom_reads` doit compter zéro lecture du bus dans 0-0x3fffff sur les 308 scénarios.
