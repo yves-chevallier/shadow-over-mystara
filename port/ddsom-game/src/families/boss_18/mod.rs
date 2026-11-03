@@ -15,6 +15,13 @@
 //! Animations: 0x181ae0 (movements), 0x181af2 (hits), 0x181b10 (reactions).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::objects::Obj;
+use crate::record::record;
+use crate::player::Player;
+use super::eshl_b::shot32::Shot32;
+use super::eshl_b::shot33::Shot33;
+use super::eshl_b::ShotB;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -24,53 +31,49 @@ mod fight;
 mod hit;
 mod intro;
 
-mod g {
-    pub const REACTION: u32 = 0x49;
-    pub const STUN: u32 = 0x56;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const APPROACH: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    pub const SHOT: u32 = 0x79;
-    pub const SHAKE: u32 = 0x90;
-    pub const TIMER: u32 = 0xa6;
-    pub const COUNT: u32 = 0xa8;
-    pub const ANIM_KIND: u32 = 0xa0;
-    pub const ANIM_LAST: u32 = 0xa1;
-    pub const SAVED_STATE: u32 = 0xa2;
-    pub const PHASE: u32 = 0xaa;
-    pub const PHASES: u32 = 0xab;
-    pub const INVULNERABLE: u32 = 0xad;
-    /// Number of attacks 4 allowed (`+0xae`), dropped objects still in play (`+0xaf`), linked object (`+0xb0`).
-    pub const BUDGET_4: u32 = 0xae;
-    pub const SPAWNED: u32 = 0xaf;
-    pub const CHILD: u32 = 0xb0;
-    /// Attacks remaining of each kind.
-    pub const BUDGET_A: u32 = 0xb2;
-    pub const BUDGET_B: u32 = 0xb3;
-    pub const BUDGET_C: u32 = 0xb4;
-    pub const BUDGET_D: u32 = 0xb5;
-    pub const BUDGET_E: u32 = 0xb6;
-    pub const BUDGET_F: u32 = 0xb7;
-    /// Pursuit timer (word `+0xb8`) and step between two aimings (`+0xba`, `+0xbb`).
-    pub const CHASE_TIME: u32 = 0xb8;
-    pub const AIM_TICK: u32 = 0xba;
-    pub const AIM_ON: u32 = 0xbb;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss18(pub Obj);
+
+impl Boss18 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss18 {
+        /// Number of attacks 4 allowed (`+0xae`), dropped objects still in play (`+0xaf`), linked object (`+0xb0`).
+        budget_4, set_budget_4, BUDGET_4: u8 @ 0xae;
+        spawned, set_spawned, SPAWNED: u8 @ 0xaf;
+        child, set_child, CHILD: u16 @ 0xb0;
+        /// Attacks remaining of each kind.
+        budget_a, set_budget_a, BUDGET_A: u8 @ 0xb2;
+        budget_b, set_budget_b, BUDGET_B: u8 @ 0xb3;
+        budget_c, set_budget_c, BUDGET_C: u8 @ 0xb4;
+        budget_d, set_budget_d, BUDGET_D: u8 @ 0xb5;
+        budget_e, set_budget_e, BUDGET_E: u8 @ 0xb6;
+        budget_f, set_budget_f, BUDGET_F: u8 @ 0xb7;
+        /// Pursuit timer (word `+0xb8`) and step between two aimings (`+0xba`, `+0xbb`).
+        chase_time, set_chase_time, CHASE_TIME: u16 @ 0xb8;
+        aim_tick, set_aim_tick, AIM_TICK: u8 @ 0xba;
+        aim_on, set_aim_on, AIM_ON: u8 @ 0xbb;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_BODY: u32 = 0x181ae0;
-const SET_STRIKE: u32 = 0x181af2;
-const SET_HURT: u32 = 0x181b10;
+const SET_BODY: RomAddr = RomAddr(0x181ae0);
+const SET_STRIKE: RomAddr = RomAddr(0x181af2);
+const SET_HURT: RomAddr = RomAddr(0x181b10);
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_BODY, n);
+    lib::start(x, SET_BODY.0, n);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE.0, n);
 }
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -85,12 +88,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         _ => x.free(&pools::BOSS),
     }
     if var::GAME_ON.get(x.b) == 0 {
-        x.set8(0x3a, 0);
+        x.set8(Boss::SHADOW_B, 0);
     }
-    if x.u8(INVULNERABLE) != 0 {
-        x.set8(0x38, 0);
+    if x.u8(Boss::INVULNERABLE) != 0 {
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -102,7 +105,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     var::BOSS_FIGHT.set(x.b, 1);
     var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     lib::pick_target_any(x);
-    x.set8(PHASES, 2);
+    x.set8(Boss::PHASES, 2);
     x.set8(f::BOX_SET, 0x32);
     lib::initial_hp_boss(x);
     var::SCENE_LEVEL.set(x.b, 0);
@@ -110,38 +113,38 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
-    x.set8(0x93, 1);
-    x.set8(0x9a, 0xff);
-    for off in [0x76, 0x70, 0x6a, 0x75, 0x8e] {
+    x.set8(Boss::DEATH_CREDIT, 1);
+    x.set8(Boss::DEATH_VALUE, 0xff);
+    for off in [Enemy::AI_BYTE_ROW, Enemy::AI_STANCE_ROW, Enemy::AI_WANDER_ROW, Enemy::AI_BOX_ANIM, Enemy::AI_ROW_8E] {
         x.set8(off, 0);
     }
-    for (off, v) in [(0x72, 1), (0x73, 1), (0x6c, 6), (0x6d, 6), (0x74, 7), (0x78, 0xff), (0x68, 8), (0x69, 1), (VULNERABLE, 0)] {
+    for (off, v) in [(Enemy::AI_DECISION_A, 1), (Enemy::AI_DECISION_B, 1), (Enemy::AI_WAIT_MASKS, 6), (Enemy::AI_WAIT_ROW, 6), (Enemy::AI_BOX_CHANCE, 7), (Enemy::AI_SHOT, 0xff), (Enemy::AI_68, 8), (Enemy::AI_69, 1), (Enemy::VULNERABLE, 0)] {
         x.set8(off, v);
     }
-    x.set8(ANIM_KIND, 0);
-    x.set8(ANIM_LAST, 0xff);
-    for (off, v) in [(BUDGET_A, 6), (BUDGET_B, 0xc), (BUDGET_C, 3), (BUDGET_D, 6), (BUDGET_E, 5), (BUDGET_F, 4)] {
+    x.set8(Boss::ANIM_KIND, 0);
+    x.set8(Boss::ANIM_LAST, 0xff);
+    for (off, v) in [(Boss18::BUDGET_A, 6), (Boss18::BUDGET_B, 0xc), (Boss18::BUDGET_C, 3), (Boss18::BUDGET_D, 6), (Boss18::BUDGET_E, 5), (Boss18::BUDGET_F, 4)] {
         x.set8(off, v);
     }
-    for (off, v) in [(0x7e, 0x26), (0x7f, 0), (0x80, 0x22), (0x81, 0x1c)] {
+    for (off, v) in [(Enemy::EVENT_KIND, 0x26), (Enemy::EVENT_LOW, 0), (Enemy::LOOT_ROW, 0x22), (Enemy::LOOT, 0x1c)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
     if var::GAME_ON.get(x.b) != 0 {
-        x.set8(0, 2);
-        x.set_bit(0x1, 1, true);
+        x.set8(Enemy::ACTIVE, 2);
+        x.set_bit(Enemy::DISPLAY, 1, true);
         let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
         let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x69);
-        x.set16(0x8, px);
-        x.set16(0x10, py);
-        x.set16(TIMER, 0x3c);
+        x.set16(Obj::X, px);
+        x.set16(Obj::Y, py);
+        x.set16(Boss::TIMER, 0x3c);
         if let Some(e) = alloc_retry(x, &pools::EFFCT) {
-            e.set_u8(x.b, 0, 1);
-            e.set_u8(x.b, 2, 0x26);
-            e.set_u16(x.b, 0x42, x.o.0 as u16);
+            e.set_u8(x.b, Obj::ACTIVE, 1);
+            e.set_u8(x.b, Obj::KIND, 0x26);
+            e.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
         }
     } else {
-        x.set_bit(0x1, 1, false);
+        x.set_bit(Enemy::DISPLAY, 1, false);
         decide::wait(x);
     }
     body(x, 2);
@@ -172,7 +175,7 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(ANIM_LAST, 0xff);
+            x.set8(Boss::ANIM_LAST, 0xff);
             body(x, 8);
         }
         2 => {

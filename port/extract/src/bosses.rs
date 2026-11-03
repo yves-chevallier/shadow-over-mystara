@@ -195,6 +195,31 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     // Entry of the front and far decisions per phase (and side): relative words to the routines.
     s.push(prog("boss_17/front_phases", 0x97026, "i16", &[], 5));
     s.push(prog("boss_17/far_phases", 0x970e4, "i16", &[], 10));
+    // ---- boss 18 ----
+    s.push(prog("boss_18/walk_delays", 0x98cc6, "u8", &[], PER_RANK));
+    s.push(prog("boss_18/walk_delays_slow", 0x98ce6, "u8", &[], PER_RANK));
+    s.push(prog("boss_18/walk_steps", 0x98d2a, "u8", &[], 32));
+    s.push(prog("boss_18/walk_steps_slow", 0x98d4a, "u8", &[], 32));
+    decision(rom, s, "boss_18/close", &[0x98db8], 0x98dc8);
+    decision(rom, s, "boss_18/front", &[0x98e04, 0x98e14, 0x98e24], 0x98e34);
+    decision(rom, s, "boss_18/mid", &[0x98e6e, 0x98e7e], 0x98e8e);
+    decision(rom, s, "boss_18/far", &[0x98f2c, 0x98f3c, 0x98f4c, 0x98f5c, 0x98f6c, 0x98f7c, 0x98f8c], 0x98ee4);
+    // Entry of the front decision per phase, of the far one per phase and side, then per scene level (relative words).
+    s.push(prog("boss_18/front_phases", 0x98de6, "i16", &[], 3));
+    s.push(prog("boss_18/far_phases", 0x98eba, "i16", &[], 6));
+    s.push(prog("boss_18/far_levels", 0x98f04, "i16", &[], 5));
+    // By number of players; by difficulty (`RANK & 0x1e`) and number of players.
+    s.push(prog("boss_18/charge_picks", 0x97d9c, "u8*16", &[], 4));
+    s.push(prog("boss_18/blast_counts", 0x992ca, "i8", &[], 64));
+    upto(s, "boss_18/blast_spots", 0x9930a, true, "i16*2", 0x80);
+    s.push(prog("boss_18/teleport_spots", 0x991ec, "i16*2", &[], 12));
+    s.push(prog("boss_18/pulse_counts", 0x9852e, "u16", &[], 64));
+    // Reactions: words relative to the table, by hit code / 2.
+    s.push(prog("boss_18/reactions", 0x986d6, "i16", &[], 43));
+    // Throws: four words (X speed, X acceleration, height speed, gravity) from `2 × row`.
+    s.push(prog("boss_18/throws", 0x993ac, "i16", &[], 32));
+    s.push(prog("boss_18/drifts", 0x993ec, "i16", &[], 16));
+    s.push(prog("boss_18/bounce_times", 0x98ab8, "u16", &[], 7));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.
