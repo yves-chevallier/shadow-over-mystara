@@ -22,7 +22,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::ram::PLAYERS;
-pub use records::{Enemy, Prey};
+pub use records::Enemy;
 /// Work RAM variables read by the enemies and bosses.
 pub use vars as var;
 

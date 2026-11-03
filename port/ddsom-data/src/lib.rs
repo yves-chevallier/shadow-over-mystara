@@ -10,6 +10,7 @@ pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod objects;
+pub mod player_tables;
 pub mod pointers;
 pub mod scene_palettes;
 pub mod spawns;
@@ -23,6 +24,7 @@ pub use data::DataFile;
 pub use effects::EffectTables;
 pub use levels::Levels;
 pub use objects::ObjectTables;
+pub use player_tables::PlayerTables;
 pub use scene_palettes::ScenePalettes;
 pub use spawns::Spawns;
 pub use speeds::Speeds;
@@ -78,11 +80,16 @@ pub struct GameData {
     pub texts: Texts,
     /// The other tables of the screens: interface panels, mode screens, service menu, credits (docs/fin.md, L11).
     pub screens: DataFile,
+    /// Tables of the players read by name or address (`player/`, `combat/`, `families/player/`; docs/fin.md, L10).
+    pub player_tables: PlayerTables,
+    /// Per-character tables of the players (`data/players.json`) and combat reaction tables (`data/combat.json`).
+    pub players: DataFile,
+    pub combat: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 13] = [
+    pub const FILES: [&'static str; 16] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -96,6 +103,9 @@ impl GameData {
         "data/misc.json",
         "texts.json",
         "data/screens.json",
+        "data/player_tables.json",
+        "data/players.json",
+        "data/combat.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -114,6 +124,9 @@ impl GameData {
             misc: DataFile::load(&dir.join(Self::FILES[10]))?,
             texts: Texts::load(&dir.join(Self::FILES[11]))?,
             screens: DataFile::load(&dir.join(Self::FILES[12]))?,
+            player_tables: PlayerTables::load(&dir.join(Self::FILES[13]))?,
+            players: DataFile::load(&dir.join(Self::FILES[14]))?,
+            combat: DataFile::load(&dir.join(Self::FILES[15]))?,
         })
     }
 }

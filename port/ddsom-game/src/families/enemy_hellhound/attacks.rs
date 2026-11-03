@@ -12,6 +12,7 @@ use super::arrival::stand_when_done;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
+use crate::player::Player;
 
 /// ROM table: duration and shot key of the breath flames.
 const FLAME_SCRIPT: &str = "hellhound/flame_script";
@@ -701,7 +702,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    if victim.u8(x.b, Enemy::ACTIVE) == 0 || victim.u8(x.b, Prey::HELD) == 0 {
+    if victim.u8(x.b, Enemy::ACTIVE) == 0 || victim.u8(x.b, Player::HELD) == 0 {
         return set_state_long(x, STANCE);
     }
     match x.u8(f::SUB3) {

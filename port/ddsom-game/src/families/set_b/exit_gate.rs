@@ -4,7 +4,6 @@ use crate::objects::Obj;
 use crate::player::Player;
 use crate::families::set_b::fields::DoorObj;
 use crate::families::set_b::fields::ExitGateBObj;
-use crate::families::set::fields::PlayerFields;
 use crate::families::set::fields::SetObj;
 
 const GATE_LOCK: u32 = 0x52;
@@ -44,7 +43,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Is a player in a position to enter? Counts the consecutive frames (byte `counter`).
 fn at_door<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u8, counter: u32) {
-    let busy = p.u8(x.b, Player::SLOW).wrapping_add(p.u8(x.b, PlayerFields::SPECIAL_ACTIVE)).wrapping_add(p.u8(x.b, Player::SLOW_8A));
+    let busy = p.u8(x.b, Player::SLOW).wrapping_add(p.u8(x.b, Player::SPECIAL_ACTIVE)).wrapping_add(p.u8(x.b, Player::SLOW_8A));
     let state = p.u32(x.b, pl::STATE) & 0xffff_ff00;
     let standing = matches!(state, 0x0200_0000 | 0x0200_0600 | 0x0200_0400);
     let y = p.u16(x.b, pl::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);

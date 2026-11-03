@@ -11,9 +11,10 @@
 use crate::machine::Machine;
 use cps2::Cps2Bus;
 
-use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
+use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{wr32, A5};
 use crate::Native;
+use crate::player::tables::{player_data, players, pc32, byte, word, long, Aligned, Read};
 
 /// Program ROM tables: one pointer per character (12), each to its own table.
 pub(crate) mod tables {
@@ -23,8 +24,6 @@ pub(crate) mod tables {
     pub const HP_BY_LEVEL: u32 = 0x325e;
     /// Eight sets of attributes (8 bytes), one of which is drawn at random.
     pub const RANDOM_STATS: u32 = 0x32d8;
-    /// Equipment per level (12 longs of 0x30 bytes per level).
-    pub const GEAR_BY_LEVEL: u32 = 0x3402;
     /// List (terminated by 0) of unlocked item flags, 8 bytes per level.
     pub const UNLOCKED_BY_LEVEL: u32 = 0x345e;
     /// Ten bytes per level (two longs and a word) at `+0x150`.
@@ -52,9 +51,13 @@ pub fn clear_player(g: &mut Ctx, k: u32) {
     clear(g, Player::nth(k).0, PLAYER_STRIDE / 32);
 }
 
+/// First of the eight sub-objects (two per player: weapon, shield), after the player records, and their size.
+pub const OVERLAYS: u32 = A5 + PLAYER_BASE + PLAYER_COUNT * PLAYER_STRIDE;
+pub const OVERLAY_SIZE: u32 = 0x60;
+
 /// Addresses of the eight sub-objects (two per player: weapon, shield).
 pub fn overlay(k: u32, shield: bool) -> u32 {
-    A5 + 0xdde + 0x60 * (2 * k + shield as u32)
+    OVERLAYS + OVERLAY_SIZE * (2 * k + shield as u32)
 }
 
 /// Clears the two sub-objects of player `k`.
@@ -100,7 +103,7 @@ pub const CLEAR_OVERLAYS: Native = Native {
 pub(crate) fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    g.prog32(table + 4 * character)
+    pc32(g.b, table + 4 * character)
 }
 
 /// 0x31f0: level according to the scene.
@@ -108,7 +111,7 @@ fn init_level(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::LEVEL_BY_SCENE);
     let scene = ram::SCENE.get(g.b) as u32;
-    let level = g.data8(t + scene);
+    let level = byte(g.b, t + scene);
     p.set_u8(g, Player::LEVEL, level);
 }
 
@@ -117,7 +120,7 @@ fn init_hp(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::HP_BY_LEVEL);
     let level = p.u8(g, Player::LEVEL) as u32;
-    let hp = g.data16(t + 2 * level);
+    let hp = word(g.b, t + 2 * level);
     p.set_u16(g, Player::HP_MAX, hp);
     p.set_u16(g, Player::HP, hp);
     p.set_u16(g, Player::HP_PREV, hp);
@@ -129,7 +132,7 @@ fn init_random_stats(g: &mut Ctx, p: Player) {
     let t = table_of(g, p, tables::RANDOM_STATS);
     let row = t + 8 * (g.random() & 7) as u32;
     for (i, dst) in [0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x108].into_iter().enumerate() {
-        let v = g.data8(row + i as u32);
+        let v = byte(g.b, row + i as u32);
         p.set_u8(g, dst, v);
     }
 }
@@ -141,19 +144,19 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     cov!();
     // only pointer table read in data space (`lea` then register indexing)
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let t = g.data32(tables::GEAR_BY_LEVEL + 4 * character);
+    let t = players("gear_by_level").long_at(g.b, 4 * character);
     let level = p.u8(g, Player::LEVEL) as u32;
     let row = t + 0x30 * level;
     for i in 0..longs {
-        let v = g.data32(row + 4 * i);
+        let v = long(g.b, row + 4 * i);
         p.set_u32(g, Player::SLOT_TABLE + 4 * i, v);
     }
     if matches!(p.u8(g, Player::CHARACTER), 8 | 9) {
         for i in 0..6 {
-            match p.u8(g, 0x140 + i) {
-                0x52 => p.set_u8(g, 0x18c, 0x14),
-                0x53 => p.set_u8(g, 0x18b, 0x14),
-                0x54 => p.set_u8(g, 0x18d, 0x14),
+            match p.u8(g, Player::INVENTORY + i) {
+                0x52 => p.set_u8(g, Player::GLOW_SHIELD, 0x14),
+                0x53 => p.set_u8(g, Player::GLOW_WEAPON, 0x14),
+                0x54 => p.set_u8(g, Player::GLOW_RING, 0x14),
                 _ => {}
             }
         }
@@ -164,16 +167,14 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
 /// the player's level. The per-class table (0xcf1b0) has a ten-byte row per level (starting from the
 /// class base level, bytes 0xcf17c): a first negative byte disables it, then the nine minima.
 pub fn raise_spells(g: &mut Ctx, p: Player) {
-    const BASE_LEVEL: u32 = 0xcf17c;
-    const MINIMA: u32 = 0xcf1b0;
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
-    let level = p.u8(g, Player::LEVEL).wrapping_sub(g.prog8(BASE_LEVEL + class)) as u32;
-    let row = g.prog32(MINIMA + 4 * class) + 10 * level;
-    if g.data8(row) as i8 >= 0 {
+    let level = p.u8(g, Player::LEVEL).wrapping_sub(player_data().init_base_level.at8(g.b, class)) as u32;
+    let row = player_data().init_minima.long_at(g.b, 4 * class) + 10 * level;
+    if byte(g.b, row) as i8 >= 0 {
         for i in 0..9 {
-            let minimum = g.data8(row + 1 + i) as i8;
-            if minimum > p.u8(g, 0x151 + i) as i8 {
-                p.set_u8(g, 0x151 + i, minimum as u8);
+            let minimum = byte(g.b, row + 1 + i) as i8;
+            if minimum > p.u8(g, Player::SPELL_RESERVE + 1 + i) as i8 {
+                p.set_u8(g, Player::SPELL_RESERVE + 1 + i, minimum as u8);
             }
         }
     }
@@ -186,7 +187,7 @@ fn init_unlocked(g: &mut Ctx, p: Player) {
     let level = p.u8(g, Player::LEVEL) as u32;
     let mut at = t + 8 * level;
     loop {
-        let flag = g.data8(at) as u32;
+        let flag = byte(g.b, at) as u32;
         if flag == 0 {
             break;
         }
@@ -201,11 +202,11 @@ fn init_spells(g: &mut Ctx, p: Player) {
     let t = table_of(g, p, tables::SPELLS_BY_LEVEL);
     let level = p.u8(g, Player::LEVEL) as u32;
     let row = t + 16 * level;
-    let (a, b) = (g.data32(row), g.data32(row + 4));
-    let c = g.data16(row + 8);
-    p.set_u32(g, 0x150, a);
-    p.set_u32(g, 0x154, b);
-    p.set_u16(g, 0x158, c);
+    let (a, b) = (long(g.b, row), long(g.b, row + 4));
+    let c = word(g.b, row + 8);
+    p.set_u32(g, Player::SPELL_RESERVE, a);
+    p.set_u32(g, Player::SPELL_RESERVE_B, b);
+    p.set_u16(g, Player::SPELL_RESERVE_C, c);
 }
 
 /// 0x34e4: starting weapons (`WEAPON_A`, `WEAPON_B`) and two unlocked item flags.
@@ -214,7 +215,7 @@ fn init_weapons(g: &mut Ctx, p: Player) {
     let t = table_of(g, p, tables::WEAPONS_BY_LEVEL);
     let level = p.u8(g, Player::LEVEL) as u32;
     let row = t + 4 * level;
-    let (w1, w2, f1, f2) = (g.data8(row), g.data8(row + 1), g.data8(row + 2) as u32, g.data8(row + 3) as u32);
+    let (w1, w2, f1, f2) = (byte(g.b, row), byte(g.b, row + 1), byte(g.b, row + 2) as u32, byte(g.b, row + 3) as u32);
     p.set_u8(g, Player::WEAPON_A, w1);
     p.set_u8(g, Player::WEAPON_B, w2);
     crate::mem::wr8(g.b, UNLOCKED_FLAGS + f1, 1);
@@ -229,9 +230,9 @@ pub fn init_weapon_stats(g: &mut Ctx, p: Player) {
     for (weapon, dst) in [(Player::WEAPON_A, 0x109), (Player::WEAPON_B, 0x10a)] {
         let w = p.u8(g, weapon) as u32;
         if w <= 0x27 {
-            let (power, cap) = (g.data8(t + 2 * w), g.data8(t + 2 * w + 1));
+            let (power, cap) = (byte(g.b, t + 2 * w), byte(g.b, t + 2 * w + 1));
             p.set_u8(g, dst, power);
-            p.set_u8(g, 0x16e, cap);
+            p.set_u8(g, Player::DAMAGE_CAP, cap);
         }
     }
 }
@@ -247,8 +248,8 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     p.set_u8(g, Player::PALETTE, k);
     p.set_u8(g, Player::SLOW_8A, 0);
     p.set_u8(g, Player::POWER_10F, 0);
-    p.set_u8(g, 0x18a, 0);
-    p.set_u8(g, 0x193, 0);
+    p.set_u8(g, Player::HOLY, 0);
+    p.set_u8(g, Player::MAGIC_USED, 0);
     p.set_u32(g, Player::SCORE_BCD, 0);
     init_level(g, p);
     init_hp(g, p);
@@ -258,17 +259,17 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     init_unlocked(g, p);
     init_weapons(g, p);
     init_weapon_stats(g, p);
-    p.set_u32(g, 0x160, !0);
-    p.set_u32(g, 0x164, !0);
-    p.set_u32(g, 0x114, 0x50);
-    p.set_u32(g, 0x118, !0);
-    p.set_u32(g, 0x11c, !0);
+    p.set_u32(g, Player::WORN, !0);
+    p.set_u32(g, Player::WORN_4, !0);
+    p.set_u32(g, Player::GOLD, 0x50);
+    p.set_u32(g, Player::NAME_HEAD, !0);
+    p.set_u32(g, Player::NAME_TAIL, !0);
     let class = p.class(g);
     p.set_u8(g, Player::BOX_SET, class);
-    p.set_u8(g, 0x161, class);
+    p.set_u8(g, Player::WORN_CLASS, class);
     let spare = p.u8(g, Player::WEAPON_B).wrapping_sub(0x28);
     if (spare as i8) >= 0 {
-        p.set_u8(g, 0x164, spare);
+        p.set_u8(g, Player::WORN_4, spare);
     }
     let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_add(1);
     ram::PLAYERS_ALIVE.set(g.b, alive);
@@ -340,7 +341,7 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
     p.set_u8(g, Player::PALETTE, k);
     p.set_u8(g, Player::SLOW_8A, 0);
     p.set_u8(g, Player::POWER_10F, 0);
-    p.set_u8(g, 0x18a, 0);
+    p.set_u8(g, Player::HOLY, 0);
     if how == Join::Refill {
         init_hp(g, p);
         init_gear(g, p, 8);
@@ -359,18 +360,18 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
         init_weapons(g, p);
         init_weapon_stats(g, p);
         if how == Join::New {
-            p.set_u32(g, 0x114, 0x200);
+            p.set_u32(g, Player::GOLD, 0x200);
         }
-        p.set_u32(g, 0x160, !0);
-        p.set_u32(g, 0x164, !0);
-        p.set_u32(g, 0x118, !0);
-        p.set_u32(g, 0x11c, !0);
+        p.set_u32(g, Player::WORN, !0);
+        p.set_u32(g, Player::WORN_4, !0);
+        p.set_u32(g, Player::NAME_HEAD, !0);
+        p.set_u32(g, Player::NAME_TAIL, !0);
         let class = p.class(g);
         p.set_u8(g, Player::BOX_SET, class);
-        p.set_u8(g, 0x161, class);
+        p.set_u8(g, Player::WORN_CLASS, class);
         let spare = p.u8(g, Player::WEAPON_B).wrapping_sub(0x28);
         if (spare as i8) >= 0 {
-            p.set_u8(g, 0x164, spare);
+            p.set_u8(g, Player::WORN_4, spare);
         }
     }
     let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_add(1);
@@ -379,15 +380,12 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
     join_shockwave(g, p, strength);
 }
 
-/// Shock damage by number of players (words, read in data space by `lea` then register; masked to
-/// 63); RAM word that holds them.
-const SHOCK_DAMAGE: u32 = 0x10108;
 const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
 /// 0x10022: shock of the arrival of player `p`: each boss then each living, visible, unprotected enemy
 /// (`+0x40`, bit 31 of `+0x94`) is thrown (state `0x04000000`, reaction 12, direction opposite to its own) and loses
 /// HP (bosses with 32 HP or less are spared, and keep at least 1 HP).
 fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
-    let damage = g.data16(SHOCK_DAMAGE + 2 * strength as u32) & 63;
+    let damage = players("shock_damage").word_at(g.b, 2 * strength as u32) & 63;
     crate::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
     for pool in [&crate::objects::pools::BOSS, &crate::objects::pools::ENEMY] {
         for o in pool.iter() {

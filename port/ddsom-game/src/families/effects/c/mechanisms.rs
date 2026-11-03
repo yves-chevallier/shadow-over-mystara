@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -213,8 +214,8 @@ pub(super) fn pillar<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::STATE, 2);
                 for k in 0..4 {
                     let p = crate::ram::PLAYERS.nth(k);
-                    if p.is_active(x.b) && p.u16(x.b, PlayerView::LIFE) != 0 {
-                        p.set_u8(x.b, PlayerView::STEP, 0xe);
+                    if p.is_active(x.b) && p.u16(x.b, Player::HP) != 0 {
+                        p.set_u8(x.b, Player::ACTION, 0xe);
                     }
                 }
             }

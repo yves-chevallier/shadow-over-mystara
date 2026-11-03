@@ -46,4 +46,9 @@ fn rom_and_assets_give_the_same_data() {
     assert!(tables(&from_roms.misc) == tables(&from_assets.misc), "misc tables differ");
     assert!(tables(&from_roms.screens) == tables(&from_assets.screens), "screen tables differ");
     assert!(from_roms.texts == from_assets.texts, "texts differ");
+    for (a, b) in from_roms.player_tables.tables().into_iter().zip(from_assets.player_tables.tables()) {
+        assert!(a == b, "player table {} differs", a.name);
+    }
+    assert!(tables(&from_roms.players) == tables(&from_assets.players), "player tables (players.json) differ");
+    assert!(tables(&from_roms.combat) == tables(&from_assets.combat), "combat tables differ");
 }

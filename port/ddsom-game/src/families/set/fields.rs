@@ -46,22 +46,6 @@ record! {
 }
 
 view! {
-    /// The fields of a player record that `crate::player::Player` does not name yet, as the SET types use them.
-    PlayerFields;
-}
-
-record! {
-    impl PlayerFields {
-        /// Order of the player at the end of the bonus level (h).
-        order, set_order, ORDER: u8 @ 0x7d;
-        /// A special move is in progress (h): with `Player::SLOW` and `Player::SLOW_8A`, the player is busy.
-        /// Objects carried (h), one byte each from `+0x140`.
-        items, set_items, ITEMS: u8 @ 0x140;
-        special_active, set_special_active, SPECIAL_ACTIVE: u8 @ 0x15c;
-    }
-}
-
-view! {
     /// The weapon object that a player holds (`Player::LINK`), as the end of the bonus level releases it.
     WeaponObj;
 }

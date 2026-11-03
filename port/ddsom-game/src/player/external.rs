@@ -27,12 +27,12 @@ pub mod sound {
 /// Effects created by other subsystems (`families`, `effects_aids`).
 pub mod effect {
     /// Life bar of a struck monster (D0 = player and type, D1 = max HP, D2 = HP, D3 = class).
-    pub const HEALTH_BAR: u32 = 0x19dce;
+    pub const HEALTH_BAR: crate::data::RomAddr = crate::data::RomAddr(0x19dce);
     /// SET object of the wand.
-    pub const WAND: u32 = 0xcc352;
+    pub const WAND: crate::data::RomAddr = crate::data::RomAddr(0xcc352);
     /// Player effects of the elf's and magic-user's spells: sparks, bolt, earthquake.
-    pub const SPARKS: u32 = 0x4dc9a;
-    pub const BOLT: u32 = 0x4b7a0;
-    pub const QUAKE: u32 = 0x4b340;
-    pub const QUAKE_B: u32 = 0x4f132;
+    pub const SPARKS: crate::data::RomAddr = crate::data::RomAddr(0x4dc9a);
+    pub const BOLT: crate::data::RomAddr = crate::data::RomAddr(0x4b7a0);
+    pub const QUAKE: crate::data::RomAddr = crate::data::RomAddr(0x4b340);
+    pub const QUAKE_B: crate::data::RomAddr = crate::data::RomAddr(0x4f132);
 }

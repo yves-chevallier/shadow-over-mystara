@@ -110,7 +110,7 @@ impl Program {
     }
 
     /// Files (paths relative to `dir`) used to rebuild the program.
-    pub const FILES: [&'static str; 24] = [
+    pub const FILES: [&'static str; 25] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -135,6 +135,7 @@ impl Program {
         "data/reste.json",
         "data/effects.json",
         "data/objects.json",
+        "data/player_tables.json",
     ];
 
     /// Like `load`, but only the files that `want` accepts are written (the sprite frames are read
@@ -195,6 +196,9 @@ impl Program {
         }
         if need(&mut p, "data/objects.json") {
             p.put_named(&ddsom_data::ObjectTables::load(&dir.join("data/objects.json"))?.tables());
+        }
+        if need(&mut p, "data/player_tables.json") {
+            p.put_named(&ddsom_data::PlayerTables::load(&dir.join("data/player_tables.json"))?.tables());
         }
         for rel in &Self::FILES[10..21] {
             if need(&mut p, rel) {

@@ -284,6 +284,24 @@ toutes ces données par adresse dans `screens/tables.rs` (`byte`, `word`, `long`
 programme ; `Rom` désigne une table ou un texte par son adresse d'origine). Une adresse de la RAM passe par le bus
 (certaines routines lisent l'une ou l'autre) ; hors des tables, le résidu (`Missing`, table `"screens"`).
 
+## Tables des joueurs : `data/player_tables.json`
+
+Tables du noyau des joueurs, des personnages, des cinématiques, des réactions aux coups, des contacts et des tirs et
+effets des joueurs (`player/`, `combat/`, `families/player/`, lot L10 de [fin.md](fin.md)), même forme que
+`data/effects.json` : 311 tables nommées (`hurt_actions`, `hurt_steps_3a1fc`, `cinematic_24138`, `reaction_rows`,
+`overlay_frames`, `storm_offsets_a`...). Déclarations dans `ddsom-data/src/player_tables.rs`, extraction
+`extract/src/player_tables.rs`, lecture par `player/tables.rs` : par nom (`player_data()`), ou par adresse (`pc8/16/32`
+en espace programme, `byte/word/long` en espace données) quand le code passe l'adresse d'une table (tables de pas des
+réactions et des cinématiques, lignes désignées par une autre table). Une adresse de la RAM de travail passe au bus.
+Les mots et longs sont lus à une adresse arrondie au pair, comme le bus (`word_at`, `long_at`).
+
+* `data/players.json` et `data/combat.json` (tables par personnage, vitesses de saut et de marche, dégâts des sorts,
+  réactions aux attaques des ennemis) sont désormais chargés dans `GameData` (`players`, `combat`) et lus par leur
+  nom (`players("hp_by_level")`, `combat("shot_guard")`) ou par adresse.
+* Les tables de pas des cinématiques et des réactions sont nommées par leur adresse (la clé que l'aiguillage
+  se passe) ; `cinematic_24ad8` s'étend sur deux octets du code que lit un saut hors table (glitch d'origine).
+* `lightning_code_word` et `combo_gates` sont des octets du code relus comme données par l'original.
+
 ## Cartes des décors : `levels.json`
 
 Mêmes tables que les caméras (`scroll.rs`, [video.md](video.md) §B1) et [niveaux.md](niveaux.md).

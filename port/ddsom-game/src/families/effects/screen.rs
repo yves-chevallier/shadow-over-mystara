@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -251,7 +252,7 @@ pub(super) fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             }
             let player = crate::ram::PLAYERS.nth(number);
             o.set_u16(ctx.b, interface::PLAYER, player.0 as u16);
-            let character = player.u8(ctx.b, PlayerView::CLASS) & 0x7e;
+            let character = player.u8(ctx.b, Player::CHARACTER) & 0x7e;
             o.set_u8(ctx.b, interface::CHARACTER, character);
             ctx.anim_start(ANIMATIONS_INTERFACE.0, 0x8e + number as u16);
         }
@@ -268,7 +269,7 @@ pub(super) fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 return;
             }
             place_on_camera(ctx, o);
-            let character = player.u8(ctx.b, PlayerView::CLASS) & 0x7e;
+            let character = player.u8(ctx.b, Player::CHARACTER) & 0x7e;
             let mut change = false;
             let known = o.u8(ctx.b, interface::CHARACTER);
             if !(character == known) {

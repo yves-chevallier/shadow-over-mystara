@@ -165,42 +165,6 @@ view! {
 }
 
 view! {
-    /// Fields of the player records read or written by the objects (to merge with the player record of L10).
-    PlayerView {
-        /// Objects in reserve (h).
-        reserve, set_reserve, RESERVE: u8 @ 0x31;
-        /// Hit state: positive when it strikes (h).
-        hit, set_hit, HIT: u8 @ 0x58;
-        /// Maximum hit points.
-        life_max, set_life_max, LIFE_MAX: u16 @ 0x60;
-        /// Hit points.
-        life, set_life, LIFE: u16 @ 0x62;
-        /// Non-zero: the player is dying (h).
-        dying, set_dying, DYING: u8 @ 0x7e;
-        /// Current attack (h).
-        attack_a, set_attack_a, ATTACK_A: u8 @ 0x10d;
-        /// Second current attack (h).
-        attack_b, set_attack_b, ATTACK_B: u8 @ 0x10e;
-        /// Non-zero: protected from the attacks (h).
-        shielded, set_shielded, SHIELDED: u8 @ 0x10f;
-        /// Piece worn in slot 4.
-        slot_4, set_slot_4, SLOT_4: u8 @ 0x164;
-        /// Duration of the potion effect (h).
-        potion_timer, set_potion_timer, POTION_TIMER: u16 @ 0x180;
-        /// Non-zero: busy, cannot pick up (h).
-        busy, set_busy, BUSY: u8 @ 0x182;
-        /// Glow timer of the special weapon (h).
-        glow_weapon, set_glow_weapon, GLOW_WEAPON: u8 @ 0x18b;
-        /// Glow timer of the shield (h).
-        glow_shield, set_glow_shield, GLOW_SHIELD: u8 @ 0x18c;
-        /// Glow timer of the ring (h).
-        glow_ring, set_glow_ring, GLOW_RING: u8 @ 0x18d;
-        /// Glow timer of the other pieces (h).
-        glow_other, set_glow_other, GLOW_OTHER: u8 @ 0x191;
-    }
-}
-
-view! {
     /// Fields of the SET objects created by the objects (h).
     SetView {
         /// Counter of the master scene element (h).

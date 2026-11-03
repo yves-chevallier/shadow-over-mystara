@@ -176,6 +176,15 @@ fn objects_lossless() {
 }
 
 #[test]
+fn player_tables_lossless() {
+    if !has("data/player_tables.json") {
+        return;
+    }
+    let tables = ddsom_data::PlayerTables::load(&assets().join("data/player_tables.json")).unwrap();
+    check("player_tables", |p| p.put_named(&tables.tables()));
+}
+
+#[test]
 fn speeds_lossless() {
     if !has("data/speeds.json") {
         return;

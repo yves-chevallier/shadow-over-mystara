@@ -3,7 +3,6 @@ use util::*;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::player::Player;
-use crate::families::set::fields::PlayerFields;
 use crate::families::set::fields::WeaponObj;
 
 const PROGRESS: u32 = 0x556;
@@ -46,7 +45,7 @@ fn wait_players<R: Bench>(x: &mut Cx<'_, R>) {
         }
         p.set_u32(x.b, P_STATE, RESET_STATE);
         p.set_u8(x.b, Player::SLOW, 0);
-        p.set_u8(x.b, PlayerFields::SPECIAL_ACTIVE, 0);
+        p.set_u8(x.b, Player::SPECIAL_ACTIVE, 0);
         if p.u8(x.b, P_WEAPON) != 0 {
             p.set_u8(x.b, P_WEAPON, 0);
             let weapon = Obj(p.u32(x.b, P_WEAPON_OBJ));

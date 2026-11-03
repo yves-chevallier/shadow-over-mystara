@@ -6,7 +6,7 @@ use super::{ram, Ctx, Player};
 use crate::mem::{rd16, wr16, wr8};
 use crate::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
 use crate::objects::Obj;
-use crate::machine::Machine;
+use crate::player::tables::{word, long};
 
 /// Speed tables (ROM): one pointer per character to 16 pairs (vx, vy) 8.8, one per
 /// combination of directions (bits 0..3 of `KEYS_HELD`).
@@ -30,9 +30,9 @@ pub mod speeds {
 pub fn set_speed(g: &mut Ctx, p: Player, tables: u32) {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let table = g.data32(tables + 4 * character);
+    let table = long(g.b, tables + 4 * character);
     let dir = (p.u8(g, Player::KEYS_HELD) & 0xf) as u32;
-    let (vx, vy) = (g.data16(table + 4 * dir), g.data16(table + 4 * dir + 2));
+    let (vx, vy) = (word(g.b, table + 4 * dir), word(g.b, table + 4 * dir + 2));
     p.set_u16(g, Obj::VX, vx);
     p.set_u16(g, Obj::VY, vy);
     p.set_u16(g, Obj::AX, 0);

@@ -1,7 +1,9 @@
 //! Player shots (PSHL) against enemies: contact behaviours (ROM table 0x267c4).
 
+use crate::objects::Obj;
 use super::*;
 use crate::machine::Machine;
+use crate::player::tables::{player_data, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Player shots against enemies
@@ -115,7 +117,7 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
 pub(super) fn kill_small_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("kill_small_enemy");
     let t = shot.u8(w.b, f::KIND) as u32;
-    if w.prog8(0x26856 + t) == 0 || e.u8(w.b, f::CLASS) != 2 {
+    if player_data().small_kill_shots.at8(w.b, t) == 0 || e.u8(w.b, f::CLASS) != 2 {
         return;
     }
     let k = e.u8(w.b, f::KIND);

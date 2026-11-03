@@ -8,6 +8,7 @@
 //! - 1: trophy of the end board, which waits for the signal of its controller, animates after a randomly drawn delay
 //!   then counts itself down with the controller; 9: sign placed on the alternate camera.
 
+use crate::player::Player;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
@@ -436,8 +437,8 @@ fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
     let player = Obj(0xff85de + 0x200 * mode);
     let present = player.is_active(x.b)
         && (player.u8(x.b, f::STATE) as i8) < 4
-        && player.u32(x.b, PlayerView::GOLD_END) == 0xffff_ffff
-        && player.u32(x.b, PlayerView::NAME_TAIL) == 0xffff_ffff;
+        && player.u32(x.b, Player::NAME_HEAD) == 0xffff_ffff
+        && player.u32(x.b, Player::NAME_TAIL) == 0xffff_ffff;
     if !present {
         return finish_from_active(x);
     }

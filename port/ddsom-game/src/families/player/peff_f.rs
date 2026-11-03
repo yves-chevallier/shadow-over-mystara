@@ -1,12 +1,17 @@
 //! Player effects (PEFF), sixth series: types 15 (weapon trail), 16 (item bubble), 18 (rain of stones) and 19
 //! (lightning). See `docs/families/joueur.md`.
 
+use super::vars;
+use crate::families::player::records::Shot;
+use crate::player::Player;
+use crate::objects::Obj;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::families::effects_creators::leftovers::OnBench;
 use crate::objects::pools;
 use crate::objects::Current;
+use crate::player::tables::{player_data, byte, word, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -17,33 +22,38 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod trail {
     use super::*;
 
-    const ANIMS: u32 = 0x1b6eda;
-    const POSES: u32 = 0x4c6de;
-    const COLORS: u32 = 0x4c66e;
+    /// Style of the trail (h).
+    const STYLE: u32 = 0x5c;
+    /// Delay before the next color.
+    const COLOR_DELAY: u32 = 0x5d;
+    /// Index of the color (0..5).
+    const COLOR: u32 = 0x5e;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b6eda);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c5cc) {
             0 => {
-                x.add8(0x4, 2);
-                if x.u8(0x2f) == 2 {
-                    x.set8(0x5e, 0);
-                    x.set8(0x5d, 1);
-                    x.set8(0x2a, 1);
-                    x.set8(0x2b, 0x14);
+                x.add8(Obj::STATE, 2);
+                if x.u8(Shot::SETTING) == 2 {
+                    x.set8(COLOR, 0);
+                    x.set8(COLOR_DELAY, 1);
+                    x.set8(Shot::OWN_PALETTE, 1);
+                    x.set8(Shot::PALETTE, 0x14);
                 }
                 let d3 = place(x);
-                let rank = (x.u8(0x2f) as u32) << 3;
+                let rank = (x.u8(Shot::SETTING) as u32) << 3;
                 let anim = (d3 as u32).wrapping_add(rank) & 0xffff;
-                x.anim(ANIMS, anim);
+                x.anim(ANIMS.0, anim);
                 cycle(x);
                 x.reinsert();
             }
             2 => {
-                if x.u8(0x5c) != 0 {
+                if x.u8(STYLE) != 0 {
                     place(x);
                 }
                 if x.anim_step() {
-                    x.add8(0x4, 2);
+                    x.add8(Obj::STATE, 2);
                 }
                 cycle(x);
             }
@@ -57,14 +67,14 @@ mod trail {
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
-        let player_row = (owner.u8(x.b, 0x3) as u32) << 2;
-        let records = x.data32(POSES + player_row);
-        let row = (x.u8(0x3) as u32) << 3;
-        let dx = x.data16(records + row);
-        let dz = x.data16(records + row + 2);
-        let d3 = x.data16(records + row + 4);
-        let d4 = x.data8(records + row + 6);
-        let d5 = x.data8(records + row + 7);
+        let player_row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2;
+        let records = player_data().trail_poses.long_at(x.b, player_row);
+        let row = (x.u8(Obj::VARIANT) as u32) << 3;
+        let dx = word(x.b, records + row);
+        let dz = word(x.b, records + row + 2);
+        let d3 = word(x.b, records + row + 4);
+        let d4 = byte(x.b, records + row + 6);
+        let d5 = byte(x.b, records + row + 7);
         *x.c.d2() = dz as u32;
         *x.c.d3() = d3 as u32;
         *x.c.d4() = d4 as u32;
@@ -74,30 +84,30 @@ mod trail {
             x.set8(f::FLIP, f);
         }
         let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
-        x.add16(0x8, dx);
-        x.add16(0xc, dz);
-        x.add16(0x10, 0xffff);
-        x.set8(0x5c, d4);
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Z, dz);
+        x.add16(Obj::Y, 0xffff);
+        x.set8(STYLE, d4);
         d3
     }
 
     /// `0x4c63c`: the rank 2 trails change colour every 4 frames.
     fn cycle<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x2f) != 2 {
+        if x.u8(Shot::SETTING) != 2 {
             return;
         }
-        x.add8(0x5d, 0xff);
-        if x.u8(0x5d) != 0 {
+        x.add8(COLOR_DELAY, 0xff);
+        if x.u8(COLOR_DELAY) != 0 {
             return;
         }
-        x.set8(0x5d, 4);
-        x.add8(0x5e, 1);
-        if x.u8(0x5e) > 5 {
-            x.set8(0x5e, 0);
+        x.set8(COLOR_DELAY, 4);
+        x.add8(COLOR, 1);
+        if x.u8(COLOR) > 5 {
+            x.set8(COLOR, 0);
         }
-        let k = x.u8(0x5e) as u32;
-        let c = x.rom8(COLORS + k);
-        x.set8(0x2b, c);
+        let k = x.u8(COLOR) as u32;
+        let c = player_data().trail_colors.at8(x.b, k);
+        x.set8(Shot::PALETTE, c);
     }
 }
 
@@ -105,37 +115,39 @@ mod trail {
 mod bubble {
     use super::*;
 
-    const ANIMS: u32 = 0x1b758c;
-    const OFFSETS: u32 = 0x4c9e0;
+    /// Lifetime (word).
+    const TIMER: u32 = 0x58;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1b758c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c956) {
             0 => {
-                x.add8(0x4, 2);
-                x.set16(0x58, 0x12c);
+                x.add8(Obj::STATE, 2);
+                x.set16(TIMER, 0x12c);
                 let owner = x.linked(f::OWNER);
-                let kind = owner.u8(x.b, 0x2) as u32;
-                x.anim(ANIMS, kind);
+                let kind = owner.u8(x.b, Player::INDEX) as u32;
+                x.anim(ANIMS.0, kind);
             }
             2 => {
-                x.add16(0x58, 0xffff);
-                if x.u16(0x58) == 0 {
-                    x.add8(0x4, 2);
+                x.add16(TIMER, 0xffff);
+                if x.u16(TIMER) == 0 {
+                    x.add8(Obj::STATE, 2);
                 }
                 let owner = x.linked(f::OWNER);
                 x.copy_pos(owner);
-                x.set16(0x12, 0);
-                owner.set_u16(x.b, 0x12, 0x8000);
-                let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                let mut dx = x.rom16(OFFSETS + row);
-                let mut dz = x.rom16(OFFSETS + row + 2);
-                if x.a5_u8(0x59) != 0 {
+                x.set16(Shot::Y_FRACTION, 0);
+                owner.set_u16(x.b, Player::Y_FRACTION, 0x8000);
+                let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
+                let mut dx = player_data().bubble_offsets.word_at(x.b, row);
+                let mut dz = player_data().bubble_offsets.word_at(x.b, row + 2);
+                if vars::SLOW_MODE.get(x.b) != 0 {
                     dz = dz.wrapping_sub(0x30);
                 }
                 dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 *x.c.d2() = dz as u32;
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
                 x.anim_step();
                 x.reinsert();
             }
@@ -149,49 +161,52 @@ mod bubble {
 mod storm {
     use super::*;
 
-    const ANIMS: u32 = 0x1ba964;
+    /// Countdown (h).
+    const TIMER: u32 = 0x58;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1ba964);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ccd8) {
             0 => {
-                x.add8(0x4, 2);
-                x.set8(0x58, 0x60);
-                let (cx, cy) = if x.a5_u8(a5::USE_CAM2) != 0 {
-                    (x.a5_u16(a5::CAM2_X), x.a5_u16(a5::CAM2_Y))
+                x.add8(Obj::STATE, 2);
+                x.set8(TIMER, 0x60);
+                let (cx, cy) = if vars::USE_CAM2.get(x.b) != 0 {
+                    (vars::CAM2_X.get(x.b), vars::CAM2_Y.get(x.b))
                 } else {
-                    (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y))
+                    (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b))
                 };
-                x.set16(0x8, cx.wrapping_add(0xc0));
-                x.set16(0xc, cy.wrapping_add(0x100));
-                x.anim(ANIMS, 0);
+                x.set16(Obj::X, cx.wrapping_add(0xc0));
+                x.set16(Obj::Z, cy.wrapping_add(0x100));
+                x.anim(ANIMS.0, 0);
                 let me = x.o;
                 crate::families::small::pshl_stones(&mut OnBench(&mut x.c), x.b, me);
                 x.reinsert();
             }
             2 => {
-                match x.u8(0x5) {
+                match x.u8(Shot::SUB_STATE) {
                     0 => {
-                        x.add8(0x58, 0xff);
-                        if x.u8(0x58) == 0 {
-                            x.add8(0x5, 2);
+                        x.add8(TIMER, 0xff);
+                        if x.u8(TIMER) == 0 {
+                            x.add8(Shot::SUB_STATE, 2);
                         }
-                        let t = x.u8(0x58) & 1;
+                        let t = x.u8(TIMER) & 1;
                         if t != 0 {
-                            x.add16(0xc, 0xffff);
+                            x.add16(Obj::Z, 0xffff);
                         }
                     }
                     2 => {
                         let owner = x.linked(f::OWNER);
-                        if owner.u8(x.b, 0x7) == 6 {
-                            x.add8(0x5, 2);
-                            x.set8(0x58, 0x10);
+                        if owner.u8(x.b, Player::STEP) == 6 {
+                            x.add8(Shot::SUB_STATE, 2);
+                            x.set8(TIMER, 0x10);
                         }
                     }
                     _ => {
-                        x.add16(0xc, 4);
-                        x.add8(0x58, 0xff);
-                        if x.u8(0x58) == 0 {
-                            x.add8(0x4, 2);
+                        x.add16(Obj::Z, 4);
+                        x.add8(TIMER, 0xff);
+                        if x.u8(TIMER) == 0 {
+                            x.add8(Obj::STATE, 2);
                         }
                     }
                 }
@@ -207,19 +222,27 @@ mod storm {
 mod flash {
     use super::*;
 
-    const ANIMS: u32 = 0x1baa5c;
-    const CORNERS: u32 = 0x4ceb2;
-    const FLIPS: u32 = 0x4ceae;
-    const DELAYS: u32 = 0x4cec2;
+    /// Delay before the flash (word).
+    const DELAY: u32 = 0x58;
+    /// Flashes left.
+    const COUNT: u32 = 0x5a;
+    /// Countdown of the blinking.
+    const BLINK: u32 = 0x5b;
+    /// Set when the flash started.
+    const STARTED: u32 = 0x5c;
+    /// Step of the player's move when the effect was created.
+    const MOVE_STEP: u32 = 0x5d;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1baa5c);
     const SFX_BODY: crate::sound::Sound = crate::sound::CMD_182;
     const SFX_CORNER: crate::sound::Sound = crate::sound::CMD_183_283;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        let child = x.u8(0x3) != 0;
+        let child = x.u8(Obj::VARIANT) != 0;
         match x.state(0x4ce1a) {
             0 if !child => {
-                x.add8(0x4, 2);
-                x.anim(ANIMS, 0);
+                x.add8(Obj::STATE, 2);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
                 crate::sound::play(x.b, SFX_BODY, x.o);
             }
@@ -231,55 +254,55 @@ mod flash {
     }
 
     fn init_corner<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x4, 2);
-        x.set_bit(0x1, 1, true);
-        let (cx, cy) = if x.a5_u8(a5::USE_CAM2) != 0 {
-            (x.a5_u16(a5::CAM2_X), x.a5_u16(a5::CAM2_Y))
+        x.add8(Obj::STATE, 2);
+        x.set_bit(Obj::FLAGS, 1, true);
+        let (cx, cy) = if vars::USE_CAM2.get(x.b) != 0 {
+            (vars::CAM2_X.get(x.b), vars::CAM2_Y.get(x.b))
         } else {
-            (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y))
+            (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b))
         };
-        x.set16(0x8, cx);
-        x.set16(0xc, cy);
-        let k = x.u8(0x2f) as u32;
+        x.set16(Obj::X, cx);
+        x.set16(Obj::Z, cy);
+        let k = x.u8(Shot::SETTING) as u32;
         *x.c.d3() = k;
         let row = k << 2;
-        let dx = x.rom16(CORNERS + row);
-        let dz = x.rom16(CORNERS + row + 2);
-        x.add16(0x8, dx);
-        x.add16(0xc, dz);
-        let flip = x.rom8(FLIPS + k);
+        let dx = player_data().flash_corners.word_at(x.b, row);
+        let dz = player_data().flash_corners.word_at(x.b, row + 2);
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Z, dz);
+        let flip = player_data().flash_flips.at8(x.b, k);
         x.set8(f::FLIP, flip);
-        let delay = x.rom16(DELAYS + 2 * k);
-        x.set16(0x58, delay);
+        let delay = player_data().flash_delays.word_at(x.b, 2 * k);
+        x.set16(DELAY, delay);
         let anim = if k > 1 { 2 } else { 1 };
-        x.anim(ANIMS, anim);
+        x.anim(ANIMS.0, anim);
     }
 
     fn body<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
-        if x.u8(0x5d) != owner.u8(x.b, 0x7) {
-            x.add8(0x4, 2);
+        if x.u8(MOVE_STEP) != owner.u8(x.b, Player::STEP) {
+            x.add8(Obj::STATE, 2);
         }
-        if x.u8(0x33) != 0 {
-            x.set8(0x33, 0);
-            x.set8(0x5c, 1);
-            x.add16(0x10, 2);
+        if x.u8(Shot::ANIM_EVENT) != 0 {
+            x.set8(Shot::ANIM_EVENT, 0);
+            x.set8(STARTED, 1);
+            x.add16(Obj::Y, 2);
             spawn_corners(x);
         }
-        if x.u8(0x5c) != 0 {
-            x.add16(0x8, 2);
-            x.add16(0xc, 1);
-            if x.u16(0x58) & 1 == 0 {
-                x.add16(0x8, 0xfffc);
-                x.add16(0xc, 0xfffe);
+        if x.u8(STARTED) != 0 {
+            x.add16(Obj::X, 2);
+            x.add16(Obj::Z, 1);
+            if x.u16(DELAY) & 1 == 0 {
+                x.add16(Obj::X, 0xfffc);
+                x.add16(Obj::Z, 0xfffe);
             }
         }
-        x.add16(0x58, 1);
-        let t = x.u16(0x58);
+        x.add16(DELAY, 1);
+        let t = x.u16(DELAY);
         if t > 0x140 {
-            x.set_bit(0x1, 1, true);
+            x.set_bit(Obj::FLAGS, 1, true);
             if t & 1 == 0 {
-                x.set_bit(0x1, 1, false);
+                x.set_bit(Obj::FLAGS, 1, false);
             }
         }
         x.anim_step();
@@ -289,42 +312,42 @@ mod flash {
     fn spawn_corners<R: Bench>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { break };
-            o.set_u8(x.b, 0, 1);
-            o.set_u8(x.b, 2, 0x13);
-            o.set_u8(x.b, 3, 1);
-            o.set_u8(x.b, 0x2f, rank);
-            o.set_u8(x.b, 0x5a, 2);
+            o.set_u8(x.b, Obj::ACTIVE, 1);
+            o.set_u8(x.b, Obj::KIND, 0x13);
+            o.set_u8(x.b, Obj::VARIANT, 1);
+            o.set_u8(x.b, Shot::SETTING, rank);
+            o.set_u8(x.b, COUNT, 2);
             o.set_u16(x.b, f::OWNER, x.o.0 as u16);
         }
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
     }
 
     fn corner<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u16(0x58) != 0 {
-            x.add16(0x58, 0xffff);
-            if x.u16(0x58) != 0 {
+        if x.u16(DELAY) != 0 {
+            x.add16(DELAY, 0xffff);
+            if x.u16(DELAY) != 0 {
                 return;
             }
-            x.set_bit(0x1, 1, false);
-            x.set8(0x5b, 2);
-            x.set_a5_u16(0x4ba, 0x100);
+            x.set_bit(Obj::FLAGS, 1, false);
+            x.set8(BLINK, 2);
+            vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
             crate::sound::play(x.b, SFX_CORNER, x.o);
         }
         if x.anim_step() {
-            x.add8(0x5a, 0xff);
-            if x.u8(0x5a) == 0 {
-                x.add8(0x4, 2);
+            x.add8(COUNT, 0xff);
+            if x.u8(COUNT) == 0 {
+                x.add8(Obj::STATE, 2);
                 return;
             }
-            x.set16(0x58, 0x18);
-            x.set_bit(0x1, 1, true);
-            let anim = if x.u8(0x2f) > 1 { 2 } else { 1 };
-            x.anim(ANIMS, anim);
+            x.set16(DELAY, 0x18);
+            x.set_bit(Obj::FLAGS, 1, true);
+            let anim = if x.u8(Shot::SETTING) > 1 { 2 } else { 1 };
+            x.anim(ANIMS.0, anim);
         } else {
-            if x.u8(0x5b) != 0 {
-                x.add8(0x5b, 0xff);
-                if x.u8(0x5b) == 0 {
-                    x.set_a5_u16(0x4ba, 0);
+            if x.u8(BLINK) != 0 {
+                x.add8(BLINK, 0xff);
+                if x.u8(BLINK) == 0 {
+                    vars::SCROLL_Y_PLANE1.set(x.b, 0);
                 }
             }
             x.reinsert();
