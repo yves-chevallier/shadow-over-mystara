@@ -95,6 +95,8 @@ pub struct GameData {
     pub scene_palettes: ScenePalettes,
     /// The palette library (`palette`, and the families that copy palettes).
     pub palettes: Palettes,
+    /// The sheets of the crates, their loot and the wear of the equipment (`families/boxes`, `items`).
+    pub boxes: DataFile,
     /// Miscellaneous tables of the original read by name (aura palettes, overlays...).
     pub rest: DataFile,
     /// Tables of the engine: AI helpers, cameras, video, palettes, sprites, creators (docs/fin.md, L12).
@@ -103,7 +105,7 @@ pub struct GameData {
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 22] = [
+    pub const FILES: [&'static str; 23] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -126,6 +128,7 @@ impl GameData {
         "palettes.png",
         "data/engine.json",
         "data/rest.json",
+        "data/boxes.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -153,6 +156,7 @@ impl GameData {
             palettes: Palettes::load(&dir.join(Self::FILES[19]))?,
             engine: DataFile::load(&dir.join(Self::FILES[20]))?,
             rest: DataFile::load(&dir.join(Self::FILES[21]))?,
+            boxes: DataFile::load(&dir.join(Self::FILES[22]))?,
         })
     }
 }

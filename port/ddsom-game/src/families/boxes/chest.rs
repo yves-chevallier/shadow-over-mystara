@@ -2,7 +2,7 @@ use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::{handlers, Cx};
 use crate::objects::{pools, Obj};
-use crate::families::shell::tables::{held16, held8, tables, Read};
+use crate::families::shell::tables::{held16, tables, Read};
 use crate::families::shell::vars;
 use crate::families::effects_creators;
 use crate::machine::Machine;
@@ -123,17 +123,17 @@ fn count_broken<R: Bench>(x: &mut Cx<'_, R>) {
 /// `0xda082`: copies the kind's sheet (10 bytes) and draws two random loots.
 fn charge_sheet<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT) as u32;
-    let sheet = tables().chest_sheets.at32(x.b, 4 * variant);
+    let sheet = crate::tables::boxes().get("fiches").at32(x.b, 4 * variant);
     let fields = [f::KIND, f::LOCK, f::LOOT_HIGH, f::LOOT_BONUS, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68];
     for (i, off) in fields.into_iter().enumerate() {
-        let v = held8(x.b, sheet + i as u32);
+        let v = crate::tables::boxes().byte(x.b, sheet + i as u32);
         x.set8(off, v);
     }
     let draw = (x.random() & 0xf) as u32;
-    let v = held8(x.b, sheet + 0xa + draw);
+    let v = crate::tables::boxes().byte(x.b, sheet + 0xa + draw);
     x.set8(f::LOOT_LEFT, v);
     let draw = (x.random() & 0xf) as u32;
-    let v = held8(x.b, sheet + 0x1a + draw);
+    let v = crate::tables::boxes().byte(x.b, sheet + 0x1a + draw);
     x.set8(f::SPECIAL, v);
     // sheet read pointers left by the original
 }
@@ -251,9 +251,9 @@ fn created_loot<R: Bench>(x: &mut Cx<'_, R>, loot: u8, vx: u16, vy: u16) -> Opti
     let n = x.alloc(&pools::ITEM)?;
     let rank = 2 * loot as u32;
     n.set_u8(x.b, f::ACTIVE, 1);
-    let kind = tables().chest_loots.at8(x.b, rank);
+    let kind = crate::tables::boxes().get("loot").at8(x.b, rank);
     n.set_u8(x.b, Obj::KIND, kind);
-    let variant = tables().chest_loots.at8(x.b, rank + 1);
+    let variant = crate::tables::boxes().get("loot").at8(x.b, rank + 1);
     n.set_u8(x.b, f::VARIANT, variant);
     for off in [f::X, f::Z, f::Y] {
         let v = x.u16(off);

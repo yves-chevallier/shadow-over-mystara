@@ -57,4 +57,5 @@ fn rom_and_assets_give_the_same_data() {
     assert!(from_roms.palettes == from_assets.palettes, "palette library differs");
     assert!(tables(&from_roms.engine) == tables(&from_assets.engine), "engine tables differ");
     assert!(tables(&from_roms.rest) == tables(&from_assets.rest), "rest tables differ");
+    assert!(tables(&from_roms.boxes) == tables(&from_assets.boxes), "crate tables differ");
 }

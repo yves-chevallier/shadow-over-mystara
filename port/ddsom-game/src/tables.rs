@@ -264,6 +264,13 @@ fn engine_zones() -> [Vec<(u32, Vec<u8>)>; 2] {
     zones
 }
 
+/// The tables of the crates (`data/boxes.json`): sheets per kind (`fiches`, the sheets by address), loot (`loot`),
+/// wear of the equipment (`wear_chances`).
+pub fn boxes() -> &'static Tables {
+    static BOXES: OnceLock<Tables> = OnceLock::new();
+    BOXES.get_or_init(|| Tables::new("boxes", &[&data().boxes]))
+}
+
 /// The engine's data (see the module).
 pub fn engine() -> &'static Tables {
     static ENGINE: OnceLock<Tables> = OnceLock::new();

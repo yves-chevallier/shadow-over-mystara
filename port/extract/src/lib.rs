@@ -66,6 +66,8 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let combat = data::build(rom, regions, &specs, Vec::new());
     let (regions, specs) = rest::specs(rom);
     let rest = data::build(rom, regions, &specs, Vec::new());
+    let (regions, specs) = combat::boxes(rom);
+    let boxes = data::build(rom, regions, &specs, Vec::new());
     Ok(GameData {
         frames,
         anims,
@@ -89,5 +91,6 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
         palettes: palettes::palettes(rom),
         engine: engine::engine(rom),
         rest,
+        boxes,
     })
 }

@@ -226,8 +226,6 @@ tables! {
     /// `eshl_d/splinter72`: Sheets of 18 bytes (offsets X, Y, Z, then the speeds), one per variant from the address of
     /// the rank.
     splinter72_sheets: data 2 @ 0xa850c;
-    /// `boxes/chest`: Per loot number, (type, variant) of the created ITEM (also in data/boxes.json, `loot`).
-    chest_loots: data 1 @ 0xda28a .. 0xda398;
     /// `boxes/chest`: Per class of the carrying player, address of the offsets (X, Z) of the carried crate per pose
     /// (`chest_taken_offsets`).
     chest_taken: data 4 @ 0xda398 .. 0xda3c8;
@@ -247,10 +245,6 @@ tables! {
     /// `items_b`: Sheet of each variant of the equipment of type 2 (8 bytes: slot, identifier, sparkle, hit counter,
     /// collection index, announce).
     equipment_b_sheets: data 1 @ 0xdb522;
-    /// `items`: Equipment that drops when a player is hit: a mask per value (0 to 5) of the hit counter left, for the
-    /// special weapon, the shield and the ring (also in data/boxes.json, `wear_chances`); the piece falls if the bit
-    /// `rng & 15` of the mask is set.
-    wear_chances: data 2 @ 0xdb7b8 .. 0xdb7dc;
     /// `items/equipment`: Per class, 8 identifiers that the first slot cannot replace.
     item_equipment_locked: data 1 @ 0xdbc5c;
     /// `items/equipment`: Sheets (data); bytes 0 to 5: authorized classes, 6: identifier, 7: group.
@@ -363,12 +357,6 @@ tables! {
     sobj_stage_title_anims_by_stage: prog 2 @ 0xdff0c;
     /// `sobj/target`: Rectangles of the target (4 words), one per variant group: variant 0x25, the others.
     sobj_target_rects: data 2 @ 0xe02c6 .. 0xe02d6;
-    /// `boxes/chest`: Per kind of crate (`+3`), address of its 0x2a-byte sheet (`chest_sheet_data`; also in
-    /// data/boxes.json, `sheets`).
-    chest_sheets: data 4 @ 0x1051ae .. 0x105396;
-    /// `boxes/chest`: The sheets of the crates (0xda082): 10 bytes copied from `+0x60`, 16 random loots, 16 random
-    /// special effects (also in data/boxes.json, `sheets/a` and `sheets/b`).
-    chest_sheet_data: data 1 @ 0x105396 .. 0x1067a2;
     /// `eshl/shot9`: Frame lists of the breath stuck to an enemy: two arrays of 7 offsets (words, relative to their
     /// array) by height, while it burns (offset 0) and at its end (offset 0xe), then the lists of (frame, frame data)
     /// longs, one pair per value of `+0x3e`.
