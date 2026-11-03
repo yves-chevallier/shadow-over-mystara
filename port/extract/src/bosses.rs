@@ -226,6 +226,23 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     upto(s, "boss_19/special_levels", 0x901e0, true, "i8", 0x10);
     s.push(data("boss_19/attack_picks", 0x91096, "u8", &[], 32));
     rank(s, "boss_19/next_attacks", 0x9110c);
+    // ---- boss 21 ----
+    s.push(prog("boss_21/walk_delays", 0x9a868, "u8", &[], PER_RANK));
+    s.push(prog("boss_21/walk_delays_slow", 0x9a888, "u8", &[], PER_RANK));
+    s.push(prog("boss_21/walk_steps", 0x9a8cc, "u8", &[], 32));
+    s.push(prog("boss_21/walk_steps_slow", 0x9a8ec, "u8", &[], 32));
+    // By difficulty (`RANK & 0x1e`) and number of players.
+    s.push(prog("boss_21/strike_limits", 0x9ac5a, "u8", &[], 64));
+    s.push(prog("boss_21/slow_times", 0x9acbc, "u16", &[], 64));
+    s.push(prog("boss_21/slow_modes", 0x9ad74, "x8", &[], 32));
+    s.push(prog("boss_21/spawn_counts", 0x9adda, "i8", &[], 64));
+    upto(s, "boss_21/spawn_spots", 0x9ae1a, true, "i16*2", 0x80);
+    decision(rom, s, "boss_21/close", &[0x9a95a], 0x9a96a);
+    decision(rom, s, "boss_21/front", &[0x9a9b4, 0x9a9c4], 0x9a9d4);
+    decision(rom, s, "boss_21/mid", &[0x9aa0a], 0x9aa1a);
+    decision(rom, s, "boss_21/far", &[0x9aa9a, 0x9aaaa], 0x9aaba);
+    s.push(prog("boss_21/front_phases", 0x9a986, "i16", &[], 5));
+    s.push(prog("boss_21/far_phases", 0x9aa44, "i16", &[], 10));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.

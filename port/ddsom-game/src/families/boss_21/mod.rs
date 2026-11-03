@@ -16,6 +16,11 @@
 //! (0x30 and 0x31: sequences with no shadow or zone test) and `+0xa1` the current animation.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::record::record;
+use super::eshl_b::shot32::Shot32;
+use super::eshl_b::shot33::Shot33;
+use super::eshl_b::ShotB;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -26,66 +31,55 @@ mod fight;
 pub(crate) mod hit;
 mod intro;
 
-/// Fields specific to this type.
-mod g {
-    /// Stun value (and copy into `+0x53`: freeze after a hit).
-    pub const STUN: u32 = 0x56;
-    /// Vulnerable (1) or not (0).
-    pub const VULNERABLE: u32 = 0x67;
-    /// Walk steps remaining (`+0x6b`), frames before the next step (`+0x71`), approach timer (`+0x6e`).
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const APPROACH: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    /// Type of the shot launched by `0xe76c` (table index).
-    pub const SHOT: u32 = 0x79;
-    /// Step timer (word).
-    pub const TIMER: u32 = 0xa6;
-    /// Current animation set and current animation.
-    pub const ANIM_KIND: u32 = 0xa0;
-    pub const ANIM_LAST: u32 = 0xa1;
-    /// Saved state (long) to resume after an interruption.
-    pub const SAVED_STATE: u32 = 0xa2;
-    pub const PHASE: u32 = 0xaa;
-    pub const PHASES: u32 = 0xab;
-    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
-    pub const INVULNERABLE: u32 = 0xad;
-    /// Number of dropped objects still in play.
-    pub const SPAWNED: u32 = 0xaf;
-    /// Linked object (word): shot.
-    pub const CHILD: u32 = 0xb0;
-    /// Attacks remaining of each kind (`0xb2`, `0xb3`, `0xb4`).
-    pub const BUDGET_A: u32 = 0xb2;
-    pub const BUDGET_B: u32 = 0xb3;
-    pub const BUDGET_C: u32 = 0xb4;
-    /// Slow motion (`0xbb`: 0 normal, 1 or 2 mode) and its counters.
-    pub const SLOW_TICK: u32 = 0xb5;
-    pub const STRIKES: u32 = 0xb6;
-    pub const STRIKE_LIMIT: u32 = 0xb7;
-    pub const SLOW_TIME: u32 = 0xb8;
-    pub const SLOW_COUNT: u32 = 0xba;
-    pub const SLOW: u32 = 0xbb;
-    /// Saved position of the target.
-    pub const MARK_X: u32 = 0xbc;
-    pub const MARK_Y: u32 = 0xbe;
-    /// Counter of hits taken during the stun.
-    pub const HITS: u32 = 0x84;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss21(pub Obj);
+
+impl Boss21 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss21 {
+        /// Counter of hits taken during the stun.
+        hits, set_hits, HITS: u16 @ 0x84;
+        /// Number of dropped objects still in play.
+        spawned, set_spawned, SPAWNED: u8 @ 0xaf;
+        /// Linked object (word): shot.
+        child, set_child, CHILD: u16 @ 0xb0;
+        /// Attacks remaining of each kind (`0xb2`, `0xb3`, `0xb4`).
+        budget_a, set_budget_a, BUDGET_A: u8 @ 0xb2;
+        budget_b, set_budget_b, BUDGET_B: u8 @ 0xb3;
+        budget_c, set_budget_c, BUDGET_C: u8 @ 0xb4;
+        /// Slow motion (`0xbb`: 0 normal, 1 or 2 mode) and its counters.
+        slow_tick, set_slow_tick, SLOW_TICK: u8 @ 0xb5;
+        strikes, set_strikes, STRIKES: u8 @ 0xb6;
+        strike_limit, set_strike_limit, STRIKE_LIMIT: u8 @ 0xb7;
+        slow_time, set_slow_time, SLOW_TIME: u16 @ 0xb8;
+        slow_count, set_slow_count, SLOW_COUNT: u8 @ 0xba;
+        slow, set_slow, SLOW: u8 @ 0xbb;
+        /// Y position aimed at by a charge (word; `Boss::MARK_X` for X).
+        mark_y, set_mark_y, MARK_Y: u16 @ 0xbe;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
 /// Jeux d'animations.
-const SET_BODY: u32 = 0x1836ec;
-const SET_STRIKE: u32 = 0x18371c;
-const SET_HURT: u32 = 0x18373a;
+const SET_BODY: RomAddr = RomAddr(0x1836ec);
+const SET_STRIKE: RomAddr = RomAddr(0x18371c);
+const SET_HURT: RomAddr = RomAddr(0x18373a);
 
 /// Starts animation `n` of the movements / hits set via the AI (`0x103d6`).
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_BODY, n);
+    lib::start(x, SET_BODY.0, n);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE.0, n);
 }
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -100,23 +94,23 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             st::HIT => hit::run(x),
             _ => x.free(&pools::BOSS),
         }
-        if x.u8(INVULNERABLE) != 0 {
-            x.set8(0x38, 0);
+        if x.u8(Boss::INVULNERABLE) != 0 {
+            x.set8(Enemy::FRAME_TAG, 0);
         }
-        if x.u8(0) == 0 {
+        if x.u8(Enemy::ACTIVE) == 0 {
             return;
         }
         // slow motion: as long as `+0xba` stays positive, the boss replays its logic within the same frame
-        if x.u32(f::STATE) & 0xffff_ff00 != decide::WAIT && x.u8(SLOW) != 0 {
-            if sub8(x, SLOW_COUNT, 1).pl() {
+        if x.u32(f::STATE) & 0xffff_ff00 != decide::WAIT && x.u8(Boss21::SLOW) != 0 {
+            if sub8(x, Boss21::SLOW_COUNT, 1).pl() {
                 continue;
             }
-            if sub16(x, SLOW_TIME, 1).gt() {
-                let tick = x.u8(SLOW);
-                x.set8(SLOW_COUNT, tick);
+            if sub16(x, Boss21::SLOW_TIME, 1).gt() {
+                let tick = x.u8(Boss21::SLOW);
+                x.set8(Boss21::SLOW_COUNT, tick);
                 slow_tick(x);
             } else {
-                x.set8(SLOW, 0);
+                x.set8(Boss21::SLOW, 0);
                 decide::pick_strike_limit(x);
             }
         }
@@ -124,7 +118,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
     // the dead host takes the boss down with it (state 0x0406 = death)
     if decide::host_dead(x) {
-        x.set8(0, 2);
+        x.set8(Enemy::ACTIVE, 2);
         x.set32(f::IMMUNITY, 0xffff_ffff);
     }
     x.reinsert();
@@ -135,26 +129,26 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     pick_target(x);
-    x.set8(PHASES, 4);
+    x.set8(Boss::PHASES, 4);
     x.set8(f::BOX_SET, 0x31);
     lib::initial_hp_boss(x);
     lib::spread_index(x);
     decide::pick_strike_limit(x);
-    x.set8(0, 2);
-    x.set_bit(0x1, 1, true);
-    for off in [0x76, 0x70, 0x6a, 0x75] {
+    x.set8(Enemy::ACTIVE, 2);
+    x.set_bit(Enemy::DISPLAY, 1, true);
+    for off in [Enemy::AI_BYTE_ROW, Enemy::AI_STANCE_ROW, Enemy::AI_WANDER_ROW, Enemy::AI_BOX_ANIM] {
         x.set8(off, 0);
     }
-    for (off, v) in [(0x72, 1), (0x73, 1), (0x6c, 6), (0x6d, 6), (0x74, 7), (0x78, 0xff), (0x8e, 3), (0x68, 0xb), (0x69, 1), (VULNERABLE, 0)] {
+    for (off, v) in [(Enemy::AI_DECISION_A, 1), (Enemy::AI_DECISION_B, 1), (Enemy::AI_WAIT_MASKS, 6), (Enemy::AI_WAIT_ROW, 6), (Enemy::AI_BOX_CHANCE, 7), (Enemy::AI_SHOT, 0xff), (Enemy::AI_ROW_8E, 3), (Enemy::AI_68, 0xb), (Enemy::AI_69, 1), (Enemy::VULNERABLE, 0)] {
         x.set8(off, v);
     }
     x.set16(f::IMMUNITY, 0xffff);
-    x.set8(ANIM_KIND, 0);
-    x.set8(ANIM_LAST, 0xff);
-    x.set8(BUDGET_A, 8);
-    x.set8(BUDGET_B, 8);
-    x.set8(BUDGET_C, 3);
-    for (off, v) in [(0x7e, 0x4d), (0x7f, 0), (0x80, 0), (0x81, 0x18)] {
+    x.set8(Boss::ANIM_KIND, 0);
+    x.set8(Boss::ANIM_LAST, 0xff);
+    x.set8(Boss21::BUDGET_A, 8);
+    x.set8(Boss21::BUDGET_B, 8);
+    x.set8(Boss21::BUDGET_C, 3);
+    for (off, v) in [(Enemy::EVENT_KIND, 0x4d), (Enemy::EVENT_LOW, 0), (Enemy::LOOT_ROW, 0), (Enemy::LOOT, 0x18)] {
         x.set8(off, v);
     }
     decide::start_intro(x);
@@ -176,7 +170,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     // the special sequences (set 0x30 and beyond) have neither play area nor shadow
-    if !cmp8(x, ANIM_KIND, 0x30).ge() {
+    if !cmp8(x, Boss::ANIM_KIND, 0x30).ge() {
         lib::keep_in_zone(x);
         lib::collide_terrain(x);
     }
@@ -190,7 +184,7 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(ANIM_LAST, 0xff);
+            x.set8(Boss::ANIM_LAST, 0xff);
             body(x, 0);
         }
         2 => {
@@ -206,16 +200,16 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 /// `retry`: insists as long as the pool is full.
 fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
-    e.set_u8(x.b, 0, 1);
-    e.set_u8(x.b, 2, kind);
+    e.set_u8(x.b, Obj::ACTIVE, 1);
+    e.set_u8(x.b, Obj::KIND, kind);
     if let Some(v) = variant {
-        e.set_u8(x.b, 3, v);
+        e.set_u8(x.b, Obj::VARIANT, v);
     }
     if flip {
         let side = x.u8(f::FLIP);
         e.set_u8(x.b, f::FLIP, side);
     }
-    e.set_u16(x.b, 0x42, x.o.0 as u16);
+    e.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
     Some(e)
 }
 
@@ -226,22 +220,22 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9ae4c: same, except during the slow motion.
 fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(SLOW) == 0 {
+    if x.u8(Boss21::SLOW) == 0 {
         dust(x);
     }
 }
 
 /// 0x9ae2a: slow-motion step: the dust falls every 11 steps (mode 1) or 7 steps (mode 2).
 fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(SLOW) == 0 {
+    if x.u8(Boss21::SLOW) == 0 {
         return;
     }
-    x.add8(SLOW_TICK, 1);
-    let period = if x.u8(SLOW) == 1 { 0xb } else { 7 };
-    if (period as i8) > x.u8(SLOW_TICK) as i8 {
+    x.add8(Boss21::SLOW_TICK, 1);
+    let period = if x.u8(Boss21::SLOW) == 1 { 0xb } else { 7 };
+    if (period as i8) > x.u8(Boss21::SLOW_TICK) as i8 {
         return;
     }
-    x.set8(SLOW_TICK, 0);
+    x.set8(Boss21::SLOW_TICK, 0);
     dust(x);
 }
 

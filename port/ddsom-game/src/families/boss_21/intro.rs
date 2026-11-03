@@ -19,76 +19,76 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(0, 2);
-            x.set_bit(0x1, 1, false);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::ACTIVE, 2);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(f::FLIP, 0);
             let cx = var::SCROLL_X.get(x.b).wrapping_add(0x140);
-            x.set16(0x8, cx);
+            x.set16(Obj::X, cx);
             let host = x.linked(f::HOST);
-            let z = host.u16(x.b, 0xc).wrapping_sub(0x10);
-            x.set16(0xc, z);
-            let y = host.u16(x.b, 0x10).wrapping_sub(8);
-            x.set16(0x10, y);
-            x.set16(TIMER, 0x14);
+            let z = host.u16(x.b, Obj::Z).wrapping_sub(0x10);
+            x.set16(Obj::Z, z);
+            let y = host.u16(x.b, Obj::Y).wrapping_sub(8);
+            x.set16(Obj::Y, y);
+            x.set16(Boss::TIMER, 0x14);
             if effect(x, true, 0x31, Some(2), true).is_some() {
                 lib::sound(x, crate::sound::CMD_311_411);
             }
             body(x, 0x16);
         }
         2 => {
-            if !sub16(x, TIMER, 1).gt() {
-                x.add8(0x7, 2);
+            if !sub16(x, Boss::TIMER, 1).gt() {
+                x.add8(Enemy::SUB_STEP, 2);
             }
             lib::step(x);
         }
         4 => {
-            sub16(x, 0xc, 1);
-            if var::LANDING_CUE.get(x.b) != 0 && cmp16(x, 0xc, 0x58).le() {
-                x.add8(0x7, 2);
-                x.set16(TIMER, 0x1e);
+            sub16(x, Obj::Z, 1);
+            if var::LANDING_CUE.get(x.b) != 0 && cmp16(x, Obj::Z, 0x58).le() {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Boss::TIMER, 0x1e);
             }
             lib::step(x);
         }
         6 => {
-            if sub16(x, TIMER, 1).gt() {
+            if sub16(x, Boss::TIMER, 1).gt() {
                 lib::step(x);
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(0x14, 0x40);
-            x.set16(0x16, 0);
-            x.set16(0x18, 0x300);
-            x.set16(0x1a, (-0x20i16) as u16);
-            x.set16(0x1c, (-0x80i16) as u16);
-            x.set16(0x1e, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::VX, 0x40);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, 0x300);
+            x.set16(Enemy::GRAVITY, (-0x20i16) as u16);
+            x.set16(Enemy::VY, (-0x80i16) as u16);
+            x.set16(Enemy::AY, 0);
             x.move_xyz();
             body(x, 4);
         }
         8 => {
             x.move_xyz();
-            if tst16(x, 0x18).gt() {
+            if tst16(x, Enemy::VZ).gt() {
                 lib::step(x);
                 return;
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             body(x, 7);
         }
         10 => {
             x.move_xyz();
-            if tst16(x, 0xc).gt() {
+            if tst16(x, Obj::Z).gt() {
                 lib::step(x);
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(0xc, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Obj::Z, 0);
             body(x, 9);
         }
         12 => {
             if lib::step(x) {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 body(x, 0);
             }
         }
@@ -97,7 +97,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 lib::step(x);
                 return;
             }
-            x.set8(0, 1);
+            x.set8(Enemy::ACTIVE, 1);
             lib::set_immunities(x);
             decide::stand(x);
         }
@@ -106,36 +106,36 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             body(x, 0);
         }
         2 => {
-            if x.data8(0xff2a38) != 0x10 {
+            if var::SCENE_SEQUENCE.get(x.b) != 0x10 {
                 lib::step(x);
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(0x18, 0x700);
-            x.set16(0x1a, 0);
-            x.set32(0x14, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::VZ, 0x700);
+            x.set16(Enemy::GRAVITY, 0);
+            x.set32(Enemy::VX_LONG, 0);
             lib::sound(x, crate::sound::CMD_80_80);
             body(x, 6);
         }
         4 => {
-            if !sub16(x, TIMER, 1).gt() {
-                x.set16(TIMER, 5);
+            if !sub16(x, Boss::TIMER, 1).gt() {
+                x.set16(Boss::TIMER, 5);
                 dust(x);
             }
             x.move_xz();
             let floor = var::CAMERA1_Y.get(x.b).wrapping_add(0x100);
-            let here = x.u16(0x10).wrapping_add(x.u16(0xc));
+            let here = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
             if Fl::sub16(here, floor).lt() {
                 return;
             }
             x.add8(f::SUB, 2);
-            x.set_bit(0x1, 1, true);
+            x.set_bit(Enemy::DISPLAY, 1, true);
         }
         _ => {}
     }
