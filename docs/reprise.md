@@ -31,11 +31,6 @@ débordements de l'original nommés (`ddsom-data/src/{residue,overreads}.rs`, `e
 * `touches.cfg` en anglais avec compatibilité ; écart connu du Z80 en retard (2 scénarios, comparaison du son
   suspendue) à accepter.
 
-**Branches distantes fusionnées à supprimer** (l'utilisateur, `! git push origin --delete …`) : wt-locales wt-restes
-wt-familles2 wt-boss2 wt-joueur2 wt-couv2 wt-familles3 wt-anglais1 wt-cpu-player wt-cpu-core wt-sans-cpu wt-son
-wt-nettoyage wt-plan-final wt-serie0 wt-l3-son wt-l4-rendu wt-l5-effets wt-l6-set wt-l7-objets wt-l8a-ennemis
-wt-l8b-ennemis wt-l9a-boss wt-l9b-boss wt-l10-joueurs wt-l11-ecrans wt-l12-moteur wt-l13-aiguillage wt-l19-nom.
-
 ## Où en est le projet
 
 * **Le jeu tourne en Rust pur, sans 68000 et sans ROM.** C'est le mode par défaut de `ddsom`, de `validate` et de `tools/validate_all.sh`. Avec `ddsom --assets <dir>`, toutes les données viennent des assets produits par `extract`. Voir [sans-rom.md](sans-rom.md).
