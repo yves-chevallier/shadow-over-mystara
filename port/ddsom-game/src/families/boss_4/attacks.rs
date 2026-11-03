@@ -39,8 +39,8 @@ fn back_to_walk<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8232e (`+6` = 0) : cri.
 fn roar<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         lib::sound(x, crate::sound::CMD_30C);
         kind(x, 0x10);
         return air(x, 0);
@@ -52,9 +52,9 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x823a6: start of the takeoff (flight animation 1, vertical speed 0x400).
 fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
-    x.set16(0x18, 0x400);
-    x.set16(0x1a, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set16(Enemy::VZ, 0x400);
+    x.set16(Enemy::GRAVITY, 0);
     air(x, 1);
 }
 
@@ -62,13 +62,13 @@ fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
 /// (invulnerable) for 0x28 frames.
 fn climb<R: Bench>(x: &mut Cx<'_, R>) {
     let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
-    let h = x.u16(0x10).wrapping_add(x.u16(0xc));
+    let h = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     setw(x, 0, top);
     if !Fl::sub16(h, top).lt() {
-        x.add8(0x7, 2);
-        x.set16(TIMER, 0x28);
-        x.set8(INVULNERABLE, 1);
-        x.set_bit(0x1, 1, true);
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set16(Boss::TIMER, 0x28);
+        x.set8(Boss::INVULNERABLE, 1);
+        x.set_bit(Enemy::DISPLAY, 1, true);
         return;
     }
     lib::push_players(x);
@@ -76,23 +76,23 @@ fn climb<R: Bench>(x: &mut Cx<'_, R>) {
     let k = x.u8(f::KEY_FRAME) & 0x7f;
     if (k as i8) < 3 {
         flap(x);
-        x.add16(0x18, (-0x28i16) as u16);
+        x.add16(Enemy::VZ, (-0x28i16) as u16);
         let v = speed_long(x, 0x18);
-        x.add32(0xc, v);
-        let s = x.u16(0x18);
-        x.set16(0x1a, s);
+        x.add32(Obj::Z, v);
+        let s = x.u16(Enemy::VZ);
+        x.set16(Enemy::GRAVITY, s);
     } else {
         flap(x);
-        x.add16(0x1a, (-0x30i16) as u16);
+        x.add16(Enemy::GRAVITY, (-0x30i16) as u16);
         let v = speed_long(x, 0x1a);
-        x.add32(0xc, v);
-        x.set16(0x18, 0x400);
+        x.add32(Obj::Z, v);
+        x.set16(Enemy::VZ, 0x400);
     }
 }
 
 /// 0x8237a (`+6` = 2): takeoff, then dive vertically onto the target.
 fn dive<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             if !pick_target(x) {
                 return decide::wait(x);
@@ -102,45 +102,45 @@ fn dive<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => climb(x),
         4 => {
-            if expired(x, TIMER) {
-                x.add8(0x7, 2);
-                x.set8(INVULNERABLE, 0);
+            if expired(x, Boss::TIMER) {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(Boss::INVULNERABLE, 0);
                 return air(x, 2);
             }
             // ten frames before the end, the boss reappears above the target
-            if x.u16(TIMER) == 0xa {
-                x.set_bit(0x1, 1, false);
+            if x.u16(Boss::TIMER) == 0xa {
+                x.set_bit(Enemy::DISPLAY, 1, false);
                 let t = load_target(x);
-                let (tx, ty) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
-                x.set16(0x8, tx);
-                x.set16(0x10, ty);
+                let (tx, ty) = (t.u16(x.b, Obj::X), t.u16(x.b, Obj::Y));
+                x.set16(Obj::X, tx);
+                x.set16(Obj::Y, ty);
                 let h = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0).wrapping_sub(ty);
                 setw(x, 0, h);
-                x.set16(0xc, h);
-                x.set16(0x18, 0xfb00);
-                x.set16(0x1a, (-0x10i16) as u16);
+                x.set16(Obj::Z, h);
+                x.set16(Enemy::VZ, 0xfb00);
+                x.set16(Enemy::GRAVITY, (-0x10i16) as u16);
             }
         }
         6 => {
-            let a = x.u16(0x1a);
+            let a = x.u16(Enemy::GRAVITY);
             setw(x, 0, a);
-            x.add16(0x18, a);
+            x.add16(Enemy::VZ, a);
             let v = speed_long(x, 0x18);
-            x.add32(0xc, v);
-            if (x.u16(0xc) as i16) > 0 {
+            x.add32(Obj::Z, v);
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x1e);
-            x.set16(0xc, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 0x1e);
+            x.set16(Obj::Z, 0);
             lib::shake_58(x, 0x1e);
             lib::debris(x, 5);
             lib::sound(x, crate::sound::CMD_328_428_B);
             air(x, 3);
         }
         _ => {
-            if (x.u16(TIMER) as i16) > 0 {
-                sub16(x, TIMER, 1);
+            if (x.u16(Boss::TIMER) as i16) > 0 {
+                sub16(x, Boss::TIMER, 1);
                 return;
             }
             if !x.anim_step() {
@@ -157,7 +157,7 @@ fn dive<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x82546 (`+6` = 4): takeoff, then crossing the screen at ground level at the height of the target.
 fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             if !pick_target(x) {
                 return decide::wait(x);
@@ -168,46 +168,46 @@ fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => climb(x),
         4 => {
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set8(INVULNERABLE, 0);
-            x.set_bit(0x1, 1, false);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss::INVULNERABLE, 0);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             let t = load_target(x);
-            let ty = t.u16(x.b, 0x10);
-            x.set16(0x10, ty);
-            x.set16(0xc, 0x80);
+            let ty = t.u16(x.b, Obj::Y);
+            x.set16(Obj::Y, ty);
+            x.set16(Obj::Z, 0x80);
             // entry from the edge opposite the one the boss faces
             let (dx, vx) = if x.u8(f::FLIP) != 0 { (0u16, 0x900u16) } else { (0x180, (-0x900i16) as u16) };
             let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
-            x.set16(0x8, px);
-            x.set16(0x14, vx);
-            x.set16(0x18, 0xf700);
-            x.set16(0x16, 0);
-            x.set16(0x1a, 0);
+            x.set16(Obj::X, px);
+            x.set16(Enemy::VX, vx);
+            x.set16(Enemy::VZ, 0xf700);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::GRAVITY, 0);
             lib::sound(x, crate::sound::CMD_30C);
             air(x, 5);
         }
         6 => {
             x.move_xz();
-            if (x.u16(0xc) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x28);
-            x.set16(DUST, 0);
-            x.set16(0xc, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 0x28);
+            x.set16(Boss4::DUST, 0);
+            x.set16(Obj::Z, 0);
             let mut d = (-0x38i16) as u16;
             if x.u8(f::FLIP) == 0 {
                 d = d.wrapping_neg();
             }
-            x.set16(0x16, d);
+            x.set16(Enemy::AX, d);
             landing(x, 0x1e, 6);
         }
         _ => {
             dust_tick(x);
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 x.move_x();
                 lib::step(x);
                 return;
@@ -227,15 +227,15 @@ fn landing<R: Bench>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
 
 /// 0x82660 (`+6` = 6): leap over the target; the vertical momentum depends on the distance to cover.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set16(0x16, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::AX, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x40);
             let t = load_target(x);
-            let mut dist = x.u32(0x8).wrapping_sub(t.u32(x.b, 0x8));
+            let mut dist = x.u32(Obj::X).wrapping_sub(t.u32(x.b, Obj::X));
             if (dist as i32) < 0 {
                 dist = dist.wrapping_neg();
             }
@@ -253,8 +253,8 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 vz = vz.wrapping_add(0x10);
             }
-            x.set16(0x18, vz);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set16(Enemy::VZ, vz);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             lib::sound(x, crate::sound::CMD_30C);
             kind(x, 0x13);
             air(x, 7);
@@ -265,40 +265,40 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.move_xz();
-            if !Fl::sub16(x.u16(0x18), 0x100).le() {
+            if !Fl::sub16(x.u16(Enemy::VZ), 0x100).le() {
                 return;
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             air(x, 8);
         }
         4 => {
             x.move_xz();
-            if !Fl::sub16(x.u16(0x18), (-0x100i16) as u16).le() {
+            if !Fl::sub16(x.u16(Enemy::VZ), (-0x100i16) as u16).le() {
                 return;
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             air(x, 9);
         }
         6 => {
             x.move_xz();
-            if (x.u16(0xc) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(DUST, 0);
-            x.set16(0xc, 0);
-            x.set8(INVULNERABLE, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 0x14);
+            x.set16(Boss4::DUST, 0);
+            x.set16(Obj::Z, 0);
+            x.set8(Boss::INVULNERABLE, 0);
             let mut d = 0x5cu16;
             if x.u8(f::FLIP) != 0 {
                 d = d.wrapping_neg();
             }
-            x.set16(0x16, d);
+            x.set16(Enemy::AX, d);
             landing(x, 0x14, 0xa);
         }
         _ => {
             dust_tick(x);
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 x.move_x();
                 lib::step(x);
                 return;
@@ -319,7 +319,7 @@ fn hover<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x827c6 (`+6` = 8): low-altitude takeoff, fan breath (ESHL 0x32 jets as long as the first double
 /// keeps its mouth open), then descent.
 fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             kind(x, 0x14);
             take_off(x);
@@ -327,71 +327,71 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             lib::push_players(x);
             flap(x);
-            if !(Fl::sub16(x.u16(0xc), 0x28).lt() || x.u8(f::KEY_FRAME) != 4) {
-                x.add8(0x7, 2);
-                x.set8(INVULNERABLE, 0);
-                x.set16(TIMER, 8);
+            if !(Fl::sub16(x.u16(Obj::Z), 0x28).lt() || x.u8(f::KEY_FRAME) != 4) {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(Boss::INVULNERABLE, 0);
+                x.set16(Boss::TIMER, 8);
                 lib::step(x);
                 return;
             }
             let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
-            let v = x.prog32(0x82852 + i);
-            x.add32(0xc, v);
+            let v = long(x, "boss_4/rise_steps", i);
+            x.add32(Obj::Z, v);
             lib::step(x);
         }
         4 => {
             hover(x);
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0xb4);
-            x.set8(BREATH, 2);
-            x.set8(BREATH_STEP, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 0xb4);
+            x.set8(Boss4::BREATH, 2);
+            x.set8(Boss4::BREATH_STEP, 0);
             cue_double(x);
         }
         6 => {
             hover(x);
-            let d = double(x, DOUBLE_A);
+            let d = double(x, Boss4::DOUBLE_A);
             if d.u8(x.b, f::KEY_FRAME) != 0 {
                 return;
             }
-            if expired(x, TIMER) {
-                x.add8(0x7, 2);
-                x.set16(TIMER, 0xa);
+            if expired(x, Boss::TIMER) {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Boss::TIMER, 0xa);
                 return cue_double(x);
             }
-            if sub8(x, BREATH, 1).gt() {
+            if sub8(x, Boss4::BREATH, 1).gt() {
                 return;
             }
-            x.set8(BREATH, 6);
-            breath_shot(x, 0x8295c, None);
+            x.set8(Boss4::BREATH, 6);
+            breath_shot(x, "boss_4/breath_angles", None);
         }
         8 => {
             flap(x);
             lib::step(x);
             bob(x);
             lib::push_players(x);
-            if expired(x, TIMER) {
-                x.add8(0x7, 2);
+            if expired(x, Boss::TIMER) {
+                x.add8(Enemy::SUB_STEP, 2);
             }
         }
         10 => {
             flap(x);
-            let z = x.u32(0xc);
-            x.set32(0xc, z.wrapping_sub(0x18000));
+            let z = x.u32(Obj::Z);
+            x.set32(Obj::Z, z.wrapping_sub(0x18000));
             if Fl::sub32(z, 0x18000).gt() {
                 lib::push_players(x);
                 lib::step(x);
                 return;
             }
-            x.add8(0x7, 2);
-            x.set16(0xc, 0);
-            x.set16(TIMER, 0x28);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Obj::Z, 0);
+            x.set16(Boss::TIMER, 0x28);
             body(x, 0);
         }
         _ => {
-            if !expired(x, TIMER) {
+            if !expired(x, Boss::TIMER) {
                 lib::step(x);
                 return;
             }
@@ -402,33 +402,33 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// One jet of the breath (ESHL 0x32, variant `variant`): its angle follows table `angles` (16 notches, flipped
 /// when the boss faces left). False if the pool is full.
-fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> bool {
+fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: &str, variant: Option<u8>) -> bool {
     let Some(s) = x.alloc(&pools::ESHL) else { return false };
-    s.set_u8(x.b, 0, 1);
-    s.set_u8(x.b, 2, 0x32);
+    s.set_u8(x.b, Enemy::ACTIVE, 1);
+    s.set_u8(x.b, Enemy::KIND, 0x32);
     if let Some(v) = variant {
-        s.set_u8(x.b, 3, v);
+        s.set_u8(x.b, Enemy::VARIANT, v);
     }
     s.set_u16(x.b, f::CREATOR, x.o.0 as u16);
-    let i = x.u8(BREATH_STEP) as u32;
-    let mut a = x.rom8(angles + i);
+    let i = x.u8(Boss4::BREATH_STEP) as u32;
+    let mut a = byte(x, angles, i);
     let side = x.u8(f::FLIP);
     s.set_u8(x.b, f::FLIP, side);
     if side != 0 {
         a = a.wrapping_add(0x10) & 0x1f;
     }
     s.set_u8(x.b, Obj::SPEED_INDEX, a);
-    let n = x.u8(BREATH_STEP).wrapping_add(1) & 0xf;
-    x.set8(BREATH_STEP, n);
+    let n = x.u8(Boss4::BREATH_STEP).wrapping_add(1) & 0xf;
+    x.set8(Boss4::BREATH_STEP, n);
     true
 }
 
 /// Wait of `+0xa6` frames, then next step with the timer `next` (and a signal to the first double).
 fn timed<R: Bench>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
-    if expired(x, TIMER) {
-        x.add8(0x7, 2);
+    if expired(x, Boss::TIMER) {
+        x.add8(Enemy::SUB_STEP, 2);
         if let Some(t) = next {
-            x.set16(TIMER, t);
+            x.set16(Boss::TIMER, t);
         }
         if cue {
             cue_double(x);
@@ -439,7 +439,7 @@ fn timed<R: Bench>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
 
 /// Last common step: wait, then the walk.
 fn last<R: Bench>(x: &mut Cx<'_, R>) {
-    if !expired(x, TIMER) {
+    if !expired(x, Boss::TIMER) {
         lib::step(x);
         return;
     }
@@ -448,10 +448,10 @@ fn last<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x82a0c (`+6` = 10): two signals to the first double, then wait.
 fn double_gesture<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set16(TIMER, 2);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 2);
             kind(x, 0x15);
             body(x, 0);
         }
@@ -464,38 +464,38 @@ fn double_gesture<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x82ab6 (`+6` = 12): breath on the ground, ESHL 0x32 variant 1 jets every 3 frames for 0x64 frames.
 fn breath<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set16(TIMER, 2);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 2);
             kind(x, 0x16);
             body(x, 0);
         }
         2 => timed(x, None, true),
         4 => {
-            let d = double(x, DOUBLE_A);
+            let d = double(x, Boss4::DOUBLE_A);
             if d.u8(x.b, f::KEY_FRAME) != 0 {
-                x.add8(0x7, 2);
-                x.set16(TIMER, 0x64);
-                x.set8(BREATH, 1);
-                x.set8(BREATH_STEP, 0);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Boss::TIMER, 0x64);
+                x.set8(Boss4::BREATH, 1);
+                x.set8(Boss4::BREATH_STEP, 0);
             }
             lib::step(x);
         }
         6 => {
-            if expired(x, TIMER) {
-                x.add8(0x7, 2);
-                x.set16(TIMER, 0xc);
+            if expired(x, Boss::TIMER) {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Boss::TIMER, 0xc);
                 cue_double(x);
                 lib::step(x);
                 return;
             }
-            if sub8(x, BREATH, 1).gt() {
+            if sub8(x, Boss4::BREATH, 1).gt() {
                 lib::step(x);
                 return;
             }
-            x.set8(BREATH, 3);
-            if !breath_shot(x, 0x82ba2, Some(1)) {
+            x.set8(Boss4::BREATH, 3);
+            if !breath_shot(x, "boss_4/air_breath_angles", Some(1)) {
                 lib::step(x);
             }
         }

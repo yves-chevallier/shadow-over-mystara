@@ -8,7 +8,8 @@
 //! * the tables of `enemy_lib` (decision masks, palette scripts) and the piece lists of `enemy_common::spawn_list`.
 //!
 //! * the tables of the families themselves (`enemy_*/`: moves by difficulty level, decisions, offsets...), named
-//!   `<family>/<table>` ([`families`]).
+//!   `<family>/<table>` ([`families`]);
+//! * the tables of the bosses, named `<boss>/<table>` (`crate::bosses`).
 
 use crate::data::{data, prog, row_size, Spec};
 use crate::rom::Program;
@@ -118,13 +119,14 @@ pub fn specs(rom: &Program) -> Vec<Spec> {
     }
     let mut bounded = Vec::new();
     families(rom, &mut s, &mut bounded);
+    crate::bosses::specs(rom, &mut s, &mut bounded);
     resolve(&mut s, bounded);
     s
 }
 
 /// A table whose end is not known from the code: it runs up to the next table of the file or the next code executed by
 /// the original (`code_68k.txt`), at most `max` bytes (index of the table in the specs, maximum).
-type Bounded = Vec<(usize, u32)>;
+pub(crate) type Bounded = Vec<(usize, u32)>;
 
 fn resolve(s: &mut [Spec], bounded: Bounded) {
     let code = crate::effects::code_starts();

@@ -473,3 +473,40 @@ Les deux cas apparaissent dans le résidu de la validation (une lecture chacun) 
 * Avec le bit 15 du réglage `A5+0x7fd0`, la remise à zéro de l'enregistreur (0xe0538) prépare un enregistrement des
   entrées dans la RAM de la carte de développement (0x930000, absente d'une borne : les écritures s'y perdent).
   Comportement de jeu réel mais inatteignable sur une borne ; gardé en Rust, désormais par `hw::io::DevRam`.
+
+## Lot L9a (boss 0 à 9 et `boss_common` ; wt-l9a-boss)
+
+### Tables d'aiguillage des états des boss 7 et 8, lues pour choisir un bras
+
+* **Code** : les deux guerriers noirs (boss 7, 0x859f8, et 8, 0x87fc0) choisissaient leurs états en relisant les tables
+  `move.w (table,PC,Dn.w),D1 ; jmp` (une cinquantaine : groupes `+5`, pas `+6`, sous-pas `+7`) et en comparant
+  l'adresse atteinte aux adresses des bras Rust. Elles deviennent des `match` sur l'octet d'état (outil
+  `jt.py` du scratchpad : chaque bras prend les index dont l'entrée mène à son adresse ; un bras `_` garde les index
+  restants comme avant). Deux pas partagent une même routine avec des tables différentes : l'esquive (`group6`,
+  tables 0x868c8/0x868de et 0x88f5a/0x88f70, choisies par `+6`) et la ruée (boss 8, 0x88e1c/0x88e5e) : `match` gardé
+  par la condition du choix de table. `leap_rest` (pas communs des bonds) prend le pas `+7` (2, 4, 6, 8) au lieu de
+  l'adresse.
+* **Pourquoi jamais atteint** : un index hors table ou impair ferait sauter l'original dans du code ou des données ;
+  avant, ces cas tombaient déjà dans le bras `_` ou un `unreachable!` ; ils y restent (`effects::bad_index` pour les
+  groupes de 0x85cc8 et 0x881aa et la mort 0x86ee6).
+* **Lecture sans effet retirée** : la pose de l'attract du boss 7 (0x85dd6) relisait la table d'un seul mot 0x85de4
+  par `+7` sans utiliser le résultat (l'original saute à son unique entrée) : la lecture est retirée.
+* **Nature** : aiguillage de l'original, devenu un `match` (L13 traitera les tables d'aiguillage des classes).
+
+### Tables d'entrée des décisions des boss 0 et 6
+
+* **Code** : boss 0 (0x7aa16, 0x7aa22 : six entrées par moitié) et boss 6 (0x85734 : trois, 0x857ac et 0x8581a : six)
+  sautent, selon la phase et le geste de l'IA, vers de petites routines qui tirent chacune dans une table de choix. Le
+  port lisait ces tables pour retrouver la routine. Elles deviennent un tableau Rust indexé par `index / 2` (le
+  numéro de la table de choix), ou rien pour 0x857ac dont les six routines tirent dans la même table (lecture sans
+  effet retirée).
+* **Pourquoi jamais atteint** : un index au-delà de la table (phase hors de 0 à 2) ferait sauter l'original au hasard ;
+  `bad_index` comme au lot L7 (avant : `panic!` du boss 0, `unreachable!` ou repli du boss 6).
+* **Nature** : repli défensif.
+
+### Formes du corps du boss 3 (0x81ad4)
+
+* `boss_common::push_out_of_boss` (0x81aa4) sautait par la table relative 0x81ad4 (formes 1 = 0x818e6, 2 = 0x819e2) ;
+  `boss_3::body::push` prend désormais la forme (1 ou 2). Une forme 3 et au-delà (jamais posée : `push_players` ne
+  pose que 1 et 2) ferait sauter l'original dans le code qui suit (0x88ad4) : `bad_index`, comme l'`unreachable!` qui
+  précédait.

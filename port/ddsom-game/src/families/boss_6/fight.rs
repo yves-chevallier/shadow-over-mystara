@@ -10,6 +10,7 @@
 //! | 10 | shot in a leap: creates an ESHL 0x2a, jumps and releases it |
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -17,8 +18,8 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Walk animation sets (0x103e0): the first if the boss is not facing the direction it is moving in.
-const WALK_SIDEWAYS: u32 = 0x177992;
-const WALK_FORWARD: u32 = 0x177a36;
+const WALK_SIDEWAYS: RomAddr = RomAddr(0x177992);
+const WALK_FORWARD: RomAddr = RomAddr(0x177a36);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -55,7 +56,7 @@ fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
-    let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
+    let set = if facing_forward(x) { WALK_FORWARD.0 } else { WALK_SIDEWAYS.0 };
     lib::switch_keeping_time(x, set);
 }
 
@@ -65,12 +66,12 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         lib::draw_6e(x);
-        x.set8(ANIM_KIND, 0);
-        if x.u8(ANIM_LAST) != 0 {
-            x.set8(ANIM_LAST, 0);
+        x.set8(Boss::ANIM_KIND, 0);
+        if x.u8(Boss::ANIM_LAST) != 0 {
+            x.set8(Boss::ANIM_LAST, 0);
             body(x, 0);
         }
         return;
@@ -78,7 +79,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) {
         return decide::charge(x, false);
     }
-    if sub8(x, APPROACH, 1).le() {
+    if sub8(x, Boss6::APPROACH, 1).le() {
         return decide::chase(x);
     }
     if needs_turn(x) {
@@ -90,11 +91,11 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 2 -----------------------------------------------------------------------------------
 
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, side);
-        x.set8(ANIM_KIND, 1);
+        x.set8(Boss::ANIM_KIND, 1);
         return body(x, 1);
     }
     if !lib::step(x) {
@@ -103,11 +104,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
-    let resume = x.u32(SAVED_STATE);
+    let resume = x.u32(Boss::SAVED_STATE);
     x.set32(f::STATE, resume);
-    let last = x.u8(ANIM_LAST);
+    let last = x.u8(Boss::ANIM_LAST);
     if last == 2 || last == 3 {
-        x.set8(ANIM_KIND, last);
+        x.set8(Boss::ANIM_KIND, last);
         walk_anim(x);
     } else {
         body(x, 0);
@@ -120,7 +121,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
         return decide::wait(x);
     }
-    if x.u8(0x7) != 0 {
+    if x.u8(Enemy::SUB_STEP) != 0 {
         return keep_walking(x);
     }
     if slow {
@@ -130,18 +131,18 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
         decide::walk_steps_fast(x);
         decide::walk_delay_fast(x);
     }
-    x.set8(ANIM_KIND, if slow { 3 } else { 2 });
-    x.add8(0x7, 2);
-    x.set16(0x16, 0);
-    x.set16(0x1e, 0);
+    x.set8(Boss::ANIM_KIND, if slow { 3 } else { 2 });
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::AY, 0);
     if !pick_target(x) {
         return decide::wait(x);
     }
     lib::approach_target(x);
     speed(x, 0xd);
-    let last = x.u8(ANIM_LAST);
-    let kind = x.u8(ANIM_KIND);
-    x.set8(ANIM_LAST, kind);
+    let last = x.u8(Boss::ANIM_LAST);
+    let kind = x.u8(Boss::ANIM_KIND);
+    x.set8(Boss::ANIM_LAST, kind);
     if last == 2 || last == 3 {
         walk_select(x);
     } else {
@@ -150,13 +151,13 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
 }
 
 fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
-    if sub8(x, WALK_DELAY, 1).mi() {
-        if sub8(x, WALK_STEPS, 1).le() {
+    if sub8(x, Boss::WALK_DELAY, 1).mi() {
+        if sub8(x, Boss::WALK_STEPS, 1).le() {
             return decide::chase_b(x);
         }
         lib::approach_target(x);
         speed(x, 0xd);
-        if x.u8(ANIM_KIND) == 3 {
+        if x.u8(Boss::ANIM_KIND) == 3 {
             decide::walk_delay_slow(x);
         } else {
             decide::walk_delay_fast(x);
@@ -166,7 +167,7 @@ fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) {
         return decide::charge(x, false);
     }
-    if x.u8(ANIM_KIND) == 3 {
+    if x.u8(Boss::ANIM_KIND) == 3 {
         let side = decide::probe(x, -0x60, 0x40, 6);
         if side != 0 {
             return decide::choose_mid(x, side);
@@ -194,43 +195,43 @@ fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 8 : charge ----------------------------------------------------------------------------
 
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set16(0x16, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::AX, 0);
             let mut angle = 0x18;
-            if x.u8(CHARGE_AT_TARGET) == 0 {
+            if x.u8(Boss6::CHARGE_AT_TARGET) == 0 {
                 x.set8(f::FLIP, 0);
                 let cam = var::CAMERA1_X.get(x.b);
-                if !Fl::sub16(x.u16(0x8), cam).gt() {
+                if !Fl::sub16(x.u16(Obj::X), cam).gt() {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
                 }
             } else {
                 let target = x.linked(f::TARGET);
-                let tx = target.u16(x.b, 0x8);
-                x.set16(MARK_X, tx);
+                let tx = target.u16(x.b, Obj::X);
+                x.set16(Boss::MARK_X, tx);
                 if x.u8(f::FLIP) != 0 {
                     angle = 8;
                 }
             }
             x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x35);
-            x.set8(ANIM_KIND, 4);
-            x.set8(ANIM_LAST, 4);
+            x.set8(Boss::ANIM_KIND, 4);
+            x.set8(Boss::ANIM_LAST, 4);
             body(x, 4);
         }
         2 => {
             lib::step(x);
             if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
-                let going_left = (x.u16(0x14) as i16) < 0;
-                let here = x.u16(0x8);
-                let limit = if x.u8(CHARGE_AT_TARGET) == 0 {
+                let going_left = (x.u16(Enemy::VX) as i16) < 0;
+                let here = x.u16(Obj::X);
+                let limit = if x.u8(Boss6::CHARGE_AT_TARGET) == 0 {
                     let margin = if going_left { 0xf0 } else { 0x90 };
                     var::CAMERA1_X.get(x.b).wrapping_add(margin)
                 } else {
-                    x.u16(MARK_X)
+                    x.u16(Boss::MARK_X)
                 };
                 let (d0, d1) = if going_left { (here, limit) } else { (limit, here) };
                 if !Fl::sub16(d1, d0).lt() && x.u8(f::KEY_FRAME) != 0 {
@@ -245,11 +246,11 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         4 => {
-            if !sub16(x, COUNT, 1).gt() {
-                x.set16(COUNT, 4);
+            if !sub16(x, Boss6::COUNT, 1).gt() {
+                x.set16(Boss6::COUNT, 4);
                 lib::debris(x, 3);
             }
-            if sub16(x, TIMER, 1).le() {
+            if sub16(x, Boss::TIMER, 1).le() {
                 if !players_alive(x) {
                     return decide::wait(x);
                 }
@@ -263,14 +264,14 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x84930: the boss has arrived: it brakes.
 fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
-    x.set16(TIMER, 0x14);
-    x.set16(COUNT, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set16(Boss::TIMER, 0x14);
+    x.set16(Boss6::COUNT, 0);
     let mut brake: i16 = 0x40;
     if x.u8(f::FLIP) != 0 {
         brake = -brake;
     }
-    x.set16(0x16, brake as u16);
+    x.set16(Enemy::AX, brake as u16);
     lib::shake_54(x, 0x14);
     lib::sound(x, crate::sound::CMD_328_428);
     lib::sound(x, crate::sound::CMD_329_429);
@@ -280,11 +281,11 @@ fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
 // --- +6 = 10: shot in a leap ------------------------------------------------------------------------
 
 fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
-            x.set8(ANIM_KIND, 5);
-            x.set8(ANIM_LAST, 5);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Boss::ANIM_KIND, 5);
+            x.set8(Boss::ANIM_LAST, 5);
             body(x, 6);
         }
         2 => {
@@ -292,30 +293,30 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             let Some(shot) = x.alloc(&pools::ESHL) else { return resume(x) };
-            x.set16(CHILD, shot.0 as u16);
-            shot.set_u8(x.b, 0, 1);
-            shot.set_u8(x.b, 2, 0x2a);
-            shot.set_u16(x.b, 0x42, x.o.0 as u16);
+            x.set16(Boss6::CHILD, shot.0 as u16);
+            shot.set_u8(x.b, Enemy::ACTIVE, 1);
+            shot.set_u8(x.b, Enemy::KIND, 0x2a);
+            shot.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
             let target = x.u16(f::TARGET);
             shot.set_u16(x.b, f::TARGET, target);
             let side = x.u8(f::FLIP);
             shot.set_u8(x.b, f::FLIP, side);
             let (angle, vz) = if side == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
             x.set8(Obj::SPEED_INDEX, angle);
-            x.set16(0x16, vz as u16);
+            x.set16(Enemy::AX, vz as u16);
             lib::drift_heading(x);
             speed(x, 0x35);
-            x.set16(0x18, 0x300);
-            x.set16(0x1a, (-0x40i16) as u16);
+            x.set16(Enemy::VZ, 0x300);
+            x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
             x.move_xz();
         }
         4 => {
             x.move_xz();
             if !tst16(x, 0x18).gt() {
-                x.add8(0x7, 2);
-                x.set16(0x16, 0);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Enemy::AX, 0);
             }
         }
         6 => {
@@ -323,23 +324,23 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
             if tst16(x, 0xc).gt() {
                 return step_only(x);
             }
-            x.add8(0x7, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(COUNT, 0);
-            x.set16(0xc, 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Boss::TIMER, 0x14);
+            x.set16(Boss6::COUNT, 0);
+            x.set16(Obj::Z, 0);
             let vz: i16 = if x.u8(f::FLIP) == 0 { -0x40 } else { 0x40 };
-            x.set16(0x16, vz as u16);
+            x.set16(Enemy::AX, vz as u16);
             x.move_x();
-            let shot = x.linked(CHILD);
-            shot.set_u8(x.b, 0x58, 1);
+            let shot = x.linked(Boss6::CHILD);
+            Salvo(shot).set_armed(x.b, 1);
             body(x, 7);
         }
         8 => {
-            if !sub16(x, COUNT, 1).gt() {
-                x.set16(COUNT, 4);
+            if !sub16(x, Boss6::COUNT, 1).gt() {
+                x.set16(Boss6::COUNT, 4);
                 lib::debris(x, 3);
             }
-            if sub16(x, TIMER, 1).le() {
+            if sub16(x, Boss::TIMER, 1).le() {
                 return resume(x);
             }
             x.move_x();

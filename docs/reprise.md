@@ -125,6 +125,13 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    `enemies` à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante d'adresse ROM, plus gros
    fichier 793 lignes. **Réextraire les assets** (`data/enemies.json`).
 
+   **Lot L9a (boss 0 à 9, `boss_common`)** fait (branche `wt-l9a-boss`, [fin.md](fin.md) « Résultat L9a ») : 130
+   tables des boss dans `data/enemies.json` (nouveau `extract/src/bosses.rs`), `boss_common/` en dossier (`records` :
+   `Boss`, `Message` ; `vars` ; `warrior` : aides communes des boss 7 et 8), un `record!` par boss, aiguillages des
+   boss 7 et 8 en `match` : fichiers de L9a à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante
+   d'adresse ROM. **Réextraire les assets** (`data/enemies.json`). Pour L9b : « Pour L9b » dans fin.md, outils
+   `tools/boss_refactor/`.
+
 8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
    `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées
    `data/objects.json` (172 tables, `ddsom-data/src/objects.rs`), champs en vues `view!`/`record!` et variables
