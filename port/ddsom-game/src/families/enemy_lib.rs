@@ -68,9 +68,10 @@ pub fn spread_index<R: Bench>(x: &mut Cx<'_, R>) {
     ai::hp_rank(x.b, x.o);
 }
 
-/// 0x105b6: crosses the next HP threshold of the table `thresholds`; true if a threshold was passed.
-pub fn next_threshold<R: Bench>(x: &mut Cx<'_, R>, thresholds: u32) -> bool {
-    ai_aids::next_threshold(x.b, x.o, thresholds)
+/// 0x105b6: crosses the next HP threshold of block `block` of the threshold tables (`ai/hp_thresholds`, 0x100 bytes
+/// per block from 0x105e2); true if a threshold was passed.
+pub fn next_threshold<R: Bench>(x: &mut Cx<'_, R>, block: u16) -> bool {
+    ai_aids::next_threshold(x.b, x.o, block)
 }
 
 /// Gesture chosen by `turn_decision` (0x1047a).
@@ -183,12 +184,12 @@ pub fn target_by_criterion<R: Bench>(x: &mut Cx<'_, R>, criterion: u8) -> Option
 
 /// 0x453c: initial HP of a boss (table 0x458c), copied to `+0x60`, `+0x62` and `+0x64`.
 pub fn initial_hp_boss<R: Bench>(x: &mut Cx<'_, R>) {
-    ai::initial_hp(x.b, x.o, ai::HP_TABLE_BOSS);
+    ai::initial_hp(x.b, x.o, ai::HpTable::Boss);
 }
 
 /// 0x4544: initial HP of an enemy (table 0x5c8c).
 pub fn initial_hp<R: Bench>(x: &mut Cx<'_, R>) {
-    ai::initial_hp(x.b, x.o, ai::HP_TABLE_ENEMY);
+    ai::initial_hp(x.b, x.o, ai::HpTable::Enemy);
 }
 
 /// 0xfe5a: immunities (`+0x94`) according to the class and the type. Returns the index read in the table (D0 of the

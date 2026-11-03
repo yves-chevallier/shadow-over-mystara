@@ -2,6 +2,7 @@
 //! meaning guessed from the code alone is marked (h).
 
 use crate::ram::{Byte, Long, Word};
+pub use crate::ram::{CAMERA1_X, CAMERA1_Y, CAMERA2_Y, SHAKE};
 
 /// Inputs of the players for this frame, one byte per player slot (bits 0-3 directions, 4-7 buttons) (h).
 pub const INPUTS: Byte = Byte::a5(0xc);
@@ -52,8 +53,6 @@ pub const BLOCK_SOURCE_1: Long = Long::a5(0x49a);
 pub const BLOCK_SOURCE_2: Long = Long::a5(0x49e);
 /// High word of `BLOCK_SOURCE_2` (h).
 pub const BLOCK_SOURCE_2_WORD: Word = Word::a5(0x49e);
-/// Screen shake requested by an effect, also read as "gauge inactive" by the bubbles (h).
-pub const SHAKE: Word = Word::a5(0x4be);
 /// Step of the scene sequence.
 pub const SCENE_STEP: Byte = Byte::a5(0x4ff);
 /// Main camera x as a 16.16 long (`crate::ram::CAMERA_X`).
@@ -72,9 +71,3 @@ pub const CAMERA_LOCK: Word = Word::a5(0x52c);
 pub const CAMERA_ALT_TARGET_X: Word = Word::a5(0x55e);
 /// Target of the alternate camera, y (h).
 pub const CAMERA_ALT_TARGET_Y: Word = Word::a5(0x562);
-/// Camera of plane 1, x.
-pub const CAMERA1_X: Word = Word::a5(0x5a6);
-/// Camera of plane 1, y.
-pub const CAMERA1_Y: Word = Word::a5(0x5aa);
-/// Camera of plane 2, y.
-pub const CAMERA2_Y: Word = Word::a5(0x5b2);

@@ -66,7 +66,7 @@ const SET_RUN_FORWARD: RomAddr = RomAddr(0x171b76);
 const SET_RUN_BACK: RomAddr = RomAddr(0x171c1a);
 
 /// HP thresholds of the phases (0x105b6).
-const THRESHOLDS: RomAddr = RomAddr(0x10ae2);
+const THRESHOLDS: u16 = 5; // 0x10ae2
 
 /// Starts animation `n` of the body set via the AI (0x103d6).
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {

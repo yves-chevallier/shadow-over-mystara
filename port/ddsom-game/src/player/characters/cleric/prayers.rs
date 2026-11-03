@@ -1,6 +1,6 @@
 //! Prayers of the cleric, continued: beam, banish, holy light, protection, blessing, heal.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;

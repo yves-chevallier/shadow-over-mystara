@@ -169,7 +169,7 @@ pub(super) fn attack_20<R: Bench>(x: &mut Cx<'_, R>) {
 
 
 /// HP thresholds per phase (words, 128 bytes per row).
-const THRESHOLDS: RomAddr = RomAddr(0x114e2);
+const THRESHOLDS: u16 = 15; // 0x114e2
 
 /// 0x98cae: delay before the next step, fast walk; 0x98cba: slow walk.
 pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {
@@ -294,7 +294,7 @@ pub(super) fn back_on_feet<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::pick_target_any(x) {
         return wait(x);
     }
-    if lib::next_threshold(x, THRESHOLDS.0) {
+    if lib::next_threshold(x, THRESHOLDS) {
         if cmp8(x, Boss::PHASE, 2).eq() {
             return attack_20(x);
         }

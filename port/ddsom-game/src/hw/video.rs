@@ -11,7 +11,7 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, wr16, wr32};
+use crate::mem::{rd16, rd32, wr16, wr32, wr8};
 
 /// A word of the graphics RAM, of the object RAM or of the object output control.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -132,9 +132,19 @@ impl Reg {
     }
 }
 
+/// A register written as a byte (`move.b`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ByteReg(pub u32);
+
+impl ByteReg {
+    pub fn set(self, b: &mut Cps2Bus, v: u8) {
+        wr8(b, self.0, v)
+    }
+}
+
 /// The registers written by the game.
 pub mod regs {
-    use super::Reg;
+    use super::{ByteReg, Reg};
 
     /// CPS-A: base of the object table (in units of 256 bytes: 0x7080 for 0x708000).
     pub const OBJECT_BASE: Reg = Reg(0x804100);
@@ -144,8 +154,12 @@ pub mod regs {
     pub const ROW_SCROLL_BASE: Reg = Reg(0x804108);
     /// CPS-A: scroll positions (x, y) of layers 1 to 3, six words.
     pub const SCROLLS: Reg = Reg(0x80410c);
+    /// CPS-A: starting offset of the row scroll table.
+    pub const ROW_SCROLL_OFFSET: Reg = Reg(0x804120);
     /// CPS-A: video control (row scroll, layer 1 page...).
     pub const VIDEO_CONTROL: Reg = Reg(0x804122);
+    /// CPS-A: object RAM bank (byte; image in `video::OBJECT_BANK`).
+    pub const OBJECT_BANK: ByteReg = ByteReg(0x8040e1);
     /// CPS-B: layer enable and priority (image in `A5+0x14`).
     pub const LAYER_CONTROL: Reg = Reg(0x804166);
     /// Object output control word (0x400004): 0x1355 when the screen is on.

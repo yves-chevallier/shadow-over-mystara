@@ -51,4 +51,10 @@ fn rom_and_assets_give_the_same_data() {
     }
     assert!(tables(&from_roms.players) == tables(&from_assets.players), "player tables (players.json) differ");
     assert!(tables(&from_roms.combat) == tables(&from_assets.combat), "combat tables differ");
+    assert!(from_roms.levels == from_assets.levels, "levels differ");
+    assert!(from_roms.terrain == from_assets.terrain, "terrain differs");
+    assert!(from_roms.scene_palettes == from_assets.scene_palettes, "scene palettes differ");
+    assert!(from_roms.palettes == from_assets.palettes, "palette library differs");
+    assert!(tables(&from_roms.engine) == tables(&from_assets.engine), "engine tables differ");
+    assert!(tables(&from_roms.rest) == tables(&from_assets.rest), "rest tables differ");
 }

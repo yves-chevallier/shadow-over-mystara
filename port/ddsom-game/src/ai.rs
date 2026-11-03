@@ -12,16 +12,14 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog32, prog8, rd16, rd32, rd8};
 use crate::objects::Obj;
 use crate::player::Player;
-use crate::ram::{self, Word, Byte, PLAYERS, PLAYERS_ALIVE};
+use crate::ram::{self, Word, LEVEL, PLAYERS, PLAYERS_ALIVE};
 use crate::rng;
+use crate::tables::{engine, Table};
 
 /// Rank (dynamic difficulty 0..31, `objects::rank`): it indexes the decision and HP tables.
 pub const RANK: Word = Word::a5(0x7f92);
-/// Difficulty level of the setting (h): beyond 5, the initial HP come from the second half of the table.
-const LEVEL: Byte = Byte::a5(0x48);
 
 /// Enemy fields read or written by these helpers.
 pub mod f {
@@ -136,18 +134,18 @@ pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> O
     found
 }
 
-/// Tables of randomly drawn criteria (16 bytes: 10 times the nearest, 4 the fewest HP, 2 the farthest).
-const CRITERIA_STRICT: u32 = 0x426a;
-const CRITERIA_LENIENT: u32 = 0x439e;
+/// Table of randomly drawn criteria of a rule (16 bytes: 10 times the nearest, 4 the fewest HP, 2 the farthest).
+fn criteria(rule: Rule) -> &'static Table {
+    engine().get(match rule {
+        Rule::Strict => "ai/criteria_strict",
+        Rule::Lenient => "ai/criteria_lenient",
+    })
+}
 
 /// 0x424e (strict rule) / 0x43ae (wide rule): randomly drawn criterion, then `target_by`.
 pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
-    let table = match rule {
-        Rule::Strict => CRITERIA_STRICT,
-        Rule::Lenient => CRITERIA_LENIENT,
-    };
     let roll = rng::random(b) & 15;
-    let criterion = Criterion::from_byte(prog8(b, table + roll as u32));
+    let criterion = Criterion::from_byte(criteria(rule).at8(b, roll as u32));
     target_by(b, o, criterion, rule)
 }
 
@@ -173,32 +171,42 @@ pub fn random_player(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
 // Initial values: HP (0x453c, 0x4544), immunities (0xfe5a), HP rank (0x1059e)
 
 /// Initial HP tables: bosses (0x453c) and enemies (0x4544). Words, by type (256 bytes), level, players, rank.
-pub const HP_TABLE_BOSS: u32 = 0x458c;
-pub const HP_TABLE_ENEMY: u32 = 0x5c8c;
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HpTable {
+    Boss,
+    Enemy,
+}
+
+impl HpTable {
+    fn table(self) -> &'static Table {
+        engine().get(match self {
+            HpTable::Boss => "hp_boss",
+            HpTable::Enemy => "hp_enemy",
+        })
+    }
+}
 
 /// 0x453c / 0x4544: initial HP of `o` read from `table` (block of type `+2`; second half beyond level 5;
 /// row of the number of players alive; column of rank / 2), copied to `+0x60`, `+0x62` and `+0x64`.
-pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: u32) {
+pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: HpTable) {
     let mut index = (o.u8(b, Obj::KIND) as u16) << 8;
     if LEVEL.get(b) > 5 {
         index = index.wrapping_add(0x80);
     }
     index = index.wrapping_add(((PLAYERS_ALIVE.get(b).wrapping_sub(1) & 3) as u16) << 5);
     index = index.wrapping_add((RANK.get(b) >> 1 & 15) * 2);
-    let hp = rd16(b, table.wrapping_add(index as i16 as u32));
+    let hp = table.table().at16(b, index as i16 as u32);
     for field in [f::HP_MAX, f::HP, f::HP_PREV] {
         o.set_u16(b, field, hp);
     }
 }
 
-/// Immunities by type (longs): enemies (class 2) then bosses (class 4, 32 types further).
-const IMMUNITY_TABLE: u32 = 0xfe78;
-
-/// 0xfe5a: immunities of `o` (`+0x94`) according to its class and type. Returns the index (bytes) read in the table.
+/// 0xfe5a: immunities of `o` (`+0x94`) according to its class and type (table `immunities`, longs: enemies, class 2,
+/// then bosses, class 4, 32 types further). Returns the index (bytes) read in the table.
 pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
     let base: u8 = if o.u8(b, Obj::CLASS) == 4 { 32 } else { 0 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
-    let v = prog32(b, IMMUNITY_TABLE + index as u32);
+    let v = engine().get("immunities").at32(b, index as u32);
     o.set_u32(b, f::IMMUNITIES, v);
     index
 }
@@ -213,40 +221,33 @@ pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
 // ---------------------------------------------------------------------------------------------
 // Table-driven decisions (0xa4b4, 0xa4c2, 0xac3a)
 
-/// Mask row tables (longs) of the two decisions.
-const DECISION_TABLE_A: u32 = 0xa4f2;
-const DECISION_TABLE_B: u32 = 0xa516;
-
 /// Mask decision: row `+0x72` (`decision_a`, 0xa4b4) or `+0x73` (`decision_b`, 0xa4c2) gives a
 /// table of 32-bit masks indexed by rank; a bit in it is drawn at random. True if it is set.
-fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: u32) -> bool {
+fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &str) -> bool {
     let line = (o.u8(b, field) as u16) << 2;
-    let masks = rd32(b, table.wrapping_add(line as i16 as u32));
+    let masks = engine().get(table).at32(b, line as i16 as u32);
     let rank = RANK.get(b);
-    let mask = rd32(b, masks.wrapping_add((rank << 2) as i16 as u32));
+    let mask = engine().long(b, masks.wrapping_add((rank << 2) as i16 as u32));
     let bit = rng::random(b) & 31;
     mask >> bit & 1 != 0
 }
 
 /// 0xa4b4: does the AI act on this frame (row `+0x72`)?
 pub fn decision_a(b: &mut Cps2Bus, o: Obj) -> bool {
-    decision(b, o, f::DECISION_A, DECISION_TABLE_A)
+    decision(b, o, f::DECISION_A, "ai/decisions_a")
 }
 
 /// 0xa4c2: same with row `+0x73`.
 pub fn decision_b(b: &mut Cps2Bus, o: Obj) -> bool {
-    decision(b, o, f::DECISION_B, DECISION_TABLE_B)
+    decision(b, o, f::DECISION_B, "ai/decisions_b")
 }
 
-/// Byte tables by rank of 0xac3a.
-const BYTE_TABLES: u32 = 0xac58;
-
-/// 0xac3a: `+0x77` = byte of the table of row `+0x76`, at the rank index.
+/// 0xac3a: `+0x77` = byte of the table of row `+0x76` (`ai/bytes_by_rank`), at the rank index.
 pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
     let line = (o.u8(b, f::BYTE_TABLE) as u16) << 2;
-    let table = rd32(b, BYTE_TABLES.wrapping_add(line as i16 as u32));
+    let table = engine().get("ai/bytes_by_rank").at32(b, line as i16 as u32);
     let rank = RANK.get(b);
-    let v = rd8(b, table.wrapping_add(rank as i16 as u32));
+    let v = engine().byte(b, table.wrapping_add(rank as i16 as u32));
     o.set_u8(b, f::BYTE, v);
 }
 
@@ -388,13 +389,10 @@ pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
     o.set_u8(b, f::HEADING, turned & 0x1f);
 }
 
-/// Randomly drawn heading steps (signed bytes) of 0x10574.
-const DRIFT_STEPS: u32 = 0x1058e;
-
-/// 0x10574: the heading of `o` changes by at most one notch, drawn at random.
+/// 0x10574: the heading of `o` changes by at most one notch, drawn at random (`ai/drift_steps`, signed bytes).
 pub fn drift_heading(b: &mut Cps2Bus, o: Obj) {
     let roll = rng::random(b) & 15;
-    let step = prog8(b, DRIFT_STEPS + roll as u32);
+    let step = engine().get("ai/drift_steps").at8(b, roll as u32);
     let heading = o.u8(b, f::HEADING).wrapping_add(step) & 0x1f;
     o.set_u8(b, f::HEADING, heading);
 }

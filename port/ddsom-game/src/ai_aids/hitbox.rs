@@ -2,25 +2,16 @@
 
 use super::*;
 
-/// Pointer tables in ROM (one long per table number).
-pub(super) const STANCE_POINTERS: u32 = 0xa48c;
-pub(super) const BOX_CHANCE_POINTERS: u32 = 0x7fec;
-pub(super) const BOX_ANIMATION_POINTERS: u32 = 0x800c;
-
-/// 0xa470: draws the stance of enemy `o` (byte of the table `+0x70`, indexed by the frame counter), stores it
+/// 0xa470: draws the stance of enemy `o` (byte of the row `+0x70` of `ai/stances`, indexed by the rank), stores it
 /// at `+0x71` and returns it (the callers' `beq` tests whether it is zero).
 pub fn stance(b: &mut Cps2Bus, o: Obj) -> u8 {
-    stance_at(b, o).1
-}
-
-/// (table read, stance).
-pub(super) fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
-    let number = rd8(b, o.0 + f::STANCE_TABLE);
-    let table = crate::mem::rd32(b, STANCE_POINTERS + 4 * number as u32);
-    let tick = rd16(b, TICK);
-    let v = rd8(b, table.wrapping_add(offset(tick)));
-    wr8(b, o.0 + f::STANCE_VALUE, v);
-    (table, v)
+    let e = Enemy(o);
+    let number = e.ai_stance_row(b);
+    let row = table("ai/stances").nth32(b, number as u32);
+    let rank = RANK.get(b);
+    let v = engine().byte(b, row.wrapping_add(offset(rank)));
+    e.set_ai_stance(b, v);
+    v
 }
 
 /// Box in front of an object: x offset (forwards), half-width, half-depth (D0, D1, D2 of the original).
@@ -44,22 +35,22 @@ pub(crate) struct Leftovers {
 }
 
 /// Is object `other` in the box in front of `me`? Biased gaps compared unsigned, like the original.
-pub(super) fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> bool {
-    let facing = rd8(b, me + f::FACING);
+pub(super) fn in_hitbox(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> bool {
+    let facing = Enemy(me).flip(b);
     let offset_x = if facing != 0 { hitbox.offset.wrapping_neg() } else { hitbox.offset };
-    let other_x = rd16(b, other + f::X);
+    let other_x = other.u16(b, Obj::X);
     r.d3 = Some(other_x);
     let half_x = hitbox.half_width;
-    let reach_x = offset_x.wrapping_add(rd16(b, me + f::X)).wrapping_sub(other_x).wrapping_add(half_x);
+    let reach_x = offset_x.wrapping_add(me.u16(b, Obj::X)).wrapping_sub(other_x).wrapping_add(half_x);
     r.d0 = Some(reach_x);
     r.d1 = Some(half_x.wrapping_mul(2));
     if reach_x > half_x.wrapping_mul(2) {
         return false;
     }
-    let other_depth = rd16(b, other + f::DEPTH);
+    let other_depth = other.u16(b, Obj::Y);
     r.d1 = Some(other_depth);
     let half_depth = hitbox.half_depth;
-    let reach_depth = rd16(b, me + f::DEPTH).wrapping_sub(other_depth).wrapping_add(half_depth);
+    let reach_depth = me.u16(b, Obj::Y).wrapping_sub(other_depth).wrapping_add(half_depth);
     r.d0 = Some(reach_depth);
     r.d2 = Some(half_depth.wrapping_mul(2));
     reach_depth <= half_depth.wrapping_mul(2)
@@ -69,50 +60,52 @@ pub(super) fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r:
 /// facing it, on the ground and in state 12 (or 14 if `strict`)? If so, after a probability draw (table `+0x74`),
 /// the enemy goes to state 6 with a randomly drawn animation (table `+0x75`) and the result is true.
 pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
-    in_front_leftovers(b, o.0, strict, hitbox).0
+    in_front_leftovers(b, o, strict, hitbox).0
 }
 
 /// (result, leftovers, mask of the probability draw: the D2 left, reread by the caller).
-pub(super) fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>) {
+pub(super) fn in_front_leftovers(b: &mut Cps2Bus, me: Obj, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>) {
     let mut r = Leftovers::default();
-    let target = rd16(b, me + f::TARGET);
+    let e = Enemy(me);
+    let target = e.target(b);
     if target == 0 {
         return (false, r, None);
     }
-    let other = object(target);
-    let state = rd8(b, other + f::SUB_STATE);
-    let refuse = if strict { rd16(b, other + 0x0c) != 0 || (state != 12 && state != 14) } else { state != 12 };
+    let other = Obj::from_word(target);
+    let player = Player(other.0);
+    let action = player.action(b);
+    let refuse = if strict { other.u16(b, Obj::Z) != 0 || (action != 12 && action != 14) } else { action != 12 };
     if refuse {
         return (false, r, None);
     }
-    let facing = rd8(b, me + f::FACING);
+    let facing = e.flip(b);
     r.d3_byte = Some(facing);
-    if facing == rd8(b, other + f::FACING) {
+    if facing == player.facing(b) {
         return (false, r, None);
     }
-    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
+    let gap = me.u16(b, Obj::X).wrapping_sub(other.u16(b, Obj::X));
     r.d3 = Some(gap);
     let side = if (gap as i16) >= 0 { 0 } else { 32 };
     r.d4_byte = Some(side);
     if side != facing || !in_hitbox(b, me, other, hitbox, &mut r) {
         return (false, r, None);
     }
-    let number = rd8(b, me + f::BOX_CHANCE);
-    let chances = crate::mem::rd32(b, BOX_CHANCE_POINTERS + 4 * number as u32);
-    let tick = rd16(b, TICK);
-    let mask = rd32(b, chances.wrapping_add(offset(tick << 2)));
+    let number = e.ai_box_chance(b);
+    let chances = table("ai/box_chances").nth32(b, number as u32);
+    let rank = RANK.get(b);
+    let mask = engine().long(b, chances.wrapping_add(offset(rank << 2)));
     let roll = rng::random(b) as u32 & 31;
     if mask >> roll & 1 == 0 {
         return (false, r, Some(mask));
     }
-    let number = rd8(b, me + f::BOX_ANIMATION);
     // byte `+0x75` is already a multiple of 4: no shift
-    let animations = rd32(b, BOX_ANIMATION_POINTERS.wrapping_add(number as u32)).wrapping_add(offset((tick >> 1) << 5));
+    let number = e.ai_box_anim(b);
+    let animations = table("ai/box_animations").at32(b, number as u32).wrapping_add(offset((rank >> 1) << 5));
     let pick = rng::random(b) as u32 & 31;
-    wr8(b, me + f::STATE, 6);
-    let v = rd8(b, animations.wrapping_add(pick));
-    wr8(b, me + f::SUB_STATE, v);
-    wr8(b, me + f::SUB_STEP, 0);
+    e.set_substate(b, 6);
+    let v = engine().byte(b, animations.wrapping_add(pick));
+    e.set_step(b, v);
+    e.set_sub_step(b, 0);
     (true, r, Some(mask))
 }
 
@@ -129,15 +122,15 @@ pub enum InHitbox {
 
 /// 0x7f19c: is object `other` in the box in front of object `me`?
 pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
-    box_reach(b, me.0, other.0, hitbox, &mut Leftovers::default())
+    box_reach(b, me, other, hitbox, &mut Leftovers::default())
 }
 
-pub(crate) fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
-    if rd16(b, other + 0x0c) != 0 || !in_hitbox(b, me, other, hitbox, r) {
+pub(crate) fn box_reach(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
+    if other.u16(b, Obj::Z) != 0 || !in_hitbox(b, me, other, hitbox, r) {
         return InHitbox::No;
     }
-    let facing = rd8(b, me + f::FACING);
-    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
+    let facing = Enemy(me).flip(b);
+    let gap = me.u16(b, Obj::X).wrapping_sub(other.u16(b, Obj::X));
     r.d1 = Some(gap);
     let side = if (gap as i16) < 0 { 32 } else { 0 };
     r.d2_byte = Some(side);
@@ -185,21 +178,21 @@ impl HitboxLeftovers {
 
 /// 0xb5e0 (`ai::target_in_front`): is the target `+0x50` in the box in front of the object? With the leftovers reread.
 pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
-    let pointer = rd16(b, o.0 + f::TARGET);
+    let pointer = Enemy(o).target(b);
     let mut leftovers = Leftovers::default();
-    let found = if pointer == 0 { InHitbox::No } else { box_reach(b, o.0, object(pointer), hitbox, &mut leftovers) };
+    let found = if pointer == 0 { InHitbox::No } else { box_reach(b, o, Obj::from_word(pointer), hitbox, &mut leftovers) };
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
 /// 0x7f19c (`box_around`), with the leftovers reread.
 pub fn box_around_leftovers(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let mut leftovers = Leftovers::default();
-    let found = box_reach(b, me.0, other.0, hitbox, &mut leftovers);
+    let found = box_reach(b, me, other, hitbox, &mut leftovers);
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
 /// 0x7f0c / 0x7ef4 (`in_front`), with the leftovers reread.
 pub fn in_front_with_leftovers(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> (bool, HitboxLeftovers) {
-    let (yes, leftovers, mask) = in_front_leftovers(b, o.0, strict, hitbox);
+    let (yes, leftovers, mask) = in_front_leftovers(b, o, strict, hitbox);
     (yes, HitboxLeftovers { leftovers, mask })
 }

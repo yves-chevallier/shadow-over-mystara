@@ -110,7 +110,7 @@ impl Program {
     }
 
     /// Files (paths relative to `dir`) used to rebuild the program.
-    pub const FILES: [&'static str; 25] = [
+    pub const FILES: [&'static str; 26] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -132,6 +132,7 @@ impl Program {
         "data/natives.json",
         "data/set.json",
         "data/screens.json",
+        "data/engine.json",
         "data/reste.json",
         "data/effects.json",
         "data/objects.json",
@@ -200,7 +201,7 @@ impl Program {
         if need(&mut p, "data/player_tables.json") {
             p.put_named(&ddsom_data::PlayerTables::load(&dir.join("data/player_tables.json"))?.tables());
         }
-        for rel in &Self::FILES[10..21] {
+        for rel in &Self::FILES[10..22] {
             if need(&mut p, rel) {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }

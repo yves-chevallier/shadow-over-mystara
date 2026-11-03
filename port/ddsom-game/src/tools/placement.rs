@@ -51,7 +51,7 @@ pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16
     let (longs, next) = load_effect_palette(b, offset);
     c.d[..7].copy_from_slice(&longs[..7]);
     c.a[3] = longs[7];
-    c.a[1] = EFFECT_PALETTE_RAM;
+    c.a[1] = EFFECT_PALETTE_RAM.0;
     c.a[2] = next;
 }
 

@@ -8,7 +8,7 @@ pub mod samples;
 
 pub use ddsom_data::{data, json, levels, pointers, scene_palettes, spawns, speeds, sprites, tables, terrain, texts};
 pub use ddsom_data::{DataFile, Levels, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts};
-pub use ddsom_data::{Anims, EffectTables, Frames};
+pub use ddsom_data::{Anims, EffectTables, Frames, Palettes};
 pub use music::Music;
 
 use std::io;
@@ -65,24 +65,6 @@ impl Cells {
 /// The graphics of `gfx/cells_NN.png`, decoded into the renderer's tile atlas.
 pub fn tile_atlas(dir: &Path) -> io::Result<TileAtlas> {
     Ok(Cells::load(dir)?.into_atlas())
-}
-
-/// Palette library: 16 colors per palette in the hardware 0xLRGB format.
-pub struct Palettes(pub Vec<[u16; 16]>);
-
-impl Palettes {
-    pub fn load(path: &Path) -> io::Result<Self> {
-        let mut r = png::Decoder::new(std::fs::File::open(path)?).read_info()?;
-        let mut buf = vec![0; r.output_buffer_size()];
-        r.next_frame(&mut buf)?;
-        let colors: Vec<u16> = buf
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|p| [p[3], p[0], p[1], p[2]].iter().fold(0, |c, &v| c << 4 | (v / 17) as u16))
-            .collect();
-        Ok(Palettes(colors.as_chunks::<16>().0.to_vec()))
-    }
 }
 
 /// Sample: signed 8-bit PCM, optional loop (start index), reference note.

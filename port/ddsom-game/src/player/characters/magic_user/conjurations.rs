@@ -1,6 +1,6 @@
 //! Spells of the magic-user, continued: storm, rain, witch, curse, wave, portal, summon, wall, drain, sacrifice.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;

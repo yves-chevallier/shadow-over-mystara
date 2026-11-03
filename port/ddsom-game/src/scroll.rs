@@ -13,49 +13,106 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::data::data;
+use crate::hw::video::Vram;
+use crate::mem::A5;
 use crate::objects::Obj;
+use crate::ram::{Byte, Long, Word};
+use crate::record::record;
+use crate::tables::engine;
 use crate::video::hw;
 use crate::Native;
 
-/// Fields of the camera record (offsets from its address).
-pub(crate) mod cam {
-    /// Target position.
-    pub const X: u32 = 0x08;
-    pub const Y: u32 = 0x0c;
-    /// Target of the previous frame.
-    pub const PREVIOUS_X: u32 = 0x26;
-    pub const PREVIOUS_Y: u32 = 0x2a;
-    /// Position already drawn.
-    pub const DRAWN_X: u32 = 0x10;
-    pub const DRAWN_Y: u32 = 0x14;
-    /// Gap target - drawn.
-    pub const DX: u32 = 0x1c;
-    pub const DY: u32 = 0x1e;
-    pub const MODE: u32 = 0x20;
-    /// Cursor in the map: offset in the strip (+0x22) and strip number (+0x24).
-    pub const CURSOR_OFFSET: u32 = 0x22;
-    pub const CURSOR_ROW: u32 = 0x24;
-    /// Left stop (does not go back), right stop.
-    pub const MIN_X: u32 = 0x2e;
-    pub const MAX_X: u32 = 0x34;
-    /// Non-zero: the left stop does not follow the target.
-    pub const HOLD_MIN: u32 = 0x3d;
-    /// Non-zero: no scrolling.
-    pub const FROZEN: u32 = 0x3e;
-    /// Strip step per 256-pixel row.
-    pub const ROW_STEP: u32 = 0x40;
+/// A camera: a work RAM record (`CAMERA_1`, `CAMERA_2`), whose mode script (`camera_modes`) moves the target and
+/// whose scenery copy (this module) follows it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Camera(pub Obj);
+
+impl Camera {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-/// Records of cameras 1 and 2 (offsets from A5).
-pub(crate) const CAMERA_1: u32 = 0x4fe;
-pub(crate) const CAMERA_2: u32 = 0x54e;
-pub(crate) const STAGE: u32 = 0x34;
-const TERRAIN_VIEW: u32 = 0x37;
-const MAP: u32 = 0x1f9ba0;
-const BANKS: u32 = 0x320f6;
-/// Table (in code) of the strip tables per scene.
-const ROW_TABLES: u32 = 0x2ff94;
+record! {
+    impl Camera {
+        /// Non-zero once the camera is initialised for the scene (the first call of a scene initialises it); as a
+        /// word with the step of the mode script.
+        active, set_active, ACTIVE: u8 @ 0x00;
+        state, set_state, STATE: u16 @ 0x00;
+        /// Step of the mode script (increases by 4), then sub-step.
+        step, set_step, STEP: u8 @ 0x01;
+        sub_step, set_sub_step, SUB_STEP: u8 @ 0x02;
+        /// Target position (whole pixels; as longs in 16.16 with their fractions).
+        x, set_x, X: u16 @ 0x08;
+        x_long, set_x_long, X_LONG: u32 @ 0x08;
+        x_fraction, set_x_fraction, X_FRACTION: u16 @ 0x0a;
+        y, set_y, Y: u16 @ 0x0c;
+        y_long, set_y_long, Y_LONG: u32 @ 0x0c;
+        y_fraction, set_y_fraction, Y_FRACTION: u16 @ 0x0e;
+        /// Position already drawn (as longs: the drift of camera 2 adds a fraction).
+        drawn_x, set_drawn_x, DRAWN_X: u16 @ 0x10;
+        drawn_x_long, set_drawn_x_long, DRAWN_X_LONG: u32 @ 0x10;
+        drawn_y, set_drawn_y, DRAWN_Y: u16 @ 0x14;
+        drawn_y_long, set_drawn_y_long, DRAWN_Y_LONG: u32 @ 0x14;
+        /// Script variable (starting ordinate, curve...), then vertical speed (`motion::Z`).
+        scratch, set_scratch, SCRATCH: u16 @ 0x18;
+        speed, set_speed, SPEED: u16 @ 0x1a;
+        /// Gap target - drawn.
+        dx, set_dx, DX: u16 @ 0x1c;
+        dy, set_dy, DY: u16 @ 0x1e;
+        /// Mode of the script (multiple of 4: `camera_modes`).
+        mode, set_mode, MODE: u16 @ 0x20;
+        /// Cursor in the map: offset in the strip (its low byte alone for camera 2) and strip number.
+        cursor_offset, set_cursor_offset, CURSOR_OFFSET: u16 @ 0x22;
+        cursor_offset_low, set_cursor_offset_low, CURSOR_OFFSET_LOW: u8 @ 0x23;
+        cursor_row, set_cursor_row, CURSOR_ROW: u16 @ 0x24;
+        /// Target of the previous frame (whole pixels; as longs with their fractions).
+        previous_x, set_previous_x, PREVIOUS_X: u16 @ 0x26;
+        previous_x_long, set_previous_x_long, PREVIOUS_X_LONG: u32 @ 0x26;
+        previous_y, set_previous_y, PREVIOUS_Y: u16 @ 0x2a;
+        previous_y_long, set_previous_y_long, PREVIOUS_Y_LONG: u32 @ 0x2a;
+        /// Left stop (does not go back).
+        min_x, set_min_x, MIN_X: u16 @ 0x2e;
+        /// Per-line scroll: accumulator of the gradient (long), or offset of camera 2 from the screen (word).
+        gradient, set_gradient, GRADIENT: u32 @ 0x30;
+        screen_offset, set_screen_offset, SCREEN_OFFSET: u16 @ 0x30;
+        /// Right stop.
+        max_x, set_max_x, MAX_X: u16 @ 0x34;
+        /// Per-line scroll: address (high word) of the gradient's table.
+        gradient_table, set_gradient_table, GRADIENT_TABLE: u16 @ 0x36;
+        /// A shake is in progress (cleared at the start of each step).
+        shaking, set_shaking, SHAKING: u8 @ 0x3c;
+        /// Non-zero: the left stop does not follow the target.
+        hold_min, set_hold_min, HOLD_MIN: u8 @ 0x3d;
+        /// Non-zero: no scrolling.
+        frozen, set_frozen, FROZEN: u8 @ 0x3e;
+        /// Strip step per 256-pixel row.
+        row_step, set_row_step, ROW_STEP: u16 @ 0x40;
+        /// Shake: rest position, counter, mode to restore.
+        shake_x, set_shake_x, SHAKE_X: u16 @ 0x42;
+        shake_y, set_shake_y, SHAKE_Y: u16 @ 0x44;
+        shake_count, set_shake_count, SHAKE_COUNT: u16 @ 0x46;
+        shake_mode, set_shake_mode, SHAKE_MODE: u16 @ 0x48;
+        /// Script counters (the first also as a long with the second); the low byte of the first is the variant
+        /// passed to the objects that some scripts create.
+        timer, set_timer, TIMER: u16 @ 0x4a;
+        timers, set_timers, TIMERS: u32 @ 0x4a;
+        kind, set_kind, KIND: u8 @ 0x4b;
+        timer_2, set_timer_2, TIMER_2: u16 @ 0x4c;
+        /// Word cleared at the initialisation of camera 1, read by no code of the port (h).
+        spare, set_spare, SPARE: u16 @ 0x4e;
+    }
+}
+
+/// Cameras 1 (scroll layer 2) and 2 (scroll layer 3).
+pub const CAMERA_1: Camera = Camera(Obj(A5 + 0x4fe));
+pub const CAMERA_2: Camera = Camera(Obj(A5 + 0x54e));
+/// Non-zero: the terrain is drawn instead of the scenery (debug).
+const TERRAIN_VIEW: Byte = Byte::a5(0x37);
+/// Scroll distance of layer 1 (background movement), as a long.
+pub(crate) const BACKDROP: Long = Long::a5(0x7fb2);
+pub(crate) const BACKDROP_WORD: Word = Word::a5(0x7fb2);
 /// Cells per column and per row copied at each step.
 const COLUMN_CELLS: u32 = 19;
 const ROW_CELLS: u32 = 35;
@@ -64,15 +121,10 @@ const TERRAIN_TILES: [u16; 2] = [0x1bc0, 0x1d80];
 /// Tile offset added to the map cells.
 const MAP_TILE_OFFSET: u32 = 0x1800_0000;
 
-/// Machine access of a camera.
-struct Exec<'a> {
-    b: &'a mut Cps2Bus,
-}
-
-impl<'a> Exec<'a> {
-    fn real(b: &'a mut Cps2Bus) -> Self {
-        Exec { b }
-    }
+/// The scenery layer `i` of `levels.json` (0: scroll layer 2, 1: scroll layer 3): its map, its block banks and its
+/// strip tables, read by address as the original computes them.
+fn layer(i: usize) -> &'static ddsom_data::levels::Layer {
+    &data().levels.layers[i]
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -80,9 +132,8 @@ impl<'a> Exec<'a> {
 // ---------------------------------------------------------------------------------------------
 
 struct Camera1<'a> {
-    x: Exec<'a>,
-    a5: u32,
-    cam: u32,
+    b: &'a mut Cps2Bus,
+    cam: Camera,
     /// D4 left by the last copy (0x3f: column, 0x40: row), reread by the following routines.
     d4: Option<u32>,
 }
@@ -94,12 +145,11 @@ enum Step {
 }
 
 impl Camera1<'_> {
-
     fn get(&mut self, field: u32) -> u16 {
-        rd16(self.x.b, self.cam + field)
+        self.cam.0.u16(self.b, field)
     }
     fn set(&mut self, field: u32, v: u16) {
-        wr16(self.x.b, self.cam + field, v);
+        self.cam.0.set_u16(self.b, field, v);
     }
     fn add(&mut self, field: u32, d: u16) {
         let v = self.get(field).wrapping_add(d);
@@ -108,25 +158,25 @@ impl Camera1<'_> {
 
     /// 0x2f81c: continuation of the mode script: target limits, then scenery copy.
     fn after_mode(&mut self) {
-        if rd8(self.x.b, self.cam + cam::FROZEN) != 0 {
+        if self.cam.frozen(self.b) != 0 {
             return;
         }
-        if self.get(cam::MODE) == 4 {
+        if self.get(Camera::MODE) == 4 {
             return self.draw();
         }
-        let (limit, mut x) = (self.get(cam::MAX_X) as i16, self.get(cam::X) as i16);
+        let (limit, mut x) = (self.get(Camera::MAX_X) as i16, self.get(Camera::X) as i16);
         if !(limit >= x) {
-            self.set(cam::X, limit as u16);
+            self.set(Camera::X, limit as u16);
             x = limit;
         }
         let behind = x.wrapping_sub(0x60);
-        let min = self.get(cam::MIN_X) as i16;
+        let min = self.get(Camera::MIN_X) as i16;
         if !(behind <= min) {
-            if !(rd8(self.x.b, self.cam + cam::HOLD_MIN) != 0) {
-                self.set(cam::MIN_X, behind as u16);
+            if self.cam.hold_min(self.b) == 0 {
+                self.set(Camera::MIN_X, behind as u16);
             }
         } else if !(x >= min) {
-            self.set(cam::X, min as u16);
+            self.set(Camera::X, min as u16);
         }
         self.draw();
     }
@@ -134,22 +184,22 @@ impl Camera1<'_> {
     /// 0x2f86e: gaps target - drawn, then copy of the missing columns and rows. The four
     /// tests follow one another; after a step, the original resumes at the test of the same direction.
     fn draw(&mut self) {
-        let dx = self.get(cam::X).wrapping_sub(self.get(cam::DRAWN_X));
-        self.set(cam::DX, dx);
-        let dy = self.get(cam::Y).wrapping_sub(self.get(cam::DRAWN_Y));
-        self.set(cam::DY, dy);
+        let dx = self.get(Camera::X).wrapping_sub(self.get(Camera::DRAWN_X));
+        self.set(Camera::DX, dx);
+        let dy = self.get(Camera::Y).wrapping_sub(self.get(Camera::DRAWN_Y));
+        self.set(Camera::DY, dy);
         let mut test = 0;
         loop {
             match test {
                 0 => {
-                    if self.get(cam::DX) as i16 >= 0x10 {
+                    if self.get(Camera::DX) as i16 >= 0x10 {
                         self.column(true);
                     } else {
                         test = 1;
                     }
                 }
                 1 => {
-                    if self.get(cam::DX) as i16 <= -0x10 {
+                    if self.get(Camera::DX) as i16 <= -0x10 {
                         if let Step::Return = self.column(false) {
                             return;
                         }
@@ -158,14 +208,14 @@ impl Camera1<'_> {
                     }
                 }
                 2 => {
-                    if self.get(cam::DY) as i16 >= 0x10 {
+                    if self.get(Camera::DY) as i16 >= 0x10 {
                         self.row(true);
                     } else {
                         test = 3;
                     }
                 }
                 _ => {
-                    if self.get(cam::DY) as i16 <= -0x10 {
+                    if self.get(Camera::DY) as i16 <= -0x10 {
                         if let Step::Return = self.row(false) {
                             return;
                         }
@@ -182,7 +232,7 @@ impl Camera1<'_> {
     /// 0x2fdfc: row of the cell to write (offset in the layer) for the bottom of the screen,
     /// drawn y rounded up to the next multiple of 16.
     fn row_offset_down(&mut self) -> u16 {
-        let mut y = self.get(cam::DRAWN_Y);
+        let mut y = self.get(Camera::DRAWN_Y);
         if !(y & 0xf == 0) {
             y = y.wrapping_add(0x10);
         }
@@ -192,25 +242,25 @@ impl Camera1<'_> {
 
     /// 0x2fe30: same for the top of the screen (drawn y - 16).
     fn row_offset_up(&mut self) -> u16 {
-        let y = self.get(cam::DRAWN_Y).wrapping_sub(0x10) & 0x3ff;
+        let y = self.get(Camera::DRAWN_Y).wrapping_sub(0x10) & 0x3ff;
         layer_row_offset(y, y)
     
     }
 
     /// 0x2fe5c: column (offset in the layer) to the left of the screen: (drawn x - 0x40) x 4.
     fn column_left(&mut self) -> u16 {
-        self.get(cam::DRAWN_X).wrapping_sub(0x40).wrapping_mul(4)
+        self.get(Camera::DRAWN_X).wrapping_sub(0x40).wrapping_mul(4)
     }
 
     /// 0x2fe6a: column to the right of the screen: (drawn x + 0x1e0) x 4.
     fn column_right(&mut self) -> u16 {
-        self.get(cam::DRAWN_X).wrapping_add(0x1e0).wrapping_mul(4)
+        self.get(Camera::DRAWN_X).wrapping_add(0x1e0).wrapping_mul(4)
     }
 
     /// 0x2fe78 (bottom) / 0x2fec0 (top): map cursor for the row at the bottom / top of the screen. The
     /// strip advances by `ROW_STEP` per 256 pixels; the offset in the strip comes from the high nibble of y.
     fn row_cursor(&mut self, down: bool) {
-        let mut y = self.get(cam::DRAWN_Y);
+        let mut y = self.get(Camera::DRAWN_Y);
         // bottom: y rounded up to the next multiple of 16, distance measured 256 pixels lower;
         // top: 16 pixels above
         let (mut distance, nibble_source) = if down {
@@ -222,69 +272,65 @@ impl Camera1<'_> {
             let above = y.wrapping_sub(0x10);
             (above, above)
         };
-        let mut step = self.get(cam::ROW_STEP);
+        let mut step = self.get(Camera::ROW_STEP);
         if !(distance as i16 >= 0) {
             distance = distance.wrapping_neg();
             step = step.wrapping_neg();
         }
         let strips = distance >> 8;
-        self.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
-        self.set(cam::CURSOR_OFFSET, 0x3c - ((nibble_source & 0xf0) >> 2));
+        self.set(Camera::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
+        self.set(Camera::CURSOR_OFFSET, 0x3c - ((nibble_source & 0xf0) >> 2));
     
     }
 
     /// 0x2ff1c (right column) / 0x2fefa (left column): advances the cursor of the added column.
     fn cursor_for_column(&mut self, right: bool) {
-        let x = self.get(cam::DRAWN_X);
+        let x = self.get(Camera::DRAWN_X);
         let column = if right { x.wrapping_add(0x1e0) } else { x.wrapping_sub(0x40) } & 0xfff0;
-        self.add(cam::CURSOR_OFFSET, (column & 0xff).wrapping_mul(4));
+        self.add(Camera::CURSOR_OFFSET, (column & 0xff).wrapping_mul(4));
         let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
-        self.add(cam::CURSOR_ROW, strip);
+        self.add(Camera::CURSOR_ROW, strip);
     
     }
 
-    /// 0x2ff66: ROM address of the map strip designated by the cursor.
+    /// 0x2ff66: ROM address of the map strip designated by the cursor (the strip table of the scene, then the
+    /// strip in the map of layer 2).
     fn strip_address(&mut self) -> u32 {
-        let stage = rd8(self.x.b, self.a5 + STAGE) as u32;
-        let table = crate::mem::prog16(self.x.b, ROW_TABLES + 4 * stage) as u32;
-        let table = table << 16 | crate::mem::prog16(self.x.b, ROW_TABLES + 4 * stage + 2) as u32;
-        let strip = self.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
-        let first = rd16(self.x.b, table.wrapping_add(strip)) as u32;
-        MAP + (first << 10)
-    
+        let row = self.get(Camera::CURSOR_ROW);
+        strip_address(self.b, layer(0), row, 10)
     }
 
     // --- copy ---
 
     /// Map cell at position `at` (address in the index table), in the layer format.
     fn map_cell(&mut self, at: u32) -> u32 {
-        let off = at.wrapping_sub(MAP);
-        let bank = rd32(self.x.b, BANKS + (off >> 16 & 0xc));
+        let (map, banks) = (layer(0).strips_rom, layer(0).banks_rom);
+        let off = at.wrapping_sub(map);
+        let bank = engine().long(self.b, banks + (off >> 16 & 0xc));
         let c = off >> 2;
-        let index = rd16(self.x.b, MAP + (c & 0xe) + (c >> 1 & 0x3fff0)) as u32;
+        let index = engine().word(self.b, map + (c & 0xe) + (c >> 1 & 0x3fff0)) as u32;
         let sub = (off as u16 >> 3 & 8) as u32 + (off & 4);
-        rd32(self.x.b, bank.wrapping_add(index << 4).wrapping_add(sub))
+        engine().long(self.b, bank.wrapping_add(index << 4).wrapping_add(sub))
     }
 
     /// Writes cell `cell` at `at`: map tile, or terrain tile in debug mode.
     fn put_cell(&mut self, at: u32, cell: u32) {
-        let terrain_view = rd8(self.x.b, self.a5 + TERRAIN_VIEW) != 0;
-        if !(!terrain_view) {
+        let at = crate::hw::video::Cell(at);
+        if TERRAIN_VIEW.is_set(self.b) {
             let attribute = cell & 0xff80;
             let number = (attribute >> 7) as u16;
             let tile = number.wrapping_add(TERRAIN_TILES[(number & 0x40 != 0) as usize]);
-            wr16(self.x.b, at, tile);
-            wr16(self.x.b, at + 2, attribute as u16);
+            at.put(self.b, tile, attribute as u16);
         } else {
-            wr32(self.x.b, at, cell.wrapping_add(MAP_TILE_OFFSET));
+            at.set_long(self.b, cell.wrapping_add(MAP_TILE_OFFSET));
         }
     }
 
     /// Column of 19 cells to the right (`right`) or left of the screen, written top to bottom.
     fn column(&mut self, right: bool) -> Step {
-        self.add(cam::DX, if right { 0x10u16.wrapping_neg() } else { 0x10 });
-        let drawn = self.get(cam::DRAWN_X).wrapping_add(if right { 0x10 } else { 0x10u16.wrapping_neg() });
-        self.set(cam::DRAWN_X, drawn);
+        self.add(Camera::DX, if right { 0x10u16.wrapping_neg() } else { 0x10 });
+        let drawn = self.get(Camera::DRAWN_X).wrapping_add(if right { 0x10 } else { 0x10u16.wrapping_neg() });
+        self.set(Camera::DRAWN_X, drawn);
         if !right && ((drawn as i16) < 0) {
             return Step::Return;
         }
@@ -295,7 +341,7 @@ impl Camera1<'_> {
         self.row_cursor(true);
         self.cursor_for_column(right);
         let mut a2 = self.strip_address();
-        let offset = self.get(cam::CURSOR_OFFSET);
+        let offset = self.get(Camera::CURSOR_OFFSET);
         a2 = a2.wrapping_add(offset as i16 as u32);
         a1 = a1.wrapping_add(d3 as i16 as u32);
         let wrap_offset = offset & 0x3c0;
@@ -306,8 +352,8 @@ impl Camera1<'_> {
             a1 += 4;
             if !(a1 as u16 & 0x3f != 0) {
                 // end of layer column: next strip of the map, next column of the layer
-                let step = self.get(cam::ROW_STEP);
-                self.add(cam::CURSOR_ROW, step);
+                let step = self.get(Camera::ROW_STEP);
+                self.add(Camera::CURSOR_ROW, step);
                 a2 = self.strip_address().wrapping_add(wrap_offset as i16 as u32);
                 let next = (a1 as u16).wrapping_add(0xfc0) & 0x3fc0;
                 a1 = hw::SCROLL2.wrapping_add(next as i16 as u32);
@@ -318,9 +364,9 @@ impl Camera1<'_> {
 
     /// Row of 35 cells at the bottom (`down`) or top of the screen, written left to right.
     fn row(&mut self, down: bool) -> Step {
-        self.add(cam::DY, if down { 0x10u16.wrapping_neg() } else { 0x10 });
-        let drawn = self.get(cam::DRAWN_Y).wrapping_add(if down { 0x10 } else { 0x10u16.wrapping_neg() });
-        self.set(cam::DRAWN_Y, drawn);
+        self.add(Camera::DY, if down { 0x10u16.wrapping_neg() } else { 0x10 });
+        let drawn = self.get(Camera::DRAWN_Y).wrapping_add(if down { 0x10 } else { 0x10u16.wrapping_neg() });
+        self.set(Camera::DRAWN_Y, drawn);
         if !down && ((drawn as i16) < 0) {
             return Step::Return;
         }
@@ -332,7 +378,7 @@ impl Camera1<'_> {
         self.row_cursor(down);
         self.cursor_for_column(false);
         let mut a2 = self.strip_address();
-        let mut offset = self.get(cam::CURSOR_OFFSET);
+        let mut offset = self.get(Camera::CURSOR_OFFSET);
         for _ in 0..ROW_CELLS {
             let cell = self.map_cell(a2.wrapping_add(offset as u32));
             self.put_cell(a1.wrapping_add(column as i16 as u32), cell);
@@ -340,7 +386,7 @@ impl Camera1<'_> {
             offset = offset.wrapping_add(0x40);
             if !(offset & 0x3c0 != 0) {
                 offset = offset.wrapping_sub(0x400);
-                self.add(cam::CURSOR_ROW, 1);
+                self.add(Camera::CURSOR_ROW, 1);
                 a2 = self.strip_address();
             }
         }
@@ -356,7 +402,18 @@ fn layer_row_offset(page: u16, y: u16) -> u16 {
 }
 
 fn camera(b: &mut Cps2Bus) -> Camera1<'_> {
-    Camera1 { x: Exec::real(b), a5: A5, cam: A5 + CAMERA_1, d4: None }
+    Camera1 { b, cam: CAMERA_1, d4: None }
+}
+
+/// ROM address of the map strip designated by the cursor row `row`: the scene's strip table (its address in the
+/// program-space table of the layer, by scene), the strip number in it, then the strip in the map (`1 << shift`
+/// bytes per strip as the cursors count them).
+fn strip_address(b: &mut Cps2Bus, layer: &ddsom_data::levels::Layer, row: u16, shift: u32) -> u32 {
+    let stage = crate::ram::SCENE.get(b) as u32;
+    let table = engine().pc_long(b, layer.scenes_rom + 4 * stage);
+    let strip = row.wrapping_mul(2) as i16 as u32;
+    let first = engine().word(b, table.wrapping_add(strip)) as u32;
+    layer.strips_rom + (first << shift)
 }
 
 /// D4 left by the copy of a scenery column or row: value and bits replaced (`D4 & !mask |
@@ -381,11 +438,6 @@ pub(crate) fn draw1(b: &mut Cps2Bus) -> D4Leftovers {
 // Camera 2: scenery of scroll layer 3 (32x32-pixel cells, 32-pixel step)
 // ---------------------------------------------------------------------------------------------
 
-/// Scenery map of camera 2 (indices of 2x2-cell blocks) and its 16 block banks.
-const MAP_3: u32 = 0x2459c0;
-const BANKS_3: u32 = 0x33a9c;
-/// Table (in code) of the strip tables per scene.
-const ROW_TABLES_3: u32 = 0x32d7c;
 /// Cells per column and per row copied at each step.
 const COLUMN_CELLS_3: u32 = 11;
 const ROW_CELLS_3: u32 = 15;
@@ -393,20 +445,18 @@ const ROW_CELLS_3: u32 = 15;
 const MAP_TILE_OFFSET_3: u32 = 0x1f00_0000;
 
 struct Camera2<'a> {
-    x: Exec<'a>,
-    a5: u32,
-    cam: u32,
+    b: &'a mut Cps2Bus,
+    cam: Camera,
     /// D4 left by the last copy: 0x1f (long) for a column, 0xe0 (low word) for a row.
     d4: Option<(u32, u32)>,
 }
 
 impl Camera2<'_> {
-
     fn get(&mut self, field: u32) -> u16 {
-        rd16(self.x.b, self.cam + field)
+        self.cam.0.u16(self.b, field)
     }
     fn set(&mut self, field: u32, v: u16) {
-        wr16(self.x.b, self.cam + field, v);
+        self.cam.0.set_u16(self.b, field, v);
     }
     fn add(&mut self, field: u32, d: u16) {
         let v = self.get(field).wrapping_add(d);
@@ -415,22 +465,22 @@ impl Camera2<'_> {
 
     /// 0x328a8: gaps target - drawn, then copy of the missing columns and rows (step of 32).
     fn draw(&mut self) {
-        let dx = self.get(cam::X).wrapping_sub(self.get(cam::DRAWN_X));
-        self.set(cam::DX, dx);
-        let dy = self.get(cam::Y).wrapping_sub(self.get(cam::DRAWN_Y));
-        self.set(cam::DY, dy);
+        let dx = self.get(Camera::X).wrapping_sub(self.get(Camera::DRAWN_X));
+        self.set(Camera::DX, dx);
+        let dy = self.get(Camera::Y).wrapping_sub(self.get(Camera::DRAWN_Y));
+        self.set(Camera::DY, dy);
         let mut test = 0;
         loop {
             match test {
                 0 => {
-                    if self.get(cam::DX) as i16 >= 0x20 {
+                    if self.get(Camera::DX) as i16 >= 0x20 {
                         self.column(true);
                     } else {
                         test = 1;
                     }
                 }
                 1 => {
-                    if self.get(cam::DX) as i16 <= -0x20 {
+                    if self.get(Camera::DX) as i16 <= -0x20 {
                         if let Step::Return = self.column(false) {
                             return;
                         }
@@ -439,14 +489,14 @@ impl Camera2<'_> {
                     }
                 }
                 2 => {
-                    if self.get(cam::DY) as i16 >= 0x20 {
+                    if self.get(Camera::DY) as i16 >= 0x20 {
                         self.row(true);
                     } else {
                         test = 3;
                     }
                 }
                 _ => {
-                    if self.get(cam::DY) as i16 <= -0x20 {
+                    if self.get(Camera::DY) as i16 <= -0x20 {
                         if let Step::Return = self.row(false) {
                             return;
                         }
@@ -463,7 +513,7 @@ impl Camera2<'_> {
     /// 0x32c2a (bottom) / 0x32c5e (top): offset in the layer of the row of cells, drawn y rounded up
     /// to the next multiple of 32 (bottom) or reduced by 32 (top).
     fn row_offset(&mut self, down: bool) -> u16 {
-        let mut y = self.get(cam::DRAWN_Y);
+        let mut y = self.get(Camera::DRAWN_Y);
         let page_source = if down {
             if !(y & 0x1f == 0) {
                 y = y.wrapping_add(0x20);
@@ -479,15 +529,15 @@ impl Camera2<'_> {
 
     /// 0x32c8a / 0x32c96: column (x - 0x20 or x + 0x180) to the left / right of the screen.
     fn column_x(&mut self, right: bool) -> u16 {
-        let x = self.get(cam::DRAWN_X);
+        let x = self.get(Camera::DRAWN_X);
         if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) }
     
     }
 
     /// 0x32ca2 (bottom) / 0x32cea (top): map cursor for the bottom / top row.
     fn row_cursor(&mut self, down: bool) {
-        let mut y = self.get(cam::DRAWN_Y);
-        let mut step = self.get(cam::ROW_STEP);
+        let mut y = self.get(Camera::DRAWN_Y);
+        let mut step = self.get(Camera::ROW_STEP);
         let (distance, nibble_source) = if down {
             if !(y & 0x1f == 0) {
                 y = y.wrapping_add(0x20);
@@ -506,51 +556,48 @@ impl Camera2<'_> {
             (above, above)
         };
         let strips = distance >> 8;
-        self.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
-        self.set(cam::CURSOR_OFFSET, 0x1c - ((nibble_source & 0xe0) >> 3));
+        self.set(Camera::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
+        self.set(Camera::CURSOR_OFFSET, 0x1c - ((nibble_source & 0xe0) >> 3));
     
     }
 
     /// 0x32d3c (right column) / 0x32d22 (left column): advances the cursor of the added column;
     /// the offset is added to the low byte only (without carry).
     fn cursor_for_column(&mut self, right: bool) {
-        let x = self.get(cam::DRAWN_X);
+        let x = self.get(Camera::DRAWN_X);
         let column = if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) } & 0xffe0;
-        let low = rd8(self.x.b, self.cam + cam::CURSOR_OFFSET + 1).wrapping_add(column as u8);
-        wr8(self.x.b, self.cam + cam::CURSOR_OFFSET + 1, low);
+        let low = self.cam.cursor_offset_low(self.b).wrapping_add(column as u8);
+        self.cam.set_cursor_offset_low(self.b, low);
         let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
-        self.add(cam::CURSOR_ROW, strip);
+        self.add(Camera::CURSOR_ROW, strip);
     
     }
 
-    /// 0x32d54: ROM address of the map strip designated by the cursor.
+    /// 0x32d54: ROM address of the map strip designated by the cursor (map of layer 3).
     fn strip_address(&mut self) -> u32 {
-        let stage = rd8(self.x.b, self.a5 + STAGE) as u32;
-        let table = (crate::mem::prog16(self.x.b, ROW_TABLES_3 + 4 * stage) as u32) << 16 | crate::mem::prog16(self.x.b, ROW_TABLES_3 + 4 * stage + 2) as u32;
-        let strip = self.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
-        let first = rd16(self.x.b, table.wrapping_add(strip)) as u32;
-        MAP_3 + (first << 8)
-    
+        let row = self.get(Camera::CURSOR_ROW);
+        strip_address(self.b, layer(1), row, 8)
     }
 
     // --- copy ---
 
     /// Map cell at position `at`; `banks`: address bits that choose the bank.
     fn map_cell(&mut self, at: u32, banks: u32) -> u32 {
-        let off = at.wrapping_sub(MAP_3);
-        let bank = rd32(self.x.b, BANKS_3 + ((off >> 16 & banks) << 2));
+        let (map, bank_table) = (layer(1).strips_rom, layer(1).banks_rom);
+        let off = at.wrapping_sub(map);
+        let bank = engine().long(self.b, bank_table + ((off >> 16 & banks) << 2));
         let c = off >> 2;
-        let index = rd16(self.x.b, MAP_3 + (c & 6) + (c >> 1 & !7)) as u32;
+        let index = engine().word(self.b, map + (c & 6) + (c >> 1 & !7)) as u32;
         let sub = (off as u16 >> 2 & 8) as u32 + (off & 4);
-        rd32(self.x.b, bank.wrapping_add(index << 4).wrapping_add(sub)).wrapping_add(MAP_TILE_OFFSET_3)
+        engine().long(self.b, bank.wrapping_add(index << 4).wrapping_add(sub)).wrapping_add(MAP_TILE_OFFSET_3)
     }
 
     /// Column of 11 cells to the right (`right`) or left of the screen, written top to bottom.
     fn column(&mut self, right: bool) -> Step {
-        self.add(cam::DX, if right { 0x20u16.wrapping_neg() } else { 0x20 });
-        let old = self.get(cam::DRAWN_X);
+        self.add(Camera::DX, if right { 0x20u16.wrapping_neg() } else { 0x20 });
+        let old = self.get(Camera::DRAWN_X);
         let drawn = old.wrapping_add(if right { 0x20 } else { 0x20u16.wrapping_neg() });
-        self.set(cam::DRAWN_X, drawn);
+        self.set(Camera::DRAWN_X, drawn);
         if !right && (old <= 0x20) {
             return Step::Return;
         }
@@ -561,19 +608,19 @@ impl Camera2<'_> {
         self.row_cursor(true);
         self.cursor_for_column(right);
         let mut a2 = self.strip_address();
-        let offset = self.get(cam::CURSOR_OFFSET);
+        let offset = self.get(Camera::CURSOR_OFFSET);
         a2 = a2.wrapping_add(offset as i16 as u32);
         a1 = a1.wrapping_add(d3 as i16 as u32);
         let wrap_offset = offset & 0xe0;
         for _ in 0..COLUMN_CELLS_3 {
             let cell = self.map_cell(a2, 0xf);
             a2 += 4;
-            wr32(self.x.b, a1, cell);
+            Vram(a1).set_long(self.b, cell);
             a1 += 4;
             if !(a1 as u16 & 0x1f != 0) {
                 // end of layer column: next strip of the map, next column of the layer
-                let step = self.get(cam::ROW_STEP);
-                self.add(cam::CURSOR_ROW, step);
+                let step = self.get(Camera::ROW_STEP);
+                self.add(Camera::CURSOR_ROW, step);
                 a2 = self.strip_address().wrapping_add(wrap_offset as i16 as u32);
                 let here = a1 as u16 & 0x3fe0;
                 a1 = a1.wrapping_sub(here as i16 as u32);
@@ -588,10 +635,10 @@ impl Camera2<'_> {
 
     /// Row of 15 cells at the bottom (`down`) or top of the screen, written left to right.
     fn row(&mut self, down: bool) -> Step {
-        self.add(cam::DY, if down { 0x20u16.wrapping_neg() } else { 0x20 });
-        let old = self.get(cam::DRAWN_Y);
+        self.add(Camera::DY, if down { 0x20u16.wrapping_neg() } else { 0x20 });
+        let old = self.get(Camera::DRAWN_Y);
         let drawn = old.wrapping_add(if down { 0x20 } else { 0x20u16.wrapping_neg() });
-        self.set(cam::DRAWN_Y, drawn);
+        self.set(Camera::DRAWN_Y, drawn);
         if !down {
             if old <= 0x20 {
                 return Step::Return;
@@ -607,15 +654,15 @@ impl Camera2<'_> {
         self.row_cursor(down);
         self.cursor_for_column(false);
         let mut a2 = self.strip_address();
-        let mut offset = self.get(cam::CURSOR_OFFSET);
+        let mut offset = self.get(Camera::CURSOR_OFFSET);
         for _ in 0..ROW_CELLS_3 {
             let cell = self.map_cell(a2.wrapping_add(offset as u32), 1);
-            wr32(self.x.b, a1.wrapping_add(column as i16 as u32), cell);
+            Vram(a1.wrapping_add(column as i16 as u32)).set_long(self.b, cell);
             column = column.wrapping_add(0x20) & 0x7e0;
             offset = offset.wrapping_add(0x20);
             if !(offset & 0xe0 != 0) {
                 offset = offset.wrapping_sub(0x100);
-                self.add(cam::CURSOR_ROW, 1);
+                self.add(Camera::CURSOR_ROW, 1);
                 a2 = self.strip_address();
             }
         }
@@ -625,7 +672,7 @@ impl Camera2<'_> {
 
 /// 0x328a8: gaps target - drawn of camera 2, then copy of the missing columns and rows.
 pub(crate) fn draw2(b: &mut Cps2Bus) -> D4Leftovers {
-    let mut cam = Camera2 { x: Exec::real(b), a5: A5, cam: A5 + CAMERA_2, d4: None };
+    let mut cam = Camera2 { b, cam: CAMERA_2, d4: None };
     cam.draw();
     cam.d4
 }
@@ -634,31 +681,32 @@ pub(crate) fn draw2(b: &mut Cps2Bus) -> D4Leftovers {
 // Parallax scenery: an object moves by a fraction of the frame's scroll
 // ---------------------------------------------------------------------------------------------
 
-/// Current scroll (x, y) of the camera, in 16.16 fixed point, and that of the previous frame.
-const SCROLL: [u32; 2] = [0x506, 0x50a];
-const PREVIOUS_SCROLL: [u32; 2] = [0x524, 0x528];
-/// Position (x, y) of an object in 16.16 fixed point.
-pub(crate) const OBJECT_X: u32 = 0x08;
-pub(crate) const OBJECT_Y: u32 = 0x0c;
-/// Integer position drawn (x) of an object.
-const OBJECT_DRAWN_X: u32 = 0x10;
+/// Position (x, y) of a scenery object or a camera that follows the scroll, in 16.16 fixed point (the fields of
+/// `Camera`: the parallax scenery objects have the same layout), and the integer position drawn (x).
+pub(crate) const OBJECT_X: u32 = Camera::X_LONG;
+pub(crate) const OBJECT_Y: u32 = Camera::Y_LONG;
+const OBJECT_DRAWN_X: u32 = Camera::DRAWN_X;
 
-/// Scroll of the frame on axis 0 (x) or 1 (y).
-pub(crate) fn scroll_delta(b: &mut Cps2Bus, a5: u32, axis: usize) -> i32 {
-    crate::mem::rd32(b, a5 + SCROLL[axis]).wrapping_sub(crate::mem::rd32(b, a5 + PREVIOUS_SCROLL[axis])) as i32
+/// Scroll of camera 1 since the previous frame (16.16) on axis 0 (x) or 1 (y).
+pub(crate) fn scroll_delta(b: &mut Cps2Bus, axis: usize) -> i32 {
+    let (now, before) = if axis == 0 {
+        (CAMERA_1.x_long(b), CAMERA_1.previous_x_long(b))
+    } else {
+        (CAMERA_1.y_long(b), CAMERA_1.previous_y_long(b))
+    };
+    now.wrapping_sub(before) as i32
 }
 
 /// Adds `d` to a position of object `o`. Returns the sum (the flags of the addition: `move_object_68k`).
 pub(crate) fn move_object(b: &mut Cps2Bus, o: Obj, field: u32, d: i32) -> (u32, u32) {
-    let at = o.0 + field;
-    let v = crate::mem::rd32(b, at);
-    crate::mem::wr32(b, at, v.wrapping_add(d as u32));
+    let v = o.u32(b, field);
+    o.set_u32(b, field, v.wrapping_add(d as u32));
     (d as u32, v)
 }
 
 /// Frame scroll for scenery that follows `(fx, fy)` of the scroll (x, y).
 pub(crate) fn parallax(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
-    (fx(scroll_delta(b, A5, 0)), fy(scroll_delta(b, A5, 1)))
+    (fx(scroll_delta(b, 0)), fy(scroll_delta(b, 1)))
 }
 /// Share of the scroll delta that a parallax scenery follows, in x and in y.
 pub(crate) type Parallax = (fn(i32) -> i32, fn(i32) -> i32);
@@ -682,9 +730,9 @@ pub(crate) fn parallax_three_quarters(b: &mut Cps2Bus, o: Obj) {
 /// 0x331e8 / 0x3326c: scenery `o` advances 6 / 3 pixels per frame, its drawn position follows. Returns the new
 /// position (flags of the original: `creep_68k`).
 pub(crate) fn creep(b: &mut Cps2Bus, o: Obj, pixels: u16) -> u16 {
-    let x = crate::mem::rd16(b, o.0 + OBJECT_X).wrapping_add(pixels);
-    crate::mem::wr16(b, o.0 + OBJECT_X, x);
-    crate::mem::wr16(b, o.0 + OBJECT_DRAWN_X, x);
+    let x = o.u16(b, OBJECT_X).wrapping_add(pixels);
+    o.set_u16(b, OBJECT_X, x);
+    o.set_u16(b, OBJECT_DRAWN_X, x);
     x
 }
 
@@ -698,10 +746,9 @@ pub const NATIVES: &[Native] = &[];
 /// before its mode script (0x2ede0) moves it; the second is processed by 0x32108.
 /// Returns the D4 left by the scenery copies of the two cameras (in order).
 pub fn update_cameras(b: &mut Cps2Bus) -> [D4Leftovers; 2] {
-    let camera = A5 + CAMERA_1;
-    let (x, y) = (rd32(b, camera + cam::X), rd32(b, camera + cam::Y));
-    wr32(b, camera + cam::PREVIOUS_X, x);
-    wr32(b, camera + cam::PREVIOUS_Y, y);
+    let (x, y) = (CAMERA_1.x_long(b), CAMERA_1.y_long(b));
+    CAMERA_1.set_previous_x_long(b, x);
+    CAMERA_1.set_previous_y_long(b, y);
     [crate::camera_modes::update_camera_1(b), crate::camera_modes::update_camera_2(b)]
 }
 
@@ -715,74 +762,76 @@ pub fn update_cameras_in_game(b: &mut Cps2Bus) {
     }
 }
 
-/// Table (per scene) of the camera in service, and starting positions (x, y) of the first camera.
-const SERVICE: u32 = 0x33bdc;
-pub(crate) const STARTS: u32 = 0x33c54;
+/// Per-scene tables of the cameras: camera in service (`scroll/camera_service`, bytes) and starting position of the
+/// first camera (`scroll/starts`, x and y words); stops, video control word, layers and steps of the cameras
+/// (`data/scenes.json`, `camera_*`).
+fn by_scene(name: &str) -> &'static crate::tables::Table {
+    engine().get(name)
+}
 
-/// 0x33aa6: cameras of the scene at their starting position. The two cameras (`A5+0x4fe`, `A5+0x54e`)
-/// are reset to zero, the start of layer 1 cleared (0x3525c); the scene (`A5+0x34`) chooses the camera
-/// in service (`A5+0x36`, table 0x33bdc) and the starting position of the first (table 0x33c54: x, y),
-/// then the cameras are updated (0x33e20, by the caller: `cameras_start` only does the reset).
+/// 0x33aa6: cameras of the scene at their starting position. The two cameras are reset to zero, the start of layer 1
+/// cleared (0x3525c); the scene chooses the camera in service (`ram::CAMERA_ALT_ACTIVE`) and the starting position of
+/// the first, then the cameras are updated (0x33e20, by the caller: `cameras_start` only does the reset).
 pub fn cameras_start(b: &mut Cps2Bus) {
-    for off in [0x54e, 0x556, 0x55a, 0x55e, 0x562, 0x56a, 0x4fe, 0x506, 0x50a, 0x50e, 0x512, 0x51a] {
-        wr32(b, A5 + off, 0);
+    for cam in [CAMERA_2, CAMERA_1] {
+        for field in [Camera::STATE, Camera::X_LONG, Camera::Y_LONG, Camera::DRAWN_X_LONG, Camera::DRAWN_Y_LONG] {
+            cam.0.set_u32(b, field, 0);
+        }
+        cam.0.set_u32(b, Camera::DX, 0);
+        if cam == CAMERA_2 {
+            CAMERA_2.set_scratch(b, 0);
+            CAMERA_2.set_hold_min(b, 0);
+        }
     }
-    wr16(b, A5 + 0x566, 0);
-    wr8(b, 0xff858b, 0);
-    wr8(b, A5 + 0x53a, 0);
+    CAMERA_1.set_shaking(b, 0);
     crate::video::clear_layer1_start(b);
-    let stage = rd8(b, A5 + STAGE) as u32;
-    let service = rd8(b, SERVICE + stage);
-    wr8(b, A5 + 0x36, service);
-    for off in [0x508, 0x50c, 0x52e] {
-        wr16(b, A5 + off, 0);
-    }
-    let start = STARTS + 4 * stage;
-    let (x, y) = (rd16(b, start), rd16(b, start + 2));
-    wr16(b, A5 + 0x506, x);
-    wr16(b, A5 + 0x50a, y);
-    wr32(b, A5 + 0x50e, 0);
+    let stage = crate::ram::SCENE.get(b) as u32;
+    let service = by_scene("scroll/camera_service").at8(b, stage);
+    crate::ram::CAMERA_ALT_ACTIVE.set(b, service);
+    CAMERA_1.set_x_fraction(b, 0);
+    CAMERA_1.set_y_fraction(b, 0);
+    CAMERA_1.set_screen_offset(b, 0);
+    let starts = by_scene("scroll/starts");
+    let (x, y) = (starts.at16(b, 4 * stage), starts.at16(b, 4 * stage + 2));
+    CAMERA_1.set_x(b, x);
+    CAMERA_1.set_y(b, y);
+    CAMERA_1.set_drawn_x_long(b, 0);
 }
 
 /// 0x33b24: cameras on return from an annex zone (exit door SET 7 and doors 27, 29, before they
-/// restore the remembered camera). The scene (`A5+0x34`) chooses the camera in service (`A5+0x36`, table
-/// 0x33bdc), a limit (`A5+0x532`), the video control word 0x400004 and the displayed layers (0xbc6),
-/// then the cameras are put back to their initial position (0x200) and their stops reloaded (per-scene
-/// tables, data space), before their update (0x33e20, by the caller).
+/// restore the remembered camera). The scene chooses the camera in service (`ram::CAMERA_ALT_ACTIVE`), the right stop
+/// of camera 1, the video control word 0x400004 and the displayed layers (0xbc6), then the cameras are put back to
+/// their initial position (0x200) and their stops reloaded (per-scene tables), before their update (0x33e20, by the
+/// caller).
 pub fn cameras_return(b: &mut Cps2Bus) {
-    use crate::camera_modes::tables::{
-        FROZEN as MODES, HOLD_MIN as PRIORITIES, LAYERS, MAX_X_1 as LIMITS, OUTPUT as VIDEO_CONTROL,
-        ROW_STEP_1 as BOUNDS_A, ROW_STEP_2 as BOUNDS_B,
-    };
-    use crate::camera_modes::OUTPUT_PORT as VIDEO_CONTROL_PORT;
-    let stage = rd8(b, A5 + STAGE) as u32;
-    let service = rd8(b, SERVICE + stage);
-    wr8(b, A5 + 0x36, service);
-    let limit = rd16(b, LIMITS + 2 * stage);
-    wr16(b, A5 + 0x532, limit);
-    let control = rd16(b, VIDEO_CONTROL + 2 * stage);
-    wr16(b, VIDEO_CONTROL_PORT, control);
-    let layers = rd16(b, LAYERS + 2 * stage);
-    wr16(b, A5 + 0x14, 0);
+    let stage = crate::ram::SCENE.get(b) as u32;
+    let service = by_scene("scroll/camera_service").at8(b, stage);
+    crate::ram::CAMERA_ALT_ACTIVE.set(b, service);
+    let limit = by_scene("camera_max_x").at16(b, 2 * stage);
+    CAMERA_1.set_max_x(b, limit);
+    let control = by_scene("camera_output").at16(b, 2 * stage);
+    crate::hw::video::regs::OBJECT_OUTPUT.set(b, control);
+    let layers = by_scene("camera_layers").at16(b, 2 * stage);
+    crate::video::LAYER_ENABLE.set(b, 0);
     crate::video::turn_layers_on(b, layers);
-    let priority = rd8(b, PRIORITIES + stage);
-    wr8(b, A5 + 0x53b, priority);
-    wr16(b, A5 + 0x4fe, 0x200);
-    wr16(b, A5 + 0x51e, 0);
-    wr32(b, A5 + 0x548, 0);
-    wr16(b, A5 + 0x54c, 0);
-    wr8(b, A5 + 0x53a, 0);
-    wr32(b, A5 + 0x7fb2, 0);
-    wr16(b, A5 + 0x54e, 0x200);
-    wr16(b, A5 + 0x56e, 0);
-    let x = rd16(b, A5 + 0x506);
-    wr16(b, A5 + 0x52c, x);
-    let bound = rd32(b, BOUNDS_A + 4 * stage);
-    let v = rd16(b, bound);
-    wr16(b, A5 + 0x53e, v);
-    let bound = rd32(b, BOUNDS_B + 4 * stage);
-    let v = rd16(b, bound);
-    wr16(b, A5 + 0x58e, v);
-    let mode = rd8(b, MODES + stage);
-    wr8(b, A5 + 0x53c, mode);
+    let priority = by_scene("camera_hold_min").at8(b, stage);
+    CAMERA_1.set_hold_min(b, priority);
+    CAMERA_1.set_state(b, 0x200);
+    CAMERA_1.set_mode(b, 0);
+    CAMERA_1.set_timers(b, 0);
+    CAMERA_1.set_spare(b, 0);
+    CAMERA_1.set_shaking(b, 0);
+    BACKDROP.set(b, 0);
+    CAMERA_2.set_state(b, 0x200);
+    CAMERA_2.set_mode(b, 0);
+    let x = CAMERA_1.x(b);
+    CAMERA_1.set_min_x(b, x);
+    let bound = by_scene("camera_row_step").at32(b, 4 * stage);
+    let v = engine().word(b, bound);
+    CAMERA_1.set_row_step(b, v);
+    let bound = by_scene("camera2_row_step").at32(b, 4 * stage);
+    let v = engine().word(b, bound);
+    CAMERA_2.set_row_step(b, v);
+    let mode = by_scene("camera_frozen").at8(b, stage);
+    CAMERA_1.set_frozen(b, mode);
 }

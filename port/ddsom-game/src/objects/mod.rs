@@ -12,17 +12,20 @@
 //! - `motion`: speeds, accelerations, speed tables by index.
 //! - `rank`: rank counter (dynamic difficulty).
 //! - `cull`: on-screen presence test and registration in the collision queues.
+//! - `enemy`: fields of the ENEMY and BOSS objects (`Enemy`), shared by the families and the AI helpers.
 //! - `current`: the `Current` trait, these routines applied to a handler's object (`x.move_xz()`...).
 
 pub mod anim;
 pub mod current;
 pub mod cull;
+pub mod enemy;
 pub mod lists;
 pub mod motion;
 pub mod pools;
 pub mod rank;
 
 pub use current::Current;
+pub use enemy::Enemy;
 
 use cps2::Cps2Bus;
 
@@ -181,14 +184,25 @@ record! {
         next, set_next, NEXT: Link @ 0x26;
         /// Class code (= original pool: see `pools::Pool::class`).
         class, set_class, CLASS: u8 @ 0x28;
+        /// Orientation: 0 faces right, 0x20 faces left (horizontal mirror of the sprite).
+        flip, set_flip, FLIP: u8 @ 0x2c;
         /// Index into the speed table (`SPEED_TABLE`).
         speed_index, set_speed_index, SPEED_INDEX: u8 @ 0x2d;
+        /// Collision box set (one set per object kind: `sprites/tables.json`).
+        box_set, set_box_set, BOX_SET: u8 @ 0x2e;
+        /// Setting given by the creator of the object (group, rank, number in a series...).
+        setting, set_setting, SETTING: u8 @ 0x2f;
         /// Current animation entry: remaining duration (frames), flags (high byte: 0 continue,
         /// 0xFE end, other jump), sprite frame, then two longs of data per frame.
         anim_timer, set_anim_timer, ANIM_TIMER: u16 @ 0x30;
         anim_flags, set_anim_flags, ANIM_FLAGS: u16 @ 0x32;
         frame, set_frame, FRAME: u32 @ 0x34;
         frame_data_a, set_frame_data_a, FRAME_DATA_A: u32 @ 0x38;
+        /// The bytes of `FRAME_DATA_A`: index of the body box, of the push box and of the attack box in the set
+        /// `BOX_SET` (0: none), then the ground mark.
+        body_box, set_body_box, BODY_BOX: u8 @ 0x38;
+        push_box, set_push_box, PUSH_BOX: u8 @ 0x39;
+        attack_box, set_attack_box, ATTACK_BOX: u8 @ 0x3a;
         frame_data_b, set_frame_data_b, FRAME_DATA_B: u32 @ 0x3c;
         /// Two additional longs of data for the long animation entries.
         frame_data_c, set_frame_data_c, FRAME_DATA_C: u32 @ 0x40;

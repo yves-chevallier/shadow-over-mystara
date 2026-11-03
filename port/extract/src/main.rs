@@ -54,6 +54,7 @@ fn main() {
             effects::extract(roms, &out.join("data/effects.json"))?;
             objects::extract(roms, &out.join("data/objects.json"))?;
             screens::extract(roms, &out.join("data/screens.json"))?;
+            engine::extract(roms, &out.join("data/engine.json"))?;
             set::extract(roms, &out.join("data/set.json"))?;
             player_tables::extract(roms, &out.join("data/player_tables.json"))?;
             data::extract(roms, &out.join("data"))?;

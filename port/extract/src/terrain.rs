@@ -17,7 +17,11 @@ const KINDS: [(u32, u32); 2] = [(0x3425c, 0x33fe4), (0x34a5c, 0x3403c)];
 const KIND_COUNT: u32 = 128;
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
-    let rom = Program::load(roms)?;
+    json::save(path, &terrain(&Program::load(roms)?), 4)
+}
+
+/// The terrain tables of the program `rom` (`terrain.json`).
+pub fn terrain(rom: &Program) -> Terrain {
     let maps = MAPS
         .iter()
         .map(|&(at, stage, dy, n)| FixedMap {
@@ -35,5 +39,5 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             kinds: (0..KIND_COUNT).map(|i| Kind::from_words(std::array::from_fn(|k| rom.rd16(at + 16 * i + 2 * k as u32)))).collect(),
         })
         .collect();
-    json::save(path, &Terrain { maps, kinds }, 4)
+    Terrain { maps, kinds }
 }

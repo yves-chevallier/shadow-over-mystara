@@ -5,7 +5,7 @@
 
 use crate::objects::Obj;
 use crate::player::Player;
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use super::*;
 use crate::objects::pools;
 use crate::machine::Machine;

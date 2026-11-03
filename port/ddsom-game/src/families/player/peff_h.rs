@@ -5,7 +5,7 @@ use crate::families::player::records::Victim;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;

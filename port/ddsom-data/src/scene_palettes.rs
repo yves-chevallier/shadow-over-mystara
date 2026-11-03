@@ -25,7 +25,7 @@ pub struct AddressTable {
     pub entries: Vec<u32>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ScenePalettes {
     /// Palette library (32 bytes each).
     #[serde(with = "hex")]

@@ -10,6 +10,7 @@ pub mod data;
 pub mod dialogs;
 pub mod effects;
 pub mod enemies;
+pub mod engine;
 pub mod gfx;
 pub mod levels;
 pub mod misc;
@@ -63,6 +64,8 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let players = data::build(rom, regions, &specs, Vec::new());
     let (regions, specs) = combat::combat();
     let combat = data::build(rom, regions, &specs, Vec::new());
+    let (regions, specs) = rest::specs(rom);
+    let rest = data::build(rom, regions, &specs, Vec::new());
     Ok(GameData {
         frames,
         anims,
@@ -80,5 +83,11 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
         player_tables: player_tables::player_tables(rom),
         players,
         combat,
+        levels: levels::levels(rom)?,
+        terrain: terrain::terrain(rom),
+        scene_palettes: scene_palettes::scene_palettes(rom)?,
+        palettes: palettes::palettes(rom),
+        engine: engine::engine(rom),
+        rest,
     })
 }

@@ -2,6 +2,7 @@
 //! are in `crate::ram`). A meaning guessed from the code alone is marked (h).
 
 use crate::ram::{Byte, Long, Word};
+pub use crate::ram::{CAMERA1_X, CAMERA1_Y};
 
 /// "Collectible picked up" flags, one byte per collectible object (48 longs cleared by `items::clear_picked_up`).
 pub const PICKED: Byte = Byte(0xff2478); // A5 - 0x5b88
@@ -82,10 +83,6 @@ pub const CAMERA_ALT_TARGET_X: Word = Word::a5(0x55e);
 pub const CAMERA_ALT_TARGET_Y: Word = Word::a5(0x562);
 /// Previous alternate camera x (16.16).
 pub const PREV_CAMERA_ALT_X: Long = Long::a5(0x574);
-/// Camera of plane 1, x.
-pub const CAMERA1_X: Word = Word::a5(0x5a6);
-/// Camera of plane 1, y.
-pub const CAMERA1_Y: Word = Word::a5(0x5aa);
 /// Scene script being read (address).
 pub const SCENE_SCRIPT: Long = Long::a5(0x5c6);
 /// First header word of the scene script (h).

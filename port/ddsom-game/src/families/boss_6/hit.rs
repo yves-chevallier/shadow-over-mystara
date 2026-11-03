@@ -20,7 +20,7 @@ const REACTIONS: RomAddr = RomAddr(0x8527a);
 /// The only routine of the table specific to the boss (code 0x4c): stun with trembling.
 const STUN_REACTION: RomAddr = RomAddr(0x85326);
 /// HP thresholds per phase (words).
-const THRESHOLDS: RomAddr = RomAddr(0x10de2);
+const THRESHOLDS: u16 = 8; // 0x10de2
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -175,7 +175,7 @@ pub(crate) fn recovered_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    lib::next_threshold(x, THRESHOLDS.0);
+    lib::next_threshold(x, THRESHOLDS);
     if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::attack_6_shielded(x);
     } else {

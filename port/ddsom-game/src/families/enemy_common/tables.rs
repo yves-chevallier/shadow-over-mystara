@@ -17,62 +17,11 @@ use std::sync::OnceLock;
 use cps2::Cps2Bus;
 
 use crate::data::{data, Missing, RomAddr};
-
-/// One table: its bytes as the ROM stores them.
-pub(crate) struct Table {
-    pub name: &'static str,
-    pub rom: u32,
-    pub program: bool,
-    bytes: Vec<u8>,
-}
-
-impl Table {
-    fn missing(&self) -> Missing {
-        Missing { table: self.name, key: self.rom }
-    }
-
-    /// Byte at offset `off` from the start of the table.
-    pub fn at8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
-        match self.bytes.get(off as usize) {
-            Some(&v) => v,
-            None => self.missing().byte_in(b, self.rom.wrapping_add(off), self.program),
-        }
-    }
-
-    /// Word (big-endian) at offset `off`.
-    pub fn at16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
-        match self.slice(off, 2) {
-            Some(s) => u16::from_be_bytes([s[0], s[1]]),
-            None => self.missing().word_in(b, self.rom.wrapping_add(off), self.program),
-        }
-    }
-
-    /// Long (big-endian) at offset `off`.
-    pub fn at32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
-        match self.slice(off, 4) {
-            Some(s) => u32::from_be_bytes([s[0], s[1], s[2], s[3]]),
-            None => self.missing().long_in(b, self.rom.wrapping_add(off), self.program),
-        }
-    }
-
-    /// Long `i` (offset `4 i`).
-    pub fn nth32(&self, b: &mut Cps2Bus, i: u32) -> u32 {
-        self.at32(b, i.wrapping_mul(4))
-    }
-
-    fn slice(&self, off: u32, n: usize) -> Option<&[u8]> {
-        let start = off as usize;
-        self.bytes.get(start..start.checked_add(n)?)
-    }
-
-    /// The table holds the address `a` (of its space).
-    fn holds(&self, a: u32) -> bool {
-        (a.wrapping_sub(self.rom) as usize) < self.bytes.len()
-    }
-}
+pub(crate) use crate::tables::Table;
+use crate::tables::Tables;
 
 struct Index {
-    by_name: HashMap<&'static str, Table>,
+    tables: Tables,
     /// Reaction tables by address.
     reactions: HashMap<u32, &'static str>,
 }
@@ -83,63 +32,37 @@ const REACTIONS: &str = "reactions/";
 fn index() -> &'static Index {
     static INDEX: OnceLock<Index> = OnceLock::new();
     INDEX.get_or_init(|| {
-        let mut by_name = HashMap::new();
-        let mut reactions = HashMap::new();
-        for t in &data().enemies.tables {
-            let name: &'static str = Box::leak(t.name.clone().into_boxed_str());
-            let bytes = t.bytes().unwrap_or_else(|e| panic!("enemy tables: {e}"));
-            if name.starts_with(REACTIONS) {
-                reactions.insert(t.rom, name);
-            }
-            by_name.insert(name, Table { name, rom: t.rom, program: t.program, bytes });
-        }
-        Index { by_name, reactions }
+        let tables = Tables::new("enemies (by address)", &[&data().enemies]);
+        let reactions = tables.iter().filter(|t| t.name.starts_with(REACTIONS)).map(|t| (t.rom, t.name)).collect();
+        Index { tables, reactions }
     })
 }
 
 /// The table named `name` of `data/enemies.json`. Panics if it does not exist: the names are those of the extraction.
 pub(crate) fn table(name: &str) -> &'static Table {
-    index().by_name.get(name).unwrap_or_else(|| panic!("data/enemies.json: no table `{name}`"))
+    index().tables.get(name)
 }
 
 /// The reaction table at the address `key` (one routine address per hit code `+0x49`, see `enemy_common::react`).
 pub(crate) fn reactions(key: u32) -> &'static Table {
     let i = index();
     let name = i.reactions.get(&key).unwrap_or_else(|| panic!("data/enemies.json: no reaction table at {key:#x}"));
-    &i.by_name[name]
-}
-
-/// The table of the data space that holds the address `a`.
-fn holding(a: u32) -> Option<&'static Table> {
-    index().by_name.values().find(|t| !t.program && t.holds(a))
-}
-
-fn residue(a: u32) -> Missing {
-    Missing { table: "enemies (by address)", key: a }
+    i.tables.get(name)
 }
 
 /// Byte at the address `a` that a table points to (data space).
 pub(crate) fn held8(b: &mut Cps2Bus, a: u32) -> u8 {
-    match holding(a) {
-        Some(t) => t.at8(b, a - t.rom),
-        None => residue(a).read8(b, a),
-    }
+    index().tables.byte(b, a)
 }
 
 /// Word at the address `a` that a table points to (data space).
 pub(crate) fn held16(b: &mut Cps2Bus, a: u32) -> u16 {
-    match holding(a) {
-        Some(t) => t.at16(b, a - t.rom),
-        None => residue(a).read16(b, a),
-    }
+    index().tables.word(b, a)
 }
 
 /// Long at the address `a` that a table points to (data space).
 pub(crate) fn held32(b: &mut Cps2Bus, a: u32) -> u32 {
-    match holding(a) {
-        Some(t) => t.at32(b, a - t.rom),
-        None => residue(a).read32(b, a),
-    }
+    index().tables.long(b, a)
 }
 
 /// Named tables: `name()` is the table `"name"` of the file.

@@ -7,7 +7,6 @@ use m68k::Cpu;
 use crate::camera_modes::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::A5;
 use crate::scroll::{CAMERA_1, CAMERA_2};
 
 /// Native: D4 of the copy, A0 = the output camera.
@@ -15,7 +14,7 @@ fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some((v, m)) = update_camera_1(b) {
         c.d[4] = c.d[4] & !m | v;
     }
-    c.a[0] = A5 + CAMERA_1;
+    c.a[0] = CAMERA_1.0 .0;
     rts(c, b);
 }
 
@@ -24,7 +23,7 @@ fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some((v, m)) = update_camera_2(b) {
         c.d[4] = c.d[4] & !m | v;
     }
-    c.a[0] = A5 + CAMERA_2;
+    c.a[0] = CAMERA_2.0 .0;
     rts(c, b);
 }
 

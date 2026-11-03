@@ -127,12 +127,13 @@ pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         return go::retire(x);
     }
+    // threshold blocks 0x10de2, 0x107e2 and 0x106e2
     let table = if (x.u8(Obj::VARIANT) as i8) < 0 {
-        0x10de2
+        8
     } else if var::LEVEL.get(x.b) > 5 {
-        0x107e2
+        2
     } else {
-        0x106e2
+        1
     };
     lib::next_threshold(x, table);
     if lib::target_in_box(x, 0, 0x30, 0xc) {

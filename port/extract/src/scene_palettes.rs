@@ -19,7 +19,11 @@ fn table(rom: &Program, at: u32, program: bool, count: u32, n: u32) -> AddressTa
 }
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
-    let rom = Program::load(roms)?;
+    json::save(path, &scene_palettes(&Program::load(roms)?)?, 3)
+}
+
+/// The scene palette tables of the program `rom` (`scene_palettes.json`).
+pub fn scene_palettes(rom: &Program) -> io::Result<ScenePalettes> {
     let mut stages = Vec::new();
     for s in 0..SCENES {
         let mut list = [0i16; 32];
@@ -37,13 +41,13 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         library: LIBRARY,
         stages_rom: STAGES,
         stages,
-        extra: table(&rom, 0x1a41c, false, 3, SCENES),
-        sets: table(&rom, 0x1a3fc, false, 32, 8),
+        extra: table(rom, 0x1a41c, false, 3, SCENES),
+        sets: table(rom, 0x1a3fc, false, 32, 8),
         pages: vec![
-            table(&rom, 0x1a62c, true, 32, 3),
-            table(&rom, 0x1a6a0, true, 32, SCENES),
-            table(&rom, 0x1a8d4, true, 32, SCENES),
+            table(rom, 0x1a62c, true, 32, 3),
+            table(rom, 0x1a6a0, true, 32, SCENES),
+            table(rom, 0x1a8d4, true, 32, SCENES),
         ],
     };
-    json::save(path, &palettes, 3)
+    Ok(palettes)
 }

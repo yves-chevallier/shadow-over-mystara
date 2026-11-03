@@ -19,7 +19,7 @@ const REACTIONS: RomAddr = RomAddr(0x82c8a);
 /// The only routine specific to the boss (code 0x4c): shaking in place.
 const SHAKE_REACTION: RomAddr = RomAddr(0x82d36);
 /// HP thresholds per phase (words, 128 bytes per row).
-const THRESHOLDS: RomAddr = RomAddr(0x10ce2);
+const THRESHOLDS: u16 = 7; // 0x10ce2
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -159,7 +159,7 @@ pub(crate) fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {
         return decide::wait(x);
     }
-    lib::next_threshold(x, THRESHOLDS.0);
+    lib::next_threshold(x, THRESHOLDS);
     if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::swoop(x);
     } else {

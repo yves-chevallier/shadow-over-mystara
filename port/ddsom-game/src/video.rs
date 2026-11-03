@@ -6,47 +6,35 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::data::data;
+use crate::hw::video::{self as gfx, regs, Cell, Vram};
+use crate::ram::{Byte, Word};
+use crate::tables::engine;
 use crate::Native;
 
-/// Work RAM variables (offsets from A5 = FF8000) specific to the video subsystem.
-pub mod ram {
-    /// Settings (bit 10: no loading gauge).
-    pub const DIP: u32 = 0x7fd0;
-    /// Image of the layer enable register (written at `0x804166`).
-    pub const LAYER_ENABLE: u32 = 0x14;
-    /// Address of the object table (value of `0x804100`).
-    pub const OBJ_TABLE: u32 = 0x5ba;
-    /// Object RAM bank toggle (byte, inverted at each clearing).
-    pub const OBJ_BANK: u32 = 0x5bc;
-    /// Coin locks: two images of the output (`+0x10`, `+0x17`) and the forced bits (`+0x18`).
-    pub const LOCKOUT: [u32; 2] = [0x10, 0x17];
-    pub const LOCKOUT_FORCED: u32 = 0x18;
-    /// Non-zero byte: the display registers are no longer written (frozen screen), `A5 - 0x7155`.
-    pub const FROZEN: u32 = 0xff0eab;
-    /// Current scene.
-    pub const STAGE: u32 = 0x34;
-    /// Camera 1 (`+0x4fe`) and 2 (`+0x54e`): scroll at `+0x08` (x) and `+0x0c` (y).
-    pub const CAMERAS: [u32; 2] = [0x4fe, 0x54e];
-    /// Non-zero byte: camera 2 is the current camera.
-    pub const USE_CAMERA_2: u32 = 0x36;
-    /// Current scroll positions (x, y) of camera 1 and camera 2.
-    pub const SCROLL: [u32; 2] = [0x506, 0x50a];
-    pub const SCROLL_2: [u32; 2] = [0x556, 0x55a];
-}
+/// Image of the layer enable register (written at `regs::LAYER_CONTROL`).
+pub const LAYER_ENABLE: Word = Word::a5(0x14);
+/// Base of the object table (value of `regs::OBJECT_BASE`).
+const OBJECT_TABLE: Word = Word::a5(0x5ba);
+/// Object RAM bank toggle (byte, inverted at each clearing and each sprite list built).
+pub(crate) const OBJECT_BANK: Byte = Byte::a5(0x5bc);
+/// Coin locks: two images of the output (`+0x10`, `+0x17`) and the forced bits (`+0x18`).
+const LOCKOUTS: [Byte; 2] = [Byte::a5(0x10), Byte::a5(0x17)];
+const LOCKOUT_FORCED: Byte = Byte::a5(0x18);
+/// Non-zero: the display registers are no longer written (frozen screen), `A5-0x7155`.
+const FROZEN: Byte = Byte(0xff0eab);
 
-/// Graphics memory and registers.
+/// Addresses of the graphics memory, for the code that computes places in it (`crate::hw::video` for the typed
+/// places).
 pub mod hw {
-    pub const TEXT_LAYER: u32 = 0x912000;
-    pub const SCROLL1: u32 = 0x910000;
-    pub const SCROLL2: u32 = 0x914000;
-    pub const SCROLL3: u32 = 0x918000;
-    pub const PALETTES: u32 = 0x91c000;
-    pub const OBJECTS: u32 = 0x708000;
-    pub const CPS_A_OBJECTS: u32 = 0x804100;
-    pub const CPS_A_SCROLL: [u32; 3] = [0x804102, 0x804104, 0x804106];
-    pub const LAYER_ENABLE: u32 = 0x804166;
-    pub const OBJ_BANK: u32 = 0x8040e1;
+    use crate::hw::video as gfx;
+
+    pub const TEXT_LAYER: u32 = gfx::TEXT.base;
+    pub const SCROLL1: u32 = gfx::SCROLL1.base;
+    pub const SCROLL2: u32 = gfx::SCROLL2.0;
+    pub const SCROLL3: u32 = gfx::SCROLL3.0;
+    pub const PALETTES: u32 = gfx::PALETTES.0;
+    pub const OBJECTS: u32 = gfx::OBJECTS.0;
 }
 
 pub(crate) fn set_low_word(r: &mut u32, v: u16) {
@@ -63,10 +51,10 @@ pub(crate) const GAUGE_LONGS: u32 = 32;
 /// 0xb46: fills the first column of the character layer with `marker` (the loading gauge), unless
 /// the settings hide it (bit 0x400 of DSW: always, in this game). Returns true if the gauge is drawn.
 pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
-    let hidden = rd16(b, A5 + ram::DIP) & 0x400 != 0;
+    let hidden = crate::ram::DSW.get(b) & 0x400 != 0;
     if !hidden {
         for i in 0..GAUGE_LONGS {
-            wr32(b, hw::TEXT_LAYER + 4 * i, marker);
+            gfx::TEXT.cell(0, i).set_long(b, marker);
         }
     }
     !hidden
@@ -85,20 +73,20 @@ pub fn gauge_in_world(b: &mut Cps2Bus, marker: u32) {
 
 /// 0xb96: locks the coin counters of bits `bits` (in addition to the forced bits). Returns the forced bits (D1.b).
 pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
-    let forced = rd8(b, A5 + ram::LOCKOUT_FORCED);
-    for off in ram::LOCKOUT {
-        let v = rd8(b, A5 + off) | bits | forced;
-        wr8(b, A5 + off, v);
+    let forced = LOCKOUT_FORCED.get(b);
+    for lock in LOCKOUTS {
+        let v = lock.get(b) | bits | forced;
+        lock.set(b, v);
     }
     forced
 }
 
 /// 0xbac: unlocks bits `bits` (except the forced bits). Returns the forced bits (D1.b).
 pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
-    let forced = rd8(b, A5 + ram::LOCKOUT_FORCED);
-    for off in ram::LOCKOUT {
-        let v = rd8(b, A5 + off) & !bits | forced;
-        wr8(b, A5 + off, v);
+    let forced = LOCKOUT_FORCED.get(b);
+    for lock in LOCKOUTS {
+        let v = lock.get(b) & !bits | forced;
+        lock.set(b, v);
     }
     forced
 }
@@ -106,42 +94,42 @@ pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
 /// 0xbc6: enables the layers `bits` (added to the register image) and programs the display registers, unless
 /// the screen is frozen. No register or flag changes.
 pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
-    let enable = rd16(b, A5 + ram::LAYER_ENABLE) | bits;
-    wr16(b, A5 + ram::LAYER_ENABLE, enable);
-    if rd8(b, ram::FROZEN) == 0 {
-        wr16(b, hw::LAYER_ENABLE, enable);
-        let objects = rd16(b, A5 + ram::OBJ_TABLE);
-        wr16(b, hw::CPS_A_OBJECTS, objects);
-        for (reg, base) in hw::CPS_A_SCROLL.into_iter().zip([hw::SCROLL1, hw::SCROLL2, hw::SCROLL3]) {
-            wr16(b, reg, (base >> 8) as u16);
+    let enable = LAYER_ENABLE.get(b) | bits;
+    LAYER_ENABLE.set(b, enable);
+    if !FROZEN.is_set(b) {
+        regs::LAYER_CONTROL.set(b, enable);
+        let objects = OBJECT_TABLE.get(b);
+        regs::OBJECT_BASE.set(b, objects);
+        for (k, base) in [hw::SCROLL1, hw::SCROLL2, hw::SCROLL3].into_iter().enumerate() {
+            regs::SCROLL_BASES.nth(k as u32).set(b, (base >> 8) as u16);
         }
     }
 }
 
 /// 0xbfc: disables the layers `bits`. The processor receives D0.w complemented.
 pub fn turn_layers_off(b: &mut Cps2Bus, bits: u16) {
-    let enable = rd16(b, A5 + ram::LAYER_ENABLE) & !bits;
-    wr16(b, A5 + ram::LAYER_ENABLE, enable);
-    wr16(b, hw::LAYER_ENABLE, enable);
+    let enable = LAYER_ENABLE.get(b) & !bits;
+    LAYER_ENABLE.set(b, enable);
+    regs::LAYER_CONTROL.set(b, enable);
 }
 
 /// 0xc58: writes the end-of-list entry (0x8000, 0x18000000) at the head of the Object RAM, twice,
 /// toggling the bank between the two: the list is empty in both banks.
 pub fn clear_objects(b: &mut Cps2Bus) {
     for _ in 0..2 {
-        wr32(b, hw::OBJECTS, 0x8000);
-        wr32(b, hw::OBJECTS + 4, 0x1800_0000);
-        let bank = rd8(b, A5 + ram::OBJ_BANK) ^ 0xff;
-        wr8(b, A5 + ram::OBJ_BANK, bank);
-        wr8(b, hw::OBJ_BANK, bank);
+        gfx::OBJECTS.set_long(b, 0x8000);
+        gfx::OBJECTS.offset(4).set_long(b, 0x1800_0000);
+        let bank = OBJECT_BANK.get(b) ^ 0xff;
+        OBJECT_BANK.set(b, bank);
+        regs::OBJECT_BANK.set(b, bank);
     }
 }
 
 /// Black screen, first half (0xc0c, 0xc32): all layers off (`0xbfc` with D0 = 0x12ce, after
 /// resetting `A5+0x14` to zero).
 fn switch_layers_off(b: &mut Cps2Bus) {
-    wr16(b, A5 + ram::LAYER_ENABLE, 0);
-    wr16(b, hw::LAYER_ENABLE, 0);
+    LAYER_ENABLE.set(b, 0);
+    regs::LAYER_CONTROL.set(b, 0);
 }
 
 /// Black screen, second half: empty object list and the three layers cleared.
@@ -190,8 +178,7 @@ pub mod black_screen {
 /// Fills [start, end) with cells (tile, 0): 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
 fn fill_layer(b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
     for a in (from..to).step_by(4) {
-        wr16(b, a, tile);
-        wr16(b, a + 2, 0);
+        Cell(a).put(b, tile, 0);
     }
 }
 
@@ -253,10 +240,6 @@ pub const CLEAR_SCROLL3: Native = memory(0xce8, "video_clear_scroll3", clear_scr
 // V2: terrain attribute under a point
 // ---------------------------------------------------------------------------------------------
 
-/// Fixed terrain maps of scenes 2 and 0x14 (words in ROM, columns of 0x20 bytes).
-const TERRAIN_MAP_STAGE_2: u32 = 0x3f8e9c;
-const TERRAIN_MAP_STAGE_14: u32 = 0x3f9c9c;
-
 /// Terrain attribute under a point, and the computation leftovers that the original leaves in its registers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Terrain {
@@ -278,34 +261,29 @@ pub struct Terrain {
 /// elsewhere: cell of scroll layer 2 in GFX RAM, with the camera correction when camera 2 is
 /// current.
 pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
-    let stage = rd8(b, crate::mem::A5 + ram::STAGE);
+    let stage = crate::ram::SCENE.get(b);
     let (mut x, mut y) = (x, y);
-    let fixed_map = if stage == 2 {
-        Some((TERRAIN_MAP_STAGE_2, 0x10u16.wrapping_neg()))
-    } else if stage == 0x14 {
-        Some((TERRAIN_MAP_STAGE_14, 0x10))
-    } else {
-        None
-    };
+    // the fixed maps of `terrain.json` (scenes 2 and 0x14), with their correction of y
+    let fixed_map = data().terrain.maps.iter().find(|m| m.stage == stage).map(|m| (m.rom, m.dy as u16));
     let (word, case, index, column) = if let Some((map, dy)) = fixed_map {
         y = y.wrapping_add(dy);
         let row = 0x1e - ((y as u8 >> 3) & 0x1e) as u16;
         let column = x.wrapping_add(x) & 0xffe0;
         let index = row.wrapping_add(column);
         let case = map.wrapping_add(index as i16 as u32);
-        (rd16(b, case), case, index, column)
+        (engine().word(b, case), case, index, column)
     } else {
-        let camera_2 = rd8(b, crate::mem::A5 + ram::USE_CAMERA_2) != 0;
-        if camera_2 {
-            x = x.wrapping_add(rd16(b, crate::mem::A5 + ram::SCROLL[0]).wrapping_sub(rd16(b, crate::mem::A5 + ram::SCROLL_2[0])));
-            y = y.wrapping_add(rd16(b, crate::mem::A5 + ram::SCROLL[1]).wrapping_sub(rd16(b, crate::mem::A5 + ram::SCROLL_2[1])));
+        use crate::ram::{CAMERA_ALT_ACTIVE, CAMERA_ALT_X, CAMERA_ALT_Y, CAMERA_X, CAMERA_Y};
+        if CAMERA_ALT_ACTIVE.is_set(b) {
+            x = x.wrapping_add(CAMERA_X.get(b).wrapping_sub(CAMERA_ALT_X.get(b)));
+            y = y.wrapping_add(CAMERA_Y.get(b).wrapping_sub(CAMERA_ALT_Y.get(b)));
         }
         let page = 0x3000u16.wrapping_sub((y & 0x300) << 4);
         let row = 0x3c - ((y as u8 >> 2) & 0x3c) as u16;
         let column = x.wrapping_shl(2) & 0xfc0;
         let index = page.wrapping_add(row).wrapping_add(column);
         let case = hw::SCROLL2.wrapping_add(index as i16 as u32);
-        (rd16(b, case + 2), case, index, column)
+        (Cell(case).attr(b), case, index, column)
     };
     Terrain { number: (word & 0xff80) >> 7, x, y, case, index, column, fixed_map: fixed_map.is_some() }
 }
@@ -329,7 +307,8 @@ pub(crate) fn terrain_regs(r: &mut impl crate::ops::Alu, t: &Terrain) {
 
 /// Terrain number under object `o` (0x24a8: x position at +8, y at +0x10).
 pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
-    let (x, y) = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
+    use crate::objects::Obj;
+    let (x, y) = (o.u16(b, Obj::X), o.u16(b, Obj::Y));
     terrain(b, x, y)
 }
 
@@ -337,9 +316,9 @@ pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
 // V2: tile block loaders
 // ---------------------------------------------------------------------------------------------
 
-/// Geometry of a loader: D0 chooses a grid of `grid` x `grid` block indices (words in ROM);
-/// each block is `cells` x `cells` cells, each cell a long (tile, attribute) copied from the ROM
-/// with `code_offset` added to the tile. A1 is the destination in GFX RAM.
+/// Geometry of a loader: D0 chooses a grid of `grid` x `grid` block indices (words of the scenery maps of
+/// `levels.json`, read by address as the original computes them); each block is `cells` x `cells` cells, each cell a
+/// long (tile, attribute) copied from the map with `code_offset` added to the tile. A1 is the destination in GFX RAM.
 struct Blocks {
     index_base: u32,
     /// Index bytes per value of D0.
@@ -359,9 +338,9 @@ enum Source {
     Fixed(u32),
     /// Several block tables of `cells`² cells, chosen from the position of the index in the
     /// index ROM: selector = `((position & mask) << shift)` swapped by halves (SWAP), signed
-    /// word; address of the table at `list + selector` (read in program space if `program`, PC-relative
-    /// access, otherwise in data space, access through an address register).
-    Banks { origin: u32, list: u32, mask: u32, shift: u32, program: bool },
+    /// word; address of the table at `list + selector` (the table of addresses `list` of `data/engine.json`, read in
+    /// program space if `program`, PC-relative access, otherwise in data space, access through an address register).
+    Banks { origin: u32, list: &'static str, mask: u32, shift: u32, program: bool },
 }
 
 const LOAD_4X4: Blocks = Blocks {
@@ -382,7 +361,7 @@ const LOAD_SCROLL2: Blocks = Blocks {
     row_stride: 0x40,
     code_offset: 0x1800,
     page: Some(0x1000),
-    source: Source::Banks { origin: 0x1f9ba0, list: 0x275a, mask: 0x0fff_8000, shift: 3, program: false },
+    source: Source::Banks { origin: 0x1f9ba0, list: "video/scroll2_banks", mask: 0x0fff_8000, shift: 3, program: false },
 };
 const LOAD_SMALL: Blocks = Blocks {
     index_base: 0x2459c0,
@@ -392,23 +371,19 @@ const LOAD_SMALL: Blocks = Blocks {
     row_stride: 0x20,
     code_offset: 0x1f00,
     page: Some(0x800),
-    source: Source::Banks { origin: 0x2459c0, list: 0x27e6, mask: 0xffff_e000, shift: 5, program: true },
+    source: Source::Banks { origin: 0x2459c0, list: "video/scroll3_banks", mask: 0xffff_e000, shift: 5, program: true },
 };
-
-fn prog_long(b: &mut Cps2Bus, a: u32) -> u32 {
-    (crate::mem::prog16(b, a) as u32) << 16 | crate::mem::prog16(b, a + 2) as u32
-}
 
 impl Blocks {
     /// ROM address of the cells of the block whose index is read at `at`.
     fn block_source(&self, b: &mut Cps2Bus, at: u32) -> u32 {
-        let index = rd16(b, at) as u32;
+        let index = engine().word(b, at) as u32;
         match self.source {
             Source::Fixed(base) => base.wrapping_add(index << 6),
             Source::Banks { origin, list, mask, shift, program } => {
                 let selector = ((at.wrapping_sub(origin) & mask) << shift).rotate_left(16) as u16 as i16;
-                let at = list.wrapping_add(selector as u32);
-                let table = if program { prog_long(b, at) } else { rd32(b, at) };
+                let at = engine().get(list).rom.wrapping_add(selector as u32);
+                let table = if program { engine().pc_long(b, at) } else { engine().long(b, at) };
                 table.wrapping_add(index << 4)
             }
         }
@@ -425,9 +400,9 @@ impl Blocks {
                 at += 2;
                 for row in 0..self.cells {
                     for col in 0..self.cells {
-                        let cell = rd32(b, src).wrapping_add((self.code_offset as u32) << 16);
+                        let cell = engine().long(b, src).wrapping_add((self.code_offset as u32) << 16);
                         src += 4;
-                        wr32(b, dst + row * self.row_stride + col * 4, cell);
+                        Vram(dst + row * self.row_stride + col * 4).set_long(b, cell);
                     }
                 }
                 dst = dst.wrapping_add(self.cells * 4);
@@ -479,16 +454,15 @@ pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridE
 // V2: digits in the character layer
 // ---------------------------------------------------------------------------------------------
 
-/// Table of fixed screens (logos and rankings): 10 entries of 12 bytes from the ROM, copied into work
-/// RAM at startup (0x19038).
-const FIXED_SCREENS_ROM: u32 = 0x19a1a;
+/// Table of fixed screens (logos and rankings): 10 entries of 12 bytes from the ROM (`video/fixed_screens`), copied
+/// into work RAM at startup (0x19038).
 const FIXED_SCREENS_RAM: u32 = 0xff111c;
-const FIXED_SCREENS_LEN: u32 = 120;
 
 pub fn copy_fixed_screens(b: &mut Cps2Bus) {
-    for offset in (0..FIXED_SCREENS_LEN).step_by(2) {
-        let word = rd16(b, FIXED_SCREENS_ROM + offset);
-        wr16(b, FIXED_SCREENS_RAM + offset, word);
+    let screens = engine().get("video/fixed_screens");
+    for i in 0..60 {
+        let word = screens.nth16(b, i);
+        Word(FIXED_SCREENS_RAM + 2 * i).set(b, word);
     }
 }
 

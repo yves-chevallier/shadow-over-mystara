@@ -75,6 +75,16 @@ fn read_entry(b: &mut Cps2Bus, at: u32, long: bool) -> Loaded {
     Loaded { timer, flags, longs }
 }
 
+/// Flags word (`+2`) of the entry at `at`, read without loading the entry (the table searches of `ai_aids` step from
+/// entry to entry by 16 bytes, as the original does).
+pub fn entry_flags(b: &mut Cps2Bus, at: u32) -> u16 {
+    let d = data();
+    match [false, true].into_iter().find_map(|long| d.anims.entry_at(RomAddr(at), long)) {
+        Some(e) => e.flags,
+        None => Missing { table: "anim entry", key: at }.read16(b, at.wrapping_add(2)),
+    }
+}
+
 /// Copies the entry located at `at` into the object and returns the address following it.
 /// `long`: the entry also contains `FRAME_DATA_C/D`.
 pub fn load_entry(b: &mut Cps2Bus, obj: Obj, at: u32, long: bool) -> u32 {

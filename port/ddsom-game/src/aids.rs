@@ -4,7 +4,9 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::objects::{Enemy, Obj};
+use crate::player::Player;
+use crate::ram::{self, PLAYERS_FROZEN};
 use crate::Native;
 
 pub(crate) fn set_low_word(r: &mut u32, v: u16) {
@@ -18,9 +20,6 @@ fn set_low_byte(r: &mut u32, v: u8) {
 // ---------------------------------------------------------------------------------------------
 // 0x1386: direction (0..31) from (D3, D4) to (D1, D2)
 // ---------------------------------------------------------------------------------------------
-
-/// Direction table, in program ROM: indexed by (octant << 3) | step.
-const DIRECTIONS: u32 = 0x140c;
 
 /// Computation of 0x1386 on the registers of the original (D1-D4), with the work registers D2-D4 it leaves (read
 /// again by the boss 15 and the handlers that follow it: `dispatch::Leftovers`).
@@ -83,8 +82,9 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
             }
         }
     }
+    // direction table (`aids/directions`, program space): indexed by (octant << 3) | step
     let index = (octant << 3 | step) as u32;
-    let direction = prog8(b, DIRECTIONS + index);
+    let direction = crate::tables::engine().get("aids/directions").at8(b, index);
     Compute { direction, d2: dy, d3: step as u32, unit }
 }
 
@@ -94,14 +94,14 @@ pub fn direction(b: &mut Cps2Bus, de: (u16, u16), to: (u16, u16)) -> u8 {
 }
 
 /// 0x137e: direction from object `o` (x, z) to point `to`.
-pub fn direction_from(b: &mut Cps2Bus, o: crate::objects::Obj, to: (u16, u16)) -> u8 {
-    let de = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
+pub fn direction_from(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) -> u8 {
+    let de = (o.u16(b, Obj::X), o.u16(b, Obj::Y));
     direction(b, de, to)
 }
 
 /// 0x1376: direction from object `o` to object `target`.
-pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, target: crate::objects::Obj) -> u8 {
-    let to = (rd16(b, target.0 + 8), rd16(b, target.0 + 0x10));
+pub fn direction_to(b: &mut Cps2Bus, o: Obj, target: Obj) -> u8 {
+    let to = (target.u16(b, Obj::X), target.u16(b, Obj::Y));
     direction_from(b, o, to)
 }
 
@@ -112,12 +112,12 @@ pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, target: crate::obje
 /// Result of 0x2810.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NameEntry {
-    /// Game frozen (`A5+0x42` non-zero): nothing is read (Z = 0).
+    /// Game frozen (`ram::PLAYERS_FROZEN` non-zero): nothing is read (Z = 0).
     Frozen,
     /// Nobody holds the object (word `+0x46` zero; Z = 1).
     Free,
     /// Player `player` holds it; `normal`: its byte `+0x2c` is zero (Z).
-    By { player: crate::objects::Obj, normal: bool },
+    By { player: Obj, normal: bool },
 }
 
 impl NameEntry {
@@ -132,44 +132,21 @@ impl NameEntry {
 }
 
 /// 0x2810: is object `o` grabbed by a player (word `+0x46`)?
-pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> NameEntry {
-    if rd8(b, A5 + 0x42) != 0 {
+pub fn grabbed(b: &mut Cps2Bus, o: Obj) -> NameEntry {
+    if PLAYERS_FROZEN.is_set(b) {
         return NameEntry::Frozen;
     }
-    let holder = rd16(b, o.0 + 0x46);
+    let holder = Enemy(o).host(b);
     if holder == 0 {
         return NameEntry::Free;
     }
-    let player = crate::objects::Obj::from_word(holder);
-    NameEntry::By { player, normal: rd8(b, player.0 + 0x2c) == 0 }
+    let player = Obj::from_word(holder);
+    NameEntry::By { player, normal: player.flip(b) == 0 }
 }
 
 // ---------------------------------------------------------------------------------------------
 // 0x28d8: all players down
 // ---------------------------------------------------------------------------------------------
-
-/// A5 variables.
-mod var {
-    pub const STAGE: u32 = 0x34;
-    pub const GAME_ON: u32 = 0x42;
-    pub const LOCK: u32 = 0x3d;
-    pub const STAGE_FLAG: u32 = 0x43;
-    pub const PHASE: u32 = 0x2c;
-    pub const HOLD: u32 = 0xffff_aa3a; // A5 - 0x55c6
-}
-
-mod player {
-    pub const ACTIVE: u32 = 0x00;
-    pub const FLAGS: u32 = 0x01;
-    pub const STATE: u32 = 0x04;
-    pub const ALTITUDE: u32 = 0x0c;
-    pub const HP: u32 = 0x62;
-    /// Bytes reset to zero when the player comes back (effects, grab, magic...).
-    pub const CLEARED: [u32; 8] = [0x2a, 0x66, 0x15c, 0x79, 0x7a, 0x182, 0x183, 0x184];
-    pub const RANK: u32 = 0x7d;
-    pub const GRAB: u32 = 0x8a;
-    pub const GRAB_OBJECT: u32 = 0x86;
-}
 
 /// Scenes without game over (shop, cutscene) and particular demo scenes.
 const STAGE_NO_END: [u8; 2] = [6, 0xc];
@@ -177,54 +154,60 @@ const STAGE_SKIP_CHECK: u8 = 0x43;
 const STAGE_SKIP_WAIT: u8 = 0x22;
 /// State of a waiting player (`0x2000c00` without the low byte): the end is not triggered.
 const STATE_WAITING: u32 = 0x0200_0c00;
-/// Game over phase (`A5+0x2c` = 0x10, step 0...) and timer according to the scene.
+/// Game over phase (`ram::PHASE` = 0x10, step 0...) and timer according to the scene.
 const PHASE_END: u32 = 0x1000_0000;
 
-/// 0x28d8, end of phase 12: when `A5+0x42` is non-zero (game in progress) and players are down
+/// 0x28d8, end of phase 12: when `ram::PLAYERS_FROZEN` is non-zero (game in progress) and players are down
 /// (zero HP), they are put back in the waiting state and the game over phase starts. Nothing happens if a player
 /// is still in the air or in the waiting state.
 pub fn game_over(b: &mut Cps2Bus) {
-    let stage = rd8(b, A5 + var::STAGE);
-    if STAGE_NO_END.contains(&stage) || rd8(b, A5 + var::GAME_ON) == 0 {
+    let stage = ram::SCENE.get(b);
+    if STAGE_NO_END.contains(&stage) || !PLAYERS_FROZEN.is_set(b) {
         return;
     }
-    wr8(b, A5 + var::STAGE_FLAG, 0x3f);
-    if rd8(b, A5 + var::LOCK) != 0 || crate::ram::PLAYERS_ALIVE.get(b) == 0 {
+    ram::INPUT_MASK.set(b, 0x3f);
+    if ram::CUTSCENE.is_set(b) || ram::PLAYERS_ALIVE.get(b) == 0 {
         return;
     }
     let (mut rank, mut downed) = (0u8, 0u8);
-    for p in crate::ram::PLAYERS.iter() {
-        let p = p.0;
-        if rd8(b, p + player::ACTIVE) != 0 && rd16(b, p + player::HP) != 0 {
+    for p in ram::PLAYERS.iter().map(Player::of) {
+        if p.active(b) != 0 && p.hp(b) != 0 {
             if stage != STAGE_SKIP_CHECK
-                && (rd16(b, p + player::ALTITUDE) != 0 || rd32(b, p + player::STATE) & 0xffff_ff00 == STATE_WAITING) {
-                    return;
-                }
+                && (p.obj().u16(b, Obj::Z) != 0 || p.obj().u32(b, Obj::STATE) & 0xffff_ff00 == STATE_WAITING)
+            {
+                return;
+            }
             downed = downed.wrapping_add(1);
-            for off in player::CLEARED {
-                wr8(b, p + off, 0);
+            // the bytes reset when the player comes back: palette, effects, grab, magic...
+            p.set_palette_group(b, 0);
+            p.set_slow(b, 0);
+            p.set_special_active(b, 0);
+            p.set_powerup(b, 0);
+            p.set_powerup_timer(b, 0);
+            p.set_aura(b, 0);
+            p.set_aura_b(b, 0);
+            p.set_aura_c(b, 0);
+            let flags = p.flags(b) & !2;
+            p.set_flags(b, flags);
+            crate::palette::character_palette(b, p.obj());
+            p.set_active(b, 1);
+            if p.slow_8a(b) != 0 {
+                p.set_slow_8a(b, 0);
+                let object = Enemy(Obj(p.link(b)));
+                object.set_substate(b, 8);
+                object.set_step_word(b, 0);
             }
-            let flags = rd8(b, p + player::FLAGS) & !2;
-            wr8(b, p + player::FLAGS, flags);
-            crate::palette::character_palette(b, crate::objects::Obj(p));
-            wr8(b, p + player::ACTIVE, 1);
-            if rd8(b, p + player::GRAB) != 0 {
-                wr8(b, p + player::GRAB, 0);
-                let object = rd32(b, p + player::GRAB_OBJECT);
-                wr8(b, object + 5, 8);
-                wr16(b, object + 6, 0);
-            }
-            wr8(b, p + player::RANK, rank);
+            p.set_rank(b, rank);
             rank = rank.wrapping_add(1);
             if stage != STAGE_SKIP_WAIT && stage != STAGE_SKIP_CHECK {
-                crate::player::actions::to_stand(&mut crate::player::Ctx::new(b), crate::player::Player(p));
+                crate::player::actions::to_stand(&mut crate::player::Ctx::new(b), p);
             }
         }
     }
     if downed != 0 {
-        wr32(b, A5 + var::PHASE, PHASE_END);
-        crate::ram::SCROLL_Y_PLANE1.set(b, 0);
-        wr16(b, A5.wrapping_add(var::HOLD), if stage == 1 { 0x60 } else { 0x120 });
+        ram::PHASE_LONG.set(b, PHASE_END);
+        ram::SCROLL_Y_PLANE1.set(b, 0);
+        ram::GAME_OVER_DELAY.set(b, if stage == 1 { 0x60 } else { 0x120 });
     }
 }
 

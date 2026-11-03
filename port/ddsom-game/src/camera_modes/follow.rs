@@ -2,39 +2,40 @@
 
 use super::*;
 
-pub(super) fn record(k: u32) -> u32 {
-    A5 + PLAYER_BASE + k * PLAYER_STRIDE
+/// Player `k`.
+pub(super) fn player(k: u32) -> Player {
+    Player::of(ram::PLAYERS.nth(k))
 }
 
 /// Player `k` exists.
 pub(super) fn present(x: &mut Cam, k: u32) -> bool {
-    rd8(x.b, record(k)) != 0
+    player(k).active(x.b) != 0
 }
 
 /// Player `k` exists and has hit points.
 pub(super) fn alive(x: &mut Cam, k: u32) -> bool {
-    present(x, k) && rd16(x.b, record(k) + Player::HP) != 0
+    present(x, k) && player(k).hp(x.b) != 0
 }
 
 pub(super) fn any(x: &mut Cam, test: fn(&mut Cam, u32) -> bool) -> bool {
-    (0..PLAYER_COUNT).any(|k| test(x, k))
+    (0..ram::PLAYERS.count).any(|k| test(x, k))
 }
 
 /// Player active for horizontal following: in game, not yet exiting (main state < 4).
 pub(super) fn playing(x: &mut Cam, k: u32) -> bool {
-    present(x, k) && (rd8(x.b, record(k) + Player::MAIN) as i8) < 4
+    present(x, k) && (player(k).main(x.b) as i8) < 4
 }
 
 /// Player on the ground or acting: main state <= 2.
 pub(super) fn grounded(x: &mut Cam, k: u32) -> bool {
-    present(x, k) && (rd8(x.b, record(k) + Player::MAIN) as i8) <= 2
+    present(x, k) && (player(k).main(x.b) as i8) <= 2
 }
 
 /// Largest and smallest (unsigned) value of a quantity of the retained players. Player 0,
 /// if retained, sets both without comparison; without players, (0, 0xffff).
 pub(super) fn extent(x: &mut Cam, value: impl Fn(&mut Cam, u32) -> Option<u16>) -> (u16, u16) {
     let (mut high, mut low) = (0u16, 0xffffu16);
-    for k in 0..PLAYER_COUNT {
+    for k in 0..ram::PLAYERS.count {
         if let Some(v) = value(x, k) {
             if k == 0 {
                 (high, low) = (v, v);
@@ -109,12 +110,12 @@ pub(super) fn track(x: &mut Cam, field: u32, (high, low): (u16, u16), w: Window)
 
 /// Abscissa of the players retained by `keep`.
 pub(super) fn players_x(x: &mut Cam, keep: fn(&mut Cam, u32) -> bool) -> (u16, u16) {
-    extent(x, |x, k| keep(x, k).then(|| rd16(x.b, record(k) + Obj::X)))
+    extent(x, |x, k| keep(x, k).then(|| player(k).obj().u16(x.b, Obj::X)))
 }
 
 /// Depth of the players retained by `keep`.
 pub(super) fn players_depth(x: &mut Cam, keep: fn(&mut Cam, u32) -> bool) -> (u16, u16) {
-    extent(x, |x, k| keep(x, k).then(|| rd16(x.b, record(k) + Obj::Y)))
+    extent(x, |x, k| keep(x, k).then(|| player(k).obj().u16(x.b, Obj::Y)))
 }
 
 /// 0x30fc8: follows the players on the ground horizontally (nothing if there are none).
@@ -127,13 +128,13 @@ pub(super) fn follow_x(x: &mut Cam) {
 /// 0x31018: follows the players in game horizontally.
 pub(super) fn follow_x_playing(x: &mut Cam) {
     let e = players_x(x, playing);
-    track(x, cam::X, e, X_PLAYERS);
+    track(x, Camera::X, e, X_PLAYERS);
 }
 
 /// Negative abscissa x brought back to 0.
 pub(super) fn keep_x_positive(x: &mut Cam) {
-    if (x.u16(cam::X) as i16) < 0 {
-        x.set16(cam::X, 0);
+    if (x.u16(Camera::X) as i16) < 0 {
+        x.set16(Camera::X, 0);
     }
 }
 
@@ -141,7 +142,7 @@ pub(super) fn keep_x_positive(x: &mut Cam) {
 pub(super) fn follow_xy(x: &mut Cam) {
     if any(x, alive) {
         let e = players_x(x, playing);
-        track(x, cam::X, e, X_PLAYERS_NARROW);
+        track(x, Camera::X, e, X_PLAYERS_NARROW);
         keep_x_positive(x);
         follow_depth(x);
     }
@@ -150,7 +151,7 @@ pub(super) fn follow_xy(x: &mut Cam) {
 /// 0x31616: follows the depth of the living players.
 pub(super) fn follow_depth(x: &mut Cam) {
     let e = players_depth(x, alive);
-    track(x, cam::Y, e, Y_PLAYERS);
+    track(x, Camera::Y, e, Y_PLAYERS);
 }
 
 /// 0x3147c: follows the living players, depth with the "low" window.
@@ -159,7 +160,7 @@ pub(super) fn follow_snap(x: &mut Cam) {
         follow_x_playing(x);
         keep_x_positive(x);
         let e = players_depth(x, alive);
-        track(x, cam::Y, e, Y_PLAYERS_LOW);
+        track(x, Camera::Y, e, Y_PLAYERS_LOW);
     }
 }
 
@@ -168,28 +169,28 @@ pub(super) fn follow_mid(x: &mut Cam) {
     if any(x, alive) {
         let (high, low) = players_x(x, alive);
         let mid = high.wrapping_add(low) >> 1;
-        track(x, cam::X, (mid, mid), X_PLAYERS);
+        track(x, Camera::X, (mid, mid), X_PLAYERS);
         keep_x_positive(x);
         let e = players_depth(x, present);
-        track(x, cam::Y, e, Y_PLAYERS);
+        track(x, Camera::Y, e, Y_PLAYERS);
     }
 }
 
-/// Four pointers (words) to the objects followed by the mode 0x0c camera (A5 - 0x555c).
-pub(super) const TRACKED_OBJECTS: u32 = 0xff2aa4;
+/// Four pointers (words) to the objects followed by the mode 0x0c camera (`A5-0x555c`).
+pub(super) const TRACKED_OBJECTS: [Word; 4] = [Word(0xff2aa4), Word(0xff2aa6), Word(0xff2aa8), Word(0xff2aaa)];
 
 /// 0x31334: follows horizontally the objects designated by the four pointers.
 pub(super) fn follow_objects(x: &mut Cam) {
-    let pointers: Vec<u16> = (0..4).map(|k| rd16(x.b, TRACKED_OBJECTS + 2 * k)).collect();
+    let pointers: Vec<u16> = TRACKED_OBJECTS.iter().map(|w| w.get(x.b)).collect();
     if pointers.iter().fold(0u16, |s, &p| s.wrapping_add(p)) == 0 {
         return;
     }
     let mut high_low = (0u16, 0xffffu16);
     for (k, &p) in pointers.iter().enumerate() {
         if p != 0 {
-            let v = rd16(x.b, p as i16 as i32 as u32 + Obj::X);
+            let v = Obj::from_word(p).u16(x.b, Obj::X);
             high_low = if k == 0 { (v, v) } else { (high_low.0.max(v), high_low.1.min(v)) };
         }
     }
-    track(x, cam::X, high_low, X_OBJECTS);
+    track(x, Camera::X, high_low, X_OBJECTS);
 }

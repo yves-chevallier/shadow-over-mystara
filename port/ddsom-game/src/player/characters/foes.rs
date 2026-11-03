@@ -5,7 +5,7 @@
 //! spell (a bit of `+0x94`) goes to the reaction `reaction` assigned to the caster, loses hit
 //! points (per-level table or fixed value, increased according to equipment) and its life bar is updated.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::families::player::records::Victim;
 use crate::machine::Machine;
 use super::super::{Ctx, Player};

@@ -51,10 +51,19 @@ const LAYERS: [Geometry; 2] = [
 ];
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
-    let rom = Program::load(roms)?;
-    let layers = LAYERS.iter().map(|g| layer(&rom, g)).collect::<io::Result<Vec<_>>>()?;
-    let scroll1 = scroll1(&rom);
-    json::save(path, &Levels { layers, scroll1 }, 6)
+    let levels = levels(&Program::load(roms)?)?;
+    for l in &levels.layers {
+        let blocks: Vec<usize> = l.banks.iter().map(|b| b.blocks.len()).collect();
+        eprintln!("{}: {} strip tables, {} strips, blocks per bank {blocks:?}", l.name, l.tables.len(), l.strips.len());
+    }
+    eprintln!("scroll1: {} images, {} blocks", levels.scroll1.grids.len(), levels.scroll1.blocks.len());
+    json::save(path, &levels, 6)
+}
+
+/// The scenery maps of the program `rom` (`levels.json`).
+pub fn levels(rom: &Program) -> io::Result<Levels> {
+    let layers = LAYERS.iter().map(|g| layer(rom, g)).collect::<io::Result<Vec<_>>>()?;
+    Ok(Levels { layers, scroll1: scroll1(rom) })
 }
 
 fn bad(msg: String) -> io::Error {
@@ -137,7 +146,6 @@ fn layer(rom: &Program, g: &Geometry) -> io::Result<Layer> {
             Bank { rom: at, blocks }
         })
         .collect();
-    eprintln!("{}: {} strip tables, {} strips, blocks per bank {:?}", g.name, layer.tables.len(), layer.strips.len(), counts);
     Ok(layer)
 }
 
@@ -153,6 +161,5 @@ fn scroll1(rom: &Program) -> Scroll1 {
     let grids: Vec<Vec<u16>> = (0..count).map(grid).collect();
     let used = grids.iter().flatten().copied().max().unwrap_or(0) as u32;
     let blocks = (0..=used).map(|i| (0..32).map(|k| rom.rd16(SCROLL1_BLOCKS + 64 * i + 2 * k)).collect()).collect();
-    eprintln!("scroll1 : {} images, {} blocs", grids.len(), used + 1);
     Scroll1 { tile_offset: 0xf800, grids_rom: SCROLL1_GRIDS, grids, blocks_rom: SCROLL1_BLOCKS, blocks }
 }

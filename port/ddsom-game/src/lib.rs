@@ -48,6 +48,7 @@ pub mod no68k;
 pub mod scene;
 pub mod screens;
 pub mod scroll;
+pub mod tables;
 pub mod scenario;
 pub mod sound;
 pub mod terrain;

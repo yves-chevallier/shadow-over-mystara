@@ -160,7 +160,7 @@ pub(crate) fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         return idle_alone(x);
     }
-    if lib::next_threshold(x, THRESHOLDS.0) && x.u8(Enemy::VARIANT) == 0 && x.u8(Boss0::TRANSFORMED) == 0 && x.u8(Boss::PHASE) == 2 {
+    if lib::next_threshold(x, THRESHOLDS) && x.u8(Enemy::VARIANT) == 0 && x.u8(Boss0::TRANSFORMED) == 0 && x.u8(Boss::PHASE) == 2 {
         return transform(x);
     }
     if lib::target_in_box(x, 0, 0x38, 0xc) {

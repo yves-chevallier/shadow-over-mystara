@@ -99,28 +99,56 @@ pub const CABINET: Byte = Byte::a5(0x20);
 /// and its step.
 pub const PHASE: Byte = Byte::a5(0x2c);
 pub const STEP: Byte = Byte::a5(0x2d);
+/// The phase, its step and the two bytes that follow as one long (a new phase is written in one go).
+pub const PHASE_LONG: Long = Long::a5(0x2c);
 /// A game is in progress.
 pub const GAME: Byte = Byte::a5(0x30);
 /// Scene number (1-114; `docs/rewrite-guide.md`, "Atteindre un stage").
 pub const SCENE: Byte = Byte::a5(0x34);
 /// Number of players alive (batch D: wrongly called "difficulty" until batch S).
 pub const PLAYERS_ALIVE: Byte = Byte::a5(0x35);
+/// Clock of the scene (long; its high word counts down the time left, h).
+pub const STAGE_CLOCK: Long = Long::a5(0x38);
 /// Alternative camera selected (non-zero) instead of the main camera.
 pub const CAMERA_ALT_ACTIVE: Byte = Byte::a5(0x36);
 /// Display mode of the interface panels (`hud`).
 pub const DISPLAY_PANELS: Byte = Byte::a5(0x3c);
+/// Byte at 1 during a cutscene (game paused, inputs cut).
+pub const CUTSCENE: Byte = Byte::a5(0x3d);
+/// Non-zero: the players are frozen (scripted scenes, ends of scenes); some helpers then do nothing.
+pub const PLAYERS_FROZEN: Byte = Byte::a5(0x42);
+/// Mask of the inputs of the players (0x3f: all buttons; written at the game over and by the bosses).
+pub const INPUT_MASK: Byte = Byte::a5(0x43);
+/// Object that the camera follows in its mode 0x7c, or the leading object of a scripted scene (word, RAM address).
+pub const LEADER: Word = Word::a5(0x46);
 /// Pause: one bit per player.
 pub const PAUSE: Byte = Byte::a5(0x4a);
+/// Difficulty level of the setting (h; `ai`): beyond 5, other tables of initial HP and speeds.
+pub const LEVEL: Byte = Byte::a5(0x48);
+/// Row of the special loot tables by difficulty (h: set with `LEVEL` by the settings).
+pub const LEVEL_ROW: Byte = Byte::a5(0x49);
+/// Scene level for bosses (0 nothing, 3 always; `boss_common::hp_threshold`).
+pub const SCENE_LEVEL: Byte = Byte::a5(0x5a);
 /// VBLANK frame counter (`vblank.rs`).
 pub const IMAGES: Word = Word::a5(0x6c);
 /// Desired vertical scroll of plane 1 (`vblank` copies it into the plane register): spells make the
 /// screen shake by toggling it between 0 and 0x100.
 pub const SCROLL_Y_PLANE1: Word = Word::a5(0x4ba);
+/// Screen shake (frames left; spells and impacts set it, `vblank` shakes the planes while it counts down).
+pub const SHAKE: Word = Word::a5(0x4be);
 /// Main camera: position on screen (x, y); alternative camera.
 pub const CAMERA_X: Word = Word::a5(0x506);
 pub const CAMERA_Y: Word = Word::a5(0x50a);
 pub const CAMERA_ALT_X: Word = Word::a5(0x556);
 pub const CAMERA_ALT_Y: Word = Word::a5(0x55a);
+/// Positions of scroll layers 2 (camera 1) and 3 (camera 2) as shown this frame: `vblank` copies the wanted
+/// positions (`CAMERA_X`...) here when it writes the CPS-A registers.
+pub const CAMERA1_X: Word = Word::a5(0x5a6);
+pub const CAMERA1_Y: Word = Word::a5(0x5aa);
+pub const CAMERA2_X: Word = Word::a5(0x5ae);
+pub const CAMERA2_Y: Word = Word::a5(0x5b2);
+/// Delay before the game over sequence (`aids::game_over`), `A5-0x55c6`.
+pub const GAME_OVER_DELAY: Word = Word(0xffaa3a);
 /// Switches word (DSW) read at VBLANK (`FF7FD0`): bit 0x200 no damage display, 0x400 charge gauge
 /// inactive, 0x800 collisions with the terrain.
 pub const DSW: Word = Word::a5(0x7fd0);

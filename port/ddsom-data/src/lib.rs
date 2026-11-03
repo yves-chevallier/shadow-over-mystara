@@ -10,6 +10,7 @@ pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod objects;
+pub mod palettes;
 pub mod player_tables;
 pub mod pointers;
 pub mod scene_palettes;
@@ -24,6 +25,7 @@ pub use data::DataFile;
 pub use effects::EffectTables;
 pub use levels::Levels;
 pub use objects::ObjectTables;
+pub use palettes::Palettes;
 pub use player_tables::PlayerTables;
 pub use scene_palettes::ScenePalettes;
 pub use spawns::Spawns;
@@ -85,11 +87,23 @@ pub struct GameData {
     /// Per-character tables of the players (`data/players.json`) and combat reaction tables (`data/combat.json`).
     pub players: DataFile,
     pub combat: DataFile,
+    /// Scenery maps of scroll layers 1 to 3 (`scroll`, `camera_modes` and the grid loaders of `video`).
+    pub levels: Levels,
+    /// Fixed terrain maps and terrain kinds (`video::terrain`, `terrain`).
+    pub terrain: Terrain,
+    /// Palettes that each scene loads (`palette`).
+    pub scene_palettes: ScenePalettes,
+    /// The palette library (`palette`, and the families that copy palettes).
+    pub palettes: Palettes,
+    /// Miscellaneous tables of the original read by name (aura palettes, overlays...).
+    pub rest: DataFile,
+    /// Tables of the engine: AI helpers, cameras, video, palettes, sprites, creators (docs/fin.md, L12).
+    pub engine: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 16] = [
+    pub const FILES: [&'static str; 22] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -106,6 +120,12 @@ impl GameData {
         "data/player_tables.json",
         "data/players.json",
         "data/combat.json",
+        "levels.json",
+        "terrain.json",
+        "scene_palettes.json",
+        "palettes.png",
+        "data/engine.json",
+        "data/rest.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -127,6 +147,12 @@ impl GameData {
             player_tables: PlayerTables::load(&dir.join(Self::FILES[13]))?,
             players: DataFile::load(&dir.join(Self::FILES[14]))?,
             combat: DataFile::load(&dir.join(Self::FILES[15]))?,
+            levels: Levels::load(&dir.join(Self::FILES[16]))?,
+            terrain: Terrain::load(&dir.join(Self::FILES[17]))?,
+            scene_palettes: ScenePalettes::load(&dir.join(Self::FILES[18]))?,
+            palettes: Palettes::load(&dir.join(Self::FILES[19]))?,
+            engine: DataFile::load(&dir.join(Self::FILES[20]))?,
+            rest: DataFile::load(&dir.join(Self::FILES[21]))?,
         })
     }
 }

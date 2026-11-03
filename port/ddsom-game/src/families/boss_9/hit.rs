@@ -201,7 +201,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                 let n = var::SCENE_STEP.get(x.b).wrapping_add(4);
                 var::SCENE_STEP.set(x.b, n);
                 // video control word of the output port (layer priorities), as at the end of a scene
-                crate::mem::wr16(x.b, crate::camera_modes::OUTPUT_PORT, 0x1355);
+                crate::hw::video::regs::OBJECT_OUTPUT.set(x.b, 0x1355);
             }
             roll(x);
         }

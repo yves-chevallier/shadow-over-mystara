@@ -1,6 +1,6 @@
 //! Special attack of the cleric: equipment swap, turning away the undead, prayer skeleton, hold, storm, swarm.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::families::player::records::Victim;
 use crate::player::Player;
 use crate::objects::Obj;

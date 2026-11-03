@@ -640,6 +640,11 @@ fn screens_lossless() {
     check_data("data/screens.json");
 }
 
+#[test]
+fn engine_lossless() {
+    check_data("data/engine.json");
+}
+
 /// QSound DSP tables: the words of `qsound_dsp.json` are those of `dl-1425.bin`.
 #[test]
 fn dsp_lossless() {

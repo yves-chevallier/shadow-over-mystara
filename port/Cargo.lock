@@ -109,6 +109,7 @@ dependencies = [
 name = "ddsom-data"
 version = "0.1.0"
 dependencies = [
+ "png",
  "serde",
  "serde_json",
 ]

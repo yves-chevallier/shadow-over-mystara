@@ -4,7 +4,8 @@
 //! (h). Names from docs/familles/enemy.md, docs/combat.md and the families.
 //!
 //! The families (`enemy_*/`) declare their own fields (`+0xa0` and beyond, the AI parameters they use) in their own
-//! records; the fields below are those of the framework, of the common reactions and of the AI library.
+//! records; the fields below are those of the framework, of the common reactions and of the AI helpers (`ai`,
+//! `ai_aids`), which read them from this one declaration.
 
 use crate::objects::Obj;
 use crate::record::record;
@@ -186,6 +187,9 @@ record! {
         ai_shot, set_ai_shot, AI_SHOT: u8 @ 0x78;
         /// AI: set of approach points (`ai_aids`); some families keep the kind of their shot there.
         ai_point_set, set_ai_point_set, AI_POINT_SET: u8 @ 0x79;
+        /// AI: point aimed at around the target (x, depth), chosen in the approach points (`ai_aids::walk`).
+        ai_goal_x, set_ai_goal_x, AI_GOAL_X: u16 @ 0x7a;
+        ai_goal_y, set_ai_goal_y, AI_GOAL_Y: u16 @ 0x7c;
         /// Type of the event of the object (`enemy_lib::object_event`).
         event_kind, set_event_kind, EVENT_KIND: u8 @ 0x7e;
         /// Second byte of the event word, cleared or set with `EVENT_KIND` at the creation; not read (h).
@@ -200,6 +204,11 @@ record! {
         weak_to_c, set_weak_to_c, WEAK_TO_C: u8 @ 0x83;
         /// Hits before the end of a grab (word).
         recover, set_recover, RECOVER: u16 @ 0x84;
+        /// AI (same place as `RECOVER` for the families that draw it): cleared inside the play area by
+        /// `ai_aids::draw_84`, which writes the word 1 here outside it (h).
+        ai_offscreen, set_ai_offscreen, AI_OFFSCREEN: u8 @ 0x84;
+        /// AI: byte drawn in the row `AI_ROW_8E` (`ai_aids::draw_84`).
+        ai_draw_85, set_ai_draw_85, AI_DRAW_85: u8 @ 0x85;
         /// Non-zero: the object was down (lying on the ground); 0 makes it not grabbable for some types.
         downed, set_downed, DOWNED: u8 @ 0x86;
         /// Non-zero: grabbed by a player.
@@ -216,12 +225,22 @@ record! {
         pending_palette, set_pending_palette, PENDING_PALETTE: u8 @ 0x91;
         /// Immunities (one bit per shot behaviour).
         immunity, set_immunity, IMMUNITY: u32 @ 0x94;
+        /// AI: behaviour parameter by type, also the countdown of `ai_aids::countdown_then_state`.
+        ai_behaviour, set_ai_behaviour, AI_BEHAVIOUR: u8 @ 0x98;
+        /// AI: number of the last approach point retained (0xff: none).
+        ai_last_point, set_ai_last_point, AI_LAST_POINT: u8 @ 0x99;
+        /// Loot: row of the luck masks of the object dropped once per type, and whether it was dropped.
+        once_mask, set_once_mask, ONCE_MASK: u8 @ 0x9c;
+        once_done, set_once_done, ONCE_DONE: u8 @ 0x9d;
         /// HP tiers (`ai_aids::next_threshold`): current tier, number of tiers, column of the thresholds (HP rank).
         hp_tier, set_hp_tier, HP_TIER: u8 @ 0xaa;
         hp_tiers, set_hp_tiers, HP_TIERS: u8 @ 0xab;
         hp_rank, set_hp_rank, HP_RANK: u8 @ 0xac;
         /// On the object that spawned skeletons or ghouls: its children still alive (h).
         children, set_children, CHILDREN: u8 @ 0xaf;
+        /// Object whose animation key or mark chooses the animation of `ai_aids::animation_of_master` and
+        /// `animation_of_mark` (word, RAM address; the families that call them name it in their own records) (h).
+        anim_master, set_anim_master, ANIM_MASTER: u16 @ 0xb2;
         /// Offset of the animation series (added by the routines of `anim_set_routines`).
         anim_variant, set_anim_variant, ANIM_VARIANT: u8 @ 0xbf;
     }

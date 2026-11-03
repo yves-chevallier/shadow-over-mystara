@@ -4,7 +4,7 @@
 //! The shots are born from a creator (`player/spawn.rs`) that sets their kind, their owner (`+0x50`), their boxes
 //! (`+0x2e`), the power (`+0x45`, `+0x46`) and the speed; the handler makes them live.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use super::vars;
 use crate::families::player::records::Shot;
 use crate::player::Player;

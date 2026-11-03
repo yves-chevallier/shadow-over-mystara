@@ -3,13 +3,11 @@
 //! alone is marked (h).
 
 use crate::mem::A5;
-use crate::ram::{Byte, Long, Word};
+use crate::ram::{Byte, Word};
+pub use crate::ram::{SHAKE, STAGE_CLOCK};
 
 pub use crate::families::enemy_common::vars::*;
 
-/// Stage clock, BCD minutes, seconds and frames (`docs/boucle.md`); a boss sets it to 4:59:59 (0x04595900) at its
-/// creation.
-pub const STAGE_CLOCK: Long = Long::a5(0x38);
 /// Non-zero: the players are frozen by a scene script (set when a boss dies).
 pub const PLAYERS_FROZEN: Byte = Byte::a5(0x42);
 /// Non-zero while a boss fights (set at its creation, cleared at its death): the scenery waits, the frames of the
@@ -25,8 +23,6 @@ pub const SUB_STEP: Byte = Byte::a5(0x2e);
 pub const FADE_PAGES: Byte = Byte::a5(0x48e);
 pub const FADE_STEPS: Byte = Byte::a5(0x48f);
 pub const FADE_DELAY: Word = Word::a5(0x490);
-/// Screen shake requested by an effect (h).
-pub const SHAKE: Word = Word::a5(0x4be);
 /// Step of the scene sequence.
 pub const SCENE_STEP: Byte = Byte::a5(0x4ff);
 /// Mode of the camera (`camera_modes`); also a signal of the boss to the scripted players (throw, landing).

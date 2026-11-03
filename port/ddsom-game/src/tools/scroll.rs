@@ -8,7 +8,6 @@ use m68k::Cpu;
 use crate::scroll::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::{rd8, A5};
 use crate::objects::Obj;
 
 /// `move_object` with the flags of the addition (`add.l`).
@@ -90,7 +89,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
             set_low_word(&mut c.d[5], y);
         }
     }
-    let cam_y = |c: &Cpu, b: &mut Cps2Bus| rd16(b, c.a[0] + cam::Y) as u32;
+    let cam_y = |c: &Cpu, b: &mut Cps2Bus| rd16(b, c.a[0] + Camera::Y) as u32;
     // sub.w src,Dn
     let sub_to = |c: &mut Cpu, n: usize, src: u32| {
         let dst = c.d[n];
@@ -117,7 +116,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
         }
         let (d5, y) = (c.d[5] & 0xffff, cam_y(c, b));
         let y = crate::tools::ops::add(c, d5, y, Size::Word) as u16;
-        wr16(b, c.a[0] + cam::Y, y);
+        wr16(b, c.a[0] + Camera::Y, y);
         { let v = c.d[4] as u16; set_low_word(&mut c.d[6], v); }
         let y = cam_y(c, b);
         sub_to(c, 6, y);
@@ -148,7 +147,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     let (d2, y) = (c.d[2] & 0xffff, cam_y(c, b));
     let y = crate::tools::ops::add(c, d2, y, Size::Word) as u16;
-    wr16(b, c.a[0] + cam::Y, y);
+    wr16(b, c.a[0] + Camera::Y, y);
     rts(c, b);
 }
 
@@ -165,7 +164,7 @@ pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     for (v, m) in update_cameras(b).into_iter().flatten() {
         c.d[4] = c.d[4] & !m | v;
     }
-    c.a[0] = A5 + CAMERA_2;
+    c.a[0] = CAMERA_2.0 .0;
 }
 
 /// Native of 0x33e20.
@@ -179,8 +178,8 @@ fn update_cameras_native(c: &mut Cpu, b: &mut Cps2Bus) {
 fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     cameras_start(b);
     crate::tools::video::leftovers_clear_layer1_start(c);
-    c.d[0] = 4 * rd8(b, A5 + STAGE) as u32;
-    c.a[1] = STARTS;
+    c.d[0] = 4 * crate::ram::SCENE.get(b) as u32;
+    c.a[1] = crate::tables::engine().get("scroll/starts").rom;
     update_cameras_68k(c, b);
     rts(c, b);
 }
@@ -196,9 +195,9 @@ pub(crate) const RESET_CAMERAS: Native = Native {
 /// Native of 0x33b24: D0 = scene, A1 = video control table, A4 = mode table, A0 = camera 2.
 fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     cameras_return(b);
-    c.d[0] = rd8(b, A5 + STAGE) as u32;
-    c.a[1] = crate::camera_modes::tables::OUTPUT;
-    c.a[4] = crate::camera_modes::tables::FROZEN;
+    c.d[0] = crate::ram::SCENE.get(b) as u32;
+    c.a[1] = crate::tables::engine().get("camera_output").rom;
+    c.a[4] = crate::tables::engine().get("camera_frozen").rom;
     update_cameras_68k(c, b);
     rts(c, b);
 }

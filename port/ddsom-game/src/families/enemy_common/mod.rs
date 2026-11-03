@@ -4,7 +4,6 @@
 //! All enemies share the same framework: byte `+4` is the main state (0 creation, 2 active, 4 hit, 6 dead), `+5` and
 //! `+6` substates; the values are even bytes that index jump tables. The "dead" state frees the slot (`0x21f4`).
 
-pub mod records;
 pub mod tables;
 pub mod vars;
 
@@ -22,7 +21,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::ram::PLAYERS;
-pub use records::Enemy;
+pub use crate::objects::Enemy;
 /// Work RAM variables read by the enemies and bosses.
 pub use vars as var;
 

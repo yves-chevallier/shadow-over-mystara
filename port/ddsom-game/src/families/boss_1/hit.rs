@@ -186,7 +186,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(Enemy::ACTIVE, 1);
             x.set8(Boss::ANIM_LAST, 0xff);
-            lib::next_threshold(x, THRESHOLDS.0);
+            lib::next_threshold(x, THRESHOLDS);
             get_up(x)
         }
     }
@@ -200,7 +200,7 @@ pub(crate) fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         return idle_alone(x);
     }
-    lib::next_threshold(x, THRESHOLDS.0);
+    lib::next_threshold(x, THRESHOLDS);
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }

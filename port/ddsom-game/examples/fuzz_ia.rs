@@ -209,12 +209,11 @@ fn band(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
 }
 
 /// Tier table (A1): a known boss table (0x83... ), or a RAM zone.
-fn steps(c: &mut Cpu, b: &mut Bus, a: &mut Rng) {
-    let t = 0xffe000;
-    for k in 0..0x400u32 {
-        wr16(b, t + 2 * k, a.below(0x400) as u16);
-    }
-    c.a[1] = t;
+/// First threshold block of the ROM (`ai/hp_thresholds`): the game passes a block number, the original its address.
+const THRESHOLDS: u32 = 0x105e2;
+
+fn steps(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
+    c.a[1] = THRESHOLDS + 0x100 * a.below(16);
 }
 
 fn attack(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
@@ -276,8 +275,8 @@ fn case() -> Vec<Case> {
             read: a1_when,
         },
         Case { entry: 0x44ee, name: "random_player", inputs: none, core: |_, b, o| obj(ai::random_player(b, o)), read: a1_when },
-        Case { entry: 0x453c, name: "initial_hp_boss", inputs: none, core: |_, b, o| { ai::initial_hp(b, o, ai::HP_TABLE_BOSS); 0 }, read: nothing },
-        Case { entry: 0x4544, name: "initial_hp", inputs: none, core: |_, b, o| { ai::initial_hp(b, o, ai::HP_TABLE_ENEMY); 0 }, read: nothing },
+        Case { entry: 0x453c, name: "initial_hp_boss", inputs: none, core: |_, b, o| { ai::initial_hp(b, o, ai::HpTable::Boss); 0 }, read: nothing },
+        Case { entry: 0x4544, name: "initial_hp", inputs: none, core: |_, b, o| { ai::initial_hp(b, o, ai::HpTable::Enemy); 0 }, read: nothing },
         Case { entry: 0xa4b4, name: "decision_a", inputs: none, core: |_, b, o| ai::decision_a(b, o) as u32, read: nz },
         Case { entry: 0xa4c2, name: "decision_b", inputs: none, core: |_, b, o| ai::decision_b(b, o) as u32, read: nz },
         Case { entry: 0xac3a, name: "pick_byte", inputs: none, core: |_, b, o| { ai::pick_byte(b, o); 0 }, read: nothing },
@@ -319,7 +318,7 @@ fn case() -> Vec<Case> {
             core: |c, b, o| ai_aids::outside_band(b, o, c.d[0] as u16, c.d[1] as u16) as u32,
             read: d0,
         },
-        Case { entry: 0x105b6, name: "next_threshold", inputs: steps, core: |c, b, o| ai_aids::next_threshold(b, o, c.a[1]) as u32, read: d0 },
+        Case { entry: 0x105b6, name: "next_threshold", inputs: steps, core: |c, b, o| ai_aids::next_threshold(b, o, ((c.a[1] - THRESHOLDS) / 0x100) as u16) as u32, read: d0 },
         Case {
             entry: 0xfc44,
             name: "attack_hits_a_player",

@@ -70,7 +70,7 @@ const SET_ATTACK: RomAddr = RomAddr(0x1727d4);
 const SET_HURT: RomAddr = RomAddr(0x1727e4);
 
 /// HP thresholds of the phases (0x105b6).
-const THRESHOLDS: RomAddr = RomAddr(0x10be2);
+const THRESHOLDS: u16 = 6; // 0x10be2
 
 /// Starts animation `n` of a set via the AI (0x103d6).
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {

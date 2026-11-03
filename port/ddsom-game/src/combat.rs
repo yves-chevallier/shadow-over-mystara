@@ -9,7 +9,7 @@
 //! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
-use crate::families::enemy_common::records::Enemy;
+use crate::objects::Enemy;
 use crate::player::Player;
 use cps2::Cps2Bus;
 

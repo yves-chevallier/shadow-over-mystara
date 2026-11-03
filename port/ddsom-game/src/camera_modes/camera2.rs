@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// Modes of camera 2 (`cam::MODE`).
+/// Modes of camera 2 (`Camera::MODE`).
 pub(super) mod mode2 {
     pub const STAGE: u16 = 0x00;
     pub const FREE: u16 = 0x04;
@@ -26,89 +26,89 @@ pub(super) mod mode2 {
 
 /// Scroll of camera 1 since the previous frame on axis 0 (x) or 1 (y).
 pub(super) fn delta(x: &mut Cam, axis: usize) -> i32 {
-    crate::scroll::scroll_delta(x.b, A5, axis)
+    crate::scroll::scroll_delta(x.b, axis)
 }
 
 /// Camera 2: advances by `dx`/`dy` (positions in 16.16).
 pub(super) fn drift(x: &mut Cam, dx: i32, dy: i32) {
-    x.add32(cam::X, dx as u32);
-    x.add32(cam::Y, dy as u32);
+    x.add32(Camera::X_LONG, dx as u32);
+    x.add32(Camera::Y_LONG, dy as u32);
 }
 
 /// Per-scene dispatch of camera 2 (0x332c0).
 pub(super) fn stage_script_2(x: &mut Cam) {
-    let stage = rd8(x.b, A5 + STAGE);
+    let stage = ram::SCENE.get(x.b);
     match stage {
-        2 | 20 | 90 | 102 => x.set16(cam::MODE, mode2::DRIVES_CAMERA_1),
-        3 | 7 | 9 | 21..=23 | 26 | 36 | 37 | 47 | 50 | 61 | 62 | 64 | 65 | 93 | 100 | 114 => x.set16(cam::MODE, mode2::FULL),
-        1 | 39 | 43 | 56 | 57 | 63 | 66 | 112 => x.set16(cam::MODE, mode2::QUARTER_THREE),
-        67 => x.set16(cam::MODE, mode2::QUARTER_BOTH),
-        4 => x.set16(cam::MODE, mode2::WAIT_THEN_CREEP),
-        35 => x.set16(cam::MODE, mode2::HALF_X),
-        8 | 41 => x.set16(cam::MODE, mode2::HALF_SYNC),
+        2 | 20 | 90 | 102 => x.set16(Camera::MODE, mode2::DRIVES_CAMERA_1),
+        3 | 7 | 9 | 21..=23 | 26 | 36 | 37 | 47 | 50 | 61 | 62 | 64 | 65 | 93 | 100 | 114 => x.set16(Camera::MODE, mode2::FULL),
+        1 | 39 | 43 | 56 | 57 | 63 | 66 | 112 => x.set16(Camera::MODE, mode2::QUARTER_THREE),
+        67 => x.set16(Camera::MODE, mode2::QUARTER_BOTH),
+        4 => x.set16(Camera::MODE, mode2::WAIT_THEN_CREEP),
+        35 => x.set16(Camera::MODE, mode2::HALF_X),
+        8 | 41 => x.set16(Camera::MODE, mode2::HALF_SYNC),
         105 => {}
         13 => falling_leaves(x),
-        54 | 59 => x.set16(cam::MODE, mode2::FROM_CAMERA_1),
+        54 | 59 => x.set16(Camera::MODE, mode2::FROM_CAMERA_1),
         46 | 113 => rising(x),
-        69 | 71 | 72 | 76 | 78 | 81..=89 => x.set16(cam::MODE, mode2::SCREEN_X),
-        11 | 94 => x.set16(cam::MODE, mode2::FOLLOWED),
-        6 | 12 | 101 => x.set16(cam::MODE, mode2::CREEP_3),
-        18 => x.set16(cam::MODE, mode2::DRIFT),
-        25 | 106..=108 => x.set16(cam::MODE, mode2::QUARTER_X),
-        91 => x.set16(cam::MODE, mode2::CREEP_6),
-        _ => x.set16(cam::MODE, mode2::HALF),
+        69 | 71 | 72 | 76 | 78 | 81..=89 => x.set16(Camera::MODE, mode2::SCREEN_X),
+        11 | 94 => x.set16(Camera::MODE, mode2::FOLLOWED),
+        6 | 12 | 101 => x.set16(Camera::MODE, mode2::CREEP_3),
+        18 => x.set16(Camera::MODE, mode2::DRIFT),
+        25 | 106..=108 => x.set16(Camera::MODE, mode2::QUARTER_X),
+        91 => x.set16(Camera::MODE, mode2::CREEP_6),
+        _ => x.set16(Camera::MODE, mode2::HALF),
     }
 }
 
 /// Scene 13: the scenery rises, then leaves fall (scenery objects created at random).
 pub(super) fn falling_leaves(x: &mut Cam) {
     const VARIANTS: [u8; 8] = [0x4b, 0x4c, 0x4d, 0x58, 0x4c, 0x4d, 0x58, 0x4b];
-    match x.u8(f::STEP) {
+    match x.u8(Camera::STEP) {
         0x00 => {
-            x.add8(f::STEP, 4);
-            x.set16(f::TIMER, 128);
-            x.set16(f::TIMER_2, 0);
+            x.add8(Camera::STEP, 4);
+            x.set16(Camera::TIMER, 128);
+            x.set16(Camera::TIMER_2, 0);
         }
         0x04 => {
-            let t = x.u16(f::TIMER).wrapping_sub(1);
-            x.set16(f::TIMER, t);
+            let t = x.u16(Camera::TIMER).wrapping_sub(1);
+            x.set16(Camera::TIMER, t);
             if (t as i16) < 0 {
-                x.add8(f::STEP, 4);
+                x.add8(Camera::STEP, 4);
             }
         }
         0x08 => {
-            let y = x.u16(cam::Y).wrapping_sub(1);
-            x.set16(cam::Y, y);
+            let y = x.u16(Camera::Y).wrapping_sub(1);
+            x.set16(Camera::Y, y);
             if (y as i16) <= 656 {
-                x.set16(cam::Y, 656);
-                x.add8(f::STEP, 4);
-                x.set16(f::TIMER, 512);
+                x.set16(Camera::Y, 656);
+                x.add8(Camera::STEP, 4);
+                x.set16(Camera::TIMER, 512);
             }
         }
         0x0c => {
-            if (rd16(x.b, A5 + 0x38) as i16) <= 0 {
-                x.add8(f::STEP, 4);
+            if (Word(ram::STAGE_CLOCK.0).get(x.b) as i16) <= 0 {
+                x.add8(Camera::STEP, 4);
                 return;
             }
-            let t = x.u16(f::TIMER_2).wrapping_sub(1);
-            x.set16(f::TIMER_2, t);
+            let t = x.u16(Camera::TIMER_2).wrapping_sub(1);
+            x.set16(Camera::TIMER_2, t);
             if (t as i16) >= 0 {
                 return;
             }
             let wait = x.random() & 63;
-            x.set16(f::TIMER_2, wait);
-            let Some(Obj(leaf)) = x.alloc(&pools::SOBJ) else { return };
-            wr8(x.b, leaf, 1);
-            wr8(x.b, leaf + 2, 0);
+            x.set16(Camera::TIMER_2, wait);
+            let Some(leaf) = x.alloc(&pools::SOBJ) else { return };
+            leaf.set_active(x.b, 1);
+            leaf.set_kind(x.b, 0);
             let variant = VARIANTS[(x.random() & 7) as usize];
-            wr8(x.b, leaf + 3, variant);
-            wr8(x.b, leaf + 0x2f, 0);
+            leaf.set_variant(x.b, variant);
+            leaf.set_setting(x.b, 0);
         }
         0x10 => {
-            let y = x.u16(cam::Y).wrapping_sub(1);
-            x.set16(cam::Y, y);
+            let y = x.u16(Camera::Y).wrapping_sub(1);
+            x.set16(Camera::Y, y);
             if (y as i16) < 0 {
-                x.set16(cam::Y, y.wrapping_add(64));
+                x.set16(Camera::Y, y.wrapping_add(64));
             }
         }
         _ => {}
@@ -118,27 +118,27 @@ pub(super) fn falling_leaves(x: &mut Cam) {
 /// Scenes 46 and 113: the scenery descends from 0 to 704, creating an object on the way.
 pub(super) fn rising(x: &mut Cam) {
     let finish = |x: &mut Cam| {
-        let y = x.u16(cam::Y).wrapping_add(4);
-        x.set16(cam::Y, y);
+        let y = x.u16(Camera::Y).wrapping_add(4);
+        x.set16(Camera::Y, y);
         if (y as i16) >= 704 {
-            x.set16(cam::Y, 704);
-            x.set16(cam::MODE, mode2::FREE);
-            x.add8(f::STEP, 4);
+            x.set16(Camera::Y, 704);
+            x.set16(Camera::MODE, mode2::FREE);
+            x.add8(Camera::STEP, 4);
         }
     };
-    match x.u8(f::STEP) {
+    match x.u8(Camera::STEP) {
         0x00 => {
-            let y = x.u16(cam::Y).wrapping_sub(4);
-            x.set16(cam::Y, y);
+            let y = x.u16(Camera::Y).wrapping_sub(4);
+            x.set16(Camera::Y, y);
             if (y as i16) >= 0 {
                 return;
             }
-            x.set16(cam::Y, 0);
-            x.set16(cam::X, 560);
-            let Some(Obj(obj)) = x.alloc(&pools::BOSS) else { return };
-            wr8(x.b, obj, 1);
-            wr8(x.b, obj + 2, 0xf);
-            x.add8(f::STEP, 4);
+            x.set16(Camera::Y, 0);
+            x.set16(Camera::X, 560);
+            let Some(obj) = x.alloc(&pools::BOSS) else { return };
+            obj.set_active(x.b, 1);
+            obj.set_kind(x.b, 0xf);
+            x.add8(Camera::STEP, 4);
             finish(x);
         }
         0x04 => finish(x),
@@ -149,29 +149,29 @@ pub(super) fn rising(x: &mut Cam) {
 /// 0x32f7c / 0x32fd2: the scenery advances 6 pixels per frame over a 0x600-pixel buffer, which it
 /// brings back by 0x200; the first time, it locks onto the next page.
 pub(super) fn strolling(x: &mut Cam) {
-    x.add16(cam::X, 6);
-    let px = x.u16(cam::X);
-    x.set16(cam::DRAWN_X, px);
-    if x.u8(f::STEP) == 0 {
+    x.add16(Camera::X, 6);
+    let px = x.u16(Camera::X);
+    x.set16(Camera::DRAWN_X, px);
+    if x.u8(Camera::STEP) == 0 {
         let px = px & 0xff;
-        x.set16(cam::X, px);
-        x.set16(cam::DRAWN_X, px);
-        x.add16(cam::Y, 0x100);
-        x.add16(cam::DRAWN_Y, 0x100);
-        x.add8(f::STEP, 2);
+        x.set16(Camera::X, px);
+        x.set16(Camera::DRAWN_X, px);
+        x.add16(Camera::Y, 0x100);
+        x.add16(Camera::DRAWN_Y, 0x100);
+        x.add8(Camera::STEP, 2);
     } else if (px as i16) >= 0x600 {
-        x.add16(cam::X, 0xfe00);
-        x.add16(cam::DRAWN_X, 0xfe00);
+        x.add16(Camera::X, 0xfe00);
+        x.add16(Camera::DRAWN_X, 0xfe00);
     }
 }
 
 /// 0x33152: a scenery object is created when the scenery has arrived at the bottom.
 pub(super) fn rubble(x: &mut Cam) {
-    let Some(Obj(obj)) = x.alloc(&pools::ENEMY) else { return };
-    let v = rd8(x.b, obj).wrapping_add(1);
-    wr8(x.b, obj, v);
-    wr8(x.b, obj + 2, 0x15);
-    x.set16(cam::MODE, mode2::RUBBLE);
+    let Some(obj) = x.alloc(&pools::ENEMY) else { return };
+    let v = obj.active(x.b).wrapping_add(1);
+    obj.set_active(x.b, v);
+    obj.set_kind(x.b, 0x15);
+    x.set16(Camera::MODE, mode2::RUBBLE);
 }
 
 /// Runs the script of camera 2's mode (A0).
@@ -201,9 +201,9 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
             stage_script_2(x);
         }
         mode2::DRIFT => {
-            x.add32(cam::X, 0x4000);
-            let px = x.u16(cam::X);
-            x.set16(cam::DRAWN_X, px);
+            x.add32(Camera::X_LONG, 0x4000);
+            let px = x.u16(Camera::X);
+            x.set16(Camera::DRAWN_X, px);
         }
         0x24 => {
             let (dx, dy) = (delta(x, 0), delta(x, 1));
@@ -213,12 +213,12 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
         0x28 => {
             let dx = delta(x, 0);
             drift(x, dx, 0);
-            let y = x.u16(cam::Y).wrapping_sub(8);
-            x.set16(cam::Y, y);
+            let y = x.u16(Camera::Y).wrapping_sub(8);
+            x.set16(Camera::Y, y);
             if (y as i16) <= 0 {
-                x.add16(cam::X, 0x400);
-                x.add16(cam::DRAWN_X, 0x400);
-                x.set16(cam::MODE, mode2::RUBBLE);
+                x.add16(Camera::X, 0x400);
+                x.add16(Camera::DRAWN_X, 0x400);
+                x.set16(Camera::MODE, mode2::RUBBLE);
                 rubble(x);
             }
         }
@@ -230,10 +230,10 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
         0x30 => {
             let dx = delta(x, 0);
             drift(x, dx, 0);
-            if (x.u16(cam::Y) as i16) >= 944 {
+            if (x.u16(Camera::Y) as i16) >= 944 {
                 rubble(x);
             } else {
-                x.add16(cam::Y, 3);
+                x.add16(Camera::Y, 3);
             }
         }
         mode2::RUBBLE => {
@@ -243,10 +243,9 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
         mode2::QUARTER_THREE => crate::scroll::parallax_quarter(x.b, x.o),
         0x3c => crate::scroll::parallax_three_quarters(x.b, x.o),
         mode2::FOLLOWED => {
-            let d = crate::mem::rd32(x.b, A5 + CAM2_X).wrapping_sub(crate::mem::rd32(x.b, A5 + CAM2_PREVIOUS_X));
-            let at = A5 + CAMERA_1 + cam::X;
-            let v = crate::mem::rd32(x.b, at).wrapping_add(d);
-            wr32(x.b, at, v);
+            let d = CAMERA_2.x_long(x.b).wrapping_sub(CAMERA_2.previous_x_long(x.b));
+            let v = CAMERA_1.x_long(x.b).wrapping_add(d);
+            CAMERA_1.set_x_long(x.b, v);
             stage_script_2(x);
         }
         mode2::QUARTER_BOTH => {
@@ -258,8 +257,8 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
         }
         mode2::HALF_SYNC => {
             let d = (delta(x, 0) >> 1) as u32;
-            x.add32(cam::X, d);
-            x.add32(cam::DRAWN_X, d);
+            x.add32(Camera::X_LONG, d);
+            x.add32(Camera::DRAWN_X_LONG, d);
             stage_script_2(x);
         }
         mode2::HALF_X => {
@@ -271,42 +270,40 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
         0x58 => shake(x, 2),
         0x5c => shake(x, 3),
         mode2::SCREEN_X => {
-            let v = rd16(x.b, A5 + 0x5a6).wrapping_add(x.u16(0x30));
-            x.set16(cam::X, v.wrapping_sub(0x90));
+            let v = ram::CAMERA1_X.get(x.b).wrapping_add(x.u16(Camera::SCREEN_OFFSET));
+            x.set16(Camera::X, v.wrapping_sub(0x90));
         }
-        mode2::WAIT_THEN_CREEP => match x.u8(f::STEP) {
+        mode2::WAIT_THEN_CREEP => match x.u8(Camera::STEP) {
             0 => {
-                x.add8(f::STEP, 4);
-                let px = x.u16(cam::X);
-                x.set16(cam::DRAWN_X, px);
+                x.add8(Camera::STEP, 4);
+                let px = x.u16(Camera::X);
+                x.set16(Camera::DRAWN_X, px);
             }
             8 => {
-                x.add16(cam::X, 4);
-                let px = x.u16(cam::X);
-                x.set16(cam::DRAWN_X, px);
+                x.add16(Camera::X, 4);
+                let px = x.u16(Camera::X);
+                x.set16(Camera::DRAWN_X, px);
             }
-            0xc => x.set16(cam::MODE, mode2::CREEP_6),
+            0xc => x.set16(Camera::MODE, mode2::CREEP_6),
             _ => {}
         },
         mode2::CREEP_3 => {
             crate::scroll::creep(x.b, x.o, 3);
         }
         mode2::FROM_CAMERA_1 => {
-            let y = ((rd16(x.b, A5 + CAMERA_1 + cam::X) & 0x30) << 4).wrapping_add(8);
-            x.set16(cam::Y, y);
-            x.set16(cam::DRAWN_Y, y);
+            let y = ((CAMERA_1.x(x.b) & 0x30) << 4).wrapping_add(8);
+            x.set16(Camera::Y, y);
+            x.set16(Camera::DRAWN_Y, y);
         }
         mode2::DRIVES_CAMERA_1 => {
-            let rd = |x: &mut Cam, a: u32| crate::mem::rd32(x.b, A5 + a);
-            let dx = (rd(x, CAM2_X).wrapping_sub(rd(x, CAM2_PREVIOUS_X)) as i32) >> 1;
-            let dy = (rd(x, CAM2_Y).wrapping_sub(rd(x, CAM2_PREVIOUS_Y)) as i32) >> 1;
-            let (x1, y1) = (A5 + CAMERA_1 + cam::X, A5 + CAMERA_1 + cam::Y);
-            let v = crate::mem::rd32(x.b, x1).wrapping_add(dx as u32);
-            wr32(x.b, x1, v);
-            let v = crate::mem::rd32(x.b, y1).wrapping_add(dy as u32);
-            wr32(x.b, y1, v);
-            if (rd16(x.b, x1) as i16) > 576 {
-                wr16(x.b, x1, 576);
+            let dx = (CAMERA_2.x_long(x.b).wrapping_sub(CAMERA_2.previous_x_long(x.b)) as i32) >> 1;
+            let dy = (CAMERA_2.y_long(x.b).wrapping_sub(CAMERA_2.previous_y_long(x.b)) as i32) >> 1;
+            let v = CAMERA_1.x_long(x.b).wrapping_add(dx as u32);
+            CAMERA_1.set_x_long(x.b, v);
+            let v = CAMERA_1.y_long(x.b).wrapping_add(dy as u32);
+            CAMERA_1.set_y_long(x.b, v);
+            if (CAMERA_1.x(x.b) as i16) > 576 {
+                CAMERA_1.set_x(x.b, 576);
             }
             stage_script_2(x);
         }
@@ -316,17 +313,17 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
 
 /// 0x32898: one step of the initialised camera 2: mode script, then scenery copy.
 pub(super) fn step_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
-    let mut x = Cam { b, o: Obj(A5 + CAMERA_2) };
-    x.set8(f::SHAKING, 0);
-    let m = x.u16(cam::MODE);
+    let mut x = on(b, CAMERA_2);
+    x.set8(Camera::SHAKING, 0);
+    let m = x.u16(Camera::MODE);
     run_mode_2(&mut x, m);
     crate::scroll::draw2(x.b)
 }
 
 /// Clears the per-line scroll bit of the video register copy (without writing the register).
 pub(super) fn clear_rowscroll_flag(x: &mut Cam) {
-    let v = rd16(x.b, A5 + VIDEO_CONTROL_COPY) & !1;
-    wr16(x.b, A5 + VIDEO_CONTROL_COPY, v);
+    let v = VIDEO_CONTROL_COPY.get(x.b) & !1;
+    VIDEO_CONTROL_COPY.set(x.b, v);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -81,7 +81,7 @@ pub struct KindTable {
     pub kinds: Vec<Kind>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct Terrain {
     pub maps: Vec<FixedMap>,
     pub kinds: Vec<KindTable>,

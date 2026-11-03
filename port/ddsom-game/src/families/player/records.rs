@@ -54,7 +54,7 @@ record! {
 }
 
 /// An enemy or boss as the players' shots and effects see it (the fields of `Enemy` that the enemy framework does not
-/// name; the others are those of `crate::families::enemy_common::records::Enemy`).
+/// name; the others are those of `crate::objects::Enemy`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Victim(pub Obj);
 
