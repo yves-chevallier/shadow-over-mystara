@@ -1120,7 +1120,7 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
 
 ### Bonus
 
-**L19. Bug de saisie du nom**
+**L19. Bug de saisie du nom** — **fait** (branche `wt-l19-nom`)
 * Petit, à tout moment. Périmètre : `scenarios/`, `hud/` ou `modes/` (le classement), `docs/modes.md`.
 * Selon [reprise.md](reprise.md), ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
 * Travail :
@@ -1131,6 +1131,17 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
   Corriger le bug ne se ferait que derrière une option (`DDSOM_*`), hors validation, sur décision de l'utilisateur.
   Le comportement par défaut reste celui de l'original.
 * Fin : le scénario est dans la validation (309/309), et la section de `docs/modes.md` est écrite.
+* Résultat :
+  * le bug (fiche KLOV du jeu) : avec un personnage dont le nom par défaut a six lettres, le bouton « nom par
+    défaut » puis des lettres en série débordent du tampon du nom sur la fiche du joueur et son inventaire (« environ
+    110 M »), le délai repartant à chaque lettre ; corrigé dans une révision ultérieure ;
+  * cause (h) : dans notre révision, `0xc9d16` (nom par défaut) pose le verrou de saisie `+0x19` quand le nom a six
+    lettres (`0xc9d5c-0xc9d62`) ; sans ce test, la longueur passerait de 6 à 7 et le test « = 6 » de `0xc9c90` ne
+    serait plus jamais vrai (écritures jusqu'à `+0x217` du joueur). Invérifiable faute d'autres ROM ;
+  * notre révision (Euro 960619) n'a pas le bug : le scénario `scenarios/modes/name_entry_overflow.txt` (voleur,
+    MORIAH, 110 appuis sur M, effacement, M, fin) laisse le tampon à six lettres (`MORIAM`), et il est VALIDE ;
+  * documenté dans [modes.md](modes.md) § 6 ; aucun code du jeu modifié. Validation complète 309/309 dans les deux
+    modes.
 
 ### Présentation (décidé avec l'utilisateur le 2026-11-02)
 

@@ -152,6 +152,12 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral` ; restent 141 constantes d'adresses de tables lues par
    adresse.
 
+10. **Lot L19 (saisie du nom)** fait (branche `wt-l19-nom`, [fin.md](fin.md) « L19 », [modes.md](modes.md) § 6) : le
+   débordement du nom des anciennes révisions (nom par défaut de six lettres puis lettres en série) n'existe pas dans
+   la nôtre (verrou posé par `0xc9d16` en `0xc9d5c`) ; scénario `scenarios/modes/name_entry_overflow.txt` VALIDE,
+   validation à 309 scénarios. Aucune option `DDSOM_*` ajoutée (décision de l'utilisateur si l'on veut reproduire le
+   bug).
+
 ## Méthode qui marche
 
 * **Consignes des agents.** Elles sont dans [agents/brief-commun.md](agents/brief-commun.md) (règles) et [agents/brief-lots.md](agents/brief-lots.md) (mission type d'un lot de refactorisation et règle du code mort). Remplacer `<scratchpad>` par le dossier temporaire de la session.
