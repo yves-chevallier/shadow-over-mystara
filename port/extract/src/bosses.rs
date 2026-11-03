@@ -95,7 +95,7 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("boss_6/walk_steps_slow", 0x85698, "u8", &[], 32));
     // ---- boss 7 ----
     s.push(prog("boss_7/sidesteps", 0x87c8a, "i16", &[], 8));
-    pointed(rom, s, "boss_7/dodge_spots", 0x87f30, 4, true, "i16*2 u8*4", 4);
+    pointed(rom, s, "boss_7/dodge_spots", 0x87f30, 4, true, ("i16*2 u8*4", 4));
     rank(s, "boss_7/front_attacks", 0x87126);
     rank(s, "boss_7/front_attacks_slow", 0x87526);
     rank(s, "boss_7/back_attacks", 0x87326);
@@ -106,7 +106,7 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     // ---- boss 8 ----
     s.push(prog("boss_8/spots", 0x8a384, "i16*2", &[], 32));
     s.push(prog("boss_8/sidesteps", 0x8a422, "i16", &[], 8));
-    pointed(rom, s, "boss_8/dodge_spots", 0x8a6cc, 4, true, "i16*2 u8*4", 4);
+    pointed(rom, s, "boss_8/dodge_spots", 0x8a6cc, 4, true, ("i16*2 u8*4", 4));
     rank(s, "boss_8/front_attacks", 0x89866);
     rank(s, "boss_8/front_attacks_slow", 0x89c66);
     rank(s, "boss_8/back_attacks", 0x89a66);
@@ -118,17 +118,17 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(data("boss_9/lives", 0x8ca02, "u8", &[], PER_RANK));
     s.push(data("boss_9/shot_waits", 0x8c9ce, "u8", &[], PER_RANK));
     s.push(data("boss_9/dashes", 0x8c430, "u8", &[], PER_RANK));
-    pointed(rom, s, "boss_9/passes", 0x8bef0, PER_RANK as u32, false, "u8", 32);
-    pointed(rom, s, "boss_9/bombs", 0x8c476, PER_RANK as u32, false, "u8", 16);
-    pointed(rom, s, "boss_9/stops", 0x8c598, PER_RANK as u32, false, "u8", 16);
-    pointed(rom, s, "boss_9/waits", 0x8bc3e, 5, false, "u8", PER_RANK);
-    pointed(rom, s, "boss_9/stop_xs", 0x8bd08, PER_RANK as u32, true, "u8", 32);
+    pointed(rom, s, "boss_9/passes", 0x8bef0, PER_RANK as u32, false, ("u8", 32));
+    pointed(rom, s, "boss_9/bombs", 0x8c476, PER_RANK as u32, false, ("u8", 16));
+    pointed(rom, s, "boss_9/stops", 0x8c598, PER_RANK as u32, false, ("u8", 16));
+    pointed(rom, s, "boss_9/waits", 0x8bc3e, 5, false, ("u8", PER_RANK));
+    pointed(rom, s, "boss_9/stop_xs", 0x8bd08, PER_RANK as u32, true, ("u8", 32));
     rank(s, "boss_9/halts", 0x8c6d2);
     s.push(data("boss_9/lanes", 0x8bec4, "i16", &[], 3));
     s.push(data("boss_9/retargets", 0x8c9aa, "u8", &[], 16));
     s.push(prog("boss_9/speeds_hard", 0x8c092, "u8", &[], 0x28));
     upto(s, "boss_9/speeds", 0x8c0ba, true, "u8", 0x28);
-    pointed(rom, s, "boss_9/dash_chances", 0x8c20c, 5, false, "x32", PER_RANK);
+    pointed(rom, s, "boss_9/dash_chances", 0x8c20c, 5, false, ("x32", PER_RANK));
 }
 
 /// A decision: the pick tables `picks` (16 bytes each, program space) named `<name>_picks` (one table) or
@@ -144,9 +144,10 @@ fn decision(rom: &Program, s: &mut Vec<Spec>, name: &str, picks: &[u32], jumps: 
 }
 
 /// A table of `count` addresses (longs of the given space) and the tables of the data space it points to, named
-/// `<name>/<k>` (`k`: the first entry that designates it) unless an earlier declaration already holds them.
-fn pointed(rom: &Program, s: &mut Vec<Spec>, name: &str, at: u32, count: u32, program: bool, format: &'static str,
-           rows: usize) {
+/// `<name>/<k>` (`k`: the first entry that designates it; `target`: their format and rows) unless an earlier declaration
+/// already holds them.
+fn pointed(rom: &Program, s: &mut Vec<Spec>, name: &str, at: u32, count: u32, program: bool, target: (&'static str, usize)) {
+    let (format, rows) = target;
     s.push(if program { prog(name, at, "addr", &[], count as usize) } else { data(name, at, "addr", &[], count as usize) });
     for k in 0..count {
         let target = rom.long(at + 4 * k, program);
