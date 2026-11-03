@@ -91,7 +91,7 @@ pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
     sync(x);
 }
 
-// --- groupes 2, 8, 10, 12 : poursuite --------------------------------------------------------------------------
+// --- groups 2, 8, 10, 12: pursuit ---------------------------------------------------------------------------
 
 /// 0x8eb52: walk delay depending on difficulty.
 fn walk_delay<R: Bench>(x: &mut Cx<'_, R>) {

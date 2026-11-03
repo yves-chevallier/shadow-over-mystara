@@ -133,7 +133,7 @@ fn green_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- type 19, variante 0 -----------------------------------------------------------------------------
+// --- type 19, variant 0 ------------------------------------------------------------------------------
 
 /// Starts the fade task `list` (0x9b6 with A0 = the entry, slot 0x10; `tasks/fading.rs`).
 fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
@@ -248,7 +248,7 @@ fn wait_camera<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
-// --- type 19, variante 1 -------------------------------------------------------------------------------
+// --- type 19, variant 1 --------------------------------------------------------------------------------
 
 fn pet_enter<R: Bench>(x: &mut Cx<'_, R>) {
     enter_from_right(x, 0x38);

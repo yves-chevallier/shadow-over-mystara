@@ -65,7 +65,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- aides ------------------------------------------------------------------------------------------------
+// --- helpers -----------------------------------------------------------------------------------------------
 
 /// 0x99414: boss orientation opposite to the hit (`+0x4a`); speeds reversed if it is non-zero.
 fn face_away<R: Bench>(x: &mut Cx<'_, R>) {
@@ -199,7 +199,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- hit_d, hit_e, hit_f, hit_g : projections ---------------------------------------------------------------------
+// --- hit_d, hit_e, hit_f, hit_g: throws ---------------------------------------------------------------------------
 
 /// `anim`: animation of the reactions set; `base`: code offset for the speeds row; `slow_rise`: divides the
 /// vertical speed by 4; `grounded`: the boss moves to state 2 during the throw.
@@ -374,7 +374,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-// --- mort ------------------------------------------------------------------------------------------------------------
+// --- death -----------------------------------------------------------------------------------------------------------
 
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {

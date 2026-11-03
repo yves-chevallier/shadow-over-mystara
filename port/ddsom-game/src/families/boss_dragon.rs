@@ -304,16 +304,16 @@ fn follow_and_hold<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(Dragon::LEAVING, 1);
         return leave_now(x);
     }
-    match x.u8(f::SUB2 + 1) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(f::SUB2 + 1, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set_bit(Dragon::HOLD, 0, true);
             glide(x);
         }
         _ if x.bit(Dragon::HOLD, 0) => glide(x),
         _ => {
             x.add8(f::SUB2, 2);
-            x.set8(f::SUB2 + 1, 0);
+            x.set8(Enemy::SUB_STEP, 0);
             x.set16(Dragon::TIMER, 0x12c);
         }
     }

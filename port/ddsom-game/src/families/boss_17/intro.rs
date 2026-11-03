@@ -443,7 +443,7 @@ fn camera_rise<R: Bench>(x: &mut Cx<'_, R>) {
         e.set_u8(x.b, Obj::KIND, 0x3c);
         e.set_u8(x.b, Obj::VARIANT, d5);
         e.set_u16(x.b, Enemy::CREATOR, core.0 as u16);
-        for off in [0x8, 0x10, 0xc] {
+        for off in [Obj::X, Obj::Y, Obj::Z] {
             let v = core.u16(x.b, off);
             e.set_u16(x.b, off, v);
         }

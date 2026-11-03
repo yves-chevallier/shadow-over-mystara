@@ -115,8 +115,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_all_popups(x);
     x.set8(Boss::DEATH_CREDIT, 1);
     x.set8(Boss::DEATH_VALUE, 0xff);
-    for off in [Enemy::AI_BYTE_ROW, Enemy::AI_STANCE_ROW, Enemy::AI_WANDER_ROW, Enemy::AI_BOX_ANIM, Enemy::AI_ROW_8E] {
-        x.set8(off, 0);
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 0), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_BOX_ANIM, 0), (Enemy::AI_ROW_8E, 0)] {
+        x.set8(off, v);
     }
     for (off, v) in [(Enemy::AI_DECISION_A, 1), (Enemy::AI_DECISION_B, 1), (Enemy::AI_WAIT_MASKS, 6), (Enemy::AI_WAIT_ROW, 6), (Enemy::AI_BOX_CHANCE, 7), (Enemy::AI_SHOT, 0xff), (Enemy::AI_68, 8), (Enemy::AI_69, 1), (Enemy::VULNERABLE, 0)] {
         x.set8(off, v);

@@ -57,7 +57,7 @@ fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     effect(x, false, 0x32, Some(v), true);
 }
 
-// --- +6 = 0 : coup simple -----------------------------------------------------------------------
+// --- +6 = 0: single hit -------------------------------------------------------------------------
 
 fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {

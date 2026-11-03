@@ -219,7 +219,7 @@ fn to_chase<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0)
 }
 
-/// 0x8eaea : demi-tour.
+/// 0x8eaea: about-face.
 fn to_turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     let flip = x.u8(f::FLIP) ^ 0x20;
@@ -250,7 +250,7 @@ fn lost<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0406_0000);
 }
 
-/// 0x8ebd0 : vitesses nulles.
+/// 0x8ebd0: speeds cleared.
 fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Enemy::VX_LONG, 0);
     x.set32(Enemy::VZ_LONG, 0);

@@ -70,7 +70,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e4a2 : recul (codes 0, 0x1c, 0x38, 0x3c, 0x6c, 0x98).
+/// 0x8e4a2: knockback (codes 0, 0x1c, 0x38, 0x3c, 0x6c, 0x98).
 fn hit_a<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         if (x.u16(f::HP) as i16) <= 0 {

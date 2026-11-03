@@ -41,7 +41,7 @@ pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE);
 }
 
-/// 0x98fd6 : idem (tir 0x2a), marche lente.
+/// 0x98fd6: same (shot 0x2a), slow walk.
 pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::VULNERABLE, 1);
     x.set8(Boss::SHOT, 0x2a);
@@ -65,12 +65,12 @@ fn attack<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     x.set32(f::STATE, state);
 }
 
-/// 0x99032 : attaque 0.
+/// 0x99032: attack 0.
 pub(super) fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0000);
 }
 
-/// 0x99040 : attaque 2.
+/// 0x99040: attack 2.
 pub(super) fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0200);
 }
@@ -94,7 +94,7 @@ pub(super) fn attack_6<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0600);
 }
 
-/// 0x9908c : attaque 8.
+/// 0x9908c: attack 8.
 pub(super) fn attack_8<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0800);
 }
@@ -165,7 +165,7 @@ pub(super) fn attack_20<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_1400);
 }
 
-// --- tirages ------------------------------------------------------------------------------------
+// --- draws -------------------------------------------------------------------------------------
 
 
 /// HP thresholds per phase (words, 128 bytes per row).

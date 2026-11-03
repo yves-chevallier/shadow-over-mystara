@@ -243,6 +243,26 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     decision(rom, s, "boss_21/far", &[0x9aa9a, 0x9aaaa], 0x9aaba);
     s.push(prog("boss_21/front_phases", 0x9a986, "i16", &[], 5));
     s.push(prog("boss_21/far_phases", 0x9aa44, "i16", &[], 10));
+    // ---- boss 2 and boss 22 (`boss_22/`) ----
+    rank(s, "boss_2/close_attacks", 0x7ea1e);
+    rank(s, "boss_2/far_attacks", 0x7ec1e);
+    rank(s, "boss_2/next_attacks", 0x7ee7c);
+    s.push(prog("boss_2/spots", 0x7f25a, "i16*2 u8*2", &[], 4));
+    // Counterattack chances: a long per number of players alive (rows of 4 bytes).
+    s.push(prog("boss_2/counter_chances", 0x7e7a2, "x32", &[], 5));
+    s.push(prog("boss_2/dashes", 0x7cd3e, "u8", &[], 16));
+    s.push(prog("boss_2/leap_speeds", 0x7f14c, "i16*4", &[], 4));
+    s.push(prog("boss_2/run_times", 0x7d5f0, "u16", &[], 8));
+    rank(s, "boss_22/close_attacks", 0x9d280);
+    rank(s, "boss_22/far_attacks", 0x9d480);
+    rank(s, "boss_22/next_attacks", 0x9d6e0);
+    s.push(prog("boss_22/spots", 0x9dabe, "i16*2 u8*2", &[], 4));
+    // Same five longs as type 2, but read with rows of 16 bytes: from two players alive on, the code that follows is
+    // read as data (original glitch), kept up to four players.
+    s.push(prog("boss_22/counter_chances", 0x9d012, "x32", &[], 17));
+    s.push(prog("boss_22/dashes", 0x9b5a0, "u8", &[], 16));
+    // Chances of the AI library draw 0xffda (a word per quarter of the difficulty).
+    s.push(prog("boss_22/flee_chances", 0xfff4, "x16", &[], 4));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.

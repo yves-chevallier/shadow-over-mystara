@@ -110,7 +110,7 @@ pub fn sub16<R: Bench>(x: &mut Cx<'_, R>, off: u32, k: u16) -> Fl {
     Fl::sub16(old, k)
 }
 
-/// `cmpi.b #imm,(off,A0)` : drapeaux de `byte - imm`.
+/// `cmpi.b #imm,(off,A0)`: flags of `byte - imm`.
 pub fn cmp8<R: Bench>(x: &mut Cx<'_, R>, off: u32, imm: u8) -> Fl {
     Fl::sub8(x.u8(off), imm)
 }

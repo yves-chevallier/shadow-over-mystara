@@ -121,7 +121,7 @@ fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     x.anim_start(base, n as u16);
 }
 
-/// Animation de repos (jeu 0).
+/// Rest animation (set 0).
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 0);
 }
@@ -144,7 +144,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-/// 0x913f6 : demi-tour.
+/// 0x913f6: about-face.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, TURN);
     let side = x.u8(f::FLIP) ^ 0x20;

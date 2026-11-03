@@ -57,7 +57,7 @@ pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE_B);
 }
 
-/// 0x97288 : charge.
+/// 0x97288: charge.
 pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::VULNERABLE, 0);
     x.set32(f::STATE, DASH);
@@ -69,7 +69,7 @@ pub(super) fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ATTACK_0);
 }
 
-/// 0x972a6 : attaque 2.
+/// 0x972a6: attack 2.
 pub(super) fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_2);
 }
@@ -80,12 +80,12 @@ pub(super) fn attack_4_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     attack_4(x);
 }
 
-/// 0x972ba : attaque 4.
+/// 0x972ba: attack 4.
 pub(super) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_4);
 }
 
-/// 0x972c8 : attaque 6.
+/// 0x972c8: attack 6.
 pub(super) fn attack_6<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_6);
 }
@@ -109,7 +109,7 @@ pub(super) fn attack_10<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_10);
 }
 
-/// 0x97302 : attaque 12.
+/// 0x97302: attack 12.
 pub(super) fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) || (x.u8(Boss17::BUDGET_B) as i8) <= 0 {
         return attack_6(x);
@@ -191,20 +191,20 @@ pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0200_0400);
 }
 
-/// 0x971ce : variante 1.
+/// 0x971ce: variant 1.
 pub(super) fn start_variant1<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Boss::ANIM_KIND, 0x33);
     var::NO_WALK_IN.set(x.b, 1);
     x.set32(f::STATE, 0x0200_0600);
 }
 
-/// 0x971e4 : variante 2.
+/// 0x971e4: variant 2.
 pub(super) fn start_variant2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Boss::ANIM_KIND, 0x34);
     x.set32(f::STATE, 0x0200_0800);
 }
 
-// --- tirages ------------------------------------------------------------------------------------
+// --- draws -------------------------------------------------------------------------------------
 
 /// 0x96ef0: delay before the next step, depending on difficulty.
 pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {

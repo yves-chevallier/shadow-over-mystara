@@ -57,7 +57,7 @@ pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE_B);
 }
 
-/// 0x9ab7c : charge.
+/// 0x9ab7c: charge.
 pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::VULNERABLE, 0);
     x.set32(f::STATE, DASH);
@@ -74,7 +74,7 @@ fn attack<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     x.set32(f::STATE, state);
 }
 
-/// 0x9ab9a : attaque 2.
+/// 0x9ab9a: attack 2.
 pub(super) fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_2);
 }
@@ -85,12 +85,12 @@ pub(super) fn attack_4_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     attack_4(x);
 }
 
-/// 0x9abae : attaque 4.
+/// 0x9abae: attack 4.
 pub(super) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_4);
 }
 
-/// 0x9abbc : attaque 6.
+/// 0x9abbc: attack 6.
 pub(super) fn attack_6<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_6);
 }
@@ -173,7 +173,7 @@ pub(super) fn after_attack<R: Bench>(x: &mut Cx<'_, R>, then: fn(&mut Cx<'_, R>)
     then(x);
 }
 
-// --- tirages ------------------------------------------------------------------------------------
+// --- draws -------------------------------------------------------------------------------------
 
 /// 0x9a850: delay before the next step, depending on difficulty.
 pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {

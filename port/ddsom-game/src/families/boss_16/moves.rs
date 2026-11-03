@@ -140,7 +140,7 @@ fn wake_high_wait<R: Bench>(x: &mut Cx<'_, R>) {
     lib::palette_script(x, (event - 1) as u16);
 }
 
-// --- groupe 2 : combat -------------------------------------------------------------------------
+// --- group 2: combat -------------------------------------------------------------------------
 
 /// 0x93618: combat; with no player alive, the boss waits.
 pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
@@ -175,7 +175,7 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x9368e : demi-tour.
+/// 0x9368e: about-face.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Boss16::FALLS, 1);
     match x.u8(Enemy::SUB_STEP) {
@@ -444,7 +444,7 @@ fn wait_then_turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 10 : pause ------------------------------------------------------------------------------
+// --- group 10: pause ------------------------------------------------------------------------------
 
 /// 0x93ece.
 pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
