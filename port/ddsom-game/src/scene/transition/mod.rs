@@ -18,6 +18,7 @@
 pub(crate) mod early;
 pub(crate) mod late;
 
+use crate::screens::tables;
 use super::Ctx;
 use crate::scene::fading;
 use crate::video::{load_grid, clear_layer, Layer, Grid};
@@ -47,16 +48,18 @@ mod a5 {
     pub const CLOCK: u32 = 0x38;
     /// Fade: pages, steps left, delay, target palettes (longs).
     /// Cameras: position (X, Y) and their copies (`+8`).
-    pub const CAM1_X: u32 = 0x506;
-    pub const CAM1_Y: u32 = 0x50a;
-    pub const CAM2_X: u32 = 0x556;
-    pub const CAM2_Y: u32 = 0x55a;
+    use crate::mem::A5;
+    use crate::screens::vars as sv;
+    pub const CAM1_X: u32 = sv::CAMERA_X.0 - A5;
+    pub const CAM1_Y: u32 = sv::CAMERA_Y.0 - A5;
+    pub const CAM2_X: u32 = sv::CAMERA_2_X.0 - A5;
+    pub const CAM2_Y: u32 = sv::CAMERA_2_Y.0 - A5;
     pub const COPY: u32 = 8;
     /// Scrolling text (h): pointer to the text, then two header words.
-    pub const SCROLL_TEXT: u32 = 0x5c6;
+    pub const SCROLL_TEXT: u32 = sv::BANNER.0 - A5;
     /// Region (word, 2 and above), which chooses the language of the texts.
     pub const REGION: u32 = 0x72;
-    pub const PLAYERS: u32 = 0x5de;
+    pub const PLAYERS: u32 = crate::ram::PLAYERS.base - A5;
 }
 
 /// Palette pages: all of them, or those of the scene (0, 2 and 3).
@@ -89,6 +92,7 @@ macro_rules! or_yield {
     };
 }
 use or_yield;
+use crate::screens::obj;
 
 // ---------------------------------------------------------------------------------------------
 // Variables
@@ -300,13 +304,16 @@ fn message_obj(x: &mut Ctx) -> Obj {
 /// Is the open message finished (byte `+0x22`)?
 fn message_done(x: &mut Ctx) -> bool {
     let o = message_obj(x);
-    rd8(x.b, o.0 + 0x22) != 0
+    o.u8(x.b, obj::MESSAGE_DONE) != 0
 }
+/// Answer chosen in a message object.
+const ANSWER: u32 = 0x23;
+
 /// Answer chosen in the open message (byte `+0x23`), which indexes a ROM byte table.
 fn answer(x: &mut Ctx, table: u32) -> u8 {
     let o = message_obj(x);
-    let k = rd8(x.b, o.0 + 0x23);
-    x.prog8(table + k as u32)
+    let k = o.u8(x.b, ANSWER);
+    tables::pc_byte(x.b, table + k as u32)
 }
 
 /// Opens message `n` (0xc8312, stored at `+4`); true if the object was created.
@@ -357,7 +364,7 @@ fn set_object(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> bool {
 }
 /// `move.l A6,0x4c(A1)`: the created object knows the script variables (A6 of the original).
 fn attach(x: &mut Ctx, o: Obj) -> Obj {
-    wr32(x.b, o.0 + 0x4c, VARS);
+    o.set_u32(x.b, obj::SIGNAL, VARS);
     o
 }
 
@@ -365,9 +372,9 @@ fn attach(x: &mut Ctx, o: Obj) -> Obj {
 /// words, then the text.
 fn scroll_text(x: &mut Ctx, table: u32) {
     let k = x.v16(a5::REGION).wrapping_sub(2).wrapping_mul(2);
-    let mut a4 = crate::mem::prog32(x.b, table + (k as i16 as i32 as u32));
+    let mut a4 = tables::pc_long(x.b, table.wrapping_add(k as i16 as i32 as u32));
     for off in [a5::SCROLL_TEXT + 4, a5::SCROLL_TEXT + 6] {
-        let w = rd16(x.b, a4);
+        let w = tables::word(x.b, a4);
         x.set_v16(off, w);
         a4 += 2;
     }

@@ -53,23 +53,24 @@ mod state {
 
 /// Work RAM variables (offsets from A5).
 pub mod var {
+    use crate::ram::{Byte, Word};
     /// Inputs: current state P1..P4, system buttons (starts, coins), switches (test, service).
     pub const INPUT: u32 = 0;
-    pub const SYSTEM: u32 = 4;
-    pub const SWITCHES: u32 = 5;
+    pub const SYSTEM: Byte = Byte::a5(4);
+    pub const SWITCHES: Byte = Byte::a5(5);
     pub const PREV: u32 = 6;
-    pub const LAYERS: u32 = 0x14;
-    pub const FLAGS: u32 = 0x12;
-    pub const FALLS: u32 = 0x1d;
-    pub const VARIANT: u32 = 0x70;
-    pub const DEV_BOARD: u32 = 0x82;
-    pub const CARD_DISPENSER: u32 = 0x84;
+    pub const LAYERS: Word = Word::a5(0x14);
+    pub const FLAGS: Word = Word::a5(0x12);
+    pub const FALLS: Byte = Byte::a5(0x1d);
+    pub const VARIANT: Word = Word::a5(0x70);
+    pub const DEV_BOARD: Byte = Byte::a5(0x82);
+    pub const CARD_DISPENSER: Byte = Byte::a5(0x84);
     /// TEST menu active (read by the sound).
-    pub const ACTIVE: u32 = 0x7fcc;
+    pub const ACTIVE: Word = Word::a5(0x7fcc);
     pub const SCROLLS: [u32; 6] = [0x4b6, 0x4ba, 0x506, 0x50a, 0x556, 0x55a];
     /// Bytes reset to zero by the menu (unknown role; `0x5bc` is the output copied to 0x8040e1 by VBLANK).
-    pub const FRAME_FLAG: u32 = 0x5bd;
-    pub const BYTE_34: u32 = 0x34;
+    pub const FRAME_FLAG: Byte = Byte::a5(0x5bd);
+    pub const BYTE_34: Byte = Byte::a5(0x34);
 }
 
 /// Bits of a player's inputs (see `inputs.rs`).
@@ -85,12 +86,12 @@ pub mod key {
 }
 
 /// Entry of the startup task, which the menu task becomes again on leaving.
-const BOOT_TASK: u32 = 0x11b16;
+const BOOT_TASK: crate::data::RomAddr = crate::data::RomAddr(0x11b16);
 
 /// Menu texts (descriptors in ROM).
 mod text {
-    pub const MENU: u32 = 0x29f1e;
-    pub const HELP: u32 = 0x2a03a;
+    pub const MENU: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x29f1e);
+    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a03a);
 }
 
 /// Board outputs (0x400004), value set by the menu.
@@ -281,7 +282,7 @@ pub fn decimal(x: &mut Ctx, cell: u32, value: u32, n: u32, attr: u16) -> u32 {
 pub fn handler(x: &mut Ctx) -> Flow {
     match get(x, f::STATE) {
         state::INIT => {
-            x.set_v16(var::ACTIVE, 1);
+            var::ACTIVE.set(x.b, 1);
             set(x, f::STATE, state::MENU);
             show_menu(x)
         }
@@ -304,13 +305,13 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
 
 /// `0x291ec`: the menu, once the screen is cleared.
 pub fn menu_after_clear(x: &mut Ctx) -> Flow {
-    x.set_v8(var::FRAME_FLAG, 0);
+    var::FRAME_FLAG.set(x.b, 0);
     set(x, f::SECRET, 0);
     set(x, f::REPEAT_V, 1);
     x.wr16(OUTPUTS, MENU_OUTPUTS);
     crate::video::unlock_counters(x.b, 0xf1);
-    print(x, text::MENU);
-    print(x, text::HELP);
+    print(x, text::MENU.addr());
+    print(x, text::HELP.addr());
     let line = get(x, f::CURSOR);
     arrow(x, MENU_ARROW, line);
     if !config::is_factory(x) {
@@ -325,7 +326,7 @@ fn menu(x: &mut Ctx) -> Flow {
     if x.rd16(SECRET_ENABLE) != 0 {
         if get(x, f::SECRET) != 0 {
             // the program word 0xc0 is zero in this version (docs/service.md): the "Secret Test" is not rewritten
-            unreachable!("TEST menu: \"Secret Test\" (0xee16e) requested");
+            unreachable!("TEST.addr() menu: \"Secret Test\" (0xee16e) requested");
         }
         if (x.v8(0) & x.v8(1)) & key::SHOT2 != 0 {
             set(x, f::SECRET, 1);
@@ -370,13 +371,13 @@ fn exit(x: &mut Ctx) -> Flow {
     for off in var::SCROLLS {
         x.set_v32(off, 0);
     }
-    x.set_v16(var::ACTIVE, 0);
-    crate::tasks::restart(x, BOOT_TASK)
+    var::ACTIVE.set(x.b, 0);
+    crate::tasks::restart(x, BOOT_TASK.0)
 }
 
 /// `0x29a48`: held 1P start and fire 1: return to the menu.
 pub fn exit_check(x: &mut Ctx) -> Flow {
-    if x.v8(var::SYSTEM) & key::START1 == 0 || x.v8(var::INPUT) & key::SHOT1 == 0 {
+    if var::SYSTEM.get(x.b) & key::START1 == 0 || x.v8(var::INPUT) & key::SHOT1 == 0 {
         return Flow::Done;
     }
     back_to_menu(x)
@@ -389,9 +390,9 @@ pub fn back_to_menu(x: &mut Ctx) -> Flow {
     // step of the screen and configuration cursors (bytes 2 to 5)
     x.wr16(MENU + f::STEP, 0);
     x.wr16(MENU + f::STEP + 2, 0);
-    let flags = x.v16(var::FLAGS) & 0x7fff;
-    x.set_v16(var::FLAGS, flags);
-    x.set_v8(var::BYTE_34, 0);
+    let flags = var::FLAGS.get(x.b) & 0x7fff;
+    var::FLAGS.set(x.b, flags);
+    var::BYTE_34.set(x.b, 0);
     show_menu(x)
 }
 

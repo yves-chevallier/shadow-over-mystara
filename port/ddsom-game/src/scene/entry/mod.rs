@@ -29,26 +29,27 @@ use later::*;
 /// ROM tables (data), indexed by scene number.
 pub(crate) mod table {
     /// One byte per scene copied to `A5+0x48` / `A5+0x49` (scene palette parameters).
-    pub const PALETTE_A: u32 = 0x21b38;
-    pub const PALETTE_B: u32 = 0x21bb0;
+    pub const PALETTE_A: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21b38);
+    pub const PALETTE_B: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21bb0);
     /// One byte per scene (copied to `A5+0x3e` and `A5+0x40`), index ×2.
-    pub const SCENE_BYTE: u32 = 0x21156;
+    pub const SCENE_BYTE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21156);
     /// Players' entry position: 4 pairs (X, Y) of words per scene.
-    pub const START_POSITIONS: u32 = 0x2123c;
+    pub const START_POSITIONS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2123c);
     /// One byte per player and per scene (`+0x2c` of the player).
-    pub const START_STATES: u32 = 0x2196c;
+    pub const START_STATES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2196c);
 }
 
 /// Work RAM variables outside the A5 ± 0x7fff page, cleared on entry.
 mod ram {
+    use crate::ram::Word;
     pub const BYTE_A: u32 = 0xff_2472;
     pub const BYTE_B: u32 = 0xff_2474;
     pub const BYTE_C: u32 = 0xff_2042;
     pub const WORD_D: u32 = 0xff_2046;
     pub const WORD_E: u32 = 0xff_2048;
     pub const WORD_F: u32 = 0xff_204a;
-    pub const WORD_G: u32 = 0xff_204c;
-    pub const WORD_H: u32 = 0xff_2040;
+    pub const WORD_G: Word = Word(0xff_204c);
+    pub const WORD_H: Word = Word(0xff_2040);
 }
 
 const STEP_INIT: u8 = 0;
@@ -67,26 +68,26 @@ const PLAYER_SPELL_SLOTS: std::ops::RangeInclusive<u32> = 0x1a0..=0x1d8;
 // Step 0: scene preparation
 
 fn init_scene(x: &mut Ctx) {
-    wr8(x.b, A5 + var::STEP, STEP_SEQUENCE);
+    var::STEP.set(x.b, STEP_SEQUENCE);
     for addr in [ram::BYTE_A, ram::BYTE_B, ram::BYTE_C] {
         wr8(x.b, addr, 0);
     }
     for addr in [ram::WORD_D, ram::WORD_E, ram::WORD_F] {
         wr16(x.b, addr, 0);
     }
-    wr16(x.b, ram::WORD_G, 5);
-    wr16(x.b, ram::WORD_H, 9);
+    ram::WORD_G.set(x.b, 5);
+    ram::WORD_H.set(x.b, 9);
     x.set_v8(0x5f, 1);
-    x.set_v8(var::INPUT_LOCK, 0xff);
+    var::INPUT_LOCK.set(x.b, 0xff);
     x.set_v8(0x3c, 1);
     x.set_v8(0x3d, 0);
-    x.set_v8(var::HOLD, 0);
+    var::HOLD.set(x.b, 0);
     x.set_v16(0x54, 0);
     x.set_v16(0x52, 0);
     x.set_v8(0x58, 0);
     x.set_v8(0x51, 0);
-    let scene = x.v8(var::SCENE) as u32;
-    let (pa, pb) = (x.rd8(table::PALETTE_A + scene), x.rd8(table::PALETTE_B + scene));
+    let scene = var::SCENE.get(x.b) as u32;
+    let (pa, pb) = (table::PALETTE_A.byte(x.b, scene), table::PALETTE_B.byte(x.b, scene));
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
     crate::modes::demo::reset_recorder(x.b);
@@ -110,7 +111,7 @@ fn init_scene(x: &mut Ctx) {
     }
     let cinematic = CINEMATIC_SCENES.contains(&(scene as u8));
     x.set_v8(0x44, cinematic as u8);
-    let marker = x.rd8(table::SCENE_BYTE + 2 * scene);
+    let marker = table::SCENE_BYTE.byte(x.b, 2 * scene);
     x.set_v8(0x3e, marker);
     x.set_v8(0x40, marker);
     let mut alive = 0u8;
@@ -121,7 +122,7 @@ fn init_scene(x: &mut Ctx) {
             wr32(x.b, p + 4, 0);
         }
     }
-    x.set_v8(var::PLAYERS, alive);
+    var::PLAYERS.set(x.b, alive);
     place_players(x.b);
 }
 
@@ -144,14 +145,14 @@ fn clear_player(x: &mut Ctx, p: u32) {
 /// of the players in the game). Returns the number of players placed: the rank of the next one (D2, that the original
 /// leaves to its callers).
 pub fn place_players(b: &mut Cps2Bus) -> u8 {
-    let scene = rd8(b, A5 + var::SCENE) as u32;
-    let mut positions = table::START_POSITIONS + (scene << 4);
-    let mut states = table::START_STATES + (scene << 2);
-    let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
+    let scene = var::SCENE.get(b) as u32;
+    let mut positions = table::START_POSITIONS.addr() + (scene << 4);
+    let mut states = table::START_STATES.addr() + (scene << 2);
+    let camera = A5 + if var::USE_ALT_CAMERA.get(b) != 0 { 0x556 } else { 0x506 };
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(b, p + player::ACTIVE) == 0 || rd16(b, p + player::HEALTH) == 0 {
+        if Obj(p).u8(b, player::ACTIVE) == 0 || Obj(p).u16(b, player::HEALTH) == 0 {
             continue;
         }
         let (dx, dy) = (rd16(b, camera), rd16(b, camera + 4));
@@ -223,10 +224,10 @@ fn sequence(scene: u8) -> Sequence {
 pub fn phase_8(b: &mut Cps2Bus, handler: u32) {
     let mut x = Ctx::new(b);
     x.phase_handler = handler;
-    match x.v8(var::STEP) {
+    match var::STEP.get(x.b) {
         STEP_INIT => init_scene(&mut x),
         STEP_SEQUENCE => {
-            let scene = x.v8(var::SCENE);
+            let scene = var::SCENE.get(x.b);
             sequence(scene)(&mut x);
             script::step(x.b);
             game::debug_scene_skip(x.b);
@@ -240,7 +241,7 @@ pub fn phase_8(b: &mut Cps2Bus, handler: u32) {
 /// Scene without its own sequence: an opening fade, the music, and the game starts.
 fn quick(x: &mut Ctx) {
     x.leave_phase();
-    x.set_v8(var::PLAYERS_FROZEN, 0);
+    var::PLAYERS_FROZEN.set(x.b, 0);
     x.fade_in();
     crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
     x.world();
@@ -249,7 +250,7 @@ fn quick(x: &mut Ctx) {
 /// Scenes 25, 106-108: like `quick`, the music starts only once (`A5+0x67`).
 fn quick_with_music(x: &mut Ctx) {
     x.leave_phase();
-    x.set_v8(var::PLAYERS_FROZEN, 0);
+    var::PLAYERS_FROZEN.set(x.b, 0);
     x.fade_in();
     if x.v8(0x67) == 0 {
         x.set_v8(0x67, 1);
@@ -261,7 +262,7 @@ fn quick_with_music(x: &mut Ctx) {
 /// Scenes 90-104 (attract demos): fade from white and system object 6/23.
 fn white_start(x: &mut Ctx) {
     x.leave_phase();
-    x.set_v8(var::PLAYERS_FROZEN, 0);
+    var::PLAYERS_FROZEN.set(x.b, 0);
     fading::PAGES.set(x.b, 15);
     crate::palette::full_brightness(x.b);
     x.sobj_6(23);
@@ -271,7 +272,7 @@ fn white_start(x: &mut Ctx) {
 /// Scenes 109, 112-114: fade, system object 6/23, music.
 fn quick_with_sobj(x: &mut Ctx) {
     x.leave_phase();
-    x.set_v8(var::PLAYERS_FROZEN, 0);
+    var::PLAYERS_FROZEN.set(x.b, 0);
     x.fade_in();
     x.sobj_6(23);
     crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -287,9 +288,9 @@ fn quick_with_sobj_flag(x: &mut Ctx) {
 /// Scene 67: jumps directly to the next phase, inputs locked.
 fn scene_67(x: &mut Ctx) {
     x.leave_phase();
-    x.set_v8(var::HOLD, 0);
-    x.set_v8(var::INPUT_LOCK, 0x0f);
-    x.set_v8(var::PLAYERS_FROZEN, 1);
+    var::HOLD.set(x.b, 0);
+    var::INPUT_LOCK.set(x.b, 0x0f);
+    var::PLAYERS_FROZEN.set(x.b, 1);
     x.fade_in();
     x.title_card();
     x.inputs();

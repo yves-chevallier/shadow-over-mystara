@@ -35,3 +35,29 @@ impl Output {
         wr16(b, self.0, v)
     }
 }
+
+/// RAM of the development board (0x930000, absent on a production board: its writes are lost and its reads give
+/// the open bus). The demonstration recorder writes its entries there (`modes/demo/recorder.rs`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DevRam(pub u32);
+
+/// Start of the development RAM.
+pub const DEV_RAM: DevRam = DevRam(0x93_0000);
+
+impl DevRam {
+    pub const fn offset(self, n: u32) -> DevRam {
+        DevRam(self.0.wrapping_add(n))
+    }
+    pub fn byte(self, b: &mut Cps2Bus) -> u8 {
+        rd8(b, self.0)
+    }
+    pub fn set_byte(self, b: &mut Cps2Bus, v: u8) {
+        crate::mem::wr8(b, self.0, v)
+    }
+    pub fn set_word(self, b: &mut Cps2Bus, v: u16) {
+        wr16(b, self.0, v)
+    }
+    pub fn set_long(self, b: &mut Cps2Bus, v: u32) {
+        crate::mem::wr32(b, self.0, v)
+    }
+}

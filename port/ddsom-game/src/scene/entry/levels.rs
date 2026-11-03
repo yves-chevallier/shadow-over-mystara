@@ -2,6 +2,7 @@
 //! title cards): one step per frame.
 
 use super::*;
+use crate::ram::{Word};
 
 /// Scene 1 (level 1): fade, title card, first dialogue, then three enemies enter from the right.
 pub(super) fn stage_1(x: &mut Ctx) {
@@ -10,7 +11,7 @@ pub(super) fn stage_1(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x140);
+            Word(TIMER).set(x.b, 0x140);
             x.fade_in();
             creators::trails_pure(x.b);
             x.title_card();
@@ -29,21 +30,21 @@ pub(super) fn stage_1(x: &mut Ctx) {
             let message = Obj(crate::mem::rd32(x.b, MESSAGE));
             if message.u8(x.b, 0x22) != 0 {
                 x.next_sub();
-                x.wr16(TIMER, 0xb0);
+                Word(TIMER).set(x.b, 0xb0);
             }
         }
         6 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(TIMER, 0x60);
+                Word(TIMER).set(x.b, 0x60);
             }
         }
         8 => {
             if x.tick(TIMER) {
                 x.leave_phase();
-                x.set_v8(var::HOLD, 0);
-                x.set_v8(var::PLAYERS_FROZEN, 0);
-            } else if x.rd16(TIMER) == 0x50 {
+                var::HOLD.set(x.b, 0);
+                var::PLAYERS_FROZEN.set(x.b, 0);
+            } else if Word(TIMER).get(x.b) == 0x50 {
                 for (px, py) in [(0x180, 0x210), (0x230, 0x220), (0x2d0, 0x200)] {
                     let o = x.spawn(&pools::ENEMY, 0x14);
                     o.set_u8(x.b, Obj::ACTIVE, 2);
@@ -65,7 +66,7 @@ pub(super) fn stage_2(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
             crate::objects::rank::reset(x.b);
@@ -89,8 +90,8 @@ pub(super) fn scene_4(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(SHAKE, 0);
-            x.wr16(TIMER, 0x158);
+            Word(SHAKE).set(x.b, 0);
+            Word(TIMER).set(x.b, 0x158);
             x.fade_in();
             x.title_card();
             crate::objects::rank::reset(x.b);
@@ -98,15 +99,15 @@ pub(super) fn scene_4(x: &mut Ctx) {
         2 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(TIMER, 0x40);
+                Word(TIMER).set(x.b, 0x40);
                 x.set_v8(0x54f, 8);
             }
         }
         4 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(SHAKE, 1);
-                x.wr16(TIMER, 0x130);
+                Word(SHAKE).set(x.b, 1);
+                Word(TIMER).set(x.b, 0x130);
                 x.set_v8(0x500, 8);
             }
         }
@@ -126,9 +127,9 @@ pub(super) fn boss_cave(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x90);
+            Word(TIMER).set(x.b, 0x90);
             x.fade_in();
-            let scene = x.v8(var::SCENE);
+            let scene = var::SCENE.get(x.b);
             if scene != 9 {
                 x.title_card();
             }
@@ -164,7 +165,7 @@ pub(super) fn scene_8(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x100);
+            Word(TIMER).set(x.b, 0x100);
             x.fade_in();
             let effect = x.spawn(&pools::EFFCT, 0x22);
             let camera_x = x.v16(0x506);
@@ -193,7 +194,7 @@ pub(super) fn scene_10(x: &mut Ctx) {
             x.next_sub();
             x.set_v16(0x51e, 4);
             x.lock();
-            x.wr16(TIMER, 0xc0);
+            Word(TIMER).set(x.b, 0xc0);
             x.fade_in();
             let effect = x.spawn(&pools::EFFCT, 0x13);
             x.set_v16(0x46, effect.0 as u16);
@@ -205,8 +206,8 @@ pub(super) fn scene_10(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.leave_phase();
                 x.set_v16(0x51e, 0);
-                x.set_v8(var::HOLD, 0);
-                x.set_v8(var::PLAYERS_FROZEN, 0);
+                var::HOLD.set(x.b, 0);
+                var::PLAYERS_FROZEN.set(x.b, 0);
             }
         }
         _ => {}
@@ -222,7 +223,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x78);
+            Word(TIMER).set(x.b, 0x78);
             x.fade_in();
             x.title_card();
             creators::swimmers(x.b);
@@ -233,7 +234,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
         2 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(TIMER, 0xa0);
+                Word(TIMER).set(x.b, 0xa0);
                 creators::bench(x.b);
             }
         }
@@ -241,20 +242,20 @@ pub(super) fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.message(95, MESSAGE);
-            } else if x.rd16(TIMER) == 0x40 {
+            } else if Word(TIMER).get(x.b) == 0x40 {
                 creators::bench(x.b);
             }
         }
         6 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 0x10);
+                Word(TIMER).set(x.b, 0x10);
             }
         }
         8 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(TIMER, 0xe0);
+                Word(TIMER).set(x.b, 0xe0);
                 let o = x.spawn(&pools::ENEMY, 0x15);
                 o.set_u8(x.b, Obj::VARIANT, 8);
                 o.set_u16(x.b, 0x42, 0x401);
@@ -265,7 +266,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.set_v16(0x4ba, 0x100);
-                x.wr16(TIMER, 12);
+                Word(TIMER).set(x.b, 12);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 60);
             }
@@ -274,7 +275,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.set_v16(0x4ba, 0);
-                x.wr16(TIMER, 0x100);
+                Word(TIMER).set(x.b, 0x100);
                 let o = x.load_obj(ENEMY);
                 crate::mem::wr32(x.b, o.0 + 4, 0x0206_0000);
             }
@@ -317,7 +318,7 @@ pub(super) fn title_card(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
             crate::objects::rank::reset(x.b);
@@ -342,7 +343,7 @@ pub(super) fn scene_24(x: &mut Ctx) {
             x.next_sub();
             x.set_v8(0x67, 0);
             x.lock();
-            x.wr16(TIMER, 0xb4);
+            Word(TIMER).set(x.b, 0xb4);
             x.fade_in();
             crate::objects::rank::reset(x.b);
             x.title_card();
@@ -369,20 +370,20 @@ pub(super) fn scene_24(x: &mut Ctx) {
                     x.message(32, MESSAGE);
                 } else {
                     x.next_sub();
-                    x.wr16(TIMER, 60);
+                    Word(TIMER).set(x.b, 60);
                 }
             }
         }
         6 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 90);
+                Word(TIMER).set(x.b, 90);
             }
         }
         8 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.wr16(TIMER, 0xa0);
+                Word(TIMER).set(x.b, 0xa0);
                 let boss = x.spawn(&pools::BOSS, 6);
                 x.store_obj(BOSS, boss);
             }
@@ -406,7 +407,7 @@ pub(super) fn scene_26(x: &mut Ctx) {
             x.next_sub();
             x.set_v8(0x67, 0);
             x.lock();
-            x.wr16(TIMER, 0x60);
+            Word(TIMER).set(x.b, 0x60);
             x.fade_in();
             crate::objects::rank::reset(x.b);
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -420,7 +421,7 @@ pub(super) fn scene_26(x: &mut Ctx) {
         4 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 30);
+                Word(TIMER).set(x.b, 30);
                 creators::camera_in_mode_60(x.b);
             }
         }
@@ -441,7 +442,7 @@ pub(super) fn scene_27(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x100);
+            Word(TIMER).set(x.b, 0x100);
             x.fade_in();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -470,18 +471,18 @@ pub(super) fn scene_28(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x100);
+            Word(TIMER).set(x.b, 0x100);
             x.fade_in();
             x.title_card();
-            if x.rd16(MUSIC_STATE) == 0 {
-                x.wr16(MUSIC_STATE, 1);
+            if Word(MUSIC_STATE).get(x.b) == 0 {
+                Word(MUSIC_STATE).set(x.b, 1);
                 crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
             }
             if x.v8(0x4e) != 0 {
                 x.set_sub(6);
-                x.wr16(TIMER, 1);
-                if x.rd16(MUSIC_STATE) != 2 {
-                    x.wr16(MUSIC_STATE, 2);
+                Word(TIMER).set(x.b, 1);
+                if Word(MUSIC_STATE).get(x.b) != 2 {
+                    Word(MUSIC_STATE).set(x.b, 2);
                     crate::sound::play_with(x.b, crate::sound::FROM_D4, crate::sound::Source { d4: Some(24), ..Default::default() });
                     x.world();
                     return;
@@ -498,7 +499,7 @@ pub(super) fn scene_28(x: &mut Ctx) {
         4 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 80);
+                Word(TIMER).set(x.b, 80);
             }
         }
         6 => {
@@ -518,7 +519,7 @@ pub(super) fn scene_32(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0xe0);
+            Word(TIMER).set(x.b, 0xe0);
             x.fade_in();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -546,8 +547,8 @@ pub(super) fn scene_34(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.set_v8(var::INPUT_LOCK, 0x0f);
-            x.wr16(TIMER, 1);
+            var::INPUT_LOCK.set(x.b, 0x0f);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             if x.v8(0x59) != 0 {
                 creators::type_68_pure(x.b);

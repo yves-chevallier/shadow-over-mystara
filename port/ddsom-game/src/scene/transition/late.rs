@@ -2,8 +2,11 @@
 //! of the game (69, taken over by 105).
 
 use super::*;
+use crate::screens::tables::Rom;
 use crate::scene::fading;
 use crate::scene::tiles;
+use crate::objects::Obj;
+use crate::screens::obj;
 
 mod ext {
     pub const MUSIC_B: crate::sound::Sound = crate::sound::CMD_16;
@@ -16,6 +19,9 @@ mod ext {
 /// Palette page 0x91c400 and its backup.
 const PALETTE_PAGE: u32 = 0x91c400;
 const PALETTE_SAVE: u32 = 0xff1190;
+/// Next scene by the choice of scene 27, and the remaining-time prizes of scene 31 (words then longs, PC-relative).
+const NEXT_SCENES: Rom = Rom::at(0xf9454);
+const TIME_PRIZES: Rom = Rom::at(0xf95ba);
 
 // ---------------------------------------------------------------------------------------------
 // Scene 27: the next scene depends on the choice kept in `+4` (table 0xf9454)
@@ -25,7 +31,7 @@ pub fn scene_27(x: &mut Ctx) -> Flow {
     if choice == 0 {
         x.set_v8(0x4e, 0);
     }
-    let scene = x.prog8(0xf9454 + choice as u32);
+    let scene = NEXT_SCENES.pc_byte(x.b, choice as u32);
     finish(x, scene)
 }
 
@@ -50,10 +56,10 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
             // bonus and duration from the remaining time (8-byte table per ten seconds)
             let clock = x.v16(a5::CLOCK);
             let at = (clock >> 8 & 15) * 48 + (clock & 0xf0) / 2;
-            let time = x.prog16(0xf95ba + at as u32);
+            let time = TIME_PRIZES.pc_word(x.b, at as u32);
             set16(x, SHOWN_TIME, time);
-            let prize = crate::mem::prog32(x.b, 0xf95bc + at as u32);
-            wr32(x.b, VARS + PRIZE, prize);
+            let prize = TIME_PRIZES.pc_long(x.b, at as u32 + 2);
+            Obj(VARS).set_u32(x.b, PRIZE, prize);
             duration(x, 0x912958, time);
             tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
             Flow::Done
@@ -139,7 +145,7 @@ crate::steps! {
         S32Shown = 0xf9a4a => |x| {
             crate::families::small::background_1_on(x.b);
             next(x);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
             Flow::Done
         },
         /// Original glitch: the resume does not reload D0: the original then reopens message 1 (D0 of the wait).
@@ -228,7 +234,7 @@ crate::steps! {
             next(x);
             set8(x, var::SUB, 0);
             let y = x.v16(a5::CAM2_Y);
-            wr32(x.b, VARS + var::MESSAGE, (y as u32) << 16);
+            Obj(VARS).set_u32(x.b, var::MESSAGE, (y as u32) << 16);
             try_set_object(x, 21);
             world(x);
             sprites_next_frame(x, Step::S46Drawn)
@@ -240,7 +246,7 @@ crate::steps! {
             yield_frames(x, 1, At(Step::S46Shown.into()))
         },
         S46Shown = 0xf9f0c => |x| {
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
             Flow::Done
         },
         S46Gone = 0xf9f96 => |x| {
@@ -317,7 +323,7 @@ fn pay_players(x: &mut Ctx) -> bool {
         if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
             continue;
         }
-        let left = rd32(x.b, VARS + PRIZE);
+        let left = Obj(VARS).u32(x.b, PRIZE);
         if left == 0 {
             continue;
         }
@@ -330,7 +336,7 @@ fn pay_players(x: &mut Ctx) -> bool {
         } else {
             (left.wrapping_sub(0x10000), 33)
         };
-        wr32(x.b, VARS + PRIZE, left);
+        Obj(VARS).set_u32(x.b, PRIZE, left);
         let player = (rd8(x.b, p + 2) as u32) << 8;
         crate::events::enqueue_points(x.b, (amount | player) as u16);
         tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
@@ -372,10 +378,10 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
 /// too in the original (`bra 0xf98be`).
 fn s33_object(x: &mut Ctx) -> Flow {
     let Some(o) = system_object(x, 0, Step::S33RetryObject) else { return Flow::Yield };
-    wr8(x.b, o.0 + 0x2f, 3);
-    wr16(x.b, o.0 + 8, 96);
-    wr16(x.b, o.0 + 0x10, 0);
-    wr16(x.b, o.0 + 0xc, 176);
+    o.set_u8(x.b, obj::INDEX, 3);
+    o.set_u16(x.b, Obj::X, 96);
+    o.set_u16(x.b, Obj::Y, 0);
+    o.set_u16(x.b, Obj::Z, 176);
     world(x);
     sprites_next_frame(x, Step::S33Drawn)
 }
@@ -409,7 +415,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if message_done(x) {
                 sound(x, 0);
                 next(x);
-                fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT);
+                fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             }
             Flow::Done
         }
@@ -518,7 +524,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
         8 => {
             if message_done(x) {
                 next(x);
-                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
+                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             }
             Flow::Done
         }
@@ -595,7 +601,7 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
             }
             next(x);
             fading::STEP.set(x.b, 1);
-            fade_task(x, 4, ALL_PAGES, crate::scene::fading::DESCENT);
+            fade_task(x, 4, ALL_PAGES, crate::scene::fading::DESCENT.0);
             Flow::Done
         }
         4 => {
@@ -612,8 +618,8 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
 }
 /// Camera 2 goes down by half a pixel per frame (fixed-point position in `+4`).
 fn descend(x: &mut Ctx) {
-    let y = rd32(x.b, VARS + var::MESSAGE).wrapping_add(0x8000);
-    wr32(x.b, VARS + var::MESSAGE, y);
+    let y = Obj(VARS).u32(x.b, var::MESSAGE).wrapping_add(0x8000);
+    Obj(VARS).set_u32(x.b, var::MESSAGE, y);
     set_camera(x, a5::CAM2_Y, (y >> 16) as u16);
 }
 

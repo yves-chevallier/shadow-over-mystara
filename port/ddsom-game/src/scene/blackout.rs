@@ -13,18 +13,16 @@ use crate::mem::{rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 
-const DISPATCH: u32 = 0xf7eda;
+const DISPATCH: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7eda);
 /// Palettes of the next scene: set for page 0 (negative: none), then D0 of 0x1a60a, 0x1a67e, 0x1a8b2.
-const PALETTES: u32 = 0xf80c4;
+const PALETTES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf80c4);
 /// Scene 105 (end of the game) takes the palettes and script of scene 69.
 const FINALE: u8 = 105;
 const FINALE_AS: u32 = 69;
 
 mod at {
-    pub const FADED: u32 = 0xf7f12;
-    pub const CLEARED: u32 = 0xf7f60;
-    pub const FINALE_1: u32 = 0xf802e;
-    pub const FINALE_2: u32 = 0xf8042;
+    pub const FADED: crate::data::RomAddr = crate::data::RomAddr(0xf7f12);
+    pub const CLEARED: crate::data::RomAddr = crate::data::RomAddr(0xf7f60);
 }
 
 fn next_sub_step(x: &mut Ctx) {
@@ -40,7 +38,7 @@ fn table_scene(x: &mut Ctx) -> u32 {
 }
 
 pub fn run(x: &mut Ctx) -> Flow {
-    match dispatch(x, DISPATCH) {
+    match dispatch(x, DISPATCH.addr()) {
         0 => {
             next_sub_step(x);
             x.set_v8(0x42, 2);
@@ -61,7 +59,7 @@ pub fn run(x: &mut Ctx) -> Flow {
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        Faded = at::FADED => |x| {
+        Faded = at::FADED.0 => |x| {
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
             if x.v8(0x34) == FINALE {
@@ -86,7 +84,7 @@ crate::steps! {
             x.wait(1, Step::Cleared)
         },
         /// Layers cleared, scrolls and cameras reset.
-        Cleared = at::CLEARED => |x| {
+        Cleared = at::CLEARED.0 => |x| {
             wr16(x.b, 0x400004, 0x1355);
             clear_layer(x.b, Layer::One);
             x.set_v8(0x3c, 1);
@@ -109,11 +107,11 @@ crate::steps! {
             }
             Flow::Done
         },
-        Finale1 = at::FINALE_1 => |x| {
+        Finale1 = 0xf802e => |x| {
             x.set_v16(0x14, 0x12c0 & 0xfff1);
             x.wait(1, Step::Finale2)
         },
-        Finale2 = at::FINALE_2 => |x| {
+        Finale2 = 0xf8042 => |x| {
             x.set_v8(0x3c, 1);
             Flow::Done
         },
@@ -123,7 +121,7 @@ crate::steps! {
 /// Sub-state 1: the palettes of the next scene, then the player screen and the fade.
 fn palettes(x: &mut Ctx) {
     next_sub_step(x);
-    let at = PALETTES + 4 * table_scene(x);
+    let at = PALETTES.addr() + 4 * table_scene(x);
     let set = rd8(x.b, at);
     if (set as i8) >= 0 {
         crate::palette::load_palette_set(x.b, set as u16);

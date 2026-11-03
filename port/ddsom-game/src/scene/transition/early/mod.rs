@@ -5,6 +5,7 @@ use crate::scene::fading;
 
 mod timed;
 use timed::*;
+use crate::screens::obj;
 pub use timed::{scene_11, scene_13};
 
 /// Engine routines specific to these scripts.
@@ -96,17 +97,17 @@ crate::steps! {
         },
         S4Shown = 0xf87c2 => |x| {
             // palette of page 7 (eight longs, `movem.l`: the registers keep the data)
-            const FROM: u32 = 0x292260;
+            const FROM: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x292260);
             const TO: u32 = 0x91c1e0;
             for k in 0..8 {
-                let v = rd32(x.b, FROM + 4 * k);
+                let v = FROM.long(x.b, 4 * k);
                 wr32(x.b, TO + 4 * k, v);
             }
             scroll_text(x, 0xf8810);
             set16(x, var::TIMER, 120);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::no_brightness(x.b);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
             Flow::Done
         },
         S4TextGone = 0xf890e => |x| hide_layers(x, At(Step::S4Hidden.into())),
@@ -177,7 +178,7 @@ crate::steps! {
             show_layers(x, At(Step::S4SceneryShown.into()))
         },
         S4SceneryShown = 0xf8c2c => |x| {
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE.0);
             s4_fading_in(x)
         },
         S4FadingIn = 0xf8c44 => |x| yield_frames(x, 1, At(Step::S4FadingInNext.into())),
@@ -265,7 +266,7 @@ crate::steps! {
             fading::PAGES.set(x.b, SCENE_PAGES);
             fading::DELAY.set(x.b, 4);
             fading::STEP.set(x.b, 1);
-            start_task(x, crate::scene::fading::RISE);
+            start_task(x, crate::scene::fading::RISE.0);
             Flow::Done
         },
         S13OutFaded = 0xf90cc => |x| yield_frames(x, 30, At(Step::S13OutScenery.into())),
@@ -459,7 +460,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             next(x);
-            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
+            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             Flow::Done
         }
         4 => {
@@ -497,7 +498,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             sound(x, 0);
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             s4_fading_out(x)
         }
         _ => Flow::Done,
@@ -522,10 +523,10 @@ fn s4_message_92(x: &mut Ctx) -> Flow {
 /// System object 0, placed (subtype 2, X 144, Y 188).
 fn s4_wizard(x: &mut Ctx) -> Flow {
     let Some(o) = system_object(x, 0, Step::S4RetryWizard) else { return Flow::Yield };
-    wr8(x.b, o.0 + 0x2f, 2);
-    wr16(x.b, o.0 + 8, 144);
-    wr16(x.b, o.0 + 0x10, 0);
-    wr16(x.b, o.0 + 0xc, 188);
+    o.set_u8(x.b, obj::INDEX, 2);
+    o.set_u16(x.b, Obj::X, 144);
+    o.set_u16(x.b, Obj::Y, 0);
+    o.set_u16(x.b, Obj::Z, 188);
     next(x);
     Flow::Done
 }

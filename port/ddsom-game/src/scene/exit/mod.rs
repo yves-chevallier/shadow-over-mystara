@@ -55,8 +55,8 @@ mod blk {
 }
 
 /// ROM tables: sequence number per scene (bytes) and branches (words, relative to the table).
-const SEQUENCE_OF_SCENE: u32 = 0xf3170;
-const SEQUENCE_JUMPS: u32 = 0xf31ea;
+const SEQUENCE_OF_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf3170);
+const SEQUENCE_JUMPS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf31ea);
 
 /// Dispatch loops of the object classes, in the order of the reduced update (without the bosses).
 const CLASSES: [&dispatch::Class; 9] = [
@@ -72,7 +72,7 @@ const CLASSES: [&dispatch::Class; 9] = [
 ];
 
 /// Player: fields written when the players leave the screen.
-const WALK_OUT_STATE: u32 = 0x000c_0000;
+const WALK_OUT_STATE: u32 = u32::from_be_bytes([0, 0x0c, 0, 0]);
 const P_STATE_LONG: u32 = 4;
 const WALK_OUT_CLEAR_BYTES: [u32; 3] = [0x66, 0x8a, 0x15c];
 const P_RANK: u32 = 0x7d;
@@ -80,10 +80,10 @@ const P_RANK: u32 = 0x7d;
 const PLAYER_LONGS: [u32; 4] = [0x602, 0x802, 0xa02, 0xc02];
 
 /// Jumping forbidden (`A5+0x3d`), input lock, animation flags.
-const PAUSE: u32 = 0x3d;
+const PAUSE: Byte = Byte::a5(0x3d);
 const PHASE_ENTRY: u32 = 0x0800_0000;
 const PHASE_ENDING: u32 = 0x1c00_0000;
-const FLAGS: u32 = 0x14;
+const FLAGS: Word = Word::a5(0x14);
 const FLAGS_KEEP: u16 = 0xfff1;
 
 /// Context of a scene exit frame.
@@ -171,13 +171,13 @@ impl<'a> Ex<'a> {
         let mut n = 0u8;
         for k in 0..4 {
             let p = PLAYERS + k * PLAYER_STRIDE;
-            if rd8(self.x.b, p + player::ACTIVE) == 0 || rd16(self.x.b, p + player::HEALTH) == 0 {
+            if Obj(p).u8(self.x.b, player::ACTIVE) == 0 || Obj(p).u16(self.x.b, player::HEALTH) == 0 {
                 continue;
             }
-            wr8(self.x.b, p + player::ACTIVE, 1);
-            wr32(self.x.b, p + P_STATE_LONG, WALK_OUT_STATE);
+            Obj(p).set_u8(self.x.b, player::ACTIVE, 1);
+            Obj(p).set_u32(self.x.b, P_STATE_LONG, WALK_OUT_STATE);
             if rank {
-                wr8(self.x.b, p + P_RANK, n);
+                Obj(p).set_u8(self.x.b, P_RANK, n);
                 n += 1;
             }
             for off in WALK_OUT_CLEAR_BYTES {
@@ -192,8 +192,8 @@ impl<'a> Ex<'a> {
     }
     /// Start of the exit: the pause is lifted, the buttons released, the players walk out.
     fn start_walk_out(&mut self, rank: bool) {
-        self.x.set_v8(PAUSE, 0);
-        self.x.set_v8(var::INPUT_LOCK, 0);
+        PAUSE.set(self.x.b, 0);
+        var::INPUT_LOCK.set(self.x.b, 0);
         crate::inputs::clear_inputs(self.x.b);
         self.release_players(rank);
     }
@@ -201,9 +201,9 @@ impl<'a> Ex<'a> {
     fn all_in_state(&mut self, state: u8) -> bool {
         (0..4).all(|k| {
             let p = PLAYERS + k * PLAYER_STRIDE;
-            rd8(self.x.b, p + player::ACTIVE) == 0
-                || rd16(self.x.b, p + player::HEALTH) == 0
-                || rd8(self.x.b, p + player::STATE) == state
+            Obj(p).u8(self.x.b, player::ACTIVE) == 0
+                || Obj(p).u16(self.x.b, player::HEALTH) == 0
+                || Obj(p).u8(self.x.b, player::STATE) == state
         })
     }
 
@@ -364,6 +364,7 @@ struct Sequence {
 
 use Update::{Full, NoCollisions, Nothing, Reduced, World};
 use St::Idle;
+use crate::ram::{Byte, Word};
 
 /// The shared states of the exit sequences, at their original address.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -408,9 +409,9 @@ fn init(ex: &mut Ex) {
     let state = ex.b8(blk::STATE).wrapping_add(2);
     ex.set_b8(blk::STATE, state);
     wr8(ex.x.b, A5 - 0x5b8e, 0);
-    ex.x.set_v8(var::PLAYERS_FROZEN, 1);
-    let scene = ex.x.v8(var::SCENE) as u32;
-    let sequence = ex.x.b.fetch16((SEQUENCE_OF_SCENE + scene) & !1);
+    var::PLAYERS_FROZEN.set(ex.x.b, 1);
+    let scene = var::SCENE.get(ex.x.b) as u32;
+    let sequence = ex.x.b.fetch16((SEQUENCE_OF_SCENE.addr() + scene) & !1);
     let sequence = if scene & 1 == 0 { (sequence >> 8) as u8 } else { sequence as u8 };
     ex.set_b8(blk::SEQUENCE, sequence);
 }
@@ -418,8 +419,8 @@ fn init(ex: &mut Ex) {
 /// State 2: the chosen sequence.
 fn run_sequence(ex: &mut Ex) {
     let number = ex.b8(blk::SEQUENCE) as u32;
-    let jump = ex.x.prog16(SEQUENCE_JUMPS + number);
-    ex.entry = SEQUENCE_JUMPS + jump as u32;
+    let jump = SEQUENCE_JUMPS.pc_word(ex.x.b, number);
+    ex.entry = SEQUENCE_JUMPS.addr() + jump as u32;
     let (sequence, dispatcher) = match number as u8 / 2 {
         // sequence 27 becomes 29 when `A5+0x66` is set; otherwise its dispatch follows this test (10 bytes)
         27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
@@ -547,7 +548,7 @@ fn run_state(ex: &mut Ex, state: St) {
         St::FadeScript { timer } => {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
-            ex.fade(2, fading::RISE);
+            ex.fade(2, fading::RISE.0);
             ex.clear_text();
         }
         St::PlayersThen { state, timer } => {
@@ -592,26 +593,26 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
     }
     crate::sprites::clear_lists(ex.x.b);
     if leave.clear_flags {
-        let flags = ex.x.v16(FLAGS) & FLAGS_KEEP;
-        ex.x.set_v16(FLAGS, flags);
+        let flags = FLAGS.get(ex.x.b) & FLAGS_KEEP;
+        FLAGS.set(ex.x.b, flags);
     }
     match leave.next_scene {
         NextScene::Same => {}
         NextScene::Plus1 => {
-            let scene = ex.x.v8(var::SCENE).wrapping_add(1);
-            ex.x.set_v8(var::SCENE, scene);
+            let scene = var::SCENE.get(ex.x.b).wrapping_add(1);
+            var::SCENE.set(ex.x.b, scene);
         }
         NextScene::Plus1UnlessLate => {
-            let scene = ex.x.v8(var::SCENE).wrapping_add(1);
-            ex.x.set_v8(var::SCENE, scene);
+            let scene = var::SCENE.get(ex.x.b).wrapping_add(1);
+            var::SCENE.set(ex.x.b, scene);
             if ex.x.v16(0x54) > 0x1500 {
-                ex.x.set_v8(var::SCENE, 10);
+                var::SCENE.set(ex.x.b, 10);
             }
         }
-        NextScene::Fixed(scene) => ex.x.set_v8(var::SCENE, scene),
+        NextScene::Fixed(scene) => var::SCENE.set(ex.x.b, scene),
         NextScene::FromBlock => {
             let scene = ex.b8(blk::NEXT_SCENE);
-            ex.x.set_v8(var::SCENE, scene);
+            var::SCENE.set(ex.x.b, scene);
         }
     }
     ex.x.set_v32(var::PHASE, leave.phase);
@@ -713,7 +714,7 @@ pub const NATIVES: &[Native] = &[];
 /// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside
 /// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
 /// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
-pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
+pub const SHARED_NEXT_ENTRY: crate::data::RomAddr = crate::data::RomAddr(0xf7b62);
 
 #[cfg(test)]
 mod tests {

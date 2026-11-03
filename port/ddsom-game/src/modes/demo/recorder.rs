@@ -1,6 +1,8 @@
 //! Recorded inputs of the demonstrations (`0xe05ec`): replay of the recorded entries, and the development recorder.
 
 use super::*;
+use crate::hw::io::{DevRam, DEV_RAM};
+use crate::ram::{Byte, Long};
 
 // ---------------------------------------------------------------------------------------------
 // Recorded inputs (`0xe05ec`)
@@ -8,12 +10,12 @@ use super::*;
 /// Demonstration input recorder (A5 - 0x5ab2...): pointer to the current entry (long), remaining
 /// frames of the entry (word), and three flags: recording, replay, active.
 mod rec {
-    use crate::mem::A5;
-    pub const POINTER: u32 = A5 - 0x5ab2;
-    pub const LEFT: u32 = A5 - 0x5aae;
-    pub const PLAYING: u32 = A5 - 0x5aac;
-    pub const RECORDING: u32 = A5 - 0x5aab;
-    pub const ACTIVE: u32 = A5 - 0x5aaa;
+    use crate::ram::{Byte, Long, Word};
+    pub const POINTER: Long = Long(0xff_254e);
+    pub const LEFT: Word = Word(0xff_2552);
+    pub const PLAYING: Byte = Byte(0xff_2554);
+    pub const RECORDING: Byte = Byte(0xff_2555);
+    pub const ACTIVE: Byte = Byte(0xff_2556);
     /// An entry: duration (word), then the three input bytes of each player.
     pub const ENTRY: u32 = 0xe;
     /// Last possible entry.
@@ -21,39 +23,42 @@ mod rec {
 }
 
 /// The twelve input bytes of the players (`A5 + 0x64a + 0x200 k`, three bytes each), in the order of an entry.
-pub(super) fn input_byte(i: u32) -> u32 {
-    A5 + 0x64a + 0x200 * (i / 3) + i % 3
+pub(super) fn input_byte(i: u32) -> Byte {
+    Byte(crate::ram::PLAYERS.nth(i / 3).0 + INPUTS + i % 3)
 }
+
+/// The three input bytes of a player record (`+0x6c`: held, previous, new).
+const INPUTS: u32 = 0x6c;
 
 /// `0xe05ec`: records the players' inputs (one entry per change, with its duration) or replays them (a
 /// game in progress with bit 15 of the settings suspends the replay).
 pub(super) fn demo_inputs(x: &mut Ctx) {
-    if rd8(x.b, rec::ACTIVE) == 0 {
+    if rec::ACTIVE.get(x.b) == 0 {
         return;
     }
-    if rd8(x.b, rec::RECORDING) != 0 {
+    if rec::RECORDING.get(x.b) != 0 {
         record_inputs(x);
-    } else if rd8(x.b, rec::PLAYING) != 0 {
-        if rd8(x.b, var::GAME) != 0 && rd16(x.b, var::DSW) & 0x8000 != 0 {
+    } else if rec::PLAYING.get(x.b) != 0 {
+        if var::GAME.get(x.b) != 0 && var::DSW.get(x.b) & 0x8000 != 0 {
             return;
         }
-        let at = rd32(x.b, rec::POINTER);
+        let at = rec::POINTER.get(x.b);
         if at > rec::LAST {
-            wr8(x.b, rec::PLAYING, 0);
+            rec::PLAYING.set(x.b, 0);
             return;
         }
         for i in 0..12 {
-            let v = rd8(x.b, at + 2 + i);
-            wr8(x.b, input_byte(i), v);
+            let v = tables::byte(x.b, at + 2 + i);
+            input_byte(i).set(x.b, v);
         }
-        let left = rd16(x.b, rec::LEFT);
+        let left = rec::LEFT.get(x.b);
         if left != 0 {
-            wr16(x.b, rec::LEFT, left - 1);
+            rec::LEFT.set(x.b, left - 1);
         } else {
             let next = at + rec::ENTRY;
-            wr32(x.b, rec::POINTER, next);
-            let length = rd16(x.b, next);
-            wr16(x.b, rec::LEFT, length);
+            rec::POINTER.set(x.b, next);
+            let length = tables::word(x.b, next);
+            rec::LEFT.set(x.b, length);
         }
     }
 }
@@ -73,49 +78,48 @@ pub(crate) struct RecorderLeftovers {
 }
 
 pub(crate) fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
-    const DEMO: u32 = A5 - 0x5aa8;
-    const RECORD_AREA: u32 = 0x93_0000;
+    const DEMO: Long = Long(0xff_2558);
     let mut leftovers = RecorderLeftovers::default();
-    if rd8(b, var::GAME) != 0 {
+    if var::GAME.get(b) != 0 {
         return leftovers;
     }
-    wr16(b, rec::LEFT, 0);
-    wr8(b, rec::RECORDING, 0);
-    wr8(b, rec::PLAYING, 0);
-    wr8(b, rec::ACTIVE, 0);
-    let dsw = rd16(b, var::DSW);
+    rec::LEFT.set(b, 0);
+    rec::RECORDING.set(b, 0);
+    rec::PLAYING.set(b, 0);
+    rec::ACTIVE.set(b, 0);
+    let dsw = var::DSW.get(b);
     leftovers.settings = Some(dsw);
     if dsw & 0x2000 != 0 {
         crate::rng::seed(b);
-        wr16(b, A5 + 0x6c, 0);
-        wr16(b, A5 + 0x6e, 0);
-        wr16(b, A5 + 0x7f92, 0xe);
-        wr8(b, rec::ACTIVE, 1);
+        var::DEMO_TIME.set(b, 0);
+        var::FRAME_COUNTER.set(b, 0);
+        var::RANK.set(b, 0xe);
+        rec::ACTIVE.set(b, 1);
     } else if dsw & 0x8000 != 0 {
-        wr32(b, rec::POINTER, RECORD_AREA);
+        rec::POINTER.set(b, DEV_RAM.0);
         for off in [0, 4, 8] {
-            wr32(b, RECORD_AREA + off, 0xffff_ffff);
+            DEV_RAM.offset(off).set_long(b, 0xffff_ffff);
         }
-        wr16(b, RECORD_AREA + 0xc, 0xffff);
-        wr8(b, rec::RECORDING, 1);
+        DEV_RAM.offset(0xc).set_word(b, 0xffff);
+        rec::RECORDING.set(b, 1);
         return leftovers;
     }
-    let demo = rd32(b, DEMO);
+    let demo = DEMO.get(b);
     leftovers.demo = Some(demo);
-    wr32(b, rec::POINTER, demo);
-    let length = rd16(b, demo);
-    wr16(b, rec::LEFT, length);
-    wr8(b, rec::PLAYING, 1);
+    rec::POINTER.set(b, demo);
+    let length = tables::word(b, demo);
+    rec::LEFT.set(b, length);
+    rec::PLAYING.set(b, 1);
     leftovers
 }
 
 /// `0xe05d6`: stops the recorder.
 pub fn stop_recorder(b: &mut Cps2Bus) {
-    wr16(b, rec::LEFT, 0);
+    rec::LEFT.set(b, 0);
     for flag in [rec::RECORDING, rec::PLAYING, rec::ACTIVE] {
-        wr8(b, flag, 0);
+        flag.set(b, 0);
     }
-    wr32(b, A5 - 0x5aa8, 0);
+    var::SCRIPT_TAIL.set(b, 0);
 }
 
 pub const RECORDER_STOP: Native = Native {
@@ -129,22 +133,22 @@ pub const RECORDER_STOP: Native = Native {
 /// Recording: the current entry lasts one more frame as long as the inputs do not change (and its duration
 /// fits in 16 bits); otherwise its duration is written and a new entry begins.
 pub(super) fn record_inputs(x: &mut Ctx) {
-    let length = rd16(x.b, rec::LEFT);
-    let at = rd32(x.b, rec::POINTER);
-    if length != 0xffff && (0..12).all(|i| rd8(x.b, input_byte(i)) == rd8(x.b, at + 2 + i)) {
-        wr16(x.b, rec::LEFT, length + 1);
+    let length = rec::LEFT.get(x.b);
+    let at = rec::POINTER.get(x.b);
+    if length != 0xffff && (0..12).all(|i| input_byte(i).get(x.b) == tables::byte(x.b, at + 2 + i)) {
+        rec::LEFT.set(x.b, length + 1);
         return;
     }
-    wr16(x.b, at, length);
-    wr16(x.b, rec::LEFT, 0);
+    DevRam(at).set_word(x.b, length);
+    rec::LEFT.set(x.b, 0);
     let next = at + rec::ENTRY;
-    wr32(x.b, rec::POINTER, next);
+    rec::POINTER.set(x.b, next);
     if next > rec::LAST {
-        wr8(x.b, rec::RECORDING, 0);
+        rec::RECORDING.set(x.b, 0);
         return;
     }
     for i in 0..12 {
-        let v = rd8(x.b, input_byte(i));
-        wr8(x.b, next + 2 + i, v);
+        let v = input_byte(i).get(x.b);
+        DevRam(next + 2 + i).set_byte(x.b, v);
     }
 }

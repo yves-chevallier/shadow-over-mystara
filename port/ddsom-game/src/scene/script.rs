@@ -18,19 +18,25 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr32, wr8, A5};
+use crate::screens::obj;
+use crate::screens::tables::{self, Rom};
+use crate::screens::vars as sv;
 use crate::objects::{pools, Obj};
 use crate::scene::var;
 use crate::Native;
+use crate::ram::{Byte, Long};
 
 /// Reader state (byte) and cursor in the script (long).
-const STATE: u32 = A5 - 0x55cc;
-const CURSOR: u32 = A5 - 0x55d0;
+const STATE: Byte = Byte(0xff_2a34);
+const CURSOR: Long = Long(0xff_2a30);
 /// Script table (one long per scene, as data) and per-class allocators (words, program space).
-const SCRIPTS: u32 = 0xf2f62;
-const ALLOCATORS: u32 = 0xf2f38;
+const SCRIPTS: Rom = Rom::at(0xf2f62);
+const ALLOCATORS: Rom = Rom::at(0xf2f38);
 /// Game rank (low byte of word `A5+0x7f92`).
-const RANK: u32 = 0x7f93;
+const RANK: Byte = Byte::a5(0x7f93);
+
+/// Word `+0x42` of the spawned objects (their setting).
+const FIELD_42: u32 = 0x42;
 
 mod state {
     pub const LOAD: u8 = 0;
@@ -58,6 +64,9 @@ mod entry {
     pub const VARIANT: u32 = 0xe;
     pub const FIELD_2F: u32 = 0xf;
     pub const FIELD_42: u32 = 0x10;
+    /// Call entry: routine (long) and its argument (word).
+    pub const ROUTINE: u32 = 4;
+    pub const ARGUMENT: u32 = 8;
 }
 
 /// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
@@ -80,45 +89,45 @@ fn script_routine(b: &mut Cps2Bus, routine: u32, arg: u16) {
 
 /// One reader step (one frame). The registers of the original loop (D0, D1, D6, A1, A4, A6) are reread by nobody.
 pub fn step(b: &mut Cps2Bus) {
-    if rd8(b, A5 + var::PLAYERS) == 0 {
+    if var::PLAYERS.get(b) == 0 {
         return;
     }
-    let state = rd8(b, STATE);
+    let state = STATE.get(b);
     let mut cursor = match state {
         state::LOAD => {
-            wr8(b, STATE, state::READ);
-            let scene = rd8(b, A5 + var::SCENE) as u32;
-            let script = rd32(b, SCRIPTS + scene * 4);
-            wr32(b, CURSOR, script);
+            STATE.set(b, state::READ);
+            let scene = var::SCENE.get(b) as u32;
+            let script = SCRIPTS.long(b, scene * 4);
+            CURSOR.set(b, script);
             script
         }
-        state::READ => rd32(b, CURSOR),
+        state::READ => CURSOR.get(b),
         state::ENDING => {
-            wr8(b, STATE, state::ENDING + 2);
+            STATE.set(b, state::ENDING + 2);
             return;
         }
         _ => return,
     };
-    let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { var::ALT_CAMERA } else { var::CAMERA };
+    let camera_x = if var::USE_ALT_CAMERA.get(b) != 0 { sv::CAMERA_2_X } else { sv::CAMERA_X };
     loop {
-        let trigger = rd16(b, cursor + entry::TRIGGER_X);
+        let trigger = tables::word(b, cursor + entry::TRIGGER_X);
         if trigger == END {
-            wr8(b, STATE, state::ENDING);
+            STATE.set(b, state::ENDING);
             return;
         }
-        if trigger as i16 > rd16(b, camera + 8) as i16 {
-            wr32(b, CURSOR, cursor);
+        if trigger as i16 > camera_x.get(b) as i16 {
+            CURSOR.set(b, cursor);
             return;
         }
-        if rd16(b, cursor + entry::OFFSET_X) == CALL_MARK {
-            let routine = rd32(b, cursor + 4);
-            let arg = rd16(b, cursor + 8);
+        if tables::word(b, cursor + entry::OFFSET_X) == CALL_MARK {
+            let routine = tables::long(b, cursor + entry::ROUTINE);
+            let arg = tables::word(b, cursor + entry::ARGUMENT);
             script_routine(b, routine, arg);
             cursor += CALL_ENTRY_SIZE;
             continue;
         }
         if spawn(b, cursor) == Spawn::PoolFull {
-            wr32(b, CURSOR, cursor);
+            CURSOR.set(b, cursor);
             return;
         }
         cursor += SPAWN_ENTRY_SIZE;
@@ -135,28 +144,28 @@ enum Spawn {
 
 /// A spawn entry.
 fn spawn(b: &mut Cps2Bus, e: u32) -> Spawn {
-    if rd8(b, e + entry::MAX_RANK) > rd8(b, A5 + RANK) {
+    if tables::byte(b, e + entry::MAX_RANK) > RANK.get(b) {
         return Spawn::Done;
     }
-    if rd8(b, e + entry::MIN_PLAYERS) > rd8(b, A5 + var::PLAYERS) {
+    if tables::byte(b, e + entry::MIN_PLAYERS) > var::PLAYERS.get(b) {
         return Spawn::Done;
     }
-    let class = rd8(b, e + entry::CLASS) as i8 as i16 as u16;
+    let class = tables::byte(b, e + entry::CLASS) as i8 as i16 as u16;
     let Some(o) = pool_of_class(b, class).alloc(b) else {
         return Spawn::PoolFull;
     };
-    let offset = rd16(b, e + entry::OFFSET_X);
+    let offset = tables::word(b, e + entry::OFFSET_X);
     let bytes = [
-        (0x2c, rd8(b, e + entry::FIELD_2C)),
-        (Obj::KIND, rd8(b, e + entry::KIND)),
-        (Obj::VARIANT, rd8(b, e + entry::VARIANT)),
-        (0x2f, rd8(b, e + entry::FIELD_2F)),
+        (obj::FACING, tables::byte(b, e + entry::FIELD_2C)),
+        (Obj::KIND, tables::byte(b, e + entry::KIND)),
+        (Obj::VARIANT, tables::byte(b, e + entry::VARIANT)),
+        (obj::INDEX, tables::byte(b, e + entry::FIELD_2F)),
     ];
     let words = [
-        (Obj::X, rd16(b, e + entry::TRIGGER_X).wrapping_add(offset)),
-        (Obj::Y, rd16(b, e + entry::Y)),
-        (Obj::Z, rd16(b, e + entry::Z)),
-        (0x42, rd16(b, e + entry::FIELD_42)),
+        (Obj::X, tables::word(b, e + entry::TRIGGER_X).wrapping_add(offset)),
+        (Obj::Y, tables::word(b, e + entry::Y)),
+        (Obj::Z, tables::word(b, e + entry::Z)),
+        (FIELD_42, tables::word(b, e + entry::FIELD_42)),
     ];
     o.set_u8(b, Obj::ACTIVE, 1);
     for (off, v) in bytes {
@@ -171,7 +180,7 @@ fn spawn(b: &mut Cps2Bus, e: u32) -> Spawn {
 /// The pool of class `class` (even byte): the allocator table (0xf2f38, program-space words) gives
 /// the address of the allocation routine of one of the pools.
 fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
-    let alloc = b.fetch16(ALLOCATORS + class as i16 as i32 as u32) as i16 as i32 as u32 & 0xff_ffff;
+    let alloc = ALLOCATORS.pc_word(b, class as i16 as i32 as u32) as i16 as i32 as u32 & 0xff_ffff;
     pools::POOLS
         .into_iter()
         .find(|p| p.alloc_routine == alloc)
@@ -181,15 +190,13 @@ fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
 
 /// Resets the reader to the "load the script" state (0xf2e56, scene change).
 pub fn reset(b: &mut Cps2Bus) {
-    wr8(b, STATE, state::LOAD);
+    STATE.set(b, state::LOAD);
 }
 
-/// Entries of the two routines.
-pub const SPAWN_ENTRY: u32 = 0xf2e5c;
-pub const RESET_ENTRY: u32 = 0xf2e56;
+
 
 pub const SPAWN_SCRIPT: Native = Native {
-    entry: SPAWN_ENTRY,
+    entry: 0xf2e5c,
     name: "scene_script",
     run: crate::Body::Memory(step),
     touches_sound: false,
@@ -198,7 +205,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 
 /// Resets the reader to the "load the script" state (scene change).
 pub const SCRIPT_RESET: Native = Native {
-    entry: RESET_ENTRY,
+    entry: 0xf2e56,
     name: "scene_script_reset",
     run: crate::Body::Memory(reset),
     touches_sound: false,

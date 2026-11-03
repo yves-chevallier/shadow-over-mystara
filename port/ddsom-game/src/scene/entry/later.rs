@@ -2,6 +2,8 @@
 //! frame.
 
 use super::*;
+use crate::screens::tables::Rom;
+use crate::ram::{Word};
 
 /// Scenes 33 and 36: simple fade, one waiting frame.
 pub(super) fn plain_fade(x: &mut Ctx) {
@@ -9,7 +11,7 @@ pub(super) fn plain_fade(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
         }
@@ -29,7 +31,7 @@ pub(super) fn title_card_music(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -50,7 +52,7 @@ pub(super) fn title_card_timed(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -69,19 +71,19 @@ pub(super) fn title_card_timed(x: &mut Ctx) {
 pub(super) fn scene_38(x: &mut Ctx) {
     const TIMER: u32 = scratch(0x9a50);
     const MESSAGE: u32 = scratch(0x9a52);
-    const DURATIONS: u32 = 0x22c28;
+    const DURATIONS: Rom = Rom::at(0x22c28);
     match x.sub() {
         0 => {
             x.next_sub();
-            x.set_v8(var::PLAYERS_FROZEN, 1);
-            x.set_v8(var::INPUT_LOCK, 0);
-            let players = x.v8(var::PLAYERS) as u32;
-            let duration = x.prog16(DURATIONS + 2 * players);
-            x.wr16(TIMER, duration);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::INPUT_LOCK.set(x.b, 0);
+            let players = var::PLAYERS.get(x.b) as u32;
+            let duration = DURATIONS.pc_word(x.b, 2 * players);
+            Word(TIMER).set(x.b, duration);
             fading::DELAY.set(x.b, 2);
             fading::PAGES.set(x.b, 15);
             crate::palette::no_brightness(x.b);
-            crate::kernel::create_task(x.b, 0x10, fading::RISE);
+            crate::kernel::create_task(x.b, 0x10, fading::RISE.0);
         }
         2 => {
             if x.tick(TIMER) {
@@ -92,14 +94,14 @@ pub(super) fn scene_38(x: &mut Ctx) {
         4 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 60);
+                Word(TIMER).set(x.b, 60);
             }
         }
         6 => {
             if x.tick(TIMER) {
                 x.leave_phase();
                 x.set_v8(0x42, 1);
-                x.set_v8(var::HOLD, 0);
+                var::HOLD.set(x.b, 0);
             }
         }
         _ => {}
@@ -114,14 +116,14 @@ pub(super) fn wait_players_6(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(6) {
-                if x.v8(var::SCENE) == 41 {
+                if var::SCENE.get(x.b) == 41 {
                     let _ = crate::effects_aids::scenery_11(x.b, 0, 0);
                 }
                 x.end_scene();
@@ -162,7 +164,7 @@ pub(super) fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, 
         2 => {
             if x.players_in_state(4) {
                 x.next_sub();
-                x.wr16(TIMER, wait);
+                Word(TIMER).set(x.b, wait);
                 match opening {
                     Opening::Lightning => {
                         crate::palette::flash(x.b, crate::palette::Flash::Gray);
@@ -181,7 +183,7 @@ pub(super) fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, 
             if x.tick(TIMER) {
                 x.end_scene();
                 crate::palette::restore_flash(x.b);
-            } else if x.rd16(TIMER) == spawn_at {
+            } else if Word(TIMER).get(x.b) == spawn_at {
                 x.spawn(&pools::BOSS, boss);
             }
         }
@@ -197,7 +199,7 @@ pub(super) fn scene_44(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in();
             if x.v8(0x30) == 0 {
                 x.sobj_6(23);
@@ -213,7 +215,7 @@ pub(super) fn scene_44(x: &mut Ctx) {
         6 => {
             if x.players_in_state(10) {
                 x.next_sub();
-                x.wr16(TIMER, 48);
+                Word(TIMER).set(x.b, 48);
             }
         }
         8 => {
@@ -238,7 +240,7 @@ pub(super) fn scene_47(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 1);
+            Word(TIMER).set(x.b, 1);
             x.fade_in_stepped();
             x.title_card();
             crate::sound::play_global(x.b, crate::sound::SCENE_MUSIC);
@@ -306,7 +308,7 @@ pub(super) fn scene_58(x: &mut Ctx) {
         2 => {
             if x.players_in_state(4) {
                 x.next_sub();
-                x.wr16(TIMER, 48);
+                Word(TIMER).set(x.b, 48);
             }
         }
         4 => {
@@ -318,7 +320,7 @@ pub(super) fn scene_58(x: &mut Ctx) {
         6 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 8);
+                Word(TIMER).set(x.b, 8);
             }
         }
         8 => {
@@ -352,7 +354,7 @@ pub(super) fn scene_64(x: &mut Ctx) {
         4 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 0x100);
+                Word(TIMER).set(x.b, 0x100);
             }
         }
         6 => {
@@ -385,7 +387,7 @@ pub(super) fn scene_65(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 x.leave_phase();
                 x.set_v8(0x42, 1);
-                x.set_v8(var::HOLD, 0);
+                var::HOLD.set(x.b, 0);
                 crate::sound::play_global(x.b, crate::sound::CMD_4D);
             }
         }
@@ -422,14 +424,14 @@ pub(super) fn scene_66(x: &mut Ctx) {
         4 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.wr16(TIMER, 0x100);
+                Word(TIMER).set(x.b, 0x100);
             }
         }
         6 => {
             if x.tick(TIMER) {
                 x.end_scene();
             }
-            if x.rd16(TIMER) == 0x80 {
+            if Word(TIMER).get(x.b) == 0x80 {
                 crate::sound::play_global(x.b, crate::sound::CMD_21);
             }
         }
@@ -437,7 +439,7 @@ pub(super) fn scene_66(x: &mut Ctx) {
         10 => {
             if x.v16(0x51e) != 0 {
                 x.next_sub();
-                x.wr16(TIMER, 48);
+                Word(TIMER).set(x.b, 48);
                 crate::sound::play_global(x.b, crate::sound::CMD_2D);
             }
         }
@@ -484,7 +486,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
     match x.sub() {
         0 => {
             begin(x);
-            x.wr16(TIMER, 0x80);
+            Word(TIMER).set(x.b, 0x80);
             x.fade_in();
             let effect = x.spawn(&pools::EFFCT, 0x24);
             effect.set_u8(x.b, Obj::VARIANT, 2);
@@ -500,9 +502,9 @@ pub(super) fn scene_105(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 if x.v8(0x5c) == 0 {
                     x.set_sub(12);
-                    x.wr16(TIMER, 0x40);
+                    Word(TIMER).set(x.b, 0x40);
                     let finale = finale(x);
-                    x.wr16(BOSS, finale.0 as u16);
+                    Word(BOSS).set(x.b, finale.0 as u16);
                     crate::sound::play_global(x.b, crate::sound::CMD_8B);
                 } else {
                     x.next_sub();
@@ -528,7 +530,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 x.next_sub();
                 let finale = finale(x);
-                x.wr16(BOSS, finale.0 as u16);
+                Word(BOSS).set(x.b, finale.0 as u16);
             }
         }
         12 | 14 => {

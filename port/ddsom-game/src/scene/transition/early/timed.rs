@@ -151,7 +151,7 @@ pub(super) fn s13_time_left(x: &mut Ctx) -> Flow {
             if try_set_object(x, 10).is_some() {
                 next_sub(x);
                 fading::STEP.set(x.b, 1);
-                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
+                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
             }
             Flow::Done
         }

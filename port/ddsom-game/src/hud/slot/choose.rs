@@ -1,6 +1,13 @@
 //! States 6, 8, 0xa and 0xc of a player slot: character choice and continue.
 
 use super::*;
+use crate::ram::Byte;
+
+/// Set when a player of character 5 starts (byte `+0x3f` of the record at `A5-0x5b88`, h).
+const CHARACTER_5_FLAG: Byte = Byte(0xff_2478 + 0x3f);
+/// Continues taken in the game (`A5+0x5a`).
+const CONTINUES: Byte = Byte::a5(0x5a);
+use crate::objects::Obj;
 
 // ---------------------------------------------------------------------------------------------
 // State 6: character choice
@@ -41,8 +48,8 @@ pub(super) fn redraw_choice(b: &mut Cps2Bus, s: Slot) {
 /// 0x15788: the player chooses their character (d-pad: next or previous, limited time).
 pub(super) fn choose(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
-    let pause = v8(b, var::PAUSE);
-    let seen = rd8(b, var::SEEN_PAUSE);
+    let pause = var::PAUSE.get(b);
+    let seen = var::SEEN_PAUSE.get(b);
     if pause != seen {
         if !pause & seen != 0 {
             redraw_choice(b, s);
@@ -52,14 +59,14 @@ pub(super) fn choose(x: &mut Ctx, s: Slot) {
         }
     }
     if s.p8(b, panel::PLAYER_DIRTY) != 0 {
-        if v8(b, var::PAUSE) == 0 {
+        if var::PAUSE.get(b) == 0 {
             redraw_choice(b, s);
         } else {
             draw::clear_banner(b, s);
             return notice_banner(b, s);
         }
     }
-    if v8(b, var::PAUSE) != 0 {
+    if var::PAUSE.get(b) != 0 {
         return notice_banner(b, s);
     }
     let current = s.p8(b, panel::CHOICE);
@@ -96,8 +103,8 @@ pub(super) fn choose(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
     s.set_p8(b, panel::LAST_MODE, 0x80);
     s.set_p8(b, panel::STATE, 0);
-    let class = prog8(b, rom::CLASS_OF_CHARACTER + (chosen >> 1) as u32);
-    s.set_g8(b, 0x15d, class);
+    let class = rom::CLASS_OF_CHARACTER.pc_byte(b, (chosen >> 1) as u32);
+    s.set_g8(b, player::SELECTION_KIND, class);
     start_player(x, s, Join::New);
 }
 
@@ -109,9 +116,9 @@ pub(super) fn start_player(x: &mut Ctx, s: Slot, how: Join) {
     crate::player::init::join_player(x.b, index, how);
     let b = &mut *x.b;
     if (s.g8(b, player::CHARACTER) & 0x7f) >> 1 == 5 {
-        s.set_g8(b, 0x162, 1);
-        s.set_g8(b, 0x16b, 5);
-        wr8(b, 0xff_2478 + 0x3f, 1);
+        s.set_g8(b, player::SPEED_CLASS, 1);
+        s.set_g8(b, player::SETTING_16B, 5);
+        CHARACTER_5_FLAG.set(b, 1);
     }
 }
 
@@ -132,7 +139,7 @@ pub(super) fn join_continue(x: &mut Ctx, s: Slot) {
     let flags = s.g8(b, player::FLAGS) | 2;
     s.set_g8(b, player::FLAGS, flags);
     s.set_p8(b, panel::CLAIM, 1);
-    if v8(b, 0x35) == 0 && others_free(b) {
+    if crate::ram::PLAYERS_ALIVE.get(b) == 0 && others_free(b) {
         let flags = s.g8(b, player::FLAGS) & !2;
         s.set_g8(b, player::FLAGS, flags);
         s.set_p8(b, panel::CLAIM, 0);
@@ -143,7 +150,7 @@ pub(super) fn join_continue(x: &mut Ctx, s: Slot) {
     s.set_p8(b, panel::STEP, 0);
     s.set_p8(b, panel::FLAG_27, 0);
     s.set_p8(b, panel::STATE, 8);
-    if v8(b, var::CONTINUE_ALLOWED) == 0 {
+    if var::CONTINUE_ALLOWED.get(b) == 0 {
         return resume_declined(b, s);
     }
     draw::clear_frame(b, s);
@@ -159,10 +166,10 @@ pub(super) fn others_free(b: &mut Cps2Bus) -> bool {
 
 /// Coins counted for this player's continue: the partial coins of the price, or the credits.
 pub(super) fn coins_inserted(b: &mut Cps2Bus, s: Slot) -> u8 {
-    if v8(b, var::PRICE_TWO) == 0 && v8(b, var::PRICE) != 1 {
-        rd8(b, s.coins + 1)
+    if var::PRICE_TWO.get(b) == 0 && var::PRICE.get(b) != 1 {
+        s.coins.coins(b)
     } else {
-        rd8(b, s.coins + 2)
+        s.coins.credits(b)
     }
 }
 
@@ -186,7 +193,7 @@ pub(super) fn resume(x: &mut Ctx, s: Slot) {
         s.set_g8(b, player::FLAGS, flags);
         s.set_p8(b, panel::CLAIM, 1);
         s.set_g8(b, player::FLAGS, flags | 2);
-        if v8(b, 0x35) == 0 && others_free(b) {
+        if crate::ram::PLAYERS_ALIVE.get(b) == 0 && others_free(b) {
             s.set_g8(b, player::FLAGS, flags);
             s.set_p8(b, panel::CLAIM, 0);
         }
@@ -217,7 +224,7 @@ pub(super) fn resume(x: &mut Ctx, s: Slot) {
     if coins != shown {
         s.set_p8(b, panel::SHOWN_COINS, coins);
     }
-    if v8(b, var::CONTINUE_MODE) == 0 && rd8(b, s.coins + 2) == 0 {
+    if var::CONTINUE_MODE.get(b) == 0 && s.coins.credits(b) == 0 {
         return;
     }
     if !start_pressed(b, s) {
@@ -225,15 +232,15 @@ pub(super) fn resume(x: &mut Ctx, s: Slot) {
     }
     crate::eeprom::count_game(x.b);
     let b = &mut *x.b;
-    let credits = rd8(b, s.coins + 2).wrapping_sub(1);
-    wr8(b, s.coins + 2, credits);
+    let credits = s.coins.credits(b).wrapping_sub(1);
+    s.coins.set_credits(b, credits);
     s.set_p8(b, panel::SUBSTEP, 0);
     s.set_p8(b, panel::STEP, 1);
     s.set_p8(b, panel::STATE, 0xc);
     s.set_p16(b, panel::COUNTDOWN, RESUME_COUNTDOWN);
     let character = s.g8(b, player::CHARACTER);
     s.set_p8(b, panel::CHOICE, character);
-    if v8(b, var::PAUSE) == 0 {
+    if var::PAUSE.get(b) == 0 {
         draw::portrait(b, s, false);
         choice::show_character(b, s, character);
         let class = s.g8(b, player::CLASS);
@@ -251,21 +258,21 @@ pub(super) fn resume_declined(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::SUBSTEP, 0);
     s.set_p8(b, panel::FLAG_27, 1);
     s.set_p16(b, panel::COUNTDOWN, 0);
-    wr32(b, s.player + player::STATE, 0x0600_0000);
-    let money = rd32(b, s.player + player::MONEY) & !0xf;
-    wr32(b, s.player + player::MONEY, money);
+    Obj(s.player).set_u32(b, player::STATE, 0x0600_0000);
+    let money = Obj(s.player).u32(b, player::MONEY) & !0xf;
+    Obj(s.player).set_u32(b, player::MONEY, money);
     // score += money, in packed decimal (byte by byte, from the end)
     let mut carry = false;
     let mut sum = [0u8; 4];
     for k in (0..4u32).rev() {
-        let add = rd8(b, s.player + player::MONEY + k);
-        let base = rd8(b, s.player + player::SCORE + k);
+        let add = s.g8(b, player::MONEY + k);
+        let base = s.g8(b, player::SCORE + k);
         let (value, out) = crate::ops::abcd(add, base, carry);
         sum[k as usize] = value;
         carry = out;
     }
     let total = u32::from_be_bytes(sum);
-    wr32(b, s.player + player::SCORE, if (total as i32) <= 0x999_9999 { total } else { 0x999_9999 });
+    Obj(s.player).set_u32(b, player::SCORE, if (total as i32) <= 0x999_9999 { total } else { 0x999_9999 });
 }
 
 /// 0x15c50: end of the continue: the end banner is displayed, then state 0xa waits for the end of the message.
@@ -310,8 +317,8 @@ pub(super) fn redraw_resume_choice(b: &mut Cps2Bus, s: Slot) {
 /// (same character: they keep their equipment) or another one.
 pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
-    let pause = v8(b, var::PAUSE);
-    let seen = rd8(b, var::SEEN_PAUSE);
+    let pause = var::PAUSE.get(b);
+    let seen = var::SEEN_PAUSE.get(b);
     if pause != seen {
         if !pause & seen != 0 {
             redraw_resume_choice(b, s);
@@ -321,14 +328,14 @@ pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
         }
     }
     if s.p8(b, panel::PLAYER_DIRTY) != 0 {
-        if v8(b, var::PAUSE) == 0 {
+        if var::PAUSE.get(b) == 0 {
             redraw_resume_choice(b, s);
         } else {
             draw::clear_banner(b, s);
             return notice_banner(b, s);
         }
     }
-    if v8(b, var::PAUSE) != 0 {
+    if var::PAUSE.get(b) != 0 {
         return notice_banner(b, s);
     }
     let own = s.p8(b, panel::CHOSEN) >> 1;
@@ -363,9 +370,9 @@ pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
         s.set_p8(b, panel::CHOICE, variant);
     }
     // the choice is made: the last digit of the score advances (up to 9)
-    let last = s.g8(b, 0x113);
+    let last = s.g8(b, player::SCORE_LOW);
     if last & 0xf != 9 {
-        s.set_g8(b, 0x113, last.wrapping_add(1));
+        s.set_g8(b, player::SCORE_LOW, last.wrapping_add(1));
     }
     let current = s.p8(b, panel::CHOICE);
     let chosen = select::resume_choice(b, s, current, false);
@@ -373,16 +380,16 @@ pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
     s.set_g8(b, player::CHARACTER, chosen);
     crate::eeprom::stat_chosen_character(x.b, chosen as u16);
     let b = &mut *x.b;
-    let counter = rd8(b, A5 + 0x5a).wrapping_add(1);
-    wr8(b, A5 + 0x5a, counter);
+    let counter = CONTINUES.get(b).wrapping_add(1);
+    CONTINUES.set(b, counter);
     s.set_p8(b, panel::LAST_MODE, 0x80);
     s.set_p8(b, panel::STATE, 0);
     if chosen >> 1 == s.p8(b, panel::CHOSEN) >> 1 {
         s.set_p32(b, panel::FRAMES, 0);
         start_player(x, s, Join::Refill);
     } else {
-        let class = prog8(b, rom::CLASS_OF_CHARACTER_ALT + (chosen >> 1) as u32);
-        s.set_g8(b, 0x15d, class);
+        let class = rom::CLASS_OF_CHARACTER_ALT.pc_byte(b, (chosen >> 1) as u32);
+        s.set_g8(b, player::SELECTION_KIND, class);
         start_player(x, s, Join::Continue);
     }
 }

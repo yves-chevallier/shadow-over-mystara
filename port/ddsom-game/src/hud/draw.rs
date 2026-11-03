@@ -5,9 +5,10 @@
 
 use cps2::Cps2Bus;
 
-use super::layer::{columns, origin, Brush, COLUMN, EMPTY};
-use super::{panel, player, v8, var, Slot};
-use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32};
+use super::layer::{clear_cell, columns, origin, Brush, COLUMN};
+use super::{panel, player, var, Slot};
+use crate::hw::video::{Cell, Vram};
+use crate::screens::tables::{self, Rom};
 
 /// Zones of a panel (row index into the origins table).
 pub mod zone {
@@ -44,7 +45,7 @@ pub fn player_attr(b: &mut Cps2Bus, s: Slot) -> u16 {
 
 /// Narrow columns (2-column layout, `A5+0x344` odd).
 pub fn narrow(b: &mut Cps2Bus) -> bool {
-    v8(b, var::LAYOUT) & 1 != 0
+    var::LAYOUT.get(b) & 1 != 0
 }
 
 pub(super) fn zone_brush<'a>(b: &'a mut Cps2Bus, s: Slot, zone: u16) -> Brush<'a> {
@@ -57,7 +58,7 @@ pub(super) fn zone_brush<'a>(b: &'a mut Cps2Bus, s: Slot, zone: u16) -> Brush<'a
 fn clear_rect(b: &mut Cps2Bus, at: u32, rows: u32, columns: u32) {
     for column in 0..columns {
         for row in 0..rows {
-            wr32(b, at + column * COLUMN + row * 4, EMPTY);
+            clear_cell(b, at + column * COLUMN + row * 4);
         }
     }
 }
@@ -75,13 +76,13 @@ pub fn clear_panels(b: &mut Cps2Bus) {
 /// 0x17542: clears the panel banner (3 cells high: 24 columns, or twice 16 columns in the
 /// 3-player layout; the second half comes 25 rows lower).
 pub fn clear_banner(b: &mut Cps2Bus, s: Slot) {
-    const WIDE: u32 = 0x3f_55e2;
-    const HALF: u32 = 0x3f_6758;
+    const WIDE: Rom = Rom::at(0x3f_55e2);
+    const HALF: Rom = Rom::at(0x3f_6758);
     const ATTR: u16 = 0xe;
-    let layout = v8(b, var::LAYOUT);
+    let layout = var::LAYOUT.get(b);
     let mut brush = zone_brush(b, s, zone::BANNER);
     let start = brush.at;
-    let (table, n) = if layout == 1 { (HALF, 16) } else { (WIDE, 24) };
+    let (table, n) = if layout == 1 { (HALF.addr(), 16) } else { (WIDE.addr(), 24) };
     columns(&mut brush, table, n, ATTR);
     if layout != 0 {
         brush.at = start + 0x64;
@@ -90,20 +91,20 @@ pub fn clear_banner(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x17400 / 0x17458: "PUSH START" banner (after clearing the old one), wide and narrow versions.
-pub fn start_banner(b: &mut Cps2Bus, s: Slot, tables: (u32, u32)) {
+pub fn start_banner(b: &mut Cps2Bus, s: Slot, tables: (Rom, Rom)) {
     clear_banner(b, s);
     let (table, n) = if narrow(b) { (tables.1, 12) } else { (tables.0, 17) };
     let mut brush = zone_brush(b, s, zone::START_BANNER);
-    columns(&mut brush, table, n, 0xe);
+    columns(&mut brush, table.addr(), n, 0xe);
 }
 
-pub const START_BANNER_A: (u32, u32) = (0x3f_5c06, 0x3f_6710);
-pub const START_BANNER_B: (u32, u32) = (0x3f_5c6c, 0x3f_66c8);
+pub const START_BANNER_A: (Rom, Rom) = (Rom::at(0x3f_5c06), Rom::at(0x3f_6710));
+pub const START_BANNER_B: (Rom, Rom) = (Rom::at(0x3f_5c6c), Rom::at(0x3f_66c8));
 
 /// One of the "INSERT COIN" banners (pointer tables in the code, a column of 3 words per entry):
 /// `source` is the address of the table pointer, `rows` the number of columns minus one.
 pub fn pointer_banner(b: &mut Cps2Bus, s: Slot, pointer: u32, columns_count: u32, attr: u16) {
-    let table = rd32(b, pointer);
+    let table = tables::long(b, pointer);
     let mut brush = zone_brush(b, s, zone::START_BANNER);
     columns(&mut brush, table, columns_count, attr);
 }
@@ -133,12 +134,10 @@ pub fn continue_digits(b: &mut Cps2Bus, s: Slot) {
     let at = brush.at;
     let (tens_tile, units_tile) = if narrow { (0x641u16.wrapping_sub(tens), 0x642 + units) } else { (0x621u16.wrapping_sub(tens), 0x622 + units) };
     for (column, tile) in [(0, tens_tile), (1, units_tile)] {
-        let cell = at + column * COLUMN;
-        wr16(brush.b, cell, tile);
-        wr16(brush.b, cell + 2, 0xe);
+        let cell = Cell(at + column * COLUMN);
+        cell.put(brush.b, tile, 0xe);
         if !narrow {
-            wr16(brush.b, cell + 4, tile + 0x10);
-            wr16(brush.b, cell + 6, 0xe);
+            cell.offset(4).put(brush.b, tile + 0x10, 0xe);
         }
     }
 }
@@ -217,28 +216,28 @@ pub fn money(b: &mut Cps2Bus, s: Slot) -> u32 {
 // ---------------------------------------------------------------------------------------------
 
 /// Portrait pointer tables (one per player) in the code.
-const PORTRAIT_POINTERS: [u32; 2] = [0x17b96, 0x17ba6];
+const PORTRAIT_POINTERS: [Rom; 2] = [Rom::at(0x17b96), Rom::at(0x17ba6)];
 
 /// 0x17096 / 0x170e0: player portrait (3 cells high); `alt` selects the second series of images.
 pub fn portrait(b: &mut Cps2Bus, s: Slot, alt: bool) {
     let attr = player_attr(b, s);
     let index = s.index(b) as u32;
     let (table, n) = if narrow(b) {
-        (if alt { 0x3f_6668 } else { 0x3f_6ba8 }, 16)
+        (if alt { Rom::at(0x3f_6668).addr() } else { Rom::at(0x3f_6ba8).addr() }, 16)
     } else {
-        (rd32(b, PORTRAIT_POINTERS[alt as usize] + 4 * index), 24)
+        (PORTRAIT_POINTERS[alt as usize].long(b, 4 * index), 24)
     };
     let mut brush = zone_brush(b, s, zone::PORTRAIT);
     columns(&mut brush, table, n, attr);
 }
 
 /// Tile of the first cell of each name row (per character and variant), code table.
-const NAME_TILES: u32 = 0x16fe2;
+const NAME_TILES: Rom = Rom::at(0x16fe2);
 
 /// 0x17012 / 0x1701c: the name of character `character` (4 cells wide, 2 high).
 pub fn character_name(b: &mut Cps2Bus, s: Slot, character: u8) {
     let attr = 4 + s.index(b) as u16;
-    let mut tile = prog16(b, NAME_TILES.wrapping_add_signed(2 * character as i8 as i32));
+    let mut tile = NAME_TILES.pc_word(b, (2 * character as i8 as i32) as u32);
     let mut brush = zone_brush(b, s, zone::CHARACTER_NAME);
     let start = brush.at;
     for row in 0..2 {
@@ -253,7 +252,7 @@ pub fn character_name(b: &mut Cps2Bus, s: Slot, character: u8) {
 }
 
 /// Tiles of the class icon strip (per character).
-const CLASS_ICON_TILES: u32 = 0x1707c;
+const CLASS_ICON_TILES: Rom = Rom::at(0x1707c);
 
 /// 0x17034: class icon of the player's character (strip of 6 cells, or one cell in narrow columns).
 pub fn class_icon(b: &mut Cps2Bus, s: Slot) {
@@ -264,7 +263,7 @@ pub fn class_icon(b: &mut Cps2Bus, s: Slot) {
     if narrow {
         brush.cell(0x96a + (character >> 1) as u16, attr);
     } else {
-        let mut tile = prog16(brush.b, CLASS_ICON_TILES + character as u32);
+        let mut tile = CLASS_ICON_TILES.pc_word(brush.b, character as u32);
         for _ in 0..6 {
             brush.cell(tile, attr);
             brush.skip_column_after_cell();
@@ -274,22 +273,22 @@ pub fn class_icon(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// Face tiles (two cells per class, read in the code as data).
-const FACE_TILES: u32 = 0x17136;
+const FACE_TILES: Rom = Rom::at(0x17136);
 
 /// 0x17106: the face of class `class` (8 to 15), two cells wide.
 pub fn face(b: &mut Cps2Bus, s: Slot, class: u8) {
     let attr = player_attr(b, s);
-    let tiles = FACE_TILES + 4 * (class.wrapping_sub(8) as u32);
+    let tiles = 4 * (class.wrapping_sub(8) as u32);
     let mut brush = zone_brush(b, s, zone::FACE);
     for k in 0..2 {
-        let tile = rd16(brush.b, tiles + 2 * k);
+        let tile = FACE_TILES.word(brush.b, tiles + 2 * k);
         brush.cell(tile, attr);
         brush.skip_column_after_cell();
     }
 }
 
 /// Tiles of the special items (codes 0xf9 to 0xfe of an item row), code table.
-const ITEM_SPECIAL_TILES: u32 = 0x171b4;
+const ITEM_SPECIAL_TILES: Rom = Rom::at(0x171b4);
 
 /// 0x17176: the player's six items (one cell each; a special code of at least 0xf9 fills the end of the
 /// row with a text).
@@ -301,12 +300,11 @@ pub fn items(b: &mut Cps2Bus, s: Slot) {
         if code == 0xff {
             brush.at += COLUMN;
         } else if code < 0xf9 {
-            wr16(brush.b, brush.at, 0x860 + code as u16);
-            wr16(brush.b, brush.at + 2, attr);
+            Cell(brush.at).put(brush.b, 0x860 + code as u16, attr);
             brush.at += COLUMN;
         } else {
             let index = (code.wrapping_neg().wrapping_sub(2) as u16 as u32) * 2;
-            let mut tile = prog16(brush.b, ITEM_SPECIAL_TILES + index);
+            let mut tile = ITEM_SPECIAL_TILES.pc_word(brush.b, index);
             for _ in k..6 {
                 brush.cell(tile, attr);
                 brush.skip_column_after_cell();
@@ -326,10 +324,10 @@ pub fn clear_frame(b: &mut Cps2Bus, s: Slot) {
     let at = zone_brush(b, s, zone::FRAME).at;
     if narrow(b) {
         clear_rect(b, at, 5, 16);
-    } else if rd8(b, var::FROZEN) != 0 {
+    } else if var::FROZEN.get(b) != 0 {
         let at = if s.index(b) & 2 != 0 { at + 8 } else { at };
         clear_rect(b, at, 3, 24);
-    } else if v8(b, 0x50) != 0 && s.index(b) & 2 != 0 {
+    } else if var::BOSS_ROW.get(b) != 0 && s.index(b) & 2 != 0 {
         clear_rect(b, at + 4, 4, 24);
     } else {
         clear_rect(b, at, 5, 24);
@@ -346,7 +344,7 @@ pub fn clear_items_row(b: &mut Cps2Bus, s: Slot) {
 /// 0x16f0a: clears a 24-column row at `at`; returns the start of the next row.
 pub(super) fn clear_row(b: &mut Cps2Bus, at: u32) -> u32 {
     for column in 0..24 {
-        wr32(b, at + column * COLUMN, EMPTY);
+        clear_cell(b, at + column * COLUMN);
     }
     at + 4
 }
@@ -355,13 +353,14 @@ pub(super) fn clear_row(b: &mut Cps2Bus, at: u32) -> u32 {
 // Palettes
 // ---------------------------------------------------------------------------------------------
 
-/// 0x17b56: copies 8 longs (16 colors) from `source` to `dest` keeping the brightness (high nibbles)
-/// of the first long of the destination.
+/// 0x17b56: copies 8 longs (16 colors) from the palette library at `source` to the palette `dest` keeping the
+/// brightness (high nibbles) of the first long of the destination.
 pub fn blend_palette(b: &mut Cps2Bus, source: u32, dest: u32) {
-    let keep = rd32(b, dest) & 0xf000_f000;
+    let dest = Vram(dest);
+    let keep = dest.long(b) & 0xf000_f000;
     for k in 0..8 {
-        let color = rd32(b, source + 4 * k) & 0x0fff_0fff;
-        wr32(b, dest + 4 * k, color | keep);
+        let color = tables::long(b, source + 4 * k) & 0x0fff_0fff;
+        dest.offset(4 * k).set_long(b, color | keep);
     }
 }
 
@@ -372,35 +371,46 @@ pub fn blend_for(b: &mut Cps2Bus, s: Slot, source: u32, dest: u32) {
     blend_palette(b, source + 32 * character, dest + 32 * player);
 }
 
+/// Palettes of the characters in the library (32 bytes per character) and their places in the page of the panels
+/// (32 bytes per player).
+pub const CHARACTER_PALETTES: [(Rom, Vram); 3] = [
+    (Rom::at(0x25_c640), crate::hw::video::palette(1, 0x80)),
+    (Rom::at(0x25_c4c0), crate::hw::video::palette(1, 0x40)),
+    (Rom::at(0x25_c7c0), crate::hw::video::palette(1, 0x180)),
+];
+
 /// 0x17b14: the three palettes of the player's character.
 pub fn character_palettes(b: &mut Cps2Bus, s: Slot) {
-    blend_for(b, s, 0x25_c640, 0x91_c500);
-    blend_for(b, s, 0x25_c4c0, 0x91_c480);
-    blend_for(b, s, 0x25_c7c0, 0x91_c700);
+    for (source, dest) in CHARACTER_PALETTES {
+        blend_for(b, s, source.addr(), dest.0);
+    }
 }
 
 /// 0x1796c: palette of the player's waiting room: `base` is the offset specific to the player number
 /// (code table), to which 32 bytes per character are added.
+/// Palettes of the waiting room in the library, and the page they go to.
+const LOBBY_SOURCE: Rom = Rom::at(0x25_c940);
+const LOBBY_PAGE: Vram = crate::hw::video::palette(1, 0);
+
 pub fn lobby_palette(b: &mut Cps2Bus, s: Slot, base: u16) {
     let character = s.g8(b, player::CHARACTER) as u16;
     let source = base.wrapping_add(character << 5) as i16 as i32;
     let number = s.g8(b, player::NUMBER) as u16;
     let dest = ((0x13 + number) << 5) as i16 as i32;
-    blend_palette(b, 0x25_c940u32.wrapping_add_signed(source), 0x91_c400u32.wrapping_add_signed(dest));
+    blend_palette(b, LOBBY_SOURCE.addr().wrapping_add_signed(source), LOBBY_PAGE.0.wrapping_add_signed(dest));
 }
 
 /// Closing cell after a number in narrow columns.
 pub fn closing_cell(b: &mut Cps2Bus, s: Slot, at: u32, tile: u16) {
     let attr = player_attr(b, s);
-    wr16(b, at, tile);
-    wr16(b, at + 2, attr);
+    Cell(at).put(b, tile, attr);
 }
 
 /// 0x17aee: palette of the character currently being chosen.
 pub fn choice_palette(b: &mut Cps2Bus, s: Slot) {
     let player = s.index(b) as u32;
     let choice = s.p8(b, panel::CHOICE) as u32;
-    blend_palette(b, 0x25_c4c0 + 32 * choice, 0x91_c480 + 32 * player);
+    blend_palette(b, CHARACTER_PALETTES[1].0.addr() + 32 * choice, CHARACTER_PALETTES[1].1.0 + 32 * player);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -408,7 +418,7 @@ pub fn choice_palette(b: &mut Cps2Bus, s: Slot) {
 // ---------------------------------------------------------------------------------------------
 
 /// Gauge tiles: start of a segment according to the remainder (per notch from 0 to 7), for four widths.
-const BAR_TILES: [u32; 4] = [0x17a64, 0x17a76, 0x17a84, 0x17a8e];
+const BAR_TILES: [Rom; 4] = [Rom::at(0x17a64), Rom::at(0x17a76), Rom::at(0x17a84), Rom::at(0x17a8e)];
 
 /// 0x17a94: one gauge cell for the remainder `d0` (in pixels), between the bounds `d1` and `d2`.
 fn bar_cell(brush: &mut Brush, attr: u16, d0: i16, d1: i16, d2: i16) {
@@ -421,7 +431,7 @@ fn bar_cell(brush: &mut Brush, attr: u16, d0: i16, d1: i16, d2: i16) {
     } else {
         (2, BAR_TILES[3])
     };
-    let tile = prog16(brush.b, table.wrapping_add_signed(2 * d1 as i32));
+    let tile = table.pc_word(brush.b, (2 * d1 as i32) as u32);
     let mut extent = d2.wrapping_sub(d1) as u16;
     let room = (limit as u16).wrapping_sub(d1 as u16);
     if extent > room {

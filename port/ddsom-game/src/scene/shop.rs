@@ -12,7 +12,7 @@
 
 use super::Ctx;
 use crate::video::{clear_layer, Layer};
-use crate::mem::{prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -42,40 +42,32 @@ mod f {
 /// Tables (`data`: read as data; `pc`: PC-relative).
 mod rom {
     /// Shop number per scene (data).
-    pub const SHOP_OF_SCENE: u32 = 0xf7ad0;
+    pub const SHOP_OF_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ad0);
     /// Shop music: offset (data) into a routine table (data).
-    pub const MUSIC_INDEX: u32 = 0xf7ab0;
-    pub const MUSIC: u32 = 0xf7ac4;
+    pub const MUSIC_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ab0);
+    pub const MUSIC: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ac4);
     /// Welcome sound: index (data, 20 shops) into a routine table (data).
-    pub const WELCOME_INDEX: u32 = 0xf7b88;
-    pub const WELCOME: u32 = 0xf7b9c;
+    pub const WELCOME_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7b88);
+    pub const WELCOME: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7b9c);
     pub const WELCOME_SHOPS: u8 = 20;
     /// Exit message lists: index (pc) into a pointer table (pc).
-    pub const EXIT_LIST_INDEX: u32 = 0xf7c14;
-    pub const EXIT_LISTS: u32 = 0xf7c28;
+    pub const EXIT_LIST_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7c14);
+    pub const EXIT_LISTS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7c28);
     /// Shop followed by another (data); scene imposed after the shop (data, 0: the return scene).
-    pub const CHAINED: u32 = 0xf7d72;
-    pub const NEXT_SCENE: u32 = 0xf7d5e;
+    pub const CHAINED: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7d72);
+    pub const NEXT_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7d5e);
     /// Player portraits: 8 bytes per character (address, tile, attributes), depending on the layout.
-    pub const PORTRAITS_WIDE: u32 = 0xf7eb2;
-    pub const PORTRAITS: u32 = 0xf7e92;
+    pub const PORTRAITS_WIDE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7eb2);
+    pub const PORTRAITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7e92);
 }
 
 mod sub {
     /// Error path of the original (`tst.w 1(A5)`: address error) when a pool is full.
-    pub const FULL: u32 = 0xf7dfa;
+    pub const FULL: crate::data::RomAddr = crate::data::RomAddr(0xf7dfa);
 }
 
 /// Portrait task (created when the shop opens).
-const PORTRAITS_TASK: u32 = 0xf7dfe;
-
-mod at {
-    pub const OPEN_FADED: u32 = 0xf7960;
-    pub const LEAVE_FADED: u32 = 0xf7c76;
-    pub const LEAVE_WAITED: u32 = 0xf7c96;
-    pub const CHAIN_FADED: u32 = 0xf7cfe;
-    pub const REOPEN_WAITED: u32 = 0xf7d34;
-}
+const PORTRAITS_TASK: crate::data::RomAddr = crate::data::RomAddr(0xf7dfe);
 
 fn b8(x: &mut Ctx, off: u32) -> u8 {
     rd8(x.b, BLOCK + off)
@@ -142,24 +134,24 @@ crate::steps! {
     /// Steps (resume points) of the shop, and the portrait task.
     pub enum Step {
         /// Entry of the portrait task.
-        Portraits = PORTRAITS_TASK => portraits,
+        Portraits = PORTRAITS_TASK.0 => portraits,
         /// Opening: shop number, portrait task, music, shop and player objects, then the
         /// shop scene (69 + number) is loaded and its spawn script restarted.
-        OpenFaded = at::OPEN_FADED => |x| {
+        OpenFaded = 0xf7960 => |x| {
             crate::objects::lists::unlink_all(x.b);
             for pool in crate::objects::pools::POOLS {
                 pool.reset(x.b);
             }
             let scene = x.v8(0x34) as u32;
-            let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
+            let shop = rom::SHOP_OF_SCENE.byte(x.b, scene);
             set_b8(x, f::SHOP, shop);
-            crate::kernel::create_task(x.b, 192, PORTRAITS_TASK);
+            crate::kernel::create_task(x.b, 192, PORTRAITS_TASK.0);
             x.set_v8(0x4e, (scene == 5) as u8);
             if b8(x, f::REOPENED) == 0 {
                 set_b8(x, f::RETURN_SCENE, scene as u8);
             }
-            let index = rd8(x.b, rom::MUSIC_INDEX + shop as u32) as u32;
-            let music = rd32(x.b, rom::MUSIC + index);
+            let index = rom::MUSIC_INDEX.byte(x.b, shop as u32) as u32;
+            let music = rom::MUSIC.long(x.b, index);
             crate::sound::play_global(x.b, crate::sound::Sound::at(music));
             set_b16(x, f::STATE, 0x200);
             set_b8(x, f::SHOPPERS, 0);
@@ -174,9 +166,9 @@ crate::steps! {
             clear_layer(x.b, Layer::One);
             crate::hud::forget_displayed(x.b);
             // pools emptied just before: the failure (address error of the original) does not happen (code-mort.md)
-            let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { crate::families::effects::address_error(sub::FULL) };
-            wr8(x.b, o, 1);
-            wr8(x.b, o + 2, 13);
+            let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { crate::families::effects::address_error(sub::FULL.0) };
+            Obj(o).set_u8(x.b, Obj::ACTIVE, 1);
+            Obj(o).set_u8(x.b, Obj::KIND, 13);
             for k in 0..4u32 {
                 let p = super::PLAYERS + k * super::PLAYER_STRIDE;
                 let slot = BLOCK + f::PLAYER_OBJECTS + 2 * k;
@@ -184,7 +176,7 @@ crate::steps! {
                 if rd8(x.b, p) == 0 || rd16(x.b, p + 0x62) == 0 {
                     continue;
                 }
-                let Some(Obj(e)) = pools::EFFCT.alloc(x.b) else { crate::families::effects::address_error(sub::FULL) };
+                let Some(Obj(e)) = pools::EFFCT.alloc(x.b) else { crate::families::effects::address_error(sub::FULL.0) };
                 wr8(x.b, e, 1);
                 wr8(x.b, e + 2, 20);
                 let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));
@@ -208,14 +200,14 @@ crate::steps! {
             super::script::step(x.b);
             Flow::Done
         },
-        LeaveFaded = at::LEAVE_FADED => |x| {
+        LeaveFaded = 0xf7c76 => |x| {
             crate::video::clear_objects(x.b);
             crate::objects::lists::unlink_all(x.b);
             x.set_v8(0x3d, 1);
             crate::tasks::one_frame(x, Step::LeaveWaited)
         },
         /// Return from the shop: layers cleared, next state of the sequence, return scene.
-        LeaveWaited = at::LEAVE_WAITED => |x| {
+        LeaveWaited = 0xf7c96 => |x| {
             clear_layers(x);
             let s = rd8(x.b, EXIT_BLOCK + 2).wrapping_add(4);
             wr8(x.b, EXIT_BLOCK + 2, s);
@@ -224,23 +216,23 @@ crate::steps! {
             x.and16(0x12, 0xfffe);
             let layers = x.v16(0x12);
             wr16(x.b, 0x804122, layers);
-            let shop = rd8(x.b, BLOCK + f::SHOP) as u32;
-            let next = rd8(x.b, rom::NEXT_SCENE + shop);
+            let shop = Obj(BLOCK).u8(x.b, f::SHOP) as u32;
+            let next = rom::NEXT_SCENE.byte(x.b, shop);
             x.set_v8(0x34, next);
             if next == 0 {
-                let back = rd8(x.b, BLOCK + f::RETURN_SCENE);
+                let back = Obj(BLOCK).u8(x.b, f::RETURN_SCENE);
                 x.set_v8(0x34, back);
             }
             // the scene exit dispatch re-reads byte `+2` of the block designated by A0 (the block, kept by the yield)
             super::exit::set_dispatch_a0(x.b, EXIT_BLOCK);
             Flow::Done
         },
-        ChainFaded = at::CHAIN_FADED => |x| {
+        ChainFaded = 0xf7cfe => |x| {
             x.set_v16(0x14, 0);
             crate::video::turn_layers_on(x.b, 0x12c0);
             Flow::Done
         },
-        ReopenWaited = at::REOPEN_WAITED => |x| {
+        ReopenWaited = 0xf7d34 => |x| {
             crate::objects::pools::SET.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
             crate::objects::pools::PEFF.reset(x.b);
@@ -265,18 +257,18 @@ fn welcome(x: &mut Ctx) -> Flow {
     crate::video::turn_layers_on(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    crate::kernel::create_task(x.b, 16, crate::scene::fading::RISE);
+    crate::kernel::create_task(x.b, 16, crate::scene::fading::RISE.0);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {
         // demonstration scenes outside the table: fix shared by the two machines (`exit::patch_shared_next`)
         return Flow::Done;
     }
-    let index = rd8(x.b, rom::WELCOME_INDEX + shop as u32);
+    let index = rom::WELCOME_INDEX.byte(x.b, shop as u32);
     if index == 0 {
         return Flow::Done;
     }
-    let sound = rd32(x.b, rom::WELCOME + 4 * index as u32);
+    let sound = rom::WELCOME.long(x.b, 4 * index as u32);
     crate::sound::play_global(x.b, crate::sound::Sound::at(sound));
     Flow::Done
 }
@@ -304,7 +296,7 @@ fn messages(x: &mut Ctx) {
         set_b16(x, f::PENDING, 0);
         return;
     }
-    let m = rd16(x.b, BLOCK + f::MESSAGE) as i16 as i32 as u32 & 0xff_ffff;
+    let m = Obj(BLOCK).u16(x.b, f::MESSAGE) as i16 as i32 as u32 & 0xff_ffff;
     if rd8(x.b, m) == 0 || rd8(x.b, m + 0x22) != 0 {
         set_b8(x, f::TALKING, 0);
         return;
@@ -321,9 +313,9 @@ fn exit_messages(x: &mut Ctx) {
     match b8(x, f::EXIT_SUB) {
         0 => {
             let shop = b8(x, f::SHOP) as u32;
-            let index = prog8(x.b, rom::EXIT_LIST_INDEX + shop) as u32;
-            let list = prog32(x.b, rom::EXIT_LISTS + 4 * index);
-            wr32(x.b, BLOCK + f::EXIT_MESSAGES, list);
+            let index = rom::EXIT_LIST_INDEX.pc_byte(x.b, shop) as u32;
+            let list = rom::EXIT_LISTS.pc_long(x.b, 4 * index);
+            Obj(BLOCK).set_u32(x.b, f::EXIT_MESSAGES, list);
             if list == 0 {
                 return exit_messages_done(x);
             }
@@ -340,13 +332,13 @@ fn exit_messages(x: &mut Ctx) {
 }
 
 fn next_exit_message(x: &mut Ctx) {
-    let at = rd32(x.b, BLOCK + f::EXIT_MESSAGES);
+    let at = Obj(BLOCK).u32(x.b, f::EXIT_MESSAGES);
     let n = rd16(x.b, at);
     if n == 0 {
         return exit_messages_done(x);
     }
     set_b16(x, f::PENDING, n);
-    wr32(x.b, BLOCK + f::EXIT_MESSAGES, at + 2);
+    Obj(BLOCK).set_u32(x.b, f::EXIT_MESSAGES, at + 2);
 }
 
 fn exit_messages_done(x: &mut Ctx) {
@@ -357,7 +349,7 @@ fn exit_messages_done(x: &mut Ctx) {
 /// Exit, step 4: fade to black, then return to the return scene; or a chained shop.
 fn leave(x: &mut Ctx) -> Flow {
     let shop = b8(x, f::SHOP) as u32;
-    let chained = rd8(x.b, rom::CHAINED + shop);
+    let chained = rom::CHAINED.byte(x.b, shop);
     if chained == 0 {
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
@@ -382,7 +374,7 @@ fn leave(x: &mut Ctx) -> Flow {
 /// then the task ends (`jmp 0x9f8`).
 fn portraits(x: &mut Ctx) -> Flow {
     let b = &mut *x.b;
-    let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE } else { rom::PORTRAITS };
+    let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE.addr() } else { rom::PORTRAITS.addr() };
     for k in 0..4 {
         let p = super::PLAYERS + k * super::PLAYER_STRIDE;
         if rd8(b, p) == 0 || (rd8(b, p + 4) as i8) >= 4 {

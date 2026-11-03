@@ -32,29 +32,33 @@ mod line {
 
 /// Texts.
 mod text {
-    pub const TITLE: u32 = 0x2caa6;
-    pub const MENU: u32 = 0x2cad2;
-    pub const SELECT: u32 = 0x2cb16;
-    pub const HELP_START: u32 = 0x2cb36;
-    pub const HELP_RESET: u32 = 0x2cb56;
-    pub const HELP_EXIT: u32 = 0x2cb76;
-    pub const SAVING: u32 = 0x2cdce;
-    pub const SYSTEM_TITLE: u32 = 0x2cb96;
+    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2caa6);
+    pub const MENU: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cad2);
+    pub const SELECT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb16);
+    pub const HELP_START: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb36);
+    pub const HELP_RESET: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb56);
+    pub const HELP_EXIT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb76);
+    pub const SAVING: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cdce);
+    pub const SYSTEM_TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb96);
     /// Lines of 7-1: without language or cards, with the language (variant 8), with the cards (4, 10).
-    pub const SYSTEM_LINES: u32 = 0x2cbc8;
-    pub const SYSTEM_LINES_LANGUAGE: u32 = 0x2cc3c;
-    pub const SYSTEM_LINES_CARDS: u32 = 0x2ce1a;
-    pub const GAME_TITLE: u32 = 0x2ccc0;
-    pub const GAME_LINES: u32 = 0x2ccee;
-    pub const SUB_SELECT: u32 = 0x2cd12;
-    pub const SUB_HELP: u32 = 0x2cd36;
-    pub const SUB_HELP_EXIT: u32 = 0x2cd82;
+    pub const SYSTEM_LINES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cbc8);
+    pub const SYSTEM_LINES_LANGUAGE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cc3c);
+    pub const SYSTEM_LINES_CARDS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ce1a);
+    pub const GAME_TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ccc0);
+    pub const GAME_LINES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ccee);
+    pub const SUB_SELECT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd12);
+    pub const SUB_HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd36);
+    pub const SUB_HELP_EXIT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd82);
 }
 
 /// Arrows of the menu and submenus; line "4. SAVE & EXIT" coloured when not at factory settings.
 const MENU_ARROW: u32 = 0x91289c;
 const SUB_ARROW: u32 = 0x91211c;
 const SAVE_LINE: u32 = 0x912b2c;
+
+/// Coin modes offered with the card dispenser (variant 4, then 10), PC-relative bytes.
+const CARD_MODES_4: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2c008);
+const CARD_MODES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2c00c);
 
 /// Game variables (offsets from A5).
 mod v {
@@ -93,7 +97,7 @@ enum Variant {
 }
 
 fn variant(x: &mut Ctx) -> Variant {
-    match x.v16(var::VARIANT) {
+    match var::VARIANT.get(x.b) {
         8 => Variant::Language,
         n @ (4 | 10) => Variant::Cards(n),
         _ => Variant::Plain,
@@ -263,8 +267,8 @@ fn coin_mode(x: &mut Ctx, variant: Variant) {
     x.set_v8(v::CONTINUE, cont);
     draw(x, &CONTINUE);
     let mode = match variant {
-        Variant::Cards(4) => x.prog8(0x2c008 + if value as i8 > 2 { 1 } else { value as u32 }),
-        Variant::Cards(_) => x.prog8(0x2c00c + if value as i8 > 3 { 2 } else { value as u32 }),
+        Variant::Cards(4) => CARD_MODES_4.pc_byte(x.b, if value as i8 > 2 { 1 } else { value as u32 }),
+        Variant::Cards(_) => CARD_MODES.pc_byte(x.b, if value as i8 > 3 { 2 } else { value as u32 }),
         _ => value,
     };
     x.set_v8(v::COIN_MODE, mode);
@@ -332,7 +336,7 @@ fn show_menu(x: &mut Ctx) {
     // long of the last palette of page 3)
     super::set16(x, f::REPEAT_V, d0 as u16);
     set(x, f::REPEAT_SHOTS, 0x7f);
-    for t in [text::TITLE, text::MENU, text::SELECT, text::HELP_START] {
+    for t in [text::TITLE.addr(), text::MENU.addr(), text::SELECT.addr(), text::HELP_START.addr()] {
         print(x, t);
     }
     if !config::is_factory(x) {
@@ -349,9 +353,9 @@ fn menu(x: &mut Ctx) -> Flow {
         move_arrow(x, MENU_ARROW, line, to);
         set(x, field::LINE, to);
         let help = match to as i8 {
-            l if l <= line::GAME as i8 => text::HELP_START,
-            l if l == line::DEFAULT as i8 => text::HELP_RESET,
-            _ => text::HELP_EXIT,
+            l if l <= line::GAME as i8 => text::HELP_START.addr(),
+            l if l == line::DEFAULT as i8 => text::HELP_RESET.addr(),
+            _ => text::HELP_EXIT.addr(),
         };
         print(x, help);
     }
@@ -367,7 +371,7 @@ fn menu(x: &mut Ctx) -> Flow {
             }
         }
         line::DEFAULT => {
-            if x.v8(var::SYSTEM) & key::START1 != 0 && held & key::SHOT1 != 0 {
+            if var::SYSTEM.get(x.b) & key::START1 != 0 && held & key::SHOT1 != 0 {
                 config::reset_factory(x);
                 let cont = x.v8(v::CONTINUE);
                 crate::mem::wr8(x.b, saved::CONTINUE_CHOSEN, cont);
@@ -378,7 +382,7 @@ fn menu(x: &mut Ctx) -> Flow {
             if new & key::SHOT1 != 0 {
                 layers_off(x);
                 crate::video::clear_layer(x.b, crate::video::Layer::One);
-                print(x, text::SAVING);
+                print(x, text::SAVING.addr());
                 layers_on(x);
                 if !config::save(x.b) {
                     return Flow::Yield;
@@ -401,7 +405,7 @@ fn sub_select(x: &mut Ctx, exit: u8, skip_continue: bool) -> bool {
     }
     move_arrow(x, SUB_ARROW, line, to);
     set(x, field::SUB_LINE, to);
-    print(x, if to == exit { text::SUB_HELP_EXIT } else { text::SUB_HELP });
+    print(x, if to == exit { text::SUB_HELP_EXIT.addr() } else { text::SUB_HELP.addr() });
     true
 }
 
@@ -414,8 +418,8 @@ fn sub_screen(x: &mut Ctx, texts: &[u32]) {
     for &t in texts {
         print(x, t);
     }
-    print(x, text::SUB_SELECT);
-    print(x, text::SUB_HELP);
+    print(x, text::SUB_SELECT.addr());
+    print(x, text::SUB_HELP.addr());
     arrow(x, SUB_ARROW, 0);
 }
 
@@ -424,11 +428,11 @@ fn system(x: &mut Ctx) -> Flow {
     let variant = variant(x);
     if get(x, field::SUB_STEP) == 0 {
         let lines = match variant {
-            Variant::Language => text::SYSTEM_LINES_LANGUAGE,
-            Variant::Cards(_) => text::SYSTEM_LINES_CARDS,
-            Variant::Plain => text::SYSTEM_LINES,
+            Variant::Language => text::SYSTEM_LINES_LANGUAGE.addr(),
+            Variant::Cards(_) => text::SYSTEM_LINES_CARDS.addr(),
+            Variant::Plain => text::SYSTEM_LINES.addr(),
         };
-        sub_screen(x, &[text::SYSTEM_TITLE, lines]);
+        sub_screen(x, &[text::SYSTEM_TITLE.addr(), lines]);
         for s in [COIN_MODE, FALLS, CONTINUE, MONITOR, DEMO_SOUND, SOUND_MODE] {
             draw(x, &s);
         }
@@ -463,7 +467,7 @@ fn system(x: &mut Ctx) -> Flow {
 /// `0x2bec8`: 7-2 GAME CONFIGURATION (difficulty).
 fn game(x: &mut Ctx) -> Flow {
     if get(x, field::SUB_STEP) == 0 {
-        sub_screen(x, &[text::GAME_TITLE, text::GAME_LINES]);
+        sub_screen(x, &[text::GAME_TITLE.addr(), text::GAME_LINES.addr()]);
         draw(x, &DIFFICULTY);
         return Flow::Done;
     }

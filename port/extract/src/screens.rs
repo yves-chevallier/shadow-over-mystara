@@ -54,7 +54,7 @@ fn hud(t: &mut Tables) {
     // columns of three tiles of the banners and the portraits (words)
     t.data("hud_columns", 0x3f54c2, "u16", Some((0x3f6c08 - 0x3f54c2) / 2));
     // palettes of the characters and of the choice (the palette library read as data)
-    t.palette(0x25c4c0, 0x700);
+    t.palette(0x25c4c0, 0x2000);
 }
 
 /// Texts of the character layer that `texts.json` does not know (`text.rs`): the "PUSH START" prompt of the prompt
@@ -63,12 +63,88 @@ fn texts(t: &mut Tables) {
     t.data("prompt_texts", 0xe04b0, "u8", Some(0xe04e4 - 0xe04b0));
 }
 
+/// Mode screens (`modes/`).
+fn modes(t: &mut Tables) {
+    // selection (`select.rs`): variant per character, announcements, cursor moves
+    t.prog("select_variants", 0x1d118, "u8", Some(6));
+    t.prog("select_banners", 0x1d3aa, "addr", None);
+    t.data("select_cursor_up", 0x1d6cc, "i8", Some(6));
+    t.data("select_cursor_down", 0x1d6d2, "i8", Some(6));
+    // demonstrations (`demo/`): sound commands, phase handlers, presentation of the characters
+    t.prog("demo_sound_commands", 0x1f3aa, "addr", Some(6));
+    t.prog("demo_phases_a", 0x1f990, "addr", Some(4));
+    t.prog("demo_phases_b", 0x20a9c, "addr", Some(4));
+    t.prog("demo_present_tiles", 0x1fd04, "u16*2", None);
+    t.data("demo_present_palettes", 0x1fe3e, "x16", Some((0x1febe - 0x1fe3e) / 2));
+    t.data("demo_present_data", 0x1febe, "u8", None);
+    t.prog("demo_frame_attrs", 0x1ffa2, "i16", None);
+    t.prog("demo_box_attrs", 0x1ffd0, "u16", None);
+    t.data("demo_text_1", 0x20070, "u8", Some(0x200ca - 0x20070));
+    t.pointed("demo_text_2", 0x200ca, true, 6, "u8");
+    // startup (`boot.rs`): region byte, palette, warnings, default high scores
+    t.data("boot_region", 0xc4, "u8", Some(1));
+    t.data("boot_palette", 0x133ba, "x16", Some(16));
+    t.data("boot_high_scores", 0x18f1e, "u8", Some(140));
+    t.data("boot_high_scores_alt", 0x18faa, "u8", Some(140));
+    // ranking (`ranking.rs`): palette, text of the ranking lines
+    t.data("ranking_palette", 0xfc6d8, "x16", Some(16));
+    t.data("ranking_text", 0xfc938, "u8", None);
+    t.palette(0x2537c0, 0x20);
+    // ending (`ending/`): offsets of the reward objects
+    t.prog("ending_reward_offsets", 0xfc3e4, "i16*2", Some(3));
+    t.data("ending_rewards", 0xfb7bc, "x32*2", Some(24));
+    t.data("ending_terrain", 0xfbe92, "u8", Some(0xfbebc - 0xfbe92));
+    t.data("ending_score_places", 0xfbebc, "i16*2", Some(4));
+    t.data("ending_last_tiles", 0xfc4e2, "u16", Some(4));
+    for at in [0x291980, 0x28fa80, 0x28faa0, 0x28f4c0, 0x292260, 0x291f00] {
+        t.palette(at, 0x20);
+    }
+}
+
+/// Spawn scripts of the scenes (`scene/script.rs`): the table of one long per scene, then each script up to and
+/// including its end word (0xffff), entries of 0x12 bytes (spawn) or 10 bytes (call, word `+2` = 0xffff).
+fn spawn_scripts(t: &mut Tables, rom: &Program) {
+    const TABLE: u32 = 0xf2f62;
+    const SCENES: u32 = 115;
+    t.data("spawn_scripts", TABLE, "addr", Some(SCENES as usize));
+    let mut starts: Vec<u32> = (0..SCENES).map(|s| rom.rd32(TABLE + 4 * s)).collect();
+    starts.sort();
+    starts.dedup();
+    for at in starts {
+        let mut p = at;
+        while rom.rd16(p) != 0xffff {
+            p += if rom.rd16(p + 2) == 0xffff { 10 } else { 0x12 };
+        }
+        t.data(&format!("spawn_script@{at:#x}"), at, "u8", Some((p + 2 - at) as usize));
+    }
+    t.prog("spawn_allocators", 0xf2f38, "i16", None);
+}
+
+/// The bytes that the ROM test of the service menu (`service/memory.rs`) sums: one byte every 0xfff in each of the
+/// eight blocks of 0x80000 bytes, and the expected sums (header words at 0xca). Built after the other tables so that
+/// these single bytes do not cut their automatic ends.
+fn rom_test() -> Vec<Spec> {
+    let mut s = vec![crate::data::data("rom_test_sums", 0xca, "u16", &[], 8)];
+    for k in 0..8u32 {
+        let mut a = 0x80000 * k;
+        while a < 0x80000 * (k + 1) {
+            s.push(crate::data::data(&format!("rom_test@{a:#x}"), a, "u8", &[], 1));
+            a += 0xfff;
+        }
+    }
+    s
+}
+
 pub fn specs(rom: &Program) -> Vec<Spec> {
     let mut t = Tables::new(rom);
     credits(&mut t);
     texts(&mut t);
     hud(&mut t);
-    t.finish()
+    modes(&mut t);
+    spawn_scripts(&mut t, rom);
+    let mut specs = t.finish();
+    specs.extend(rom_test());
+    specs
 }
 
 /// The tables in memory (mode with ROMs).

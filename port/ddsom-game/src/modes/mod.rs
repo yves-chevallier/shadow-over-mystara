@@ -19,48 +19,34 @@ pub mod title;
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd8, wr16, wr8, A5};
+use crate::objects::Obj;
+use crate::ram::Byte;
+
+/// Bytes set by the entry of the mode loop (`A5-0x7151`, `A5-0x7152`, h).
+const MODE_LOOP_FLAGS: Byte = Byte(0xff_0eaf);
+const MODE_LOOP_FLAGS_B: Byte = Byte(0xff_0eae);
 use crate::scene::Ctx;
 use crate::tasks::table::Next;
 use crate::Native;
 
 /// Mode machine state block (`A0` in the original) and its fields.
 pub mod mode {
+    use crate::ram::{Byte, Word};
     pub const BASE: u32 = 0xff_0e70;
     /// Mode: 0 initialisation, 2 execution.
-    pub const MODE: u32 = BASE;
+    pub const MODE: Byte = Byte(BASE);
     /// Sub-mode (step of 2): the current screen.
-    pub const SUB: u32 = BASE + 1;
-    /// Sub-mode step.
-    pub const STEP: u32 = BASE + 2;
-    pub const STEP_2: u32 = BASE + 3;
+    pub const SUB: Byte = Byte(BASE + 1);
+    /// Sub-mode step (byte; cleared with the next byte as a word).
+    pub const STEP: Byte = Byte(BASE + 2);
+    pub const STEP_WORD: Word = Word(BASE + 2);
+    pub const STEP_2: Byte = Byte(BASE + 3);
     /// Screen timer (word, in frames).
-    pub const TIMER: u32 = BASE + 8;
+    pub const TIMER: Word = Word(BASE + 8);
     /// Byte != 0: the startup screen has already been shown.
-    pub const BOOTED: u32 = BASE + 0x32;
+    pub const BOOTED: Byte = Byte(BASE + 0x32);
 }
 
-/// Addresses of the loop at `0x133fe`.
-mod at {
-    pub const LOOP: u32 = 0x133fe;
-    /// Return of the mode handler: yield one frame.
-    pub const AFTER_HANDLER: u32 = 0x1341a;
-    /// Resume after the yield: next turn.
-    pub const AFTER_WAIT: u32 = 0x13422;
-}
-
-/// Engine subroutines called by the screens.
-pub mod sub {
-    /// VRAM clears: sprites, plane 1, plane 2, plane 3.
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    /// Loads palette n (D0) of the background pages.
-    pub const LOAD_PALETTE: u32 = 0x1a67e;
-    /// Copies a tile block (D0 = number, A1 = destination) into a plane.
-    pub const TILE_BLOCK: u32 = 0x26d4;
-}
 
 /// Continuation of a handler: finished (it returns to what follows the current call) or not (it yielded to
 /// the scheduler, jumped to another native, or gave up: the task will continue elsewhere).
@@ -137,16 +123,16 @@ pub trait Block {
 
 impl Block for Ctx<'_> {
     fn m8(&mut self, off: u32) -> u8 {
-        rd8(self.b, mode::BASE + off)
+        Obj(mode::BASE).u8(self.b, off)
     }
     fn m16(&mut self, off: u32) -> u16 {
-        rd16(self.b, mode::BASE + off)
+        Obj(mode::BASE).u16(self.b, off)
     }
     fn set_m8(&mut self, off: u32, v: u8) {
-        wr8(self.b, mode::BASE + off, v)
+        Obj(mode::BASE).set_u8(self.b, off, v)
     }
     fn set_m16(&mut self, off: u32, v: u16) {
-        wr16(self.b, mode::BASE + off, v)
+        Obj(mode::BASE).set_u16(self.b, off, v)
     }
     fn next_step(&mut self) {
         let s = self.m8(2).wrapping_add(2);
@@ -167,17 +153,17 @@ crate::steps! {
     /// Steps of the mode machine loop (`0x133fe`).
     pub enum Step {
         /// Loop entry (task 0 restarted after a game, or end of startup).
-        Entry = at::LOOP => start,
+        Entry = 0x133fe => start,
         /// The handler yielded: one yield frame, then a new turn.
-        AfterHandler = at::AFTER_HANDLER => |x| x.wait(1, Step::AfterWait),
+        AfterHandler = 0x1341a => |x| x.wait(1, Step::AfterWait),
         /// After the yield: a new turn.
-        AfterWait = at::AFTER_WAIT => turn,
+        AfterWait = 0x13422 => turn,
     }
 }
 
 /// One turn: calls the mode handler, which returns to [`Step::AfterHandler`].
 fn turn(x: &mut Ctx) -> Flow {
-    let m = rd8(x.b, mode::MODE);
+    let m = mode::MODE.get(x.b);
     push(x.b, Step::AfterHandler);
     match m {
         0 => init(x),
@@ -189,21 +175,21 @@ fn turn(x: &mut Ctx) -> Flow {
 
 /// Mode 0 (`0x13428`): moves to mode 2 and chooses the first sub-mode.
 fn init(x: &mut Ctx) -> Flow {
-    let m = rd8(x.b, mode::MODE).wrapping_add(2);
-    wr8(x.b, mode::MODE, m);
-    wr8(x.b, mode::SUB, 2);
-    if rd8(x.b, mode::BOOTED) != 0 {
-        wr8(x.b, mode::SUB, 0x14);
+    let m = mode::MODE.get(x.b).wrapping_add(2);
+    mode::MODE.set(x.b, m);
+    mode::SUB.set(x.b, 2);
+    if mode::BOOTED.get(x.b) != 0 {
+        mode::SUB.set(x.b, 0x14);
     }
-    wr8(x.b, mode::STEP, 0);
-    wr8(x.b, mode::STEP_2, 0);
-    wr16(x.b, mode::TIMER, 0x12c);
+    mode::STEP.set(x.b, 0);
+    mode::STEP_2.set(x.b, 0);
+    mode::TIMER.set(x.b, 0x12c);
     Flow::Done
 }
 
 /// Mode 2 (`0x13450`): dispatches on the sub-mode.
 fn dispatch(x: &mut Ctx) -> Flow {
-    let sub = rd8(x.b, mode::SUB);
+    let sub = mode::SUB.get(x.b);
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
         // the eleven entries of the table (0 to 0x14) are rewritten (code-mort.md, batch "CPU removal")
@@ -213,8 +199,8 @@ fn dispatch(x: &mut Ctx) -> Flow {
 
 /// `0x133fe`: loop entry.
 pub fn start(x: &mut Ctx) -> Flow {
-    wr8(x.b, A5.wrapping_sub(0x7151), 0xff);
-    wr8(x.b, A5.wrapping_sub(0x7152), 0);
+    MODE_LOOP_FLAGS.set(x.b, 0xff);
+    MODE_LOOP_FLAGS_B.set(x.b, 0);
     turn(x)
 }
 

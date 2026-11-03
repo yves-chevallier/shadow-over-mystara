@@ -1,6 +1,12 @@
 //! State 4 of a player slot: the player is in the game; the panel gauges, digits and names are kept up to date.
 
 use super::*;
+use crate::ram::Byte;
+
+/// Non-zero: the characters' palettes are kept when the player changes (`FF1A14`, h).
+const PALETTES_KEPT: Byte = Byte(0xff_1a14);
+/// Class of each character (PC-relative byte table).
+const CLASS_OF_CHARACTER: Rom = Rom::at(0x16b3c);
 
 // ---------------------------------------------------------------------------------------------
 // State 4: the player is in the game
@@ -8,7 +14,7 @@ use super::*;
 
 pub(super) fn play(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
-    let mode = v8(b, var::DISPLAY);
+    let mode = var::DISPLAY.get(b);
     if mode == 0 {
         return;
     }
@@ -58,8 +64,8 @@ pub(super) fn update_hp(b: &mut Cps2Bus, s: Slot) {
 
 /// Byte of the class table (`+0x120` of the player, 16-byte row per family `+0x15d`).
 pub(super) fn selection_class(b: &mut Cps2Bus, s: Slot) -> u8 {
-    let kind = s.g8(b, 0x15d) as u32;
-    s.g8(b, 0x120 + (kind << 4))
+    let kind = s.g8(b, player::SELECTION_KIND) as u32;
+    s.g8(b, player::SELECTIONS + (kind << 4))
 }
 
 /// 0x15f9e: must the player's selection image be redrawn?
@@ -67,14 +73,14 @@ pub(super) fn update_selection(b: &mut Cps2Bus, s: Slot) {
     if s.g8(b, player::ACTIVE) == 0 {
         return;
     }
-    let held = s.g8(b, 0x15c);
+    let held = s.g8(b, player::SELECTION_COUNT);
     if held != s.p8(b, panel::DISPLAYED_B) {
         s.set_p8(b, panel::DISPLAYED_B, held);
         s.set_p8(b, panel::DISPLAYED_A, 0xff);
         return;
     }
     if held == 0 {
-        let settings = v8(b, var::SETTINGS) & 0x20;
+        let settings = var::SETTINGS.get(b) & 0x20;
         if settings != s.p8(b, 0x2f) {
             s.set_p8(b, 0x2f, settings);
             s.set_p8(b, panel::DISPLAYED_A, 0xfe);
@@ -158,11 +164,11 @@ pub(super) fn money_redraw(b: &mut Cps2Bus, s: Slot) {
 
 /// 0x15ec8: the player name (multi-player layouts), or the blinking of the lone player.
 pub(super) fn update_names(b: &mut Cps2Bus, s: Slot) {
-    if v8(b, var::GAME_ON) == 0 {
+    if var::GAME_ON.get(b) == 0 {
         return;
     }
-    if v8(b, var::LAYOUT) != 0 {
-        let (first, second) = (s.g32(b, 0x160), s.g32(b, 0x164));
+    if var::LAYOUT.get(b) != 0 {
+        let (first, second) = (s.g32(b, player::NAME), s.g32(b, player::NAME + 4));
         if first != s.p32(b, panel::SHOWN_NAME) || second != s.p32(b, panel::SHOWN_NAME + 4) {
             choice::names(b, s);
         }
@@ -207,11 +213,11 @@ pub(super) fn refresh_all(b: &mut Cps2Bus, s: Slot) {
 
 /// 0x16878: the player has changed: portrait, name, gauge, items, names and values are redrawn.
 pub(super) fn redraw_player(b: &mut Cps2Bus, s: Slot) {
-    if s.p8(b, panel::PLAYER_DIRTY) == 0 || v8(b, var::DISPLAY) == 0 {
+    if s.p8(b, panel::PLAYER_DIRTY) == 0 || var::DISPLAY.get(b) == 0 {
         return;
     }
     s.set_p8(b, panel::PLAYER_DIRTY, 0);
-    if v8(b, var::GAME_ON) == 0 || rd8(b, 0xff_1a14) == 0 {
+    if var::GAME_ON.get(b) == 0 || PALETTES_KEPT.get(b) == 0 {
         draw::character_palettes(b, s);
     }
     redraw_all(b, s);
@@ -266,7 +272,7 @@ pub(super) fn lock_mode(b: &mut Cps2Bus, s: Slot) {
     let character = s.g8(b, player::CHARACTER);
     if character & 0x80 != 0 {
         s.set_g8(b, player::CHARACTER, character & 0x7f);
-        let class = prog8(b, 0x16b3c + ((character & 0x7f) >> 1) as u32);
+        let class = CLASS_OF_CHARACTER.pc_byte(b, ((character & 0x7f) >> 1) as u32);
         s.set_g8(b, player::CLASS, class);
         draw::character_palettes(b, s);
         redraw_all(b, s);

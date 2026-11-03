@@ -18,15 +18,23 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog16, rd16, rd8, wr16, wr32, wr8, A5};
+use crate::hw::video::{Cell, TEXT};
+use crate::mem::A5;
+use crate::screens::tables::{self, Rom};
 use crate::text::clear_cells;
+use crate::ram::Byte;
+use crate::objects::Obj;
 
 const EMPTY: u16 = 0xffff;
 /// Current pop-up (4 words); the remaining duration is the last one.
 pub(crate) const CURRENT: u32 = 0xffff_9180;
+/// Fields of a pop-up (current or queued): identifier, width and height (pixels), remaining duration (words).
+const ID: u32 = 0;
+const WIDTH: u32 = 2;
+const HEIGHT: u32 = 4;
 const DURATION: u32 = 6;
 pub(crate) const INPUTS: u32 = 0x20e;
-const READ: u32 = 0x20d;
+const READ: Byte = Byte::a5(0x20d);
 const ENTRY_SIZE: u8 = 8;
 /// Default duration of a pop-up without a second parameter (frames), and shortened duration.
 const DEFAULT_DURATION: u16 = 0x60;
@@ -37,44 +45,50 @@ const REDUCED: u32 = 0x20;
 /// Program ROM data.
 mod rom {
     /// Rectangles to erase (column, row, width, height), one per slot: large, then reduced.
-    pub const CLEARS: [u32; 2] = [0x19f02, 0x19f12];
+    use crate::screens::tables::Rom;
+    pub const CLEARS: [Rom; 2] = [Rom::at(0x19f02), Rom::at(0x19f12)];
     /// Origin of the bubble in the text layer, per slot (4 large, then 4 reduced): read
     /// as a PC-relative table, hence in the decrypted program.
-    pub const ORIGINALS: u32 = 0x19f6c;
+    pub const ORIGINALS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x19f6c);
     /// Offsets of the texts (by number) to strings of tile indices terminated by `/`.
-    pub const TEXTS: u32 = 0x1a01a;
+    pub const TEXTS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x1a01a);
     /// Tiles of the bottom edge of the frame (by height remainder from 1 to 8 pixels).
-    pub const EDGES: u32 = 0x1a25e;
+    pub const EDGES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x1a25e);
 }
 
-const TEXT_LAYER: u32 = 0x912000;
-const COLUMN: u32 = 0x80;
+const TEXT_LAYER: u32 = TEXT.base;
+const COLUMN: u32 = TEXT.column;
 /// End of a text string.
 const TEXT_END: u8 = 0x2f;
 /// Frame cells (tile, attribute 0xd): edge of the last column, full edge, and base of the corner cell.
-const EDGE_CURRENT: u32 = 0x1318_000d;
-const EDGE_FULL: u32 = 0x1310_000d;
+const EDGE_CURRENT: u16 = 0x1318;
+const EDGE_FULL: u16 = 0x1310;
 const EDGE_COIN: u16 = 0x1310;
 const ATTR_FRAME: u16 = 0xd;
 const ATTR_TEXT: u16 = 2;
 
 fn reduced(b: &mut Cps2Bus, a5: u32) -> bool {
-    rd8(b, a5 + REDUCED) & 1 != 0
+    Obj(a5).u8(b, REDUCED) & 1 != 0
 }
 
 /// 0x19ee0: erases the bubble of pop-up `entry`.
 fn clear(b: &mut Cps2Bus, a5: u32, entry: u32) {
     let table = rom::CLEARS[reduced(b, a5) as usize];
-    let case = table + 4 * rd8(b, entry) as u32;
-    let (col, row, width, height) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
+    let case = 4 * Obj(entry).u8(b, ID) as u32;
+    clear_box(b, table, case);
+}
+
+/// The rectangle of empty cells described at `case` bytes from `table` (column, row, width, height).
+fn clear_box(b: &mut Cps2Bus, table: Rom, case: u32) {
+    let [col, row, width, height] = [0, 1, 2, 3].map(|k| table.byte(b, case + k));
     clear_cells(b, col, row, width, height);
 }
 
 /// 0x19f24: draws the bubble of pop-up `entry`.
 fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
-    let id = rd16(b, entry);
-    let mut width = rd16(b, entry + 2);
-    let mut height = rd16(b, entry + 4);
+    let id = Obj(entry).u16(b, ID);
+    let mut width = Obj(entry).u16(b, WIDTH);
+    let mut height = Obj(entry).u16(b, HEIGHT);
     if (height as i16) < 0 {
         // parameter absent
         height = 0;
@@ -90,7 +104,7 @@ fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
         width >>= 1;
         height >>= 1;
     }
-    let original = prog16(b, rom::ORIGINALS + slot as u32) as i16 as i32 as u32;
+    let original = rom::ORIGINALS.pc_word(b, slot as u32) as i16 as i32 as u32;
     let a4 = TEXT_LAYER.wrapping_add(original);
     text(b, a4, id, small);
     frame(b, a4, id, small, width as i16, height as i16);
@@ -104,16 +118,15 @@ fn shifted(id: u16, small: bool) -> bool {
 /// 0x19fd2: the text, one tile per cell, in a column.
 fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
     let mut case = a4 + 0x100 + if shifted(id, small) { 4 } else { 0 };
-    let start = prog16(b, rom::TEXTS + 2 * (id & 0xff) as u32) as i16 as i32 as u32;
-    let mut s = rom::TEXTS.wrapping_add(start);
+    let start = rom::TEXTS.pc_word(b, 2 * (id & 0xff) as u32) as i16 as i32 as u32;
+    let mut s = rom::TEXTS.addr().wrapping_add(start);
     loop {
-        let tile = rd8(b, s);
+        let tile = tables::byte(b, s);
         s += 1;
         if tile == TEXT_END {
             return;
         }
-        wr16(b, case, tile as u16);
-        wr16(b, case + 2, ATTR_TEXT);
+        Cell(case).put(b, tile as u16, ATTR_TEXT);
         case += COLUMN;
     }
 }
@@ -128,7 +141,7 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
         if d2 < 0 {
             break;
         }
-        wr32(b, case, EDGE_CURRENT);
+        Cell(case).put(b, EDGE_CURRENT, ATTR_FRAME);
         case += COLUMN;
     }
     loop {
@@ -138,13 +151,11 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
             return;
         }
         if d1 <= 8 {
-            let edge = prog16(b, rom::EDGES.wrapping_add_signed(2 * d1 as i32));
-            wr16(b, case, edge.wrapping_add(d2 as u16));
-            wr16(b, case + 2, ATTR_FRAME);
+            let edge = rom::EDGES.pc_word(b, (2 * d1 as i32) as u32);
+            Cell(case).put(b, edge.wrapping_add(d2 as u16), ATTR_FRAME);
             return;
         }
-        wr16(b, case, EDGE_COIN.wrapping_add(d2 as u16));
-        wr16(b, case + 2, ATTR_FRAME);
+        Cell(case).put(b, EDGE_COIN.wrapping_add(d2 as u16), ATTR_FRAME);
         case += COLUMN;
         d1 = d1.wrapping_sub(8);
         d2 = -8;
@@ -153,7 +164,7 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
             if d1 < 0 {
                 break;
             }
-            wr32(b, case, EDGE_FULL);
+            Cell(case).put(b, EDGE_FULL, ATTR_FRAME);
             case += COLUMN;
         }
     }
@@ -162,21 +173,21 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
 /// Makes the next pop-up of the queue the current pop-up (if there is one) and starts its drawing. Returns the read
 /// index read.
 fn next(b: &mut Cps2Bus, current: u32) -> u8 {
-    let index = rd8(b, A5 + READ);
-    let case = A5 + INPUTS + index as u32;
-    if rd16(b, case) == EMPTY {
+    let index = READ.get(b);
+    let case = Obj(A5 + INPUTS + index as u32);
+    if case.u16(b, ID) == EMPTY {
         return index;
     }
-    for offset in [0, 2, 4, 6] {
-        let word = rd16(b, case + offset);
-        wr16(b, current + offset, word);
-        wr16(b, case + offset, EMPTY);
+    for offset in [ID, WIDTH, HEIGHT, DURATION] {
+        let word = case.u16(b, offset);
+        Obj(current).set_u16(b, offset, word);
+        case.set_u16(b, offset, EMPTY);
     }
-    if rd16(b, current + 4) == 0 {
-        wr16(b, current + DURATION, DEFAULT_DURATION);
+    if Obj(current).u16(b, HEIGHT) == 0 {
+        Obj(current).set_u16(b, DURATION, DEFAULT_DURATION);
     }
     draw(b, A5, current);
-    wr8(b, A5 + READ, index.wrapping_add(ENTRY_SIZE));
+    READ.set(b, index.wrapping_add(ENTRY_SIZE));
     index
 }
 
@@ -184,18 +195,18 @@ fn next(b: &mut Cps2Bus, current: u32) -> u8 {
 /// original). Core.
 pub fn animate_obj(b: &mut Cps2Bus) -> Option<u8> {
     let current = A5.wrapping_add(CURRENT);
-    let duration = rd16(b, current + DURATION);
+    let duration = Obj(current).u16(b, DURATION);
     if duration != 0 {
         let duration = duration - 1;
-        wr16(b, current + DURATION, duration);
+        Obj(current).set_u16(b, DURATION, duration);
         if duration != 0 {
             // the current pop-up continues; if another is waiting, it is cut short
             if duration < SHORT_DURATION {
                 return None;
             }
-            let index = rd8(b, A5 + READ);
-            if rd16(b, A5 + INPUTS + index as u32) != EMPTY {
-                wr16(b, current + DURATION, SHORT_DURATION);
+            let index = READ.get(b);
+            if Obj(A5 + INPUTS + index as u32).u16(b, ID) != EMPTY {
+                Obj(current).set_u16(b, DURATION, SHORT_DURATION);
             }
             return Some(index);
         }
@@ -211,11 +222,9 @@ pub fn clear_all(b: &mut Cps2Bus) -> u32 {
     let table = rom::CLEARS[small as usize];
     let last = if small { 2 } else { 3 };
     for slot in (0..=last).rev() {
-        let case = table + 4 * slot;
-        let (col, row, width, height) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
-        clear_cells(b, col, row, width, height);
+        clear_box(b, table, 4 * slot);
     }
-    table
+    table.addr()
 }
 
 #[cfg(test)]

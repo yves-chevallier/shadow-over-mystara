@@ -3,24 +3,26 @@
 //! A character is a number from 0 to 11: the number (step of 2) and, in bit 0, the color
 //! variant. A player cannot take another player's character.
 
+use crate::ram::Byte;
 use cps2::Cps2Bus;
 
-use super::{panel, player, v8, var, Slot};
-use crate::mem::{rd8, A5};
+use super::{panel, player, var, Slot};
+use crate::mem::A5;
+use crate::objects::Obj;
 
 /// Characters taken (one bit per character and variant): those of the present players, or the one they
 /// have chosen if they are currently choosing (states 8 and 0xc). `except`: a player to ignore (their own).
 fn taken(b: &mut Cps2Bus, except: Option<u32>) -> u32 {
-    let count = 3u8.wrapping_sub(v8(b, var::LAYOUT)) as u32 + 1;
+    let count = 3u8.wrapping_sub(var::LAYOUT.get(b)) as u32 + 1;
     let mut mask = 0u32;
     for k in 0..count {
-        let who = A5 + var::PLAYERS + player::SIZE * k;
+        let who = crate::ram::PLAYERS.nth(k).0;
         let panel_k = A5 + var::PANELS + panel::SIZE * k;
-        if rd8(b, who) == 0 || Some(who) == except {
+        if Obj(who).u8(b, player::ACTIVE) == 0 || Some(who) == except {
             continue;
         }
-        let state = rd8(b, panel_k + panel::STATE);
-        let character = if state == 8 || state == 0xc { rd8(b, panel_k + panel::CHOSEN) } else { rd8(b, who + player::CHARACTER) };
+        let state = Obj(panel_k).u8(b, panel::STATE);
+        let character = if state == 8 || state == 0xc { Obj(panel_k).u8(b, panel::CHOSEN) } else { Obj(who).u8(b, player::CHARACTER) };
         mask |= 1 << (character & 31);
     }
     mask
@@ -94,7 +96,7 @@ pub fn resume_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8
 
 /// 0x173ee: inputs of player `index`: current state and rising edges.
 pub fn inputs(b: &mut Cps2Bus, index: u8) -> (u8, u8) {
-    (rd8(b, A5 + var::INPUT + index as u32), rd8(b, A5 + var::PRESSED + index as u32))
+    (Byte::a5(var::INPUT + index as u32).get(b), Byte::a5(var::PRESSED + index as u32).get(b))
 }
 
 /// D-pad repeat: number of frames before repeating a held movement.

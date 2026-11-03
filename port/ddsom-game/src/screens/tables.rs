@@ -100,17 +100,17 @@ pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
 
 /// Byte of the program space (table read PC-relative).
 pub fn pc_byte(b: &mut Cps2Bus, a: u32) -> u8 {
-    bytes(true, a, 1).map_or_else(|| missing(a).prog8(b, a), |v| v as u8)
+    bytes(true, a, 1).map_or_else(|| missing(a).byte_in(b, a, true), |v| v as u8)
 }
 
 /// Word of the program space.
 pub fn pc_word(b: &mut Cps2Bus, a: u32) -> u16 {
-    bytes(true, a, 2).map_or_else(|| missing(a).prog16(b, a), |v| v as u16)
+    bytes(true, a, 2).map_or_else(|| missing(a).word_in(b, a, true), |v| v as u16)
 }
 
 /// Long of the program space.
 pub fn pc_long(b: &mut Cps2Bus, a: u32) -> u32 {
-    bytes(true, a, 4).unwrap_or_else(|| missing(a).prog32(b, a))
+    bytes(true, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, true))
 }
 
 /// A ROM table or text of the screens, designated by its address (the key the original code uses).

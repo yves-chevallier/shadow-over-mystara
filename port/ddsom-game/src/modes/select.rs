@@ -23,7 +23,10 @@ use super::{Flow, Sequence};
 use crate::scene::fading;
 use crate::dispatch;
 use crate::families::effects_creators::{banner, element_d_interface};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::hw::video::{palette, SCROLL2, SCROLL3};
+use crate::player::Player;
+use crate::ram::{Byte, Long, Word};
+use crate::screens::tables::Rom;
 use crate::objects::{pools, Obj};
 use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::video::{load_grid, clear_layer, Layer, Grid};
@@ -31,71 +34,116 @@ use crate::Native;
 
 /// Work RAM variables (absolute addresses).
 mod var {
-    use crate::mem::A5;
-    /// Game phase, step (bytes), sub-step (word).
-    pub const PHASE: u32 = A5 + 0x2c;
-    pub const STEP: u32 = A5 + 0x2d;
-    pub const SUB: u32 = A5 + 0x2e;
+    use crate::ram::{Byte, Long, Word};
+    /// Game phase, step (bytes), sub-step (word, and its high byte).
+    pub const PHASE: Byte = Byte::a5(0x2c);
+    pub const STEP: Byte = Byte::a5(0x2d);
+    pub const SUB: Word = Word::a5(0x2e);
+    pub const SUB_HIGH: Byte = Byte::a5(0x2e);
     /// Frozen players (!= 0); game active; buttons; mask of players in play.
-    pub const PLAYERS_FROZEN: u32 = A5 + 0x4a;
-    pub const GAME_ACTIVE: u32 = A5 + 0x30;
-    pub const BUTTONS_A: u32 = A5 + 4;
-    pub const BUTTONS_B: u32 = A5 + 0xa;
-    pub const FRAME_COUNTER: u32 = A5 + 0x6f;
-    pub const MODE_FLAG: u32 = A5 + 0x73;
-    pub const SCREEN_ID: u32 = A5 + 0x3c;
-    pub const VIDEO: u32 = A5 + 0x14;
-    /// Fondu.
-    pub const FADE_SOURCES: u32 = A5 + 0x492;
-    pub const SCROLL_1: u32 = A5 + 0x4b6;
-    pub const SCROLL_2: u32 = A5 + 0x4ba;
-    pub const CAMERA: u32 = A5 + 0x506;
-    pub const CAMERA_Y: u32 = A5 + 0x50a;
-    pub const CAMERA_2: u32 = A5 + 0x556;
-    pub const CAMERA_2_Y: u32 = A5 + 0x55a;
+    pub const PLAYERS_FROZEN: Byte = Byte::a5(0x4a);
+    pub const GAME_ACTIVE: Byte = Byte::a5(0x30);
+    pub const BUTTONS_A: Byte = Byte::a5(4);
+    pub const BUTTONS_B: Byte = Byte::a5(0xa);
+    pub const FRAME_COUNTER: Byte = Byte::a5(0x6f);
+    pub const MODE_FLAG: Byte = Byte::a5(0x73);
+    pub const SCREEN_ID: Byte = Byte::a5(0x3c);
+    pub const VIDEO: Word = Word::a5(0x14);
+    /// Rising edges of the buttons, one byte per player.
+    pub const PRESSED: u32 = 0xff_800c;
+    /// Fade from white: the four library palettes it starts from (ROM addresses, longs).
+    pub const FADE_SOURCES: Long = Long::a5(0x492);
+    /// Requested scrolls and cameras (see `vblank.rs`).
+    pub const SCROLL_1: Long = Long::a5(0x4b6);
+    pub const SCROLL_2: Long = Long::a5(0x4ba);
+    pub const CAMERA: Word = Word::a5(0x506);
+    pub const CAMERA_Y: Word = Word::a5(0x50a);
+    pub const CAMERA_2: Word = Word::a5(0x556);
+    pub const CAMERA_2_Y: Word = Word::a5(0x55a);
     /// Blinking announcement: text address (long), x and y.
-    pub const BANNER: u32 = A5 + 0x5c6;
-    pub const BANNER_X: u32 = A5 + 0x5ca;
-    pub const BANNER_Y: u32 = A5 + 0x5cc;
+    pub const BANNER: Long = Long::a5(0x5c6);
+    pub const BANNER_X: Word = Word::a5(0x5ca);
+    pub const BANNER_Y: Word = Word::a5(0x5cc);
     /// Waiting-screen flag (byte at FF0EAB).
-    pub const SCREEN_WAIT: u32 = A5 - 0x7155;
+    pub const SCREEN_WAIT: Byte = Byte(0xff_0eab);
 
     /// Countdown word (high byte: seconds, low byte: frames), cells taken (bits), list of choices.
-    pub const COUNTDOWN: u32 = A5 - 0x6602;
-    pub const COUNTDOWN_TICK: u32 = A5 - 0x6601;
-    pub const TAKEN: u32 = A5 - 0x6600;
-    pub const CHOICES: u32 = A5 - 0x65fe;
-    pub const WORD_9A0E: u32 = A5 - 0x65f2;
-    pub const LINK_9A10: u32 = A5 - 0x65f0;
-    pub const PLAYERS_PRESENT: u32 = A5 - 0x65ee;
-    pub const LOCKED_FLAG: u32 = A5 - 0x65ed;
-    pub const SLOT_LINKS: u32 = A5 - 0x660c;
-    pub const MAIN_LINK: u32 = A5 - 0x6604;
+    pub const COUNTDOWN: Word = Word(0xff_19fe);
+    pub const COUNTDOWN_SECONDS: Byte = Byte(0xff_19fe);
+    pub const COUNTDOWN_TICK: Byte = Byte(0xff_19ff);
+    pub const TAKEN: Word = Word(0xff_1a00);
+    pub const CHOICES: u32 = 0xff_1a02;
+    pub const WORD_9A0E: Word = Word(0xff_1a0e);
+    pub const LINK_9A10: Word = Word(0xff_1a10);
+    pub const PLAYERS_PRESENT: Byte = Byte(0xff_1a12);
+    pub const LOCKED_FLAG: Byte = Byte(0xff_1a13);
+    pub const SLOT_LINKS: u32 = 0xff_19f4;
+    pub const MAIN_LINK: Word = Word(0xff_19fc);
 }
 
 /// ROM tables: variant bytes per character (code), announcements, cursor moves (data). The
 /// initialisation routines of the four players (0x1d0f6) are those of `player::init::initialize`.
 mod table {
-    pub const VARIANT: u32 = 0x1d118;
-    pub const BANNERS: u32 = 0x1d3aa;
-    pub const CURSOR_DOWN_DELTAS: u32 = 0x1d6d2;
-    pub const CURSOR_UP_DELTAS: u32 = 0x1d6cc;
+    use crate::screens::tables::Rom;
+    pub const VARIANT: Rom = Rom::at(0x1d118);
+    pub const BANNERS: Rom = Rom::at(0x1d3aa);
+    pub const CURSOR_DOWN_DELTAS: Rom = Rom::at(0x1d6d2);
+    pub const CURSOR_UP_DELTAS: Rom = Rom::at(0x1d6cc);
+}
+
+/// Fields of the interface elements of the screen (EFFCT objects `element_d_interface`): kind of element
+/// (`+3`: 0 the main element, 1 a cursor, 2 a marker, 3 the counter, 4 a cell), slot (`+0x2f`), main element
+/// (`+0x1e`, word), the choices published by the main element, the counter's seconds.
+mod el {
+    use crate::objects::Obj;
+    pub const KIND: u32 = Obj::VARIANT;
+    pub const SLOT: u32 = 0x2f;
+    pub const MAIN: u32 = 0x1e;
+    pub const CHOICES: u32 = 0x08;
+    pub const TAKEN: u32 = 0x14;
+    pub const LOCKED: u32 = 0x18;
+    pub const SHOWN: u32 = 0x1c;
+    pub const SECONDS: u32 = 0x14;
+    pub const FRACTION: u32 = 0x15;
+    /// Cursor: parity of the cell of its player.
+    pub const PARITY: u32 = 0x16;
+    /// Announcement banner: the variable it watches (long).
+    pub const WATCHED: u32 = 0x58;
+}
+
+/// Player fields of the selection: the cursor (`+3`, the character, bit 7: confirmed), selected (`+0x192`).
+const SELECTED: u32 = 0x192;
+/// Selection family, and the setting of character 5 (`hud::player`).
+const SELECTION_KIND: u32 = 0x15d;
+const SETTING_16B: u32 = 0x16b;
+/// Set when a player of character 5 starts (byte `+0x3f` of the record at `A5-0x5b88`, h).
+const CHARACTER_5_FLAG: Byte = Byte(0xff_2478 + 0x3f);
+
+/// Byte `i` of the list of choices (two places per character).
+fn choice(i: u32) -> Byte {
+    Byte(var::CHOICES + i)
+}
+
+/// Element of the interface linked to slot `k`.
+fn slot_link(k: u32) -> Word {
+    Word(var::SLOT_LINKS + 2 * k)
 }
 
 const SLOTS: usize = 12;
+/// Library palettes the opening fade from white starts from.
+const FADE_SOURCES: [Rom; 4] = [Rom::at(0x28ff00), Rom::at(0x25c0c0), Rom::at(0x279460), Rom::at(0x28c6e0)];
+/// Where the blocks of layers 2 and 3 of the screens are loaded.
+const LAYER2_BLOCKS: u32 = SCROLL2.0 + 0x3000;
+const LAYER3_BLOCKS: u32 = SCROLL3.0 + 0x3800;
 const COUNTDOWN_START: u16 = 0x1432;
-
-fn prog32(x: &mut Ctx, addr: u32) -> u32 {
-    (x.prog16(addr) as u32) << 16 | x.prog16(addr + 2) as u32
-}
 
 /// Program-space word sign-extended (`movea.w` address).
 fn sign_ext(v: u16) -> u32 {
     v as i16 as i32 as u32 & 0xff_ffff
 }
 
-fn player(k: u32) -> u32 {
-    PLAYERS + k * PLAYER_STRIDE
+fn player(k: u32) -> Obj {
+    Obj(PLAYERS + k * PLAYER_STRIDE)
 }
 
 /// Dispatch of the objects of the given classes, then the sprite list (`jsr 0x39cba`... `jsr 0x1de96`).
@@ -114,7 +162,7 @@ fn two_blocks(x: &mut Ctx, grid: Grid, n: u16, destination: u32) {
 
 /// Phase 4 of the game (`0x1ca20`): the selection screen, one step per frame.
 pub fn phase_4(x: &mut Ctx) -> Flow {
-    let step = rd8(x.b, var::STEP);
+    let step = var::STEP.get(x.b);
     match step {
         0 => step_0(x),
         2 => step_2(x),
@@ -132,131 +180,131 @@ pub fn phase_4(x: &mut Ctx) -> Flow {
 // Step 0: selection screen
 
 fn step_0(x: &mut Ctx) -> Flow {
-    wr8(x.b, var::SCREEN_WAIT, 0);
-    let s = rd8(x.b, var::STEP).wrapping_add(2);
-    wr8(x.b, var::STEP, s);
-    wr8(x.b, var::SUB, 0);
+    var::SCREEN_WAIT.set(x.b, 0);
+    let s = var::STEP.get(x.b).wrapping_add(2);
+    var::STEP.set(x.b, s);
+    var::SUB_HIGH.set(x.b, 0);
     crate::video::clear_objects(x.b);
     for pool in [&crate::objects::pools::EFFCT, &crate::objects::pools::SET, &crate::objects::pools::SOBJ] {
         pool.reset(x.b);
     }
     crate::sprites::clear_lists(x.b);
-    wr32(x.b, var::SCROLL_1, 0);
-    wr32(x.b, var::SCROLL_2, 0);
+    var::SCROLL_1.set(x.b, 0);
+    var::SCROLL_2.set(x.b, 0);
     // starting cursor of each player: one cell bit per player
     for (k, cell) in [0u8, 2, 4, 8].into_iter().enumerate() {
-        wr8(x.b, player(k as u32) + 3, cell);
+        player(k as u32).set_u8(x.b, Player::CHARACTER, cell);
     }
-    for off in [0x770u32, 0x970, 0xb70, 0xd70] {
-        wr8(x.b, A5 + off, 0);
+    for k in 0..4 {
+        player(k).set_u8(x.b, SELECTED, 0);
     }
-    for off in [0x6f6u32, 0x6fa, 0x8f6, 0x8fa, 0xaf6, 0xafa, 0xcf6, 0xcfa] {
-        wr32(x.b, A5 + off, 0xffff_ffff);
+    for k in 0..4 {
+        for half in [0, 4] {
+            player(k).set_u32(x.b, crate::hud::player::ITEMS + half, 0xffff_ffff);
+        }
     }
-    wr16(x.b, var::TAKEN, 0);
-    wr16(x.b, var::WORD_9A0E, 0);
-    wr8(x.b, var::LOCKED_FLAG, 0);
-    wr16(x.b, var::CAMERA, 0x20);
-    wr16(x.b, var::CAMERA_Y, 0x20);
-    wr16(x.b, var::CAMERA_2_Y, 0x30);
-    wr16(x.b, var::CAMERA_2, 0x10);
-    wr16(x.b, var::CAMERA_2_Y, 0xfff8);
+    var::TAKEN.set(x.b, 0);
+    var::WORD_9A0E.set(x.b, 0);
+    var::LOCKED_FLAG.set(x.b, 0);
+    var::CAMERA.set(x.b, 0x20);
+    var::CAMERA_Y.set(x.b, 0x20);
+    var::CAMERA_2_Y.set(x.b, 0x30);
+    var::CAMERA_2.set(x.b, 0x10);
+    var::CAMERA_2_Y.set(x.b, 0xfff8);
     for off in [0u32, 4, 8] {
-        wr32(x.b, var::CHOICES + off, 0xffff_ffff);
+        Long(var::CHOICES + off).set(x.b, 0xffff_ffff);
     }
     crate::hud::forget_displayed(x.b);
     crate::sound::play_global(x.b, crate::sound::CMD_02);
-    wr16(x.b, var::COUNTDOWN, 0x203c);
-    wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);
+    var::COUNTDOWN.set(x.b, 0x203c);
+    var::COUNTDOWN.set(x.b, COUNTDOWN_START);
     objects_0(x)
 }
 
 /// Creates the screen objects: four cursors, a panel, six markers, a counter, eight
 /// cells; if a pool is full the step stops (the original exits without undoing anything).
 fn objects_0(x: &mut Ctx) -> Flow {
-    let mut links = var::SLOT_LINKS;
+    let mut link = 0;
     for slot in (0..4u32).rev() {
-        let Some(Obj(o)) = element_d_interface(x.b) else {
+        let Some(o) = element_d_interface(x.b) else {
             return Flow::Done;
         };
-        wr8(x.b, o + 3, 1);
-        wr8(x.b, o + 0x2f, slot as u8);
-        wr16(x.b, links, o as u16);
-        links += 2;
+        o.set_u8(x.b, el::KIND, 1);
+        o.set_u8(x.b, el::SLOT, slot as u8);
+        slot_link(link).set(x.b, o.0 as u16);
+        link += 1;
     }
-    let Some(Obj(main)) = element_d_interface(x.b) else {
+    let Some(main) = element_d_interface(x.b) else {
         return Flow::Done;
     };
-    wr8(x.b, main + 3, 0);
-    wr8(x.b, main + 0x1c, 0);
-    wr16(x.b, var::MAIN_LINK, main as u16);
+    main.set_u8(x.b, el::KIND, 0);
+    main.set_u8(x.b, el::SHOWN, 0);
+    var::MAIN_LINK.set(x.b, main.0 as u16);
     publish_choices(x, main);
     for k in 0..4u32 {
-        let o = sign_ext(rd16(x.b, var::SLOT_LINKS + 2 * k));
-        wr16(x.b, o + 0x1e, main as u16);
+        let o = Obj(sign_ext(slot_link(k).get(x.b)));
+        o.set_u16(x.b, el::MAIN, main.0 as u16);
     }
     for slot in (0..6u32).rev() {
-        let Some(Obj(o)) = element_d_interface(x.b) else {
+        let Some(o) = element_d_interface(x.b) else {
             return Flow::Done;
         };
-        wr8(x.b, o + 3, 2);
-        wr8(x.b, o + 0x2f, slot as u8);
-        wr16(x.b, o + 0x1e, main as u16);
+        o.set_u8(x.b, el::KIND, 2);
+        o.set_u8(x.b, el::SLOT, slot as u8);
+        o.set_u16(x.b, el::MAIN, main.0 as u16);
     }
-    let Some(Obj(o)) = element_d_interface(x.b) else {
+    let Some(o) = element_d_interface(x.b) else {
         return Flow::Done;
     };
-    wr8(x.b, o + 3, 3);
-    wr8(x.b, o + 0x2f, 0);
-    wr16(x.b, var::LINK_9A10, o as u16);
-    let seconds = rd8(x.b, var::COUNTDOWN);
-    wr8(x.b, o + 0x14, seconds);
-    wr8(x.b, o + 0x15, 0);
+    o.set_u8(x.b, el::KIND, 3);
+    o.set_u8(x.b, el::SLOT, 0);
+    var::LINK_9A10.set(x.b, o.0 as u16);
+    let seconds = var::COUNTDOWN_SECONDS.get(x.b);
+    o.set_u8(x.b, el::SECONDS, seconds);
+    o.set_u8(x.b, el::FRACTION, 0);
     for slot in (0..8u32).rev() {
-        let Some(Obj(o)) = element_d_interface(x.b) else {
+        let Some(o) = element_d_interface(x.b) else {
             return Flow::Done;
         };
-        wr8(x.b, o + 3, 4);
-        wr8(x.b, o + 0x2f, slot as u8);
+        o.set_u8(x.b, el::KIND, 4);
+        o.set_u8(x.b, el::SLOT, slot as u8);
     }
     render(x, &[&dispatch::EFFCT]);
     x.wait(2, Step::FadeStart)
 }
-const FADE_START: u32 = 0x1cc0c;
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        FadeStart = FADE_START => |x| {
+        FadeStart = 0x1cc0c => |x| {
             fading::DELAY.set(x.b, 1);
             fading::PAGES.set(x.b, 0xf);
-            wr32(x.b, var::FADE_SOURCES, 0x28ff00);
-            wr32(x.b, var::FADE_SOURCES + 4, 0x25c0c0);
-            wr32(x.b, var::FADE_SOURCES + 8, 0x279460);
-            wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
-            create_task(x, crate::scene::fading::FROM_WHITE, 0x10);
+            for (k, source) in FADE_SOURCES.into_iter().enumerate() {
+                Long(var::FADE_SOURCES.0 + 4 * k as u32).set(x.b, source.addr());
+            }
+            create_task(x, crate::scene::fading::FROM_WHITE.0, 0x10);
             fading::STEP.set(x.b, 1);
-            two_blocks(x, Grid::Layer2, 0x203, 0x917000);
-            two_blocks(x, Grid::Layer3, 0xfc, 0x91b800);
-            wr16(x.b, var::VIDEO, 0x12ce);
+            two_blocks(x, Grid::Layer2, 0x203, LAYER2_BLOCKS);
+            two_blocks(x, Grid::Layer3, 0xfc, LAYER3_BLOCKS);
+            var::VIDEO.set(x.b, 0x12ce);
             fade_wait(x)
         },
-        FadeLoop = FADE_LOOP => fade_wait,
-        Step6Faded = STEP_6_FADED => |x| {
+        FadeLoop = 0x1cca4 => fade_wait,
+        Step6Faded = 0x1d19c => |x| {
             dispatch::EFFCT.update_no_next(x.b);
             crate::objects::pools::EFFCT.reset(x.b);
             crate::sprites::clear_lists(x.b);
             crate::sprites::build_in_game(x.b);
-            let v = rd16(x.b, var::VIDEO) & !0xe;
-            wr16(x.b, var::VIDEO, v);
+            let v = var::VIDEO.get(x.b) & !0xe;
+            var::VIDEO.set(x.b, v);
             x.wait(1, Step::Step6Clear)
         },
-        Step6Clear = STEP_6_CLEAR => |x| {
-            wr8(x.b, var::SCREEN_ID, 0xff);
+        Step6Clear = 0x1d1c2 => |x| {
+            var::SCREEN_ID.set(x.b, 0xff);
             crate::video::clear_objects(x.b);
             clear_layers(x);
             x.wait(4, Step::Step6Palette)
         },
-        Step6Palette = STEP_6_PALETTE => |x| {
+        Step6Palette = 0x1d1e8 => |x| {
             // 0x1a608 (page 1 takes entry 0), 0x1a67e, 0x1a8b2, 0x1a3d4
             crate::palette::load_scene_page(x.b, 1);
             crate::palette::load_palette_page(x.b, 2, 0x56);
@@ -264,41 +312,43 @@ crate::steps! {
             crate::palette::load_palette_set(x.b, 3);
             for i in 0..8 {
                 for j in 0..8 {
-                    wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
+                    palette(0, 16 * i + 2 * j).set_long(x.b, 0);
                 }
             }
             fading::PAGES.set(x.b, 0xf);
             crate::palette::full_brightness(x.b);
-            for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
-                wr32(x.b, v, 0);
+            var::SCROLL_1.set(x.b, 0);
+            var::SCROLL_2.set(x.b, 0);
+            for v in [var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
+                Long(v.0).set(x.b, 0);
             }
             Flow::Done
         },
-        Step8Show = STEP_8_SHOW => |x| {
-            let v = rd16(x.b, var::VIDEO) | 0xe;
-            wr16(x.b, var::VIDEO, v);
+        Step8Show = 0x1d31c => |x| {
+            let v = var::VIDEO.get(x.b) | 0xe;
+            var::VIDEO.set(x.b, v);
             crate::tasks::wait_then_return(x, 1)
         },
-        StepEFaded = STEP_E_FADED => |x| {
+        StepEFaded = 0x1d498 => |x| {
             crate::objects::pools::SET.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
             crate::sprites::clear_lists(x.b);
             crate::video::clear_objects(x.b);
             x.wait(1, Step::StepEHide)
         },
-        StepEHide = STEP_E_HIDE => |x| {
-            let v = rd16(x.b, var::VIDEO) & !0xe;
-            wr16(x.b, var::VIDEO, v);
+        StepEHide = 0x1d4b8 => |x| {
+            let v = var::VIDEO.get(x.b) & !0xe;
+            var::VIDEO.set(x.b, v);
             x.wait(1, Step::StepEClear)
         },
-        StepEClear = STEP_E_CLEAR => |x| {
+        StepEClear = 0x1d4c6 => |x| {
             clear_layers(x);
             x.wait(4, Step::StepEFade)
         },
-        StepEFade = STEP_E_FADE => |x| {
+        StepEFade = 0x1d4e0 => |x| {
             fading::DELAY.set(x.b, 3);
             fading::PAGES.set(x.b, 0xf);
-            create_task(x, crate::scene::fading::RISE, 0x10);
+            create_task(x, crate::scene::fading::RISE.0, 0x10);
             Flow::Done
         },
     }
@@ -309,9 +359,9 @@ fn fade_wait(x: &mut Ctx) -> Flow {
         render(x, &[&dispatch::EFFCT]);
         return x.wait(1, Step::FadeLoop);
     }
-    wr8(x.b, var::SCREEN_ID, 3);
-    let main = sign_ext(rd16(x.b, var::MAIN_LINK));
-    wr8(x.b, main + 0x1c, 1);
+    var::SCREEN_ID.set(x.b, 3);
+    let main = Obj(sign_ext(var::MAIN_LINK.get(x.b)));
+    main.set_u8(x.b, el::SHOWN, 1);
     // `jmp 0x1de96` at the end
     render(x, &[&dispatch::EFFCT]);
     Flow::Done
@@ -323,7 +373,6 @@ fn clear_layers(x: &mut Ctx) {
         clear_layer(x.b, layer);
     }
 }
-const FADE_LOOP: u32 = 0x1cca4;
 
 /// Creates the entry task `entry` in slot `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
@@ -337,36 +386,36 @@ fn step_2(x: &mut Ctx) -> Flow {
     count_players(x);
     if countdown(x) {
         // countdown over: continue
-        wr8(x.b, var::STEP, 4);
-        wr8(x.b, var::PLAYERS_FROZEN, 1);
+        var::STEP.set(x.b, 4);
+        var::PLAYERS_FROZEN.set(x.b, 1);
     }
     for k in 0..4 {
         let p = player(k);
-        if rd8(x.b, p) != 0 {
+        if p.u8(x.b, Player::ACTIVE) != 0 {
             cursor(x, p);
         }
     }
     queue(x);
     mark_choices(x);
     check_all_chosen(x);
-    let main = sign_ext(rd16(x.b, var::MAIN_LINK));
+    let main = Obj(sign_ext(var::MAIN_LINK.get(x.b)));
     publish_choices(x, main);
-    wr8(x.b, var::LOCKED_FLAG, 0);
+    var::LOCKED_FLAG.set(x.b, 0);
     // `jmp 0x1de96` at the end
     render(x, &[&dispatch::EFFCT]);
     Flow::Done
 }
 
 /// Copies the players' choices into the main object (read by the cursor objects).
-fn publish_choices(x: &mut Ctx, main: u32) {
+fn publish_choices(x: &mut Ctx, main: Obj) {
     for k in 0..3u32 {
-        let v = rd32(x.b, var::CHOICES + 4 * k);
-        wr32(x.b, main + 8 + 4 * k, v);
+        let v = Long(var::CHOICES + 4 * k).get(x.b);
+        main.set_u32(x.b, el::CHOICES + 4 * k, v);
     }
-    let v = rd16(x.b, var::WORD_9A0E);
-    wr16(x.b, main + 0x14, v);
-    let v = rd8(x.b, var::LOCKED_FLAG);
-    wr8(x.b, main + 0x18, v);
+    let v = var::WORD_9A0E.get(x.b);
+    main.set_u16(x.b, el::TAKEN, v);
+    let v = var::LOCKED_FLAG.get(x.b);
+    main.set_u8(x.b, el::LOCKED, v);
 }
 
 /// `0x1d6d8`: counts the present players and re-arms the countdown when their number changes.
@@ -374,66 +423,66 @@ fn count_players(x: &mut Ctx) {
     let mut n = 0u8;
     for k in 0..4 {
         let p = player(k);
-        if rd8(x.b, p) != 0 {
+        if p.u8(x.b, Player::ACTIVE) != 0 {
             n += 1;
-            wr8(x.b, p + 0x192, 1);
+            p.set_u8(x.b, SELECTED, 1);
         }
     }
-    if n != rd8(x.b, var::PLAYERS_PRESENT) {
-        wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);
-        let panel = sign_ext(rd16(x.b, var::LINK_9A10));
-        wr8(x.b, panel + 0x14, 20);
+    if n != var::PLAYERS_PRESENT.get(x.b) {
+        var::COUNTDOWN.set(x.b, COUNTDOWN_START);
+        let panel = Obj(sign_ext(var::LINK_9A10.get(x.b)));
+        panel.set_u8(x.b, el::SECONDS, 20);
     }
-    wr8(x.b, var::PLAYERS_PRESENT, n);
+    var::PLAYERS_PRESENT.set(x.b, n);
 }
 
 /// `0x1d802`: one frame of the countdown; true when the seconds have elapsed (Z flag of the original).
 fn countdown(x: &mut Ctx) -> bool {
-    let tick = rd8(x.b, var::COUNTDOWN_TICK).wrapping_sub(1);
-    wr8(x.b, var::COUNTDOWN_TICK, tick);
+    let tick = var::COUNTDOWN_TICK.get(x.b).wrapping_sub(1);
+    var::COUNTDOWN_TICK.set(x.b, tick);
     if tick != 0 {
         return false;
     }
-    let seconds = rd8(x.b, var::COUNTDOWN);
+    let seconds = var::COUNTDOWN_SECONDS.get(x.b);
     if seconds == 0 {
         return true;
     }
     let seconds = seconds - 1;
-    wr8(x.b, var::COUNTDOWN, seconds);
-    let panel = sign_ext(rd16(x.b, var::LINK_9A10));
-    wr8(x.b, panel + 0x14, seconds);
-    wr8(x.b, var::COUNTDOWN_TICK, 50);
+    var::COUNTDOWN_SECONDS.set(x.b, seconds);
+    let panel = Obj(sign_ext(var::LINK_9A10.get(x.b)));
+    panel.set_u8(x.b, el::SECONDS, seconds);
+    var::COUNTDOWN_TICK.set(x.b, 50);
     false
 }
 
 /// `0x1d584`: cursor of player `a0` (cells 0 to 11, two per character).
-fn cursor(x: &mut Ctx, a0: u32) {
-    if rd8(x.b, a0 + 3) & 0x80 != 0 {
+fn cursor(x: &mut Ctx, a0: Obj) {
+    if a0.u8(x.b, Player::CHARACTER) & 0x80 != 0 {
         return;
     }
     dedupe(x, a0);
-    let d1 = crate::inputs::player_inputs(x.b, a0).fresh;
-    let mut d3 = rd8(x.b, a0 + 3) as u32;
-    let slot = rd8(x.b, a0 + 2);
+    let d1 = crate::inputs::player_inputs(x.b, a0.0).fresh;
+    let mut d3 = a0.u8(x.b, Player::CHARACTER) as u32;
+    let slot = a0.u8(x.b, Player::INDEX);
     let mut d0: u8 = 0;
     loop {
         let d5 = ((d3 as u8) >> 1) as u32;
         if d1 & 2 != 0 {
-            d0 = rd8(x.b, table::CURSOR_DOWN_DELTAS + d5);
+            d0 = table::CURSOR_DOWN_DELTAS.byte(x.b, d5);
         }
         if d1 & 1 != 0 {
-            d0 = rd8(x.b, table::CURSOR_UP_DELTAS + d5);
+            d0 = table::CURSOR_UP_DELTAS.byte(x.b, d5);
         }
         if d0 == 0 {
             break;
         }
         // frees the cell being left
-        let mut cell = var::CHOICES + (d3 & 0xffff);
-        if rd8(x.b, cell) == slot || {
+        let mut cell = d3 & 0xffff;
+        if choice(cell).get(x.b) == slot || {
             cell += 1;
-            rd8(x.b, cell) == slot
+            choice(cell).get(x.b) == slot
         } {
-            wr8(x.b, cell, 0xff);
+            choice(cell).set(x.b, 0xff);
         }
         // new cell, wrapping around to the other end
         let mut n = (d3 as u8).wrapping_add(d0);
@@ -444,118 +493,117 @@ fn cursor(x: &mut Ctx, a0: u32) {
             n = 0;
         }
         d3 = n as u32;
-        let first = var::CHOICES + d3;
-        if rd8(x.b, first) & 0x80 != 0 {
-            wr8(x.b, first, slot);
+        if choice(d3).get(x.b) & 0x80 != 0 {
+            choice(d3).set(x.b, slot);
             break;
         }
-        if rd8(x.b, first + 1) & 0x80 != 0 {
-            wr8(x.b, first + 1, slot);
+        if choice(d3 + 1).get(x.b) & 0x80 != 0 {
+            choice(d3 + 1).set(x.b, slot);
             break;
         }
     }
     // validation
     d0 = 0;
     let mut lock = true;
-    if rd16(x.b, var::COUNTDOWN) != 0 && d1 & 0xf0 == 0 {
+    if var::COUNTDOWN.get(x.b) != 0 && d1 & 0xf0 == 0 {
             let s = slot as u32;
             d0 = 1;
-            let held = !rd8(x.b, var::BUTTONS_B) & rd8(x.b, var::BUTTONS_A);
+            let held = !var::BUTTONS_B.get(x.b) & var::BUTTONS_A.get(x.b);
             lock = (held >> s) & 1 != 0;
         }
     if lock {
-        let mut taken = rd16(x.b, var::TAKEN) as u32;
+        let mut taken = var::TAKEN.get(x.b) as u32;
         taken |= 1 << (d3 & 31);
-        wr16(x.b, var::TAKEN, taken as u16);
-        let mut other = rd16(x.b, var::WORD_9A0E) as u32;
+        var::TAKEN.set(x.b, taken as u16);
+        let mut other = var::WORD_9A0E.get(x.b) as u32;
         d3 = (d3 as u8).wrapping_add(d0) as u32;
         if (other >> (d3 & 31)) & 1 != 0 {
             d3 ^= 1;
         }
         other |= 1 << (d3 & 31);
-        wr16(x.b, var::WORD_9A0E, other as u16);
+        var::WORD_9A0E.set(x.b, other as u16);
         // 0x2e630: character stat (development card only). Original glitch: it receives D0.w, of which only the low
         // byte is the choice; the high byte is left over from previous calls: taken as zero (the development card is
         // never there, code-mort.md)
         crate::eeprom::stat_chosen_character(x.b, (d3 & 0xff) as u16);
         d3 |= 0x80;
-        wr8(x.b, var::LOCKED_FLAG, 1);
+        var::LOCKED_FLAG.set(x.b, 1);
     }
-    wr8(x.b, a0 + 3, d3 as u8);
+    a0.set_u8(x.b, Player::CHARACTER, d3 as u8);
 }
 
 /// `0x1d714`: the player must not occupy another player's cell; otherwise he advances two cells.
-fn dedupe(x: &mut Ctx, a0: u32) {
+fn dedupe(x: &mut Ctx, a0: Obj) {
     loop {
-        let cell = rd8(x.b, a0 + 3) as u32;
-        let a1 = var::CHOICES + cell;
-        let slot = rd8(x.b, a0 + 2);
-        let first = rd8(x.b, a1);
+        let cell = a0.u8(x.b, Player::CHARACTER) as u32;
+        let (a1, a2) = (choice(cell), choice(cell + 1));
+        let slot = a0.u8(x.b, Player::INDEX);
+        let first = a1.get(x.b);
         if first & 0x80 != 0 || first == slot {
             // the first place is free or mine: the second must not be mine
-            if rd8(x.b, a1 + 1) != slot {
-                wr8(x.b, a1, slot);
+            if a2.get(x.b) != slot {
+                a1.set(x.b, slot);
             }
             return;
         }
-        let second = rd8(x.b, a1 + 1);
+        let second = a2.get(x.b);
         if second & 0x80 != 0 {
-            wr8(x.b, a1 + 1, slot);
+            a2.set(x.b, slot);
             return;
         }
         if second == slot {
             return;
         }
-        let mut n = rd8(x.b, a0 + 3).wrapping_add(2);
+        let mut n = a0.u8(x.b, Player::CHARACTER).wrapping_add(2);
         if n > 12 {
             n = 0;
         }
-        wr8(x.b, a0 + 3, n);
+        a0.set_u8(x.b, Player::CHARACTER, n);
     }
 }
 
 /// `0x1d760`: a player who has not confirmed and whose neighbouring cell was freed takes the first place.
 fn queue(x: &mut Ctx) {
-    let taken = rd16(x.b, var::TAKEN) as u32;
+    let taken = var::TAKEN.get(x.b) as u32;
     for k in 0..6u32 {
-        let a1 = var::CHOICES + 2 * k;
-        if rd8(x.b, a1) & 0x80 == 0 {
+        let (a1, a2) = (choice(2 * k), choice(2 * k + 1));
+        if a1.get(x.b) & 0x80 == 0 {
             continue;
         }
-        let other = rd8(x.b, a1 + 1);
+        let other = a2.get(x.b);
         if other & 0x80 != 0 || (taken >> (2 * k)) & 1 != 0 {
             continue;
         }
-        wr8(x.b, a1, other);
-        wr8(x.b, a1 + 1, 0xff);
+        a1.set(x.b, other);
+        a2.set(x.b, 0xff);
     }
 }
 
 /// `0x1d794`: for each cell cursor, `+0x16` = parity of the cell occupied by its player.
 fn mark_choices(x: &mut Ctx) {
     for k in 0..4u32 {
-        let o = sign_ext(rd16(x.b, var::SLOT_LINKS + 2 * k));
-        let slot = rd8(x.b, o + 0x2f);
+        let o = Obj(sign_ext(slot_link(k).get(x.b)));
+        let slot = o.u8(x.b, el::SLOT);
         let mut parity = 0u8;
         for i in 0..SLOTS as u32 {
-            if rd8(x.b, var::CHOICES + i) == slot {
+            if choice(i).get(x.b) == slot {
                 break;
             }
             parity ^= 1;
         }
-        wr8(x.b, o + 0x16, parity);
+        o.set_u8(x.b, el::PARITY, parity);
     }
 }
 
 /// `0x1d7c0`: if all present players have confirmed, moves to step 4.
 fn check_all_chosen(x: &mut Ctx) {
-    if rd8(x.b, var::STEP) != 4 {
-        let mut left = rd8(x.b, var::PLAYERS_PRESENT);
+    if var::STEP.get(x.b) != 4 {
+        let mut left = var::PLAYERS_PRESENT.get(x.b);
         for k in 0..4 {
-            if rd8(x.b, player(k) + 3) & 0x80 != 0 {
+            if player(k).u8(x.b, Player::CHARACTER) & 0x80 != 0 {
                 left = left.wrapping_sub(1);
                 if left == 0 {
-                    wr8(x.b, var::STEP, 4);
+                    var::STEP.set(x.b, 4);
                     freeze(x);
                     return;
                 }
@@ -566,8 +614,8 @@ fn check_all_chosen(x: &mut Ctx) {
     freeze(x);
 }
 fn freeze(x: &mut Ctx) {
-    wr8(x.b, var::COUNTDOWN, 30);
-    wr8(x.b, var::PLAYERS_FROZEN, 1);
+    var::COUNTDOWN_SECONDS.set(x.b, 30);
+    var::PLAYERS_FROZEN.set(x.b, 1);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -575,11 +623,11 @@ fn freeze(x: &mut Ctx) {
 
 fn step_4(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::EFFCT]);
-    let left = rd8(x.b, var::COUNTDOWN).wrapping_sub(1);
-    wr8(x.b, var::COUNTDOWN, left);
+    let left = var::COUNTDOWN_SECONDS.get(x.b).wrapping_sub(1);
+    var::COUNTDOWN_SECONDS.set(x.b, left);
     if left == 0 {
-        let s = rd8(x.b, var::STEP).wrapping_add(2);
-        wr8(x.b, var::STEP, s);
+        let s = var::STEP.get(x.b).wrapping_add(2);
+        var::STEP.set(x.b, s);
     }
     Flow::Done
 }
@@ -588,26 +636,26 @@ fn step_4(x: &mut Ctx) -> Flow {
 // Step 6: characters frozen, fade
 
 fn step_6(x: &mut Ctx) -> Flow {
-    let s = rd8(x.b, var::STEP).wrapping_add(2);
-    wr8(x.b, var::STEP, s);
+    let s = var::STEP.get(x.b).wrapping_add(2);
+    var::STEP.set(x.b, s);
     for k in 0..4 {
         let p = player(k);
-        if rd8(x.b, p) == 0 {
+        if p.u8(x.b, Player::ACTIVE) == 0 {
             continue;
         }
-        let cell = rd8(x.b, p + 3) & 0x7f;
-        wr8(x.b, p + 3, cell);
-        let variant = x.prog8(table::VARIANT + (cell as u32 >> 1));
-        wr8(x.b, p + 0x15d, variant);
+        let cell = p.u8(x.b, Player::CHARACTER) & 0x7f;
+        p.set_u8(x.b, Player::CHARACTER, cell);
+        let variant = table::VARIANT.pc_byte(x.b, cell as u32 >> 1);
+        p.set_u8(x.b, SELECTION_KIND, variant);
         // the routine of table 0x1d0f6 (`movea.w`, called with A0 = the player) is the initialisation of the
         // player of that number (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
-        let kind = rd8(x.b, p + 2) as u32;
+        let kind = p.u8(x.b, Player::INDEX) as u32;
         assert!(kind < 4, "selection: player {kind} outside table 0x1d0f6");
         crate::player::init::initialize(x.b, kind);
-        if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
-            wr8(x.b, p + 0x162, 1);
-            wr8(x.b, p + 0x16b, 5);
-            wr8(x.b, 0xff2478 + 0x3f, 1);
+        if (p.u8(x.b, Player::CHARACTER) & 0x7f) >> 1 == 5 {
+            p.set_u8(x.b, Player::SPEED_CLASS, 1);
+            p.set_u8(x.b, SETTING_16B, 5);
+            CHARACTER_5_FLAG.set(x.b, 1);
         }
     }
     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 0x1c });
@@ -615,56 +663,52 @@ fn step_6(x: &mut Ctx) -> Flow {
     fading::PAGES.set(x.b, 0xf);
     x.subroutine(crate::tasks::fading::descent, Step::Step6Faded)
 }
-const STEP_6_FADED: u32 = 0x1d19c;
-const STEP_6_CLEAR: u32 = 0x1d1c2;
-const STEP_6_PALETTE: u32 = 0x1d1e8;
 
 // ---------------------------------------------------------------------------------------------
 // Step 8: second screen
 
 fn step_8(x: &mut Ctx) -> Flow {
-    let s = rd8(x.b, var::STEP).wrapping_add(2);
-    wr8(x.b, var::STEP, s);
+    let s = var::STEP.get(x.b).wrapping_add(2);
+    var::STEP.set(x.b, s);
     crate::sound::service(x.b, crate::sound::Service::Ff06 { lock: 0xff, line: 4 });
     crate::sound::play_global(x.b, crate::sound::CMD_2A);
-    two_blocks(x, Grid::Layer2, 0x208, 0x917000);
-    two_blocks(x, Grid::Layer3, 0x14a, 0x91b800);
+    two_blocks(x, Grid::Layer2, 0x208, LAYER2_BLOCKS);
+    two_blocks(x, Grid::Layer3, 0x14a, LAYER3_BLOCKS);
     let mut count = 0u8;
     for counter in (0..2u8).rev() {
         // the variant of the panel is the loop counter of the `dbf` (D0)
-        let Some(Obj(o)) = banner(x.b, counter) else { break };
-        wr32(x.b, o + 0x58, var::PLAYERS_PRESENT);
+        let Some(o) = banner(x.b, counter) else { break };
+        o.set_u32(x.b, el::WATCHED, var::PLAYERS_PRESENT.0);
         count = count.wrapping_add(1);
     }
-    wr8(x.b, var::PLAYERS_PRESENT, count);
+    var::PLAYERS_PRESENT.set(x.b, count);
     let mut d4 = 0xeau8;
     for _ in 0..2 {
-        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
-        wr8(x.b, o, 1);
-        wr8(x.b, o + 2, 0);
-        wr8(x.b, o + 3, d4);
+        let Some(o) = pools::SOBJ.alloc(x.b) else { break };
+        o.set_active(x.b, 1);
+        o.set_kind(x.b, 0);
+        o.set_variant(x.b, d4);
         d4 = d4.wrapping_add(1);
-        wr16(x.b, o + 8, 0x80);
-        wr16(x.b, o + 0xc, 0xc0);
-        wr32(x.b, o + 0x10, 1);
+        o.set_u16(x.b, Obj::X, 0x80);
+        o.set_u16(x.b, Obj::Z, 0xc0);
+        o.set_y(x.b, 1);
     }
     render(x, &[&dispatch::EFFCT, &dispatch::SOBJ]);
     x.wait(2, Step::Step8Show)
 }
-const STEP_8_SHOW: u32 = 0x1d31c;
 
 /// `0x1d686`: has a player in play (state < 4) pressed a button? (Z flag of the original: false)
 fn any_button(x: &mut Ctx) -> bool {
-    if rd8(x.b, var::GAME_ACTIVE) == 0 {
+    if var::GAME_ACTIVE.get(x.b) == 0 {
         return false;
     }
     let mut buttons = 0u8;
     for k in 0..4u32 {
         let p = player(3 - k);
-        if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
+        if p.u8(x.b, Player::ACTIVE) == 0 || (p.u8(x.b, Player::MAIN) as i8) >= 4 {
             continue;
         }
-        buttons |= rd8(x.b, A5 + 0xc + (3 - k));
+        buttons |= Byte(var::PRESSED + (3 - k)).get(x.b);
     }
     buttons & 0xf0 != 0
 }
@@ -675,47 +719,47 @@ fn any_button(x: &mut Ctx) -> bool {
 fn step_a(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::EFFCT, &dispatch::SOBJ]);
     if any_button(x) {
-        wr16(x.b, var::COUNTDOWN, 1);
+        var::COUNTDOWN.set(x.b, 1);
         crate::objects::pools::EFFCT.reset(x.b);
-    } else if rd8(x.b, var::PLAYERS_PRESENT) != 0 {
+    } else if var::PLAYERS_PRESENT.get(x.b) != 0 {
         return Flow::Done;
     }
-    let s = rd8(x.b, var::STEP).wrapping_add(2);
-    wr8(x.b, var::STEP, s);
-    let which = rd8(x.b, var::MODE_FLAG).wrapping_sub(2) as u16;
-    let banner = prog32(x, table::BANNERS + 2 * which as u32);
-    wr32(x.b, var::BANNER, banner);
-    wr16(x.b, var::BANNER_X, 0x44);
-    wr16(x.b, var::BANNER_Y, 0xc0);
-    wr8(x.b, var::PLAYERS_PRESENT, 0);
-    wr8(x.b, var::LOCKED_FLAG, 0);
+    let s = var::STEP.get(x.b).wrapping_add(2);
+    var::STEP.set(x.b, s);
+    let which = var::MODE_FLAG.get(x.b).wrapping_sub(2) as u16;
+    let banner = table::BANNERS.pc_long(x.b, 2 * which as u32);
+    var::BANNER.set(x.b, banner);
+    var::BANNER_X.set(x.b, 0x44);
+    var::BANNER_Y.set(x.b, 0xc0);
+    var::PLAYERS_PRESENT.set(x.b, 0);
+    var::LOCKED_FLAG.set(x.b, 0);
     fading::DELAY.set(x.b, 3);
     fading::PAGES.set(x.b, 0xf);
     fading::STEP.set(x.b, 7);
-    create_task(x, crate::scene::fading::DESCENT_STEP, 0x10);
+    create_task(x, crate::scene::fading::DESCENT_STEP.0, 0x10);
     Flow::Done
 }
 
 fn step_c(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::SET, &dispatch::SOBJ]);
-    if rd8(x.b, var::FRAME_COUNTER) & 3 == 0 {
-        let y = rd16(x.b, var::BANNER_Y).wrapping_sub(1);
-        wr16(x.b, var::BANNER_Y, y);
+    if var::FRAME_COUNTER.get(x.b) & 3 == 0 {
+        let y = var::BANNER_Y.get(x.b).wrapping_sub(1);
+        var::BANNER_Y.set(x.b, y);
         if y <= 0x40 {
-            let s = rd8(x.b, var::STEP).wrapping_add(2);
-            wr8(x.b, var::STEP, s);
-            wr16(x.b, var::BANNER_Y, 0x40);
-            wr16(x.b, var::COUNTDOWN, 0x258);
+            let s = var::STEP.get(x.b).wrapping_add(2);
+            var::STEP.set(x.b, s);
+            var::BANNER_Y.set(x.b, 0x40);
+            var::COUNTDOWN.set(x.b, 0x258);
             return finish_c(x);
         }
         let phase = (y.wrapping_sub(1) & 0x10) as u8;
-        if phase != rd8(x.b, var::PLAYERS_PRESENT) && rd8(x.b, var::LOCKED_FLAG) != 7 {
-            let v = rd8(x.b, var::PLAYERS_PRESENT) ^ 0x10;
-            wr8(x.b, var::PLAYERS_PRESENT, v);
+        if phase != var::PLAYERS_PRESENT.get(x.b) && var::LOCKED_FLAG.get(x.b) != 7 {
+            let v = var::PLAYERS_PRESENT.get(x.b) ^ 0x10;
+            var::PLAYERS_PRESENT.set(x.b, v);
             // 0xcdedc: SET object of type 13 (the blinking), variant is the counter
-            let n = rd8(x.b, var::LOCKED_FLAG);
+            let n = var::LOCKED_FLAG.get(x.b);
             if crate::families::creators::set_13_pure(x.b, n).is_ok() {
-                wr8(x.b, var::LOCKED_FLAG, n + 1);
+                var::LOCKED_FLAG.set(x.b, n + 1);
             }
         }
     }
@@ -723,9 +767,9 @@ fn step_c(x: &mut Ctx) -> Flow {
 }
 fn finish_c(x: &mut Ctx) -> Flow {
     if any_button(x) {
-        let s = rd8(x.b, var::STEP).wrapping_add(2);
-        wr8(x.b, var::STEP, s);
-        wr16(x.b, var::COUNTDOWN, 1);
+        let s = var::STEP.get(x.b).wrapping_add(2);
+        var::STEP.set(x.b, s);
+        var::COUNTDOWN.set(x.b, 1);
     }
     Flow::Done
 }
@@ -736,26 +780,22 @@ fn step_e(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     if any_button(x) {
-        wr16(x.b, var::COUNTDOWN, 1);
+        var::COUNTDOWN.set(x.b, 1);
     }
-    let left = rd16(x.b, var::COUNTDOWN).wrapping_sub(1);
-    wr16(x.b, var::COUNTDOWN, left);
+    let left = var::COUNTDOWN.get(x.b).wrapping_sub(1);
+    var::COUNTDOWN.set(x.b, left);
     if left != 0 {
         return Flow::Done;
     }
     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 0x1c });
-    let phase = rd8(x.b, var::PHASE).wrapping_add(4);
-    wr8(x.b, var::PHASE, phase);
-    wr8(x.b, var::STEP, 0);
-    wr16(x.b, var::SUB, 0);
+    let phase = var::PHASE.get(x.b).wrapping_add(4);
+    var::PHASE.set(x.b, phase);
+    var::STEP.set(x.b, 0);
+    var::SUB.set(x.b, 0);
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 0xf);
     x.subroutine(|x| crate::tasks::fading::descent_steps(x, 8), Step::StepEFaded)
 }
-const STEP_E_FADED: u32 = 0x1d498;
-const STEP_E_HIDE: u32 = 0x1d4b8;
-const STEP_E_CLEAR: u32 = 0x1d4c6;
-const STEP_E_FADE: u32 = 0x1d4e0;
 
 pub const NATIVES: &[Native] = &[
     

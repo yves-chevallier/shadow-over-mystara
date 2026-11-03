@@ -8,31 +8,34 @@
 use super::bonus::{dispatch, fade};
 use crate::video::{clear_layer, Layer};
 use super::Ctx;
-use crate::mem::{prog8, rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd8, wr16, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
+use crate::screens::obj;
+use crate::objects::Obj;
 
 mod v {
-    use crate::mem::A5;
+    use crate::ram::{Byte, Word};
+    
     /// Characters concerned (mask), current player (word), players left to examine.
-    pub const MASK: u32 = A5 - 0x5576;
-    pub const PLAYER: u32 = A5 - 0x5578;
-    pub const LEFT: u32 = A5 - 0x5575;
+    pub const MASK: Byte = Byte(0xff_2a8a);
+    pub const PLAYER: Word = Word(0xff_2a88);
+    pub const LEFT: Byte = Byte(0xff_2a8b);
     /// Timer (byte) of a player's interlude.
-    pub const TIMER: u32 = A5 - 0x55a8;
+    pub const TIMER: Byte = Byte(0xff_2a58);
 }
 
-const DISPATCH: u32 = 0xf64a0;
+const DISPATCH: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf64a0);
 /// Mask of the characters concerned, per scene (bytes relative to the PC).
-const MASKS: u32 = 0xf672e;
+const MASKS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf672e);
 
 mod at {
-    pub const FADED_OUT: u32 = 0xf64d4;
+    pub const FADED_OUT: crate::data::RomAddr = crate::data::RomAddr(0xf64d4);
     /// After a wait, new attempt to create objects 5, 6 and 7.
-    pub const RETRY_5: u32 = 0xf6600;
-    pub const RETRY_6: u32 = 0xf6626;
-    pub const RETRY_7: u32 = 0xf6644;
-    pub const NEXT_WAITED: u32 = 0xf66aa;
+    pub const RETRY_5: crate::data::RomAddr = crate::data::RomAddr(0xf6600);
+    pub const RETRY_6: crate::data::RomAddr = crate::data::RomAddr(0xf6626);
+    pub const RETRY_7: crate::data::RomAddr = crate::data::RomAddr(0xf6644);
+    pub const NEXT_WAITED: crate::data::RomAddr = crate::data::RomAddr(0xf66aa);
 }
 
 /// Scene exit block: the original's A0, set by the dispatch and kept across the yields.
@@ -63,7 +66,7 @@ fn concerned(x: &mut Ctx, p: u32, mask: u8) -> bool {
 }
 
 pub fn run(x: &mut Ctx) -> Flow {
-    match dispatch(x, DISPATCH) {
+    match dispatch(x, DISPATCH.addr()) {
         0 => start(x),
         2 => next_player(x),
         4 => player_scene(x),
@@ -80,15 +83,15 @@ pub fn run(x: &mut Ctx) -> Flow {
 
 /// Sub-state 0 (0xf66d6): the scene mask; with no player concerned, the state is skipped, otherwise fade to black.
 fn start(x: &mut Ctx) -> Flow {
-    wr8(x.b, v::MASK, 0);
+    v::MASK.set(x.b, 0);
     let scene = x.v8(0x34) as u32;
-    let mask = prog8(x.b, MASKS + scene);
+    let mask = MASKS.pc_byte(x.b, scene);
     let any = mask != 0 && (0..4).any(|k| concerned(x, super::PLAYERS + k * super::PLAYER_STRIDE, mask));
     if !any {
         skip(x);
         return Flow::Done;
     }
-    wr8(x.b, v::MASK, mask);
+    v::MASK.set(x.b, mask);
     x.set_v8(0x5f, 0);
     fade(x, crate::tasks::fading::descent, Step::FadedOut)
 }
@@ -117,11 +120,11 @@ impl Step {
     /// Address the original resumes at in this step.
     pub const fn address(self) -> u32 {
         match self {
-            Step::FadedOut => at::FADED_OUT,
-            Step::Retry5(_) => at::RETRY_5,
-            Step::Retry6(_) => at::RETRY_6,
-            Step::Retry7(_) => at::RETRY_7,
-            Step::NextWaited => at::NEXT_WAITED,
+            Step::FadedOut => at::FADED_OUT.0,
+            Step::Retry5(_) => at::RETRY_5.0,
+            Step::Retry6(_) => at::RETRY_6.0,
+            Step::Retry7(_) => at::RETRY_7.0,
+            Step::NextWaited => at::NEXT_WAITED.0,
         }
     }
 
@@ -151,8 +154,8 @@ fn faded_out(x: &mut Ctx) -> Flow {
     super::bonus::reset_camera_copies(x);
     x.set_v8(0x42, 2);
     next_sub_step(x);
-    wr16(x.b, v::PLAYER, super::PLAYERS as u16);
-    wr8(x.b, v::LEFT, 4);
+    v::PLAYER.set(x.b, super::PLAYERS as u16);
+    v::LEFT.set(x.b, 4);
     reset_objects(x);
     clear_layer(x.b, Layer::One);
     x.set_v8(0x3c, 0xff);
@@ -166,21 +169,21 @@ fn faded_out(x: &mut Ctx) -> Flow {
 
 /// Sub-state 2: the next concerned player, or the end of the state.
 fn next_player(x: &mut Ctx) -> Flow {
-    if rd8(x.b, v::LEFT) == 0 {
+    if v::LEFT.get(x.b) == 0 {
         return end(x);
     }
-    let mut p = rd16(x.b, v::PLAYER) as i16 as i32 as u32;
+    let mut p = v::PLAYER.get(x.b) as i16 as i32 as u32;
     x.set_v8(0x33, 1);
-    let mask = rd8(x.b, v::MASK);
+    let mask = v::MASK.get(x.b);
     loop {
         if concerned(x, p & 0xff_ffff, mask) {
             next_sub_step(x);
-            wr16(x.b, v::PLAYER, p as u16);
+            v::PLAYER.set(x.b, p as u16);
             return Flow::Done;
         }
         p = p.wrapping_add(0x200);
-        let left = rd8(x.b, v::LEFT).wrapping_sub(1);
-        wr8(x.b, v::LEFT, left);
+        let left = v::LEFT.get(x.b).wrapping_sub(1);
+        v::LEFT.set(x.b, left);
         if left == 0 {
             return end(x);
         }
@@ -190,9 +193,9 @@ fn next_player(x: &mut Ctx) -> Flow {
 /// Sub-state 4: the player's interlude, after four frames (the player follows in the resume step).
 fn player_scene(x: &mut Ctx) -> Flow {
     next_sub_step(x);
-    wr8(x.b, v::TIMER, 0xf0);
+    v::TIMER.set(x.b, 0xf0);
     x.set_v16(0x14, 0x12c0);
-    let p = rd16(x.b, v::PLAYER) as i16 as i32 as u32;
+    let p = v::PLAYER.get(x.b) as i16 as i32 as u32;
     let player = Player { record: p, byte: rd8(x.b, p + 3) };
     x.wait(4, Step::Retry5(player))
 }
@@ -220,8 +223,8 @@ fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Step) -> Option<u32> {
 
 /// The object is linked to the player (byte `+0x2f`) and to the scene exit block (long `+0x4c`, A0 of the original).
 fn bind(x: &mut Ctx, o: u32, j: Player) {
-    wr8(x.b, o + 0x2f, j.byte);
-    wr32(x.b, o + 0x4c, BLOCK);
+    Obj(o).set_u8(x.b, obj::INDEX, j.byte);
+    Obj(o).set_u32(x.b, obj::SIGNAL, BLOCK);
 }
 
 /// Objects 5, 6 and 7 of the player.
@@ -245,16 +248,16 @@ fn object_7(x: &mut Ctx, j: Player) -> Flow {
 
 /// Sub-state 8: after 240 frames, the screen is cleared and the next player goes (sub-state 2).
 fn player_done(x: &mut Ctx) -> Flow {
-    let t = rd8(x.b, v::TIMER).wrapping_sub(1);
-    wr8(x.b, v::TIMER, t);
+    let t = v::TIMER.get(x.b).wrapping_sub(1);
+    v::TIMER.set(x.b, t);
     if t != 0 {
         return Flow::Done;
     }
     set_sub_step(x, 2);
-    let p = (rd16(x.b, v::PLAYER) as i16 as i32 as u32).wrapping_add(0x200);
-    wr16(x.b, v::PLAYER, p as u16);
-    let left = rd8(x.b, v::LEFT).wrapping_sub(1);
-    wr8(x.b, v::LEFT, left);
+    let p = (v::PLAYER.get(x.b) as i16 as i32 as u32).wrapping_add(0x200);
+    v::PLAYER.set(x.b, p as u16);
+    let left = v::LEFT.get(x.b).wrapping_sub(1);
+    v::LEFT.set(x.b, left);
     reset_objects(x);
     crate::sprites::build_in_game(x.b);
     crate::video::clear_objects(x.b);

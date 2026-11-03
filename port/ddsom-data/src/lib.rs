@@ -41,6 +41,12 @@ use std::sync::OnceLock;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct RomAddr(pub u32);
 
+impl From<RomAddr> for u32 {
+    fn from(a: RomAddr) -> u32 {
+        a.0
+    }
+}
+
 impl RomAddr {
     /// The address `n` bytes further (wrapping like the 68000 address arithmetic).
     pub fn offset(self, n: i32) -> RomAddr {
