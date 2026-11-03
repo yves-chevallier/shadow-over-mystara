@@ -271,6 +271,15 @@ pub fn boxes() -> &'static Tables {
     BOXES.get_or_init(|| Tables::new("boxes", &[&data().boxes]))
 }
 
+/// The table `name` of the engine's data ([`engine`]), looked up once per call site.
+macro_rules! engine_table {
+    ($name:expr) => {{
+        static TABLE: std::sync::OnceLock<&'static $crate::tables::Table> = std::sync::OnceLock::new();
+        *TABLE.get_or_init(|| $crate::tables::engine().get($name))
+    }};
+}
+pub(crate) use engine_table;
+
 /// The engine's data (see the module).
 pub fn engine() -> &'static Tables {
     static ENGINE: OnceLock<Tables> = OnceLock::new();

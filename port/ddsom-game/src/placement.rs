@@ -16,19 +16,19 @@ const LAST_Y: Word = Word(0xff0e68);
 
 /// Offset of the starting point of the search for player `o` in `table` (`placement/start_x`, `start_y`: words of
 /// the code, per player).
-fn start_offset(b: &mut Cps2Bus, o: Obj, table: &str) -> u16 {
+fn start_offset(b: &mut Cps2Bus, o: Obj, table: &crate::tables::Table) -> u16 {
     let player = Player::of(o).index(b) as u32;
-    engine().get(table).nth16(b, player)
+    table.nth16(b, player)
 }
 
 /// Starting point of the search for player `o` (relative to the camera): x.
 pub(crate) fn start_x(b: &mut Cps2Bus, o: Obj) -> u16 {
-    camera(b).0.wrapping_add(start_offset(b, o, "placement/start_x"))
+    camera(b).0.wrapping_add(start_offset(b, o, crate::tables::engine_table!("placement/start_x")))
 }
 
 /// Starting point of the search for player `o`: depth.
 pub(crate) fn start_y(b: &mut Cps2Bus, o: Obj) -> u16 {
-    camera(b).1.wrapping_add(start_offset(b, o, "placement/start_y"))
+    camera(b).1.wrapping_add(start_offset(b, o, crate::tables::engine_table!("placement/start_y")))
 }
 
 /// Can a player be placed on terrain `t`?

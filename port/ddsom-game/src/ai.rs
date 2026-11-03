@@ -16,7 +16,7 @@ use crate::objects::Obj;
 use crate::player::Player;
 use crate::ram::{self, Word, LEVEL, PLAYERS, PLAYERS_ALIVE};
 use crate::rng;
-use crate::tables::{engine, Table};
+use crate::tables::{engine, engine_table, Table};
 
 /// Rank (dynamic difficulty 0..31, `objects::rank`): it indexes the decision and HP tables.
 pub const RANK: Word = Word::a5(0x7f92);
@@ -136,10 +136,10 @@ pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> O
 
 /// Table of randomly drawn criteria of a rule (16 bytes: 10 times the nearest, 4 the fewest HP, 2 the farthest).
 fn criteria(rule: Rule) -> &'static Table {
-    engine().get(match rule {
-        Rule::Strict => "ai/criteria_strict",
-        Rule::Lenient => "ai/criteria_lenient",
-    })
+    match rule {
+        Rule::Strict => engine_table!("ai/criteria_strict"),
+        Rule::Lenient => engine_table!("ai/criteria_lenient"),
+    }
 }
 
 /// 0x424e (strict rule) / 0x43ae (wide rule): randomly drawn criterion, then `target_by`.
@@ -179,10 +179,10 @@ pub enum HpTable {
 
 impl HpTable {
     fn table(self) -> &'static Table {
-        engine().get(match self {
-            HpTable::Boss => "hp_boss",
-            HpTable::Enemy => "hp_enemy",
-        })
+        match self {
+            HpTable::Boss => engine_table!("hp_boss"),
+            HpTable::Enemy => engine_table!("hp_enemy"),
+        }
     }
 }
 
@@ -206,7 +206,7 @@ pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: HpTable) {
 pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
     let base: u8 = if o.u8(b, Obj::CLASS) == 4 { 32 } else { 0 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
-    let v = engine().get("immunities").at32(b, index as u32);
+    let v = crate::tables::engine_table!("immunities").at32(b, index as u32);
     o.set_u32(b, f::IMMUNITIES, v);
     index
 }
@@ -223,9 +223,9 @@ pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
 
 /// Mask decision: row `+0x72` (`decision_a`, 0xa4b4) or `+0x73` (`decision_b`, 0xa4c2) gives a
 /// table of 32-bit masks indexed by rank; a bit in it is drawn at random. True if it is set.
-fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &str) -> bool {
+fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &Table) -> bool {
     let line = (o.u8(b, field) as u16) << 2;
-    let masks = engine().get(table).at32(b, line as i16 as u32);
+    let masks = table.at32(b, line as i16 as u32);
     let rank = RANK.get(b);
     let mask = engine().long(b, masks.wrapping_add((rank << 2) as i16 as u32));
     let bit = rng::random(b) & 31;
@@ -234,18 +234,18 @@ fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &str) -> bool {
 
 /// 0xa4b4: does the AI act on this frame (row `+0x72`)?
 pub fn decision_a(b: &mut Cps2Bus, o: Obj) -> bool {
-    decision(b, o, f::DECISION_A, "ai/decisions_a")
+    decision(b, o, f::DECISION_A, engine_table!("ai/decisions_a"))
 }
 
 /// 0xa4c2: same with row `+0x73`.
 pub fn decision_b(b: &mut Cps2Bus, o: Obj) -> bool {
-    decision(b, o, f::DECISION_B, "ai/decisions_b")
+    decision(b, o, f::DECISION_B, engine_table!("ai/decisions_b"))
 }
 
 /// 0xac3a: `+0x77` = byte of the table of row `+0x76` (`ai/bytes_by_rank`), at the rank index.
 pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
     let line = (o.u8(b, f::BYTE_TABLE) as u16) << 2;
-    let table = engine().get("ai/bytes_by_rank").at32(b, line as i16 as u32);
+    let table = crate::tables::engine_table!("ai/bytes_by_rank").at32(b, line as i16 as u32);
     let rank = RANK.get(b);
     let v = engine().byte(b, table.wrapping_add(rank as i16 as u32));
     o.set_u8(b, f::BYTE, v);
@@ -392,7 +392,7 @@ pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
 /// 0x10574: the heading of `o` changes by at most one notch, drawn at random (`ai/drift_steps`, signed bytes).
 pub fn drift_heading(b: &mut Cps2Bus, o: Obj) {
     let roll = rng::random(b) & 15;
-    let step = engine().get("ai/drift_steps").at8(b, roll as u32);
+    let step = crate::tables::engine_table!("ai/drift_steps").at8(b, roll as u32);
     let heading = o.u8(b, f::HEADING).wrapping_add(step) & 0x1f;
     o.set_u8(b, f::HEADING, heading);
 }

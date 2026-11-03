@@ -14,16 +14,10 @@ use crate::objects::Obj;
 use crate::ops::Size;
 use crate::player::Player;
 use crate::ram::{Byte, Word};
-use crate::tables::{engine, Table};
 
 /// Address word of an object (`move.w An,...`).
 fn word(o: Obj) -> u16 {
     o.0 as u16
-}
-
-/// The engine table `name` (`data/engine.json`).
-fn table(name: &str) -> &'static Table {
-    engine().get(name)
 }
 
 /// 0x51c06: player shot (PSHL) that accompanies the weapon of player A0, if its kind `+2` (shifted by 4 when `+0x28` !=
@@ -32,7 +26,7 @@ pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option
     let s = Spawn(me);
     s.set_partner(b, 0);
     let shift = if me.class(b) == 2 { 0 } else { 4 };
-    let mask = table("creators/weapon_shots").at32(b, shift);
+    let mask = crate::tables::engine_table!("creators/weapon_shots").at32(b, shift);
     r.d(1, mask);
     let bit = (shift as u8).wrapping_add(me.kind(b));
     r.d(0, bit as u32);
@@ -200,7 +194,7 @@ pub(crate) fn scene_set_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> 
     s.set_mark_37(b, 0xff);
     let scene = (SCENE_SETS.get(b) >> 1) as u32;
     r.d(0, scene);
-    let kind = table("creators/scene_sets").at8(b, scene);
+    let kind = crate::tables::engine_table!("creators/scene_sets").at8(b, scene);
     set.set_u8(b, Obj::KIND, kind);
     r.flags(scene, Size::Byte);
     Some(set)
@@ -279,8 +273,8 @@ const OBJECT_LEVEL: Byte = Byte(0xff253a);
 /// routine of `creators/music_routines` chosen by `creators/music_of_variant`).
 pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
     let variant = scene.u8(b, Obj::VARIANT) as u32;
-    let i = 4 * table("creators/music_of_variant").at8(b, variant) as u32;
-    let routine = table("creators/music_routines").at32(b, i);
+    let i = 4 * crate::tables::engine_table!("creators/music_of_variant").at8(b, variant) as u32;
+    let routine = crate::tables::engine_table!("creators/music_routines").at32(b, i);
     scene_routine(b, scene, routine);
 }
 
@@ -288,8 +282,8 @@ pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
 /// `creators/exit_of_variant`).
 pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
     let variant = scene.u8(b, Obj::VARIANT) as u32;
-    let i = 4 * table("creators/exit_of_variant").at8(b, variant) as u32;
-    let routine = table("creators/exit_routines").at32(b, i);
+    let i = 4 * crate::tables::engine_table!("creators/exit_of_variant").at8(b, variant) as u32;
+    let routine = crate::tables::engine_table!("creators/exit_routines").at32(b, i);
     scene_routine(b, scene, routine);
 }
 
@@ -358,7 +352,7 @@ fn set_15_b_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj>
     set.set_u8(b, Obj::KIND, 0x15);
     set.set_u8(b, Obj::VARIANT, 2);
     r.d(0, 2 * kind);
-    let v = table("creators/set_15_args").at16(b, 2 * kind);
+    let v = crate::tables::engine_table!("creators/set_15_args").at16(b, 2 * kind);
     set.set_arg(b, v);
     r.flags(v as u32, Size::Word);
     Some(set)

@@ -138,7 +138,7 @@ fn opening_init<R: Bench>(x: &mut Cx<'_, R>) {
     if v == 3 {
         x.set8(Effect::PALETTE, 0x1d);
         x.set8(Effect::OWN_PALETTE, 1);
-        load_palette(x, crate::palette::library_excerpt("opening_palette", 0x28dca0, 0x28dcc0, 4), opening::PALETTE_RAM);
+        load_palette(x, crate::palette::library_excerpt!("opening_palette", 0x28dca0, 0x28dcc0, 4), opening::PALETTE_RAM);
         x.anim_start(opening::ANIM_SET.0, 0x20);
         return;
     }
@@ -603,7 +603,7 @@ mod start_sign {
 }
 
 fn start_sign_palette<R: Bench>(x: &mut Cx<'_, R>) {
-    load_palette(x, crate::palette::library_excerpt("start_sign_palette", 0x28ff20, 0x28ff40, 4), start_sign::PALETTE_RAM);
+    load_palette(x, crate::palette::library_excerpt!("start_sign_palette", 0x28ff20, 0x28ff40, 4), start_sign::PALETTE_RAM);
     x.set8(Effect::OWN_PALETTE, 1);
     x.set8(Effect::PALETTE, 0x1c);
 }

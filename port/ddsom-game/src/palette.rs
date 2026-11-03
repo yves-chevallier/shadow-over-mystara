@@ -163,21 +163,23 @@ fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
 }
 
 /// The colours of the palette library from `rom` to `end` (`palettes.png`), as a table of elements of `size` bytes:
-/// the excerpts of the library that the families copy (`name` names them in the residue counters).
-pub(crate) fn library_excerpt(name: &'static str, rom: u32, end: u32, size: u8) -> &'static ddsom_data::effects::Table {
-    use std::sync::Mutex;
-    static EXCERPTS: Mutex<Vec<&'static ddsom_data::effects::Table>> = Mutex::new(Vec::new());
-    let mut excerpts = EXCERPTS.lock().unwrap();
-    if let Some(t) = excerpts.iter().find(|t| t.rom == rom && t.len() == end - rom && t.size == size) {
-        return t;
-    }
+/// the excerpts of the library that the families copy (`name` names them in the residue counters). See
+/// [`library_excerpt!`], which builds it once per call site.
+pub(crate) fn library_table(name: &'static str, rom: u32, end: u32, size: u8) -> &'static ddsom_data::effects::Table {
     let library = crate::data::data().palettes.bytes();
     let bytes = &library[(rom - Palettes::ROM) as usize..(end - Palettes::ROM) as usize];
     let spec = ddsom_data::effects::Spec { name, rom, program: false, size, end: Some(end) };
-    let table: &'static ddsom_data::effects::Table = Box::leak(Box::new(ddsom_data::effects::Table::from_bytes(&spec, bytes)));
-    excerpts.push(table);
-    table
+    Box::leak(Box::new(ddsom_data::effects::Table::from_bytes(&spec, bytes)))
 }
+
+/// `library_excerpt!(name, rom, end, size)`: the excerpt of the palette library (`library_table`), built once.
+macro_rules! library_excerpt {
+    ($name:literal, $rom:expr, $end:expr, $size:expr) => {{
+        static TABLE: std::sync::OnceLock<&'static ddsom_data::effects::Table> = std::sync::OnceLock::new();
+        *TABLE.get_or_init(|| $crate::palette::library_table($name, $rom, $end, $size))
+    }};
+}
+pub(crate) use library_excerpt;
 
 /// The scene palette tables.
 fn scene_palettes() -> &'static ddsom_data::ScenePalettes {
@@ -586,8 +588,8 @@ pub fn character_palette(b: &mut Cps2Bus, o: crate::objects::Obj) {
 /// (offset, source, destination) of the palette of the character of object `o`.
 pub(crate) fn character_palette_at(b: &mut Cps2Bus, o: u32) -> (u32, u32, u32) {
     let character = crate::player::Player(o).character(b) as u32;
-    let offset = engine().get("aura_offsets").nth16(b, character) as i16 as i32 as u32;
-    let plain = engine().get("aura_normal").rom;
+    let offset = crate::tables::engine_table!("aura_offsets").nth16(b, character) as i16 as i32 as u32;
+    let plain = crate::tables::engine_table!("aura_normal").rom;
     (offset, plain.wrapping_add(offset), PALETTES.wrapping_add(offset))
 }
 

@@ -421,17 +421,20 @@ impl Table {
 }
 
 /// The machine's task table (created at first access).
+#[inline]
 pub fn table(b: &mut Cps2Bus) -> &mut Table {
     let ext = b.ext.get_or_insert_with(|| Box::new(Table::default()));
     ext.as_mut().as_any_mut().downcast_mut().expect("bus extension: task table")
 }
 
 /// The task table, if the machine has one (game machine; the original machine keeps its own in RAM).
+#[inline]
 pub fn read(b: &Cps2Bus) -> Option<&Table> {
     b.ext.as_deref()?.as_any().downcast_ref()
 }
 
 /// The task table, if the machine has one, without creating it.
+#[inline]
 pub(crate) fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
     b.ext.as_deref_mut()?.as_any_mut().downcast_mut()
 }

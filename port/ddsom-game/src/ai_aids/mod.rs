@@ -115,7 +115,7 @@ pub fn next_threshold(b: &mut Cps2Bus, o: Obj, block: u16) -> bool {
     let column = e.hp_rank(b) as i8 as i16;
     let index = (level as i16).wrapping_shl(7).wrapping_add(column);
     let at = (block as u32 * 0x100).wrapping_add(offset(index as u16));
-    let threshold = table("ai/hp_thresholds").at16(b, at) as i16;
+    let threshold = crate::tables::engine_table!("ai/hp_thresholds").at16(b, at) as i16;
     if threshold < e.hp(b) as i16 {
         return false;
     }
@@ -142,6 +142,6 @@ pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
 pub fn landing_routine(b: &mut Cps2Bus, o: Obj) -> Option<(u32, u16)> {
     let base: u8 = if o.u8(b, Obj::CLASS) == 2 { 0 } else { 32 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
-    let routine = table("ai/landing_routines").at32(b, offset(index));
+    let routine = crate::tables::engine_table!("ai/landing_routines").at32(b, offset(index));
     (routine != 0x3e2aa && routine != 0x3bb9a).then_some((routine, index))
 }

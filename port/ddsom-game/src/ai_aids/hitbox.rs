@@ -7,7 +7,7 @@ use super::*;
 pub fn stance(b: &mut Cps2Bus, o: Obj) -> u8 {
     let e = Enemy(o);
     let number = e.ai_stance_row(b);
-    let row = table("ai/stances").nth32(b, number as u32);
+    let row = crate::tables::engine_table!("ai/stances").nth32(b, number as u32);
     let rank = RANK.get(b);
     let v = engine().byte(b, row.wrapping_add(offset(rank)));
     e.set_ai_stance(b, v);
@@ -91,7 +91,7 @@ pub(super) fn in_front_leftovers(b: &mut Cps2Bus, me: Obj, strict: bool, hitbox:
         return (false, r, None);
     }
     let number = e.ai_box_chance(b);
-    let chances = table("ai/box_chances").nth32(b, number as u32);
+    let chances = crate::tables::engine_table!("ai/box_chances").nth32(b, number as u32);
     let rank = RANK.get(b);
     let mask = engine().long(b, chances.wrapping_add(offset(rank << 2)));
     let roll = rng::random(b) as u32 & 31;
@@ -100,7 +100,7 @@ pub(super) fn in_front_leftovers(b: &mut Cps2Bus, me: Obj, strict: bool, hitbox:
     }
     // byte `+0x75` is already a multiple of 4: no shift
     let number = e.ai_box_anim(b);
-    let animations = table("ai/box_animations").at32(b, number as u32).wrapping_add(offset((rank >> 1) << 5));
+    let animations = crate::tables::engine_table!("ai/box_animations").at32(b, number as u32).wrapping_add(offset((rank >> 1) << 5));
     let pick = rng::random(b) as u32 & 31;
     e.set_substate(b, 6);
     let v = engine().byte(b, animations.wrapping_add(pick));

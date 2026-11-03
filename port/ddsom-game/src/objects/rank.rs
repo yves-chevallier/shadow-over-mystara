@@ -47,7 +47,7 @@ pub(crate) fn set(b: &mut Cps2Bus, off: u32, v: u16) {
 
 /// Copies the settings of row `row` of the table `rank/presets`.
 pub fn load_preset(b: &mut Cps2Bus, row: u8) {
-    let presets = crate::tables::engine().get("rank/presets");
+    let presets = crate::tables::engine_table!("rank/presets");
     for i in 0..4 {
         let v = presets.at32(b, 16 * row as u32 + 4 * i);
         Long(BASE + MAX + 4 * i).set(b, v);

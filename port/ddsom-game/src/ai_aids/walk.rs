@@ -4,8 +4,12 @@ use super::*;
 
 /// Tables of candidate points by number (`+0x79`): address of a list (number of points - 1, then pairs (x offset,
 /// depth offset) around the target). The mirrored table has its x offsets flipped by the direction of the target.
-const WALK_POINTS: &str = "approach_tables";
-const MIRRORED_WALK_POINTS: &str = "ai/mirrored_walk_points";
+fn walk_points() -> &'static Table {
+    crate::tables::engine_table!("approach_tables")
+}
+fn mirrored_walk_points() -> &'static Table {
+    crate::tables::engine_table!("ai/mirrored_walk_points")
+}
 
 /// "City block" gap between two points: |dx| + |dy| (words).
 pub(super) fn manhattan(b: &mut Cps2Bus, me: Obj, x: u16, depth: u16) -> u16 {
@@ -26,10 +30,10 @@ pub(super) enum Pick {
 /// target's position if none). `skip`: point number skipped without reading its pair (original glitch: the following
 /// points take the shifted pair); the point retained is then noted at `+0x99`. `mirror`: x offsets
 /// flipped if the target faces left. Returns the point retained.
-pub(super) fn pick_point(b: &mut Cps2Bus, o: Obj, table: &str, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
+pub(super) fn pick_point(b: &mut Cps2Bus, o: Obj, table: &Table, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
     let target = Obj::from_word(Enemy(o).target(b));
     let set = Enemy(o).ai_point_set(b) as u32;
-    let mut at = engine().get(table).nth32(b, set);
+    let mut at = table.nth32(b, set);
     let last = engine().word(b, at);
     at += 2;
     let (target_x, target_depth) = (target.u16(b, Obj::X), target.u16(b, Obj::Y));
@@ -72,7 +76,7 @@ pub(super) fn far_from_camera(b: &mut Cps2Bus, o: Obj) -> bool {
 
 /// 0xf084: aims at the farthest point around the target and turns one notch towards it.
 pub fn walk_far_point(b: &mut Cps2Bus, o: Obj) {
-    let goal = pick_point(b, o, WALK_POINTS, Pick::Farthest, None, false);
+    let goal = pick_point(b, o, walk_points(), Pick::Farthest, None, false);
     crate::ai::turn_toward(b, o, goal);
 }
 
@@ -85,7 +89,7 @@ pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
     if far_from_camera(b, o) {
         return walk_far_point(b, o);
     }
-    let goal = pick_point(b, o, WALK_POINTS, Pick::Nearest, None, false);
+    let goal = pick_point(b, o, walk_points(), Pick::Nearest, None, false);
     crate::ai::turn_toward(b, o, goal);
 }
 
@@ -94,7 +98,7 @@ pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
     if Enemy(o).target(b) == 0 {
         return;
     }
-    let goal = pick_point(b, o, MIRRORED_WALK_POINTS, Pick::Nearest, None, true);
+    let goal = pick_point(b, o, mirrored_walk_points(), Pick::Nearest, None, true);
     crate::ai::turn_toward(b, o, goal);
 }
 
@@ -108,7 +112,7 @@ pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
         return walk_far_point(b, o);
     }
     let last = Enemy(o).ai_last_point(b);
-    pick_point(b, o, WALK_POINTS, Pick::Farthest, Some(last), false);
+    pick_point(b, o, walk_points(), Pick::Farthest, Some(last), false);
 }
 
 /// 0xe914: is the targeted point reached (to within 8 pixels on each axis)? Then another is chosen (0xe886).
@@ -133,7 +137,7 @@ pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
     Enemy(o).set_ai_last_point(b, 0xff);
     let target = Obj::from_word(Enemy(o).target(b));
     let set = Enemy(o).ai_point_set(b) as u32;
-    let mut at = engine().get(WALK_POINTS).nth32(b, set);
+    let mut at = walk_points().nth32(b, set);
     let last = engine().word(b, at);
     at += 2;
     let (target_x, target_depth) = (target.u16(b, Obj::X), target.u16(b, Obj::Y));

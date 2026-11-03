@@ -9,8 +9,8 @@ fn push_amount_for(b: &mut Cps2Bus, me: Obj, player: Obj, gap: u16) -> u32 {
     if gap as i16 >= 512 {
         return 0;
     }
-    let profile = table("ai/push_profile_index").at8(b, offset(gap >> 4)) as u16;
-    let profiles = table("ai/push_profiles");
+    let profile = crate::tables::engine_table!("ai/push_profile_index").at8(b, offset(gap >> 4)) as u16;
+    let profiles = crate::tables::engine_table!("ai/push_profiles");
     let entry = offset(profile << 3);
     let max_height = profiles.at16(b, entry) as i16;
     let max_depth = profiles.at16(b, entry.wrapping_add(2)) as i16;
@@ -58,7 +58,7 @@ fn player_hit(b: &mut Cps2Bus, me: Obj, attack: u32, p: Player) -> bool {
         return false;
     }
     let character = p.character(b) & 14;
-    let set = table("ai/body_box_sets").at32(b, 2 * character as u32);
+    let set = crate::tables::engine_table!("ai/body_box_sets").at32(b, 2 * character as u32);
     let mut mine = attack;
     let mut theirs = set.wrapping_add(8 * body as u32);
     // x, then z, then y: (offset, extent) of each box; only x takes the facing direction into account
@@ -101,7 +101,7 @@ fn keep_inside_camera(b: &mut Cps2Bus, me: Obj) -> bool {
 
 /// 0xfc44: is a player hit by the attack box `attack` of `o`? Returns the first one hit.
 pub fn attack_hits_a_player(b: &mut Cps2Bus, o: Obj, attack: u8) -> Option<Obj> {
-    let boxes = table("ai/attack_boxes").rom.wrapping_add(offset((attack as u16) << 3));
+    let boxes = crate::tables::engine_table!("ai/attack_boxes").rom.wrapping_add(offset((attack as u16) << 3));
     crate::ram::PLAYERS.iter().find(|&p| player_hit(b, o, boxes, Player::of(p)))
 }
 
@@ -140,7 +140,7 @@ pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
     if step == 0 {
         return;
     }
-    let mut at = table("ai/seize_moves").rom + 4 * step;
+    let mut at = crate::tables::engine_table!("ai/seize_moves").rom + 4 * step;
     let mirrored = e.flip(b) != 0;
     let mut dx = byte_signed(b, at);
     if mirrored {

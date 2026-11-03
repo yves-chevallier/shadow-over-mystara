@@ -75,11 +75,6 @@ use crate::video::VIDEO_CONTROL as VIDEO_CONTROL_COPY;
 // Initialisation and update of the cameras
 // ---------------------------------------------------------------------------------------------
 
-/// Per-scene table `name` of the cameras (`data/scenes.json`: `camera_*`, `camera2_*`).
-fn by_scene(name: &str) -> &'static crate::tables::Table {
-    engine().get(name)
-}
-
 /// Tile blocks (index, address in layer 2) loaded at the entry of certain scenes, camera 1.
 fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     const SLOTS: [u32; 4] = [0x917000, 0x917400, 0x917800, 0x917c00];
@@ -114,14 +109,14 @@ fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     x.set16(Camera::STATE, 0x0200);
     let stage = ram::SCENE.get(x.b);
     let by_stage = 2 * stage as u32;
-    let max_x = by_scene("camera_max_x").at16(x.b, by_stage);
+    let max_x = crate::tables::engine_table!("camera_max_x").at16(x.b, by_stage);
     x.set16(Camera::MAX_X, max_x);
-    let output = by_scene("camera_output").at16(x.b, by_stage);
+    let output = crate::tables::engine_table!("camera_output").at16(x.b, by_stage);
     regs::OBJECT_OUTPUT.set(x.b, output);
     crate::video::LAYER_ENABLE.set(x.b, 0);
-    let layers = by_scene("camera_layers").at16(x.b, by_stage);
+    let layers = crate::tables::engine_table!("camera_layers").at16(x.b, by_stage);
     crate::video::turn_layers_on(x.b, layers);
-    let hold = by_scene("camera_hold_min").at8(x.b, stage as u32);
+    let hold = crate::tables::engine_table!("camera_hold_min").at8(x.b, stage as u32);
     x.set8(Camera::HOLD_MIN, hold);
     x.set16(Camera::MODE, 0);
     x.set32(Camera::TIMERS, 0);
@@ -134,12 +129,12 @@ fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     BACKDROP.set(x.b, 0);
     // the left stop takes the table's value if it is positive, otherwise it is inverted
     let min = x.u16(Camera::MIN_X) as i16;
-    let min = if min >= 0 { by_scene("camera_min_x").at16(x.b, by_stage) } else { min.wrapping_neg() as u16 };
+    let min = if min >= 0 { crate::tables::engine_table!("camera_min_x").at16(x.b, by_stage) } else { min.wrapping_neg() as u16 };
     x.set16(Camera::MIN_X, min);
-    let pointer = by_scene("camera_row_step").at32(x.b, 2 * by_stage);
+    let pointer = crate::tables::engine_table!("camera_row_step").at32(x.b, 2 * by_stage);
     let row_step = engine().word(x.b, pointer);
     x.set16(Camera::ROW_STEP, row_step);
-    let frozen = by_scene("camera_frozen").at8(x.b, stage as u32);
+    let frozen = crate::tables::engine_table!("camera_frozen").at8(x.b, stage as u32);
     x.set8(Camera::FROZEN, frozen);
     if let Some(blocks) = background_blocks_1(stage) {
         if stage == 8 || stage == 41 {
@@ -195,12 +190,12 @@ fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     x.set16(Camera::MODE, 0);
     x.set16(Camera::MIN_X, 0);
     let stage = ram::SCENE.get(x.b) as u32;
-    let pointer = by_scene("camera2_row_step").at32(x.b, 4 * stage);
+    let pointer = crate::tables::engine_table!("camera2_row_step").at32(x.b, 4 * stage);
     let row_step = engine().word(x.b, pointer);
     x.set16(Camera::ROW_STEP, row_step);
     x.set16(Camera::X_FRACTION, 0);
     x.set16(Camera::Y_FRACTION, 0);
-    let starts = by_scene("camera2_start");
+    let starts = crate::tables::engine_table!("camera2_start");
     let (start_x, start_y) = (starts.at16(x.b, 4 * stage), starts.at16(x.b, 4 * stage + 2));
     x.set16(Camera::X, start_x);
     x.set16(Camera::Y, start_y);

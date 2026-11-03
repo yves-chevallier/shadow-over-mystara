@@ -19,7 +19,7 @@ pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
         return again(b);
     }
     let row = ((crate::ram::PLAYERS_ALIVE.get(b) as u16) << 4).wrapping_add((RANK.get(b) >> 2) << 1);
-    let mask = table("ai/countdown_masks").at16(b, offset(row)) as u32;
+    let mask = crate::tables::engine_table!("ai/countdown_masks").at16(b, offset(row)) as u32;
     let roll = rng::random(b) as u32 & 15;
     if mask >> roll & 1 == 0 {
         return again(b);
@@ -30,14 +30,14 @@ pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
 /// 0xfffc: behaviour parameter `+0x98` of `o`, according to its type (`ai/behaviour_by_kind`).
 pub fn behaviour_by_kind(b: &mut Cps2Bus, o: Obj) {
     let kind = o.kind(b) as u32;
-    let v = table("ai/behaviour_by_kind").at8(b, kind);
+    let v = crate::tables::engine_table!("ai/behaviour_by_kind").at8(b, kind);
     Enemy(o).set_ai_behaviour(b, v);
 }
 
 /// 32-bit mask of row `number` of the table of addresses `rows`, chosen by the rank; one of its bits is drawn:
 /// true if it is set.
-fn rank_mask_roll(b: &mut Cps2Bus, rows: &str, number: u8) -> bool {
-    let row = table(rows).nth32(b, number as u32);
+fn rank_mask_roll(b: &mut Cps2Bus, rows: &Table, number: u8) -> bool {
+    let row = rows.nth32(b, number as u32);
     let rank = RANK.get(b);
     let mask = engine().long(b, row.wrapping_add(offset(rank << 2)));
     let roll = rng::random(b) as u32 & 31;
@@ -45,8 +45,8 @@ fn rank_mask_roll(b: &mut Cps2Bus, rows: &str, number: u8) -> bool {
 }
 
 /// Byte drawn at random (32 choices) in row `number` of the table of addresses `rows`.
-fn random_byte(b: &mut Cps2Bus, rows: &str, number: u8) -> u8 {
-    let row = table(rows).nth32(b, number as u32);
+fn random_byte(b: &mut Cps2Bus, rows: &Table, number: u8) -> u8 {
+    let row = rows.nth32(b, number as u32);
     let roll = rng::random(b) as u32 & 31;
     engine().byte(b, row + roll)
 }
@@ -55,7 +55,7 @@ fn random_byte(b: &mut Cps2Bus, rows: &str, number: u8) -> u8 {
 pub fn draw_6b(b: &mut Cps2Bus, o: Obj) {
     let e = Enemy(o);
     let number = e.ai_wander_row(b);
-    let v = random_byte(b, "ai/draws_6b", number);
+    let v = random_byte(b, crate::tables::engine_table!("ai/draws_6b"), number);
     e.set_ai_wander(b, v);
 }
 
@@ -64,7 +64,7 @@ pub fn draw_6e(b: &mut Cps2Bus, o: Obj) {
     let e = Enemy(o);
     let v = if crate::objects::cull::in_arena(b, o, 0) {
         let number = e.ai_wait_row(b);
-        random_byte(b, "ai/draws_6e", number)
+        random_byte(b, crate::tables::engine_table!("ai/draws_6e"), number)
     } else {
         1
     };
@@ -74,7 +74,7 @@ pub fn draw_6e(b: &mut Cps2Bus, o: Obj) {
 /// 0x79ce: if the bit drawn in the mask of row `+0x6c` is set, `draw_6e` and true; otherwise false.
 pub fn maybe_draw_6e(b: &mut Cps2Bus, o: Obj) -> bool {
     let number = Enemy(o).ai_wait_masks(b);
-    if !rank_mask_roll(b, "ai/masks_6c", number) {
+    if !rank_mask_roll(b, crate::tables::engine_table!("ai/masks_6c"), number) {
         return false;
     }
     draw_6e(b, o);
@@ -100,7 +100,7 @@ pub fn parries(b: &mut Cps2Bus, attacker: Obj, victim: Obj, table: Parry) -> boo
         Parry::A => v.ai_68(b),
         Parry::B => v.ai_69(b),
     };
-    rank_mask_roll(b, "ai/parries", number)
+    rank_mask_roll(b, crate::tables::engine_table!("ai/parries"), number)
 }
 
 /// 0xf118: outside the play area, the word `+0x84` = 1; otherwise `+0x84` = 0 and `+0x85` is drawn in row `+0x8e`
@@ -114,7 +114,7 @@ pub fn draw_84(b: &mut Cps2Bus, o: Obj) {
     }
     let number = e.ai_row_8e(b) as u32;
     let block = (RANK.get(b) >> 1) << 5;
-    let row = table("ai/draws_85").nth32(b, number).wrapping_add(offset(block));
+    let row = crate::tables::engine_table!("ai/draws_85").nth32(b, number).wrapping_add(offset(block));
     let roll = rng::random(b) as u32 & 31;
     let v = engine().byte(b, row + roll);
     e.set_ai_draw_85(b, v);
@@ -130,7 +130,7 @@ pub fn set_68(b: &mut Cps2Bus, o: Obj) {
     } else {
         let players = crate::ram::PLAYERS_ALIVE.get(b).wrapping_mul(4);
         let row = ((level.wrapping_sub(1) as i8).min(3) as u8).wrapping_add(players);
-        table("ai/parry_levels").at8(b, row as u32)
+        crate::tables::engine_table!("ai/parry_levels").at8(b, row as u32)
     };
     Enemy(o).set_ai_68(b, v);
 }

@@ -100,12 +100,6 @@ fn loot_rolls(b: &mut Cps2Bus) -> u16 {
 const DRAWN_KIND: Byte = Byte(0xff0e6a);
 const DRAWN_VARIANT: Byte = Byte(0xff0e6b);
 
-/// Address of a table of 0xbad6 (read as data, A1 = `lea` of the table): row `+0x80` (kind, variant pairs), then by
-/// difficulty (`ram::LEVEL_ROW`).
-fn special(name: &str) -> u32 {
-    table(name).rom
-}
-
 /// Character classes (`+3` / 2 of a player) that count for the special loot.
 const CLERIC: u8 = 1;
 const ELF: u8 = 2;
@@ -159,7 +153,7 @@ fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
 /// 0x1172e: debris set no. `set` (`ai/debris_sets`: number - 1, then rows of 4 words: x offset, x speed, `+0x18`,
 /// `+0x58`) around `o`, flipped if `o` faces left. A row is only read if the effect could be created.
 pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
-    let mut at = table("ai/debris_sets").at32(b, offset(set.wrapping_mul(4)));
+    let mut at = crate::tables::engine_table!("ai/debris_sets").at32(b, offset(set.wrapping_mul(4)));
     let mut next = |b: &mut Cps2Bus| {
         let v = engine().word(b, at);
         at += 2;
@@ -237,12 +231,12 @@ pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
     }
     let roll = rng::random(b) as u32 & 31;
     let line = e.once_mask(b) as u32;
-    let mask = table("ai/once_masks").nth32(b, line);
+    let mask = crate::tables::engine_table!("ai/once_masks").nth32(b, line);
     if mask >> roll & 1 == 0 {
         return;
     }
     let kind = o.kind(b) as u32;
-    let variant = table("ai/once_variants").at8(b, kind);
+    let variant = crate::tables::engine_table!("ai/once_variants").at8(b, kind);
     if variant == 0 {
         return;
     }
@@ -263,7 +257,7 @@ pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
     }
     for left in (0..loot_rolls(b)).rev() {
         let roll = (rng::random(b) & 15).wrapping_add(row << 4);
-        let variant = table("ai/loot").at8(b, offset(roll));
+        let variant = crate::tables::engine_table!("ai/loot").at8(b, offset(roll));
         if (variant as i8) < 0 {
             return;
         }
@@ -284,11 +278,11 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
     let mut rank: u8 = 1;
     for left in (0..loot_rolls(b)).rev() {
         let roll = (rng::random(b) & 15).wrapping_add(row << 4);
-        let list = table("ai/treasure_rows").at8(b, offset(roll));
+        let list = crate::tables::engine_table!("ai/treasure_rows").at8(b, offset(roll));
         if (list as i8) < 0 {
             return (row << 4, Some(left as u32));
         }
-        let mut at = table("ai/treasure_lists").nth32(b, list as u32);
+        let mut at = crate::tables::engine_table!("ai/treasure_lists").nth32(b, list as u32);
         loop {
             let variant = engine().byte(b, at);
             at += 1;
@@ -344,7 +338,7 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
     loop {
         step = match step {
             Draw::Row => {
-                let at = special_entry(b, special("ai/special_rows"), row << 5, 15, 2);
+                let at = special_entry(b, crate::tables::engine_table!("ai/special_rows").rom, row << 5, 15, 2);
                 let (kind, variant) = (engine().byte(b, at), engine().byte(b, at + 1));
                 set_drawn(b, kind, variant);
                 match (kind as i8, variant) {
@@ -359,7 +353,7 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
             Draw::Common => {
                 let line = difficulty_line(b, 64);
                 d3 = Some(line);
-                let at = special_entry(b, special("ai/special_common"), line, 31, 1);
+                let at = special_entry(b, crate::tables::engine_table!("ai/special_common").rom, line, 31, 1);
                 let caster = party_classes(b).iter().any(|&k| matches!(k, CLERIC | ELF | MAGE));
                 if caster {
                     let variant = engine().byte(b, at);
@@ -372,7 +366,7 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
             Draw::Pair => {
                 let line = difficulty_line(b, 64);
                 d3 = Some(line);
-                let at = special_entry(b, special("ai/special_pairs"), line, 31, 2);
+                let at = special_entry(b, crate::tables::engine_table!("ai/special_pairs").rom, line, 31, 2);
                 let (kind, variant) = (engine().byte(b, at), engine().byte(b, at + 1));
                 set_drawn(b, kind, variant);
                 Draw::Restrict
@@ -380,14 +374,14 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
             Draw::Kind2 => {
                 let line = difficulty_line(b, 16);
                 d3 = Some(line);
-                let at = special_entry(b, special("ai/special_kind_2"), line, 15, 1);
+                let at = special_entry(b, crate::tables::engine_table!("ai/special_kind_2").rom, line, 15, 1);
                 let variant = engine().byte(b, at);
                 set_drawn(b, 2, variant);
                 Draw::Restrict
             }
             Draw::ByClass => {
                 let line = difficulty_line(b, 64);
-                let at = special_entry(b, special("ai/special_by_class"), line, 15, 1);
+                let at = special_entry(b, crate::tables::engine_table!("ai/special_by_class").rom, line, 15, 1);
                 let classes = party_classes(b).iter().fold(0u8, |bits, &k| {
                     bits | match k {
                         CLERIC => 1,
@@ -448,7 +442,7 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
             let shift = if bits == 1 { 0 } else { 16 };
             let line = difficulty_line(b, 32);
             *d3 = Some(line);
-            let at = special_entry(b, special("ai/special_cleric_or_mage"), line, 15, 1);
+            let at = special_entry(b, crate::tables::engine_table!("ai/special_cleric_or_mage").rom, line, 15, 1);
             let variant = engine().byte(b, at + shift);
             DRAWN_VARIANT.set(b, variant);
             match variant {
@@ -459,8 +453,8 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
                 _ => Draw::Spawn,
             }
         }
-        (4, 15) => only_class_draw(b, d3, MAGE, "ai/special_mages"),
-        (4, 8 | 9) => only_class_draw(b, d3, CLERIC, "ai/special_clerics"),
+        (4, 15) => only_class_draw(b, d3, MAGE, crate::tables::engine_table!("ai/special_mages")),
+        (4, 8 | 9) => only_class_draw(b, d3, CLERIC, crate::tables::engine_table!("ai/special_clerics")),
         (4, 10 | 11) => {
             let bits = party_classes(b).iter().fold(0u8, |bits, &k| {
                 bits | if k == MAGE { 1 } else { 0 } | if k == CLERIC { 2 } else { 0 }
@@ -473,7 +467,7 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
             };
             let line = difficulty_line(b, 16) + shift;
             *d3 = Some(line);
-            let at = special_entry(b, special("ai/special_mage_or_cleric"), line, 15, 1);
+            let at = special_entry(b, crate::tables::engine_table!("ai/special_mage_or_cleric").rom, line, 15, 1);
             reroll_or_none(b, at)
         }
         _ => Draw::Spawn,
@@ -481,12 +475,12 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
 }
 
 /// All the players in play are of class `class`: new kind 4 variant drawn in `table`.
-fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, rows: &str) -> Draw {
+fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, rows: &Table) -> Draw {
     if party_classes(b).iter().any(|&k| k != class) {
         return Draw::Spawn;
     }
     let line = difficulty_line(b, 16);
     *d3 = Some(line);
-    let at = special_entry(b, special(rows), line, 15, 1);
+    let at = special_entry(b, rows.rom, line, 15, 1);
     reroll_or_none(b, at)
 }

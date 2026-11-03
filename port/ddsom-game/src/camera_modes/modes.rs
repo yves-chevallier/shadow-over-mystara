@@ -63,7 +63,7 @@ pub(super) fn ripple(x: &mut Cam) {
         let y = x.u16(Camera::Y);
         x.set16(Camera::SCRATCH, y);
         rowscroll_on(x);
-        let rows = engine().get("camera/ripple_rows");
+        let rows = crate::tables::engine_table!("camera/ripple_rows");
         let mut at = ROW_SCROLL;
         for _ in 0..9 {
             for k in 0..16 {
@@ -350,7 +350,7 @@ pub(super) fn thunder(x: &mut Cam) {
 /// step); end of the table: the per-line scroll stops.
 pub(super) fn palette_step(x: &mut Cam) {
     let at = x.u16(Camera::TIMER_2) as i16 as i32 as u32;
-    let steps = engine().get("camera/palette_steps");
+    let steps = crate::tables::engine_table!("camera/palette_steps");
     let source = steps.at32(x.b, at);
     if source == 0 {
         rowscroll_control(x, false);

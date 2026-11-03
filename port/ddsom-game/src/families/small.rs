@@ -16,7 +16,7 @@ use crate::player::Player;
 use crate::ram::{Byte, Long};
 use crate::record::record;
 use crate::scroll::CAMERA_1;
-use crate::tables::{engine, Table};
+use crate::tables::engine;
 use crate::Native;
 
 /// The fields that these creators set in the objects they create, and read in their creator.
@@ -73,10 +73,6 @@ fn start(b: &mut Cps2Bus, o: Obj, kind: u8) {
     o.set_kind(b, kind);
 }
 
-/// The engine table `name` (`data/engine.json`).
-fn table(name: &str) -> &'static Table {
-    engine().get(name)
-}
 
 /// Creates an object of `pool` of type `kind`, linked to the creator by word `link` (flags of that `move.w`).
 pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
@@ -155,7 +151,7 @@ pub fn enemy_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
 /// `+0x2f`, linked by `+0x5c`.
 /// D0.w and D1.w of the original: the table index, the counter (exhausted: 0xffff, or the number of the refused shot).
 pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bool) {
-    let (counts, variant) = if big { (table("small/roar_big"), 0) } else { (table("small/roar_small"), 1) };
+    let (counts, variant) = if big { (crate::tables::engine_table!("small/roar_big"), 0) } else { (crate::tables::engine_table!("small/roar_small"), 1) };
     let i = crate::ai::RANK.get(b) >> 1;
     r.d_word(0, i);
     let total = counts.at8(b, i as u32);
@@ -258,7 +254,7 @@ pub(crate) fn four_palette_blocks<R: Bench>(x: &mut Cx<'_, R>, brighten: bool) {
         let src = if brighten {
             ddsom_data::Palettes::ROM + 32 * (0x46 + k as u32)
         } else {
-            table("small/palettes_69").rom + 0x20 * k as u32
+            crate::tables::engine_table!("small/palettes_69").rom + 0x20 * k as u32
         };
         for i in 0..8 {
             let v = engine().long(x.b, src + 4 * i);
@@ -311,7 +307,7 @@ pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
         Spawn(o).set_partner(b, delay);
         let (x, y) = crate::ram::camera(b);
         let index = (variant as u16).wrapping_shl(2) as u32;
-        let offsets = table("small/stone_offsets");
+        let offsets = crate::tables::engine_table!("small/stone_offsets");
         let (dx, dy) = (offsets.at16(b, index), offsets.at16(b, 2 + index));
         let ground = y.wrapping_add(dy);
         o.set_u16(b, Obj::X, x.wrapping_add(dx));
@@ -411,7 +407,7 @@ pub(crate) fn item_lock_clear(b: &mut Cps2Bus) {
 /// index (the D0.w that the original leaves, which a caller reads as the variant of the effect it creates).
 pub(crate) fn player_table_byte(b: &mut Cps2Bus, player: Obj) -> u16 {
     let i = crate::ai::RANK.get(b) >> 2;
-    let v = table("small/undead_counts").at8(b, i as u32);
+    let v = crate::tables::engine_table!("small/undead_counts").at8(b, i as u32);
     Player::of(player).set_undead_left(b, v);
     i
 }

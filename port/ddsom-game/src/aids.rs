@@ -84,7 +84,7 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
     }
     // direction table (`aids/directions`, program space): indexed by (octant << 3) | step
     let index = (octant << 3 | step) as u32;
-    let direction = crate::tables::engine().get("aids/directions").at8(b, index);
+    let direction = crate::tables::engine_table!("aids/directions").at8(b, index);
     Compute { direction, d2: dy, d3: step as u32, unit }
 }
 

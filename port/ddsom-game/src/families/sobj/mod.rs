@@ -65,7 +65,7 @@ const BRIGHT: u32 = 0xf000_f000;
 /// Copies `n` longs of the palette library (`sobj_palettes`, designated by their address `from`) to video memory or
 /// RAM.
 fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: RomAddr, to: u32, n: u32) {
-    let t = crate::palette::library_excerpt("sobj_palettes", 0x28f340, 0x292260, 4);
+    let t = crate::palette::library_excerpt!("sobj_palettes", 0x28f340, 0x292260, 4);
     for i in 0..n {
         let v = t.at32(x.b, from.0.wrapping_sub(t.rom) + 4 * i);
         wr32(x.b, to + 4 * i, v);

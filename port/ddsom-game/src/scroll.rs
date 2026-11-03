@@ -761,13 +761,6 @@ pub fn update_cameras_in_game(b: &mut Cps2Bus) {
     }
 }
 
-/// Per-scene tables of the cameras: camera in service (`scroll/camera_service`, bytes) and starting position of the
-/// first camera (`scroll/starts`, x and y words); stops, video control word, layers and steps of the cameras
-/// (`data/scenes.json`, `camera_*`).
-fn by_scene(name: &str) -> &'static crate::tables::Table {
-    engine().get(name)
-}
-
 /// 0x33aa6: cameras of the scene at their starting position. The two cameras are reset to zero, the start of layer 1
 /// cleared (0x3525c); the scene chooses the camera in service (`ram::CAMERA_ALT_ACTIVE`) and the starting position of
 /// the first, then the cameras are updated (0x33e20, by the caller: `cameras_start` only does the reset).
@@ -785,12 +778,12 @@ pub fn cameras_start(b: &mut Cps2Bus) {
     CAMERA_1.set_shaking(b, 0);
     crate::video::clear_layer1_start(b);
     let stage = crate::ram::SCENE.get(b) as u32;
-    let service = by_scene("scroll/camera_service").at8(b, stage);
+    let service = crate::tables::engine_table!("scroll/camera_service").at8(b, stage);
     crate::ram::CAMERA_ALT_ACTIVE.set(b, service);
     CAMERA_1.set_x_fraction(b, 0);
     CAMERA_1.set_y_fraction(b, 0);
     CAMERA_1.set_screen_offset(b, 0);
-    let starts = by_scene("scroll/starts");
+    let starts = crate::tables::engine_table!("scroll/starts");
     let (x, y) = (starts.at16(b, 4 * stage), starts.at16(b, 4 * stage + 2));
     CAMERA_1.set_x(b, x);
     CAMERA_1.set_y(b, y);
@@ -804,16 +797,16 @@ pub fn cameras_start(b: &mut Cps2Bus) {
 /// caller).
 pub fn cameras_return(b: &mut Cps2Bus) {
     let stage = crate::ram::SCENE.get(b) as u32;
-    let service = by_scene("scroll/camera_service").at8(b, stage);
+    let service = crate::tables::engine_table!("scroll/camera_service").at8(b, stage);
     crate::ram::CAMERA_ALT_ACTIVE.set(b, service);
-    let limit = by_scene("camera_max_x").at16(b, 2 * stage);
+    let limit = crate::tables::engine_table!("camera_max_x").at16(b, 2 * stage);
     CAMERA_1.set_max_x(b, limit);
-    let control = by_scene("camera_output").at16(b, 2 * stage);
+    let control = crate::tables::engine_table!("camera_output").at16(b, 2 * stage);
     crate::hw::video::regs::OBJECT_OUTPUT.set(b, control);
-    let layers = by_scene("camera_layers").at16(b, 2 * stage);
+    let layers = crate::tables::engine_table!("camera_layers").at16(b, 2 * stage);
     crate::video::LAYER_ENABLE.set(b, 0);
     crate::video::turn_layers_on(b, layers);
-    let priority = by_scene("camera_hold_min").at8(b, stage);
+    let priority = crate::tables::engine_table!("camera_hold_min").at8(b, stage);
     CAMERA_1.set_hold_min(b, priority);
     CAMERA_1.set_state(b, 0x200);
     CAMERA_1.set_mode(b, 0);
@@ -825,12 +818,12 @@ pub fn cameras_return(b: &mut Cps2Bus) {
     CAMERA_2.set_mode(b, 0);
     let x = CAMERA_1.x(b);
     CAMERA_1.set_min_x(b, x);
-    let bound = by_scene("camera_row_step").at32(b, 4 * stage);
+    let bound = crate::tables::engine_table!("camera_row_step").at32(b, 4 * stage);
     let v = engine().word(b, bound);
     CAMERA_1.set_row_step(b, v);
-    let bound = by_scene("camera2_row_step").at32(b, 4 * stage);
+    let bound = crate::tables::engine_table!("camera2_row_step").at32(b, 4 * stage);
     let v = engine().word(b, bound);
     CAMERA_2.set_row_step(b, v);
-    let mode = by_scene("camera_frozen").at8(b, stage);
+    let mode = crate::tables::engine_table!("camera_frozen").at8(b, stage);
     CAMERA_1.set_frozen(b, mode);
 }

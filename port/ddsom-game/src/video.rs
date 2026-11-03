@@ -461,7 +461,7 @@ pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridE
 const FIXED_SCREENS_RAM: u32 = 0xff111c;
 
 pub fn copy_fixed_screens(b: &mut Cps2Bus) {
-    let screens = engine().get("video/fixed_screens");
+    let screens = crate::tables::engine_table!("video/fixed_screens");
     for i in 0..60 {
         let word = screens.nth16(b, i);
         Word(FIXED_SCREENS_RAM + 2 * i).set(b, word);

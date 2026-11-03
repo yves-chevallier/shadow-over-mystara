@@ -315,7 +315,7 @@ pub(super) fn copy_palette<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset: u16) {
         let destination = interface::PALETTE.wrapping_add(slot as i16 as i32 as u32);
         let source = slot.wrapping_add(offset) as i16 as i32 as u32;
         for k in 0..8 {
-            let v = crate::palette::library_excerpt("interface_palettes", 0x28ff00, 0x290c00, 2).at32(ctx.b, source.wrapping_add(4 * k)) | 0xf000_f000;
+            let v = crate::palette::library_excerpt!("interface_palettes", 0x28ff00, 0x290c00, 2).at32(ctx.b, source.wrapping_add(4 * k)) | 0xf000_f000;
             crate::mem::wr32(ctx.b, destination + 4 * k, v);
         }
     }

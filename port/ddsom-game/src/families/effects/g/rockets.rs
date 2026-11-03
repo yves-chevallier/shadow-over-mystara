@@ -130,7 +130,7 @@ pub(super) fn fireworks_init<R: Bench>(x: &mut Cx<'_, R>) {
                 x.anim_start(fireworks::ANIMS_FIRE.0, 3);
             }
         _ => {
-            load_colours(x, crate::palette::library_excerpt("fireworks_palette_last", 0x253460, 0x2534a0, 2), 0x91c2e0, 0x20);
+            load_colours(x, crate::palette::library_excerpt!("fireworks_palette_last", 0x253460, 0x2534a0, 2), 0x91c2e0, 0x20);
             x.set8(Effect::OWN_PALETTE, 1);
             x.set8(Effect::PALETTE, 0x17);
             place(x, 0x120, Some(0xe0), 0x160);
@@ -316,7 +316,7 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.add8(f::SUB_STATE, 2);
             x.set16(Obj::X, 0xc0);
             x.set16(Obj::Z, 0);
-            load_colours(x, crate::palette::library_excerpt("fireworks_palette_hero", 0x253260, 0x253280, 2), 0x91c260, 0x10);
+            load_colours(x, crate::palette::library_excerpt!("fireworks_palette_hero", 0x253260, 0x253280, 2), 0x91c260, 0x10);
             x.set16(fireworks::TIMER, 0x10);
             x.set16(fireworks::DELAY, 0);
             x.anim_start(fireworks::ANIMS_HERO.0, 0);
