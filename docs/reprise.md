@@ -136,6 +136,15 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    n'existent plus (`effects::bad_index`) ; `PlayerView` de `shell/records.rs` (comme celle de L5) est à fusionner
    avec la fiche de joueur de L10, `Host` avec les fiches d'ennemis et de boss (L8, L9).
 
+9. **Lot L10 (joueurs)** fait (branche `wt-l10-joueurs`, [fin.md](fin.md) « L10 », « Résultat ») : `player/hurt`,
+   `cinematics`, `moves` et quatre personnages découpés (plus gros fichier de la zone 916 lignes), nouveau
+   `data/player_tables.json` (311 tables, `ddsom-data/src/player_tables.rs`) et `data/players.json`,
+   `data/combat.json` chargés dans `GameData` (**réextraire les assets**), lecture par `player/tables.rs` (par nom ou
+   par adresse, mots alignés comme le bus) ; une seule fiche `record!` `Player` (vues `PlayerView` de L5 et L7,
+   `PlayerFields` de L6 et `Prey` de L8b fusionnées), vues `Shot` et `Victim` des tirs et effets : zone `players` à
+   0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral` ; restent 141 constantes d'adresses de tables lues par
+   adresse.
+
 ## Méthode qui marche
 
 * **Consignes des agents.** Elles sont dans [agents/brief-commun.md](agents/brief-commun.md) (règles) et [agents/brief-lots.md](agents/brief-lots.md) (mission type d'un lot de refactorisation et règle du code mort). Remplacer `<scratchpad>` par le dossier temporaire de la session.

@@ -307,7 +307,7 @@ crate::record::record! {
         character, set_character, CHARACTER: u8 @ Obj::VARIANT;
         /// Main state (`states::Main`), sub-state (`states::Sub`), action (`states::Action`), step.
         main, set_main, MAIN: u8 @ 0x04;
-        sub, set_sub, SUB: u8 @ 0x05;
+        sub_state, set_sub_state, SUB: u8 @ 0x05;
         action, set_action, ACTION: u8 @ 0x06;
         step, set_step, STEP: u8 @ 0x07;
         /// Low word of `Obj::X`: its fraction.

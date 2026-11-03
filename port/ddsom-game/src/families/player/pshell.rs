@@ -79,11 +79,6 @@ impl<R: Bench> Cx<'_, R> {
         }
     }
 
-    /// Long from the program ROM (tables read relative to the PC).
-    pub fn rom32(&mut self, addr: u32) -> u32 {
-        (pc16(self.b, addr) as u32) << 16 | pc16(self.b, addr + 2) as u32
-    }
-
     /// Starts script `n` of animation set `set` (`anim_start_indexed`).
     pub fn anim(&mut self, set: u32, n: u32) {
         self.anim_start(set, n as u16);
