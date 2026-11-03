@@ -121,6 +121,8 @@ fn scenes(t: &mut Tables) {
     // the shop's exit message lists and bytes read past its tables (data space)
     t.data("shop_exit_message_lists", 0xf7c30, "u8", Some(0xf7d5e - 0xf7c30));
     t.data("shop_tail", 0xf7e5c, "u8", Some(0xf7e92 - 0xf7e5c));
+    // the exit list index and lists read past their 20 shops (a shop number of 0xeb in a long bot), program space
+    t.prog("shop_exit_lists_tail", 0xf7c14, "u8", Some(0xf7d5e - 0xf7c14));
     // waits of the boss intermission by the number of players (PC-relative words)
     t.prog("intermission_waits", 0x21c94, "u16", Some(5));
     // transitions (`transition/`): answers of the questions, scrolling texts, remaining-time prizes
