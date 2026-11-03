@@ -119,7 +119,7 @@ pub fn extract(roms: &Path, assets: &Path) -> io::Result<()> {
     for &(a, b) in &returned {
         is_code[a as usize..b as usize].fill(false);
     }
-    let others = ddsom_assets::rebuild::Program::load_files(assets, &|f| f != "data/reste.json")?;
+    let others = crate::rebuild::Program::load_files(assets, &|f| f != "data/reste.json")?;
     let blocks = |view: &[u16], covered: &dyn Fn(u32) -> bool, n: u32| -> Vec<Block> {
         ranges(n, |a| !is_code[a as usize] && !covered(a))
             .into_iter()

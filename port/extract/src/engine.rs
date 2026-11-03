@@ -244,8 +244,87 @@ fn rank(t: &mut Tables) {
     t.data("rank/presets", 0x1f1d8, "x32*4", Some(9));
 }
 
+/// Settings (`config.rs`): the default block of each variant (0x30 bytes, read in data space at the address that the
+/// displacement table designates), the coins per credit by coin mode, the credits by credit mode, the message of the
+/// failed EEPROM write.
+fn config(t: &mut Tables, rom: &Program) {
+    const VARIANTS: u32 = 0x2d656;
+    // displacements by variant (`A5+0x70` = 0, 2... 10), relative to the table
+    t.prog("config/variants", VARIANTS, "i16", Some(6));
+    let mut blocks: Vec<u32> = (0..6).map(|k| VARIANTS.wrapping_add(rom.prog16(VARIANTS + 2 * k) as i16 as u32)).collect();
+    blocks.sort_unstable();
+    blocks.dedup();
+    for at in blocks {
+        t.data(&format!("config/defaults@{at:#x}"), at, "u8", Some(0x30));
+    }
+    t.prog("config/coins", 0x2d38c, "x16", Some(17));
+    t.prog("config/credits_a", 0x2d40e, "u8", Some(0x18));
+    t.prog("config/credits_b", 0x2d426, "u8", Some(0x0c));
+    t.data("config/error_message", 0x2d7fc, "u8", Some(12));
+}
+
+/// The command tables of the sound wrappers and the tables of the dispatchers (`sound.rs`), read PC-relative; the lists
+/// of the hit noises by category (data space) that the dispatcher 0xe662a designates. Addresses: `sound_tables.txt`.
+fn sound(t: &mut Tables, rom: &Program) {
+    for l in include_str!("../sound_tables.txt").lines().filter(|l| !l.starts_with('#')) {
+        let (kind, at) = l.split_once(' ').unwrap_or_else(|| panic!("sound_tables.txt: '{l}'"));
+        let at = u32::from_str_radix(at.trim_start_matches("0x"), 16).unwrap_or_else(|_| panic!("sound_tables.txt: '{l}'"));
+        let name = format!("sound/{kind}@{at:#x}");
+        match kind {
+            "Delays" => t.data(&name, at, "x16", None),
+            "Alternate" => t.prog(&name, at, "x16", Some(2)),
+            "ByVariant" => t.prog(&name, at, "x16", Some(8)),
+            "ByVariantLong" | "ByA1" => t.prog(&name, at, "addr", if kind == "ByA1" { None } else { Some(8) }),
+            "ByVariantAndCategory" => {
+                t.prog(&name, at, "addr", Some(8));
+                // the last two rows (variants 12 and 14) are the code that follows: no list there
+                let mut lists: Vec<u32> =
+                    (0..8).map(|k| rom.prog32(at + 4 * k)).filter(|&a| a < 0x40_0000 && a & 1 == 0).collect();
+                lists.sort_unstable();
+                lists.dedup();
+                for list in lists {
+                    t.data(&format!("sound/categories@{list:#x}"), list, "addr", None);
+                }
+            }
+            _ => t.prog(&name, at, "x16", None),
+        }
+    }
+}
+
+/// Reset (`startup.rs`): the program header (debug display of the sound locks, region word, "development card" byte),
+/// the starting palette.
+fn startup(t: &mut Tables) {
+    t.data("startup/header", 0xc0, "x16", Some(3));
+    t.data("startup/palette", 0x19f0, "x32", Some(8));
+}
+
+/// Prompts (`tasks/prompt.rs`): the text of each coin setting (from setting 1).
+fn prompts(t: &mut Tables) {
+    t.data("prompt/coin_texts", 0xe048c, "addr", Some(9));
+}
+
+/// Bytes of the code that the original reads as data (glitches written in clear in the game): the byte `+0x2c` of the
+/// shard rain's handler (EFFCT, A1 = the handler's address 0xb997c).
+fn code_bytes(t: &mut Tables) {
+    t.data("effects/rain_handler_facing", 0xb997c + 0x2c, "u8", Some(1));
+}
+
+/// The ranking screen of the attract mode (`tasks/fixed_screen.rs`): tiles of the numbers of ranks 2 to 4, then of the
+/// large digits, digits, ranks 5 to 10, portraits and letters (indexed by a name byte: 0xff is read as 0x81, the
+/// other bytes past the letters read the words that follow, as the original does).
+fn ranking(t: &mut Tables) {
+    t.data("ranking/big_ranks", 0x18b88, "x16", Some(3));
+    t.data("ranking/tiles", 0x18d58, "x16", Some((0x18dbe + 2 * 0x100 - 0x18d58) / 2));
+}
+
 /// All the tables of the engine.
 fn all(t: &mut Tables, rom: &Program) {
+    ranking(t);
+    code_bytes(t);
+    prompts(t);
+    startup(t);
+    config(t, rom);
+    sound(t, rom);
     ai(t, rom);
     aids(t);
     placement(t);

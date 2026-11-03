@@ -1,0 +1,27 @@
+# Overreads of the original (extract/src/overreads.rs): <space d|p> <start>-<end exclusive> <key> <table> # <reason>
+# Measured with DDSOM_RESIDUE_BYTES=1 over the 309 scenarios (docs/sans-rom.md, "Overreads"); ranges widened to the
+# whole record that the reader can take (24 bytes of a long animation entry, the span of a script table).
+#
+# Animation entries that are not entries: scripts started from incoherent sets around 0x1af22c-0x1bf902 (their
+# "frames" are not frames; docs/fin.md, L1 "Résultat").
+d 1af22c-1af244 1af22c anim entry # incoherent script: entry outside the animation data
+d 1af354-1af36c 1af354 anim entry # incoherent script: entry outside the animation data
+d 1af49a-1af4b2 1af49a anim entry # incoherent script: entry outside the animation data
+d 1b1fc2-1b1fda 1b1fc2 anim entry # incoherent script: entry outside the animation data
+d 1b21c2-1b21da 1b21c2 anim entry # incoherent script: entry outside the animation data
+d 1b21c2-1b21da 1b21c3 anim entry # incoherent script at an odd address (the words are read at the even address below)
+d 1b21c6-1b21de 1b21c6 anim entry # incoherent script: entry outside the animation data
+d 1b21f6-1b220e 1b21f6 anim entry # incoherent script: entry outside the animation data
+d 1bf902-1bf91a 1bf902 anim entry # incoherent script: entry outside the animation data
+# Script offsets read in sets that are not sets (the offset table of the incoherent sets).
+d 1b2d30-1b2e80 1b21c2 anim set # incoherent set: script offsets read far past it, by the script number
+d 1b670c-1b670e 1b670a anim set # incoherent set: one script offset
+d 1bfaf4-1bfaf6 1bf8fe anim set # incoherent set: one script offset
+# Invalid frame pointers (the header of a "frame" at the 24-bit address; the pieces are read where it points).
+d 200b30-200b3a b200b30 frame # invalid frame pointer 0x0b200b30: header read at 0x200b30
+d 2310-231a 23002310 frame # invalid frame pointer 0x23002310: header read at 0x2310 (code)
+d 3200-320a 32003200 frame # invalid frame pointer 0x32003200: header read at 0x3200 (code)
+# An object without speed table (0): its speeds are read from address 0 (reset vectors and the start of the code).
+d 0-100 0 speed table # object without speed table: speeds read from address 0
+# A critical hit row read past the damage table (docs/fin.md, L10).
+p 3ca2-3ca4 3c84 damage_crit_row # row of the critical damage read past the table, in the code that follows

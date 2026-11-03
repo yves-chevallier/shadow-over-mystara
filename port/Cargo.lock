@@ -101,6 +101,7 @@ dependencies = [
  "ddsom-game",
  "ddsom-sound",
  "png",
+ "qsound",
  "serde",
  "serde_json",
 ]

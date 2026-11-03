@@ -55,6 +55,7 @@ fn main() {
             objects::extract(roms, &out.join("data/objects.json"))?;
             screens::extract(roms, &out.join("data/screens.json"))?;
             engine::extract(roms, &out.join("data/engine.json"))?;
+            overreads::extract(roms, &out.join("data/overreads.json"))?;
             set::extract(roms, &out.join("data/set.json"))?;
             player_tables::extract(roms, &out.join("data/player_tables.json"))?;
             data::extract(roms, &out.join("data"))?;
@@ -145,6 +146,11 @@ The rest of the program region: `natives.json`, the measured zones that the nati
 `reste.json`, everything no other file describes, except the executed 68000 code (ranges listed in
 `code`), as blocks of hexadecimal bytes. With them, the rebuilt program region equals the ROM outside code
 (docs/sans-rom.md 'full data coverage').
+
+## data/overreads.json
+
+Bytes that the original reads outside every table on the paths the scenarios play (original glitches), named by
+the read that takes them.
 
 ## data/speeds.json
 

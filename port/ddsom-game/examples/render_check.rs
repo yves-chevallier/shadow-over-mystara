@@ -2,10 +2,9 @@
 //!
 //! render_check <roms> <eeprom> <scenario> <frames> [output]
 //!
-//! Runs the game (without 68000, Rust sound driver) with rendering and audio (`DDSOM_SON_Z80=1`: the emulated Z80
-//! instead) and prints one line per frame: hash of the pixels, hash of the audio samples produced. With `exit`, writes
+//! Runs the game (without 68000, without ROM, Rust sound driver) with rendering and audio and prints one line per frame: hash of the pixels, hash of the audio samples produced. With `exit`, writes
 //! these lines to a file; otherwise only the summary line is printed. Compare two outputs with `cmp`/`diff`.
-//! `DDSOM_ASSETS=<dir>`: machine built from the assets only (tile atlas from `gfx/cells_NN.png`, samples from the WAVs).
+//! `DDSOM_ASSETS=<dir>`: game loaded from the assets only (tile atlas from `gfx/cells_NN.png`, samples from the WAVs).
 //! `DDSOM_DUMP_VIDEO=<dir>` (and `DDSOM_DUMP_EVERY=<n>`, default 10): writes the video state of every n-th frame and the
 //! hash of its pixels, for `cps2-gfx/examples/render_bench` (renderer alone, without the game).
 
@@ -33,27 +32,18 @@ fn main() {
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();
-    let mut m = match std::env::var_os("DDSOM_ASSETS") {
-        Some(dir) => {
-            ddsom_data::install(ddsom_data::GameData::load(Path::new(&dir)).expect("game data"));
-            let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
-            cps2::Machine::ddsom(contents, ee.as_deref())
-        }
-        None => {
-            let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
-            m.set_overclock(16.0);
-            m
-        }
+    // the game machine (no ROM) and its data, as in `ddsom`
+    let contents = match std::env::var_os("DDSOM_ASSETS") {
+        Some(dir) => extract::install_game_assets(Path::new(&dir)).expect("assets"),
+        None => extract::install_game(Path::new(&a[1])).expect("roms"),
     };
+    let mut m = cps2::Machine::game(contents, ee.as_deref());
     let dump = std::env::var_os("DDSOM_DUMP_VIDEO").map(std::path::PathBuf::from);
     let every: usize = std::env::var("DDSOM_DUMP_EVERY").ok().and_then(|n| n.parse().ok()).unwrap_or(10);
     let mut index = dump.as_ref().map(|d| {
         std::fs::create_dir_all(d).unwrap();
         std::io::BufWriter::new(std::fs::File::create(d.join("index.txt")).unwrap())
     });
-    if std::env::var_os("DDSOM_SON_Z80").is_none() {
-        m.sound.use_rust_driver();
-    }
     ddsom_game::install_no_68k(&mut m);
     m.rendering = true;
     let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");

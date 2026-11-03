@@ -19,6 +19,11 @@ impl Program {
         Program { data, prog }
     }
 
+    /// The whole program as the residue of the game (`ddsom_data::residue`, mode with ROMs).
+    pub fn residue(&self) -> ddsom_data::residue::Residue {
+        ddsom_data::residue::Residue::from_program(&self.data, &self.prog)
+    }
+
     pub fn len(&self) -> u32 {
         2 * self.data.len() as u32
     }

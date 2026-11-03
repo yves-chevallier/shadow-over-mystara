@@ -76,4 +76,9 @@ impl DspTables {
     pub fn load(path: &Path) -> io::Result<Self> {
         crate::json::load(path)
     }
+
+    /// The tables as the QSound emulation reads them.
+    pub fn tables(&self) -> Result<qsound::DspTables, String> {
+        qsound::DspTables::from_tables(|name| self.tables.iter().find(|t| t.name == name).map(|t| &t.values[..]))
+    }
 }

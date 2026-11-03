@@ -377,8 +377,8 @@ fn next_scene(m: &mut cps2::Machine) -> Option<u32> {
 
 fn cards(roms: &Path, eeprom: &Path, exit: &Path, scenes: &[u32]) {
     let mut m = start_up(roms, eeprom);
-    let (gfx, data, prog) = (m.gfx.clone(), m.bus.rom.clone(), m.bus.rom_dec.clone());
-    let rom = Rom { data: &data, prog: &prog, gfx: &gfx };
+    let (gfx, program) = (m.gfx.clone(), m.bus.rom.clone().expect("machine with the ROMs"));
+    let rom = Rom { data: &program.data, prog: &program.decrypted, gfx: &gfx };
     for d in ["couches", "infos"] {
         std::fs::create_dir_all(exit.join(d)).unwrap();
     }
@@ -587,7 +587,8 @@ fn main() {
         Some("planche") if a.len() >= 4 => sheet(Path::new(&a[2]), Path::new(&a[3])),
         Some("tables") if a.len() >= 3 => {
             let m = cps2::Machine::load_ddsom(Path::new(&a[2]), None).unwrap();
-            let rom = Rom { data: &m.bus.rom, prog: &m.bus.rom_dec, gfx: &m.gfx };
+            let program = m.bus.rom.clone().expect("machine with the ROMs");
+            let rom = Rom { data: &program.data, prog: &program.decrypted, gfx: &m.gfx };
             for n in 0..115 {
                 let dim = |c: &Layer| {
                     let g = c.grid(&rom, n);

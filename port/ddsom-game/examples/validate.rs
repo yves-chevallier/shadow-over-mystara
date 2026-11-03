@@ -15,10 +15,11 @@
 //! Sound: machine A has the game's sound driver (Rust, `ddsom-sound`), machine B the original Z80 program. Each QSound
 //! register and each shared RAM byte must receive the same values from both drivers, in the same order, up to a few
 //! frames of delay (`SoundStreams`), and the shared RAM must be identical at every frame (except the pan report byte,
-//! compared in the sequences). `DDSOM_SON_Z80=1` (diagnostic): the Z80 in machine A too.
+//! compared in the sequences).
 //!
-//! `DDSOM_ASSETS=<dir>`: machine A is built from the extracted resources alone
-//! (`ddsom_assets::rebuild::contents`, no ROM read: game without ROM, docs/sans-rom.md); machine B keeps the ROMs.
+//! Machine A has no ROM (`cps2::Machine::game`): its data are extracted in memory from the ROMs
+//! (`extract::install_game`), or with `DDSOM_ASSETS=<dir>` loaded from the extracted resources alone
+//! (`extract::install_game_assets`, no ROM read: game without ROM, docs/sans-rom.md); machine B keeps the ROMs.
 //!
 //! validate <roms> <eeprom> <scenario> <frames>
 
@@ -272,19 +273,13 @@ fn main() {
         m
     };
     ddsom_game::refuse_hybrid();
-    let mut ma = match std::env::var_os("DDSOM_ASSETS") {
-        Some(dir) => {
-            ddsom_data::install(ddsom_data::GameData::load(Path::new(&dir)).expect("game data"));
-            let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
-            cps2::Machine::ddsom(contents, ee.as_deref())
-        }
-        None => load(),
+    // the game: a machine without ROM, its data extracted from the ROMs (or loaded from the assets)
+    let contents = match std::env::var_os("DDSOM_ASSETS") {
+        Some(dir) => extract::install_game_assets(Path::new(&dir)).expect("assets"),
+        None => extract::install_game(Path::new(roms)).expect("roms"),
     };
+    let mut ma = cps2::Machine::game(contents, ee.as_deref());
     let mut mb = load();
-    // the game's sound driver against the original Z80 (DDSOM_SON_Z80=1, diagnostic: the Z80 in both machines)
-    if std::env::var_os("DDSOM_SON_Z80").is_none() {
-        ma.sound.use_rust_driver();
-    }
     ma.sound.output = Some(Vec::new());
     mb.sound.output = Some(Vec::new());
     let mut sound = SoundStreams::default();

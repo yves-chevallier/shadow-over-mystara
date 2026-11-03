@@ -97,12 +97,15 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
     }
 }
 
-/// Word of the program space (PC-relative read: the decrypted program, not the data).
+/// Word of the program space (PC-relative read: the decrypted program, not the data). Tools only: the game machine
+/// has no ROM (the natives for the original code read the ROM of the reference machine).
+#[cfg(feature = "tools")]
 pub fn prog16(b: &mut Cps2Bus, a: u32) -> u16 {
     b.fetch16(a)
 }
 
-/// Byte of the program space (see `prog16`).
+/// Byte of the program space (see `prog16`). Tools only.
+#[cfg(feature = "tools")]
 pub fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
     let word = b.fetch16(a & !1);
     if a & 1 == 0 { (word >> 8) as u8 } else { word as u8 }

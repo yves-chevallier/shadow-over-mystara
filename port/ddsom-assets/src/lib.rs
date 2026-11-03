@@ -1,9 +1,10 @@
-//! Loading of the resources produced by `extract` (see docs/assets.md): graphics, palettes, samples, music, and the
-//! rebuilding of the ROM image (`rebuild`). The typed game data (sprites, scenery, tables...) are in `ddsom-data`.
+//! Loading of the resources produced by `extract` (see docs/assets.md): graphics, palettes, samples, music, and what
+//! the game machine holds ([`game_contents`]). The typed game data (sprites, scenery, tables...) are in `ddsom-data`.
+//! The rebuilding of ROM images from the resources is in `extract::rebuild` (lossless tests only).
 
+pub mod image;
 pub mod music;
-pub mod rebuild;
-pub mod remainder;
+pub use ddsom_data::remainder;
 pub mod samples;
 
 pub use ddsom_data::{data, json, levels, pointers, scene_palettes, spawns, speeds, sprites, tables, terrain, texts};
@@ -65,6 +66,18 @@ impl Cells {
 /// The graphics of `gfx/cells_NN.png`, decoded into the renderer's tile atlas.
 pub fn tile_atlas(dir: &Path) -> io::Result<TileAtlas> {
     Ok(Cells::load(dir)?.into_atlas())
+}
+
+/// What the game machine holds, from the assets folder `dir`: the tile atlas (`gfx/`), the sound driver's data
+/// (`sound/music.json`), the DSP tables (`sound/qsound_dsp.json`) and the sample bank (`sounds/*.wav`). No ROM image.
+pub fn game_contents(dir: &Path) -> io::Result<cps2::GameContents> {
+    let dsp = music::DspTables::load(&dir.join("sound/qsound_dsp.json"))?.tables().map_err(io::Error::other)?;
+    Ok(cps2::GameContents {
+        graphics: tile_atlas(&dir.join("gfx"))?,
+        sound: Music::load(&dir.join("sound/music.json"))?.data,
+        dsp,
+        samples: samples::bank(dir)?.bytes,
+    })
 }
 
 /// Sample: signed 8-bit PCM, optional loop (start index), reference note.

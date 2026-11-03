@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ddsom_assets::data::{Cell, DataFile, Kind};
-use ddsom_assets::rebuild::{self, Program};
+use extract::rebuild::{self, Program};
 use ddsom_sound::data::SoundKind;
 use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
@@ -66,7 +66,7 @@ fn graphics_lossless() {
     assert_eq!(cells.len() * 128, rom.len());
     // each cell re-encoded in hardware format (4 planes per group of 8 pixels)
     for c in 0..cells.len() {
-        assert_eq!(&cells.encode(c)[..], &rom[c * 128..][..128], "cell {c}");
+        assert_eq!(&rebuild::encode_cell(&cells, c)[..], &rom[c * 128..][..128], "cell {c}");
     }
 }
 
@@ -652,7 +652,7 @@ fn dsp_lossless() {
         return;
     }
     let dsp = std::fs::read(roms().join("dl-1425.bin")).unwrap();
-    let rebuilt = ddsom_assets::rebuild::qsound_dsp(&assets()).unwrap();
+    let rebuilt = extract::rebuild::qsound_dsp(&assets()).unwrap();
     let t = ddsom_assets::music::DspTables::load(&assets().join("sound/qsound_dsp.json")).unwrap();
     for table in &t.tables {
         let (a, n) = (2 * table.rom as usize, 2 * table.values.len());
@@ -666,10 +666,10 @@ fn audio_region_lossless() {
     if !has("sound/music.json") {
         return;
     }
-    let img = ddsom_assets::rebuild::audio_region(&assets()).unwrap();
+    let img = extract::rebuild::audio_region(&assets()).unwrap();
     assert!(img.conflicts.is_empty(), "contradictory writes: {:x?}", &img.conflicts[..img.conflicts.len().min(8)]);
     let region = ddsom_sound::region::load(&roms()).unwrap();
-    let first = ddsom_assets::rebuild::first_difference(&img, &region);
+    let first = extract::rebuild::first_difference(&img, &region);
     assert!(first.is_none(), "Z80 region: difference at {:#x}", first.unwrap());
 }
 

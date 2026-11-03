@@ -23,9 +23,9 @@ mod var {
     pub const COINAGE: u32 = 0x1e;
 }
 
-/// Texts: per coin setting (longs, the first for setting 1), free game, setting `A5+0x457`.
+/// Texts: free game, setting `A5+0x457` (the texts per coin setting are the table `prompt/coin_texts`, 0xe048c, longs,
+/// the first for setting 1).
 mod text {
-    pub const BY_COINAGE: u32 = 0xe048c;
     pub const FREE_PLAY: u32 = 0xe04b0;
     pub const SETTING: u32 = 0xe04e4;
 }
@@ -71,7 +71,7 @@ fn entry(x: &mut Ctx) -> Flow {
         return show(x, Print::Simple, Step::PlainShown);
     }
     let k = 4 * x.v8(var::COINAGE) as u32;
-    let t = rd32(x.b, text::BY_COINAGE + k - 4);
+    let t = crate::tables::engine_table!("prompt/coin_texts").at32(x.b, k.wrapping_sub(4));
     wr32(x.b, SHOWN, t);
     show(x, Print::Pieces, Step::CoinsShown)
 }

@@ -27,8 +27,9 @@
 
 use cps2::{Cps2Bus, LINES, VBLANK_LINE};
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::kernel::Point;
+use crate::tables::engine_table;
 use crate::video::Layer;
 use crate::tasks::table::{table, Table};
 
@@ -100,14 +101,14 @@ mod shared {
 }
 
 /// Program constants read at startup.
+/// The tables of the program header that the reset reads (engine data): region word at 2 (copied to `A5+0x70`) and
+/// "development card" byte at 4 (`startup/header`, 0xc0); starting palette (8 longs copied to 0x91C400,
+/// `startup/palette`, 0x19f0); stacks of the 16 tasks (16 longs, pushed below FF01A6: the stack heap, `task_stacks`,
+/// 0x534).
 mod rom {
-    /// Region word (copied to `A5+0x70`) and "development card" byte.
-    pub const REGION: u32 = 0xc2;
-    pub const DEVELOPMENT: u32 = 0xc4;
-    /// Starting palette (8 longs, copied to 0x91C400).
-    pub const PALETTE: u32 = 0x19f0;
-    /// Stacks of the 16 tasks (16 longs, pushed below FF01A6: the stack heap).
-    pub const STACKS: u32 = 0x534;
+    pub const HEADER: &str = "startup/header";
+    pub const PALETTE: &str = "startup/palette";
+    pub const STACKS: &str = "task_stacks";
 }
 
 const GFX_TEST: u32 = 0x910000;
@@ -148,7 +149,7 @@ fn reset(b: &mut Cps2Bus) -> Point {
     b.ram.fill(0);
     *table(b) = Table::default();
     crate::kernel::set_interrupt_mask(b, crate::kernel::MASK_ALL);
-    let region = rd16(b, rom::REGION);
+    let region = engine_table!(rom::HEADER).at16(b, 2);
     wr16(b, a5(var::REGION), region);
     wr16(b, io::VIDEO, 0xe);
     wr16(b, a5(var::VIDEO), 0xe);
@@ -180,7 +181,7 @@ fn reset(b: &mut Cps2Bus) -> Point {
     }
     // 0x182a: starting palette, then empty cells in the first quarter of the tested GFX RAM
     for i in 0..8 {
-        let v = rd32(b, rom::PALETTE + 4 * i);
+        let v = engine_table!(rom::PALETTE).nth32(b, i);
         wr32(b, START_PALETTE + 4 * i, v);
     }
     wr16(b, io::CPS_B_OBJECTS, 0xf);
@@ -229,7 +230,7 @@ fn boot_init(b: &mut Cps2Bus) -> Option<Point> {
     wr16(b, a5(var::DSW), 0xffff);
     // 16 stacks, pushed (`move.l (A0)+,-(A1)` below FF01A6): the last of the table at the top. The heap is that of
     // the Rust task table; A1 keeps the top of the original's.
-    let stacks = (0..16).map(|i| rd32(b, rom::STACKS + 4 * i)).collect();
+    let stacks = (0..16).map(|i| engine_table!(rom::STACKS).nth32(b, i)).collect();
     table(b).stacks = stacks;
     // 0x2d30a (the registers that the RAM test and the stack heap leave it are read by nobody)
     if !crate::config::initialize(b) {
@@ -242,7 +243,7 @@ fn boot_init(b: &mut Cps2Bus) -> Option<Point> {
 
 /// 0x50a: creates the startup task (slot 0) and hands control to the scheduler.
 fn launch(b: &mut Cps2Bus) -> Point {
-    if rd8(b, rom::DEVELOPMENT) != 0 {
+    if engine_table!(rom::HEADER).at8(b, 4) != 0 {
         let pressed = rd8(b, io::BUTTONS) & 0x10 == 0;
         wr8(b, BUTTON_AT_STARTUP, if pressed { 0xff } else { 0 });
     }

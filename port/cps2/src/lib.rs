@@ -144,8 +144,8 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     Ok((rom, dec))
 }
 
-/// Contents of the ddsom chips, as the machine stores them: from the ROMs (`Contents::from_roms`) or rebuilt
-/// from the extracted resources (`ddsom_assets::rebuild::contents`, ROM-less game).
+/// Contents of the ddsom chips as the ROMs hold them: the machine that runs the original program (reference machine,
+/// tools, `ddsom --features original`). The game machine has no program ROM nor Z80 program: [`GameContents`].
 #[derive(Clone)]
 pub struct Contents {
     /// 68000 program, data view (big-endian words, 0x200000 words).
@@ -162,6 +162,28 @@ pub struct Contents {
     pub samples: Vec<u8>,
 }
 
+/// The Z80 region of the ROMs `dd2.01` and `dd2.02` (0x50000 bytes): `dd2.01` = 0x8000 at 0, then 0x18000 at 0x10000
+/// (ROM_CONTINUE); `dd2.02` at 0x28000.
+pub fn load_audio_region(romdir: &Path) -> io::Result<Vec<u8>> {
+    let mut audio = vec![0u8; 0x50000];
+    let d1 = std::fs::read(romdir.join("dd2.01"))?;
+    audio[..0x8000].copy_from_slice(&d1[..0x8000]);
+    audio[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
+    let d2 = std::fs::read(romdir.join("dd2.02"))?;
+    audio[0x28000..0x48000].copy_from_slice(&d2);
+    Ok(audio)
+}
+
+/// The QSound sample ROMs `dd2.11m` and `dd2.12m` (ROM_LOAD16_WORD_SWAP), 4 MB.
+pub fn load_samples(romdir: &Path) -> io::Result<Vec<u8>> {
+    let mut samples = Vec::with_capacity(0x400000);
+    for name in ["dd2.11m", "dd2.12m"] {
+        let d = std::fs::read(romdir.join(name))?;
+        samples.extend(d.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
+    }
+    Ok(samples)
+}
+
 impl Contents {
     /// Reads the ROMs (ddsom.zip and dl-1425.bin). `gfx` and `samples`, if given, replace the graphics ROMs
     /// (`dd2.13m`...) and the sample ROMs (`dd2.11m`, `dd2.12m`), which are then not read.
@@ -171,27 +193,39 @@ impl Contents {
             Some(g) => g,
             None => cps2_gfx::rom::load_atlas(romdir)?,
         };
-        // Z80: dd2.01 = 0x8000 at 0, then 0x18000 at 0x10000 (ROM_CONTINUE); dd2.02 at 0x28000
-        let mut audio = vec![0u8; 0x50000];
-        let d1 = std::fs::read(romdir.join("dd2.01"))?;
-        audio[..0x8000].copy_from_slice(&d1[..0x8000]);
-        audio[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
-        let d2 = std::fs::read(romdir.join("dd2.02"))?;
-        audio[0x28000..0x48000].copy_from_slice(&d2);
-        // QSound samples: ROM_LOAD16_WORD_SWAP
         let samples = match samples {
             Some(s) => s,
-            None => {
-                let mut samples = Vec::with_capacity(0x400000);
-                for name in ["dd2.11m", "dd2.12m"] {
-                    let d = std::fs::read(romdir.join(name))?;
-                    samples.extend(d.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
-                }
-                samples
-            }
+            None => load_samples(romdir)?,
         };
         let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
-        Ok(Contents { program, decrypted_program, graphics, audio, dsp, samples })
+        Ok(Contents { program, decrypted_program, graphics, audio: load_audio_region(romdir)?, dsp, samples })
+    }
+}
+
+/// What the game machine holds: the graphics, the data of the Rust sound driver, the tables of the QSound DSP and the
+/// sample memory. No program ROM (the game reads `ddsom_data::GameData`), no Z80 program, no DSP program: from the
+/// ROMs ([`GameContents::from_roms`]) or from the assets (`ddsom_assets::game_contents`).
+#[derive(Clone)]
+pub struct GameContents {
+    /// Graphics, decoded into 8-bit pens.
+    pub graphics: TileAtlas,
+    /// Everything the sound driver reads (`sound/music.json`, or read from the Z80 region of the ROMs).
+    pub sound: ddsom_sound::SoundData,
+    /// Tables of the DSP program (`sound/qsound_dsp.json`, or read from `dl-1425.bin`).
+    pub dsp: qsound::DspTables,
+    /// QSound sample memory (4 MB).
+    pub samples: Vec<u8>,
+}
+
+impl GameContents {
+    /// From the ROMs: the regions are read, then reduced to the data the game uses.
+    pub fn from_roms(romdir: &Path) -> io::Result<Self> {
+        Ok(GameContents {
+            graphics: cps2_gfx::rom::load_atlas(romdir)?,
+            sound: ddsom_sound::SoundData::from_region(&load_audio_region(romdir)?),
+            dsp: qsound::DspTables::from_program(&std::fs::read(romdir.join("dl-1425.bin"))?),
+            samples: load_samples(romdir)?,
+        })
     }
 }
 
@@ -213,16 +247,30 @@ impl Machine {
         Ok(Self::ddsom(Contents::from_roms(romdir, gfx, samples)?, eeprom))
     }
 
-    /// ddsom machine built from these chip contents (no file read).
+    /// ddsom machine built from these chip contents (no file read), reset: the 68000 reads its vectors.
     pub fn ddsom(contents: Contents, eeprom: Option<&[u8]>) -> Self {
-        let Contents { program: rom, decrypted_program: rom_dec, graphics: gfx, audio: zrom, dsp, samples } =
-            contents;
-        let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
+        let Contents { program, decrypted_program, graphics, audio, dsp, samples } = contents;
+        let rom = bus::ProgramRom { data: program, decrypted: decrypted_program };
+        let sound = sound::Sound::new(audio, qsound::QSound::new(&dsp, samples));
+        let mut m = Self::build(Some(rom), sound, graphics, eeprom);
+        m.reset();
+        m
+    }
+
+    /// The game machine: no program ROM (its bus has none, the reset vectors are not read), the Rust sound driver on
+    /// the driver's data, QSound on the DSP tables. The game must be installed on it (`ddsom_game::install_no_68k`).
+    pub fn game(contents: GameContents, eeprom: Option<&[u8]>) -> Self {
+        let GameContents { graphics, sound, dsp, samples } = contents;
+        let sound = sound::Sound::with_driver(sound, qsound::QSound::with_tables(dsp, samples));
+        Self::build(None, sound, graphics, eeprom)
+    }
+
+    fn build(rom: Option<bus::ProgramRom>, sound: sound::Sound, gfx: TileAtlas, eeprom: Option<&[u8]>) -> Self {
         let ee = match eeprom {
             Some(b) => Eeprom93c46::from_bytes(b),
             None => Eeprom93c46::new([0xffff; 64]),
         };
-        let mut m = Machine {
+        Machine {
             #[cfg(feature = "m68k")]
             executor: None,
             #[cfg(feature = "m68k")]
@@ -240,8 +288,8 @@ impl Machine {
             rendering: true,
             #[cfg(feature = "m68k")]
             cpu: Cpu::new(),
-            bus: Cps2Bus::new(rom, rom_dec, ee),
-            sound: snd,
+            bus: Cps2Bus::new(rom, ee),
+            sound,
             gfx,
             frame: 0,
             obj_buffer: vec![0; 0x1000],
@@ -249,9 +297,7 @@ impl Machine {
             line_cycles: CPU_HZ / LINE_HZ,
             cycle_debt: 0.0,
             z80_debt: 0.0,
-        };
-        m.reset();
-        m
+        }
     }
 
     /// Multiplies the 68000 frequency (1.0 = arcade). Overclocked, the game always finishes its work

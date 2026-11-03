@@ -360,7 +360,7 @@ fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox
     cov::hit("overlap3_attack");
     let pair = Pair { a: victim, abox: vbox, b: attacker, bbox: abox, signed: false };
     let (ay, ax, az) = (pair.probe_y(w), pair.probe_x(w), pair.probe_z(w));
-    let half = rd8(w.b, abox.0 + HitBox::HALF_Y) as u16;
+    let half = byte(w.b, abox.0 + HitBox::HALF_Y) as u16;
     let y = Probe { delta: ay.delta, half };
     y.overlaps() && ax.overlaps() && az.overlaps()
 }
@@ -381,7 +381,7 @@ impl Pair {
         }
         let a = ao.wrapping_add(self.a.u16(w.b, pos));
         let b = bo.wrapping_add(self.b.u16(w.b, pos));
-        let half = half_sum(rd8(w.b, self.abox.0 + half), rd8(w.b, self.bbox.0 + half), self.signed);
+        let half = half_sum(byte(w.b, self.abox.0 + half), byte(w.b, self.bbox.0 + half), self.signed);
         Probe { delta: a.wrapping_sub(b), half }
     }
     fn probe_y(&self, w: &mut World) -> Probe {

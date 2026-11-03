@@ -50,10 +50,9 @@ impl Clone for Box<dyn Extension> {
 
 #[derive(Clone)]
 pub struct Cps2Bus {
-    /// Program ROM, data view (plain), big-endian words. Shared between bus copies.
-    pub rom: Arc<Vec<u16>>,
-    /// Program ROM, program-space view (decrypted opcodes and PC-relative reads).
-    pub rom_dec: Arc<Vec<u16>>,
+    /// The program ROM, shared between bus copies. `None` on the game machine, which reads its data through the typed
+    /// tables (`ddsom_data::GameData`): only the reference machine and the tools run the original program.
+    pub rom: Option<Arc<ProgramRom>>,
     pub ram: Vec<u16>,       // FF0000-FFFFFF
     pub extra_ram: Vec<u16>, // 660000-664001
     pub gfxram: Vec<u16>,    // 900000-92FFFF
@@ -88,11 +87,24 @@ pub struct Cps2Bus {
     pub ext: Option<Box<dyn Extension>>,
 }
 
+/// The 68000 program ROM: data view (plain) and program-space view (decrypted opcodes and PC-relative reads),
+/// big-endian words.
+pub struct ProgramRom {
+    pub data: Vec<u16>,
+    pub decrypted: Vec<u16>,
+}
+
+/// A read of the program ROM on a machine without ROM: the game never reads it (its data are typed tables).
+#[cold]
+fn no_rom(a: u32) -> ! {
+    panic!("read of the program ROM at {a:#08x} on a machine without ROM (the game reads its data through `GameData`)")
+}
+
 impl Cps2Bus {
-    pub fn new(rom: Vec<u16>, rom_dec: Vec<u16>, eeprom: Eeprom93c46) -> Self {
+    /// A bus with the program ROM (`Some`: reference machine and tools) or without (the game).
+    pub fn new(rom: Option<ProgramRom>, eeprom: Eeprom93c46) -> Self {
         Cps2Bus {
-            rom: Arc::new(rom),
-            rom_dec: Arc::new(rom_dec),
+            rom: rom.map(Arc::new),
             ram: vec![0; 0x8000],
             extra_ram: vec![0; 0x2001],
             gfxram: vec![0; 0x18000],
@@ -142,7 +154,10 @@ impl Cps2Bus {
             0x000000..=0x3fffff => {
                 #[cfg(feature = "rom-trace")]
                 rom_trace::note(false, a);
-                self.rom[(a >> 1) as usize]
+                match &self.rom {
+                    Some(rom) => rom.data[(a >> 1) as usize],
+                    None => no_rom(a),
+                }
             }
             0x400000..=0x40000b => self.output[((a - 0x400000) >> 1) as usize],
             0x618000..=0x619fff => 0xff00 | self.qram[((a - 0x618000) >> 1) as usize] as u16,
@@ -262,7 +277,10 @@ impl Cps2Bus {
         if a < 0x400000 {
             #[cfg(feature = "rom-trace")]
             rom_trace::note(true, a);
-            self.rom_dec[(a >> 1) as usize]
+            match &self.rom {
+                Some(rom) => rom.decrypted[(a >> 1) as usize],
+                None => no_rom(a),
+            }
         } else {
             self.read_word(a & !1)
         }

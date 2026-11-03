@@ -16,9 +16,11 @@ pub mod levels;
 pub mod misc;
 pub mod music;
 pub mod objects;
+pub mod overreads;
 pub mod natives;
 pub mod palettes;
 pub mod player_tables;
+pub mod rebuild;
 pub mod players;
 pub mod rest;
 #[cfg(feature = "full")]
@@ -42,6 +44,23 @@ use std::path::Path;
 use ddsom_data::GameData;
 
 pub use rom::Program;
+
+/// The game of the mode with ROMs: installs the game data extracted in memory and the residue (the program), returns
+/// what the game machine holds (`cps2::Machine::game`). No ROM image is kept on the machine.
+pub fn install_game(roms: &Path) -> io::Result<cps2::GameContents> {
+    let program = Program::load(roms)?;
+    ddsom_data::install(to_data_from(&program)?);
+    ddsom_data::residue::install(ddsom_data::residue::Source::Ready(program.residue()));
+    cps2::GameContents::from_roms(roms)
+}
+
+/// The game of the mode without ROM: installs the game data and the residue (read at its first consultation) of the
+/// assets folder `dir`, returns what the game machine holds. No ROM file is opened.
+pub fn install_game_assets(dir: &Path) -> io::Result<cps2::GameContents> {
+    ddsom_data::install(GameData::load(dir)?);
+    ddsom_data::residue::install(ddsom_data::residue::Source::Assets(dir.to_path_buf()));
+    ddsom_assets::game_contents(dir)
+}
 
 /// The game data, extracted in memory from the ROMs of `roms` (the same tables as the assets folder).
 pub fn to_data(roms: &Path) -> io::Result<GameData> {
@@ -92,5 +111,6 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
         engine: engine::engine(rom),
         rest,
         boxes,
+        overreads: overreads::overreads(rom),
     })
 }

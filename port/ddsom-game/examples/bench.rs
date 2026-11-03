@@ -21,22 +21,13 @@ fn main() {
     };
     let ee = std::fs::read(eeprom).ok();
     ddsom_game::refuse_hybrid();
-    let mut m = match std::env::var_os("DDSOM_ASSETS") {
-        Some(dir) => {
-            ddsom_data::install(ddsom_data::GameData::load(Path::new(&dir)).expect("game data"));
-            let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
-            cps2::Machine::ddsom(contents, ee.as_deref())
-        }
-        None => {
-            ddsom_data::install(extract::to_data(Path::new(roms)).expect("game data"));
-            let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-            m.set_overclock(16.0);
-            m
-        }
+    // the game machine (no ROM) and its data, as in `ddsom`
+    let contents = match std::env::var_os("DDSOM_ASSETS") {
+        Some(dir) => extract::install_game_assets(Path::new(&dir)).expect("assets"),
+        None => extract::install_game(Path::new(roms)).expect("roms"),
     };
+    let mut m = cps2::Machine::game(contents, ee.as_deref());
     ddsom_game::install_no_68k(&mut m);
-    // the game's sound driver (Rust), as in `ddsom`
-    m.sound.use_rust_driver();
     // DDSOM_RENDU=1: the frame is computed at every frame, as in the application
     m.rendering = std::env::var_os("DDSOM_RENDU").is_some();
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
@@ -47,6 +38,10 @@ fn main() {
         m.run_frame();
     }
     let dt = t0.elapsed();
+    let residue: u64 = ddsom_game::data::residue().iter().map(|r| r.1).sum();
+    if residue > 0 {
+        println!("residue: {residue} consultations {:?}", ddsom_game::data::residue());
+    }
     // FNV-1a of the final state
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     let words = m.bus.ram.iter().chain(&m.bus.gfxram).chain(&m.bus.objram[0]).chain(&m.bus.objram[1]).chain(&m.bus.palette);

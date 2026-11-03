@@ -314,10 +314,10 @@ pub(super) fn backstab(g: &mut Ctx, p: Player) -> bool {
 /// 0x375a8: is enemy `e` (body box `body`) within grabbing range of player `me`? (in
 /// depth ±(16 + half-depth), in x in front of the player ±(48 + the enemy's byte `+1`, like the original)).
 pub(super) fn within_reach(b: &mut cps2::Cps2Bus, me: u32, e: u32, body: u32) -> bool {
-    let sbyte = |b: &mut cps2::Cps2Bus, a: u32| rd8(b, a) as i8 as i16 as u16;
+    let sbyte = |b: &mut cps2::Cps2Bus, a: u32| crate::player::tables::byte(b, a) as i8 as i16 as u16;
     let near = |gap: u16, half: u16| gap.wrapping_add(half) <= half.wrapping_add(half);
     let gap = 4u16.wrapping_add(rd16(b, me + Obj::Y)).wrapping_sub(sbyte(b, body + 4).wrapping_add(rd16(b, e + Obj::Y)));
-    if !near(gap, 16u8.wrapping_add(rd8(b, body + 5)) as u16) {
+    if !near(gap, 16u8.wrapping_add(crate::player::tables::byte(b, body + 5)) as u16) {
         return false;
     }
     let mut reach = (-48i16) as u16;

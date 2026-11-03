@@ -8,7 +8,7 @@ use crate::objects::Obj;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::mem::{rd32, wr32};
+use crate::mem::wr32;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::player::tables::{player_data, Aligned};
@@ -23,7 +23,7 @@ const PALETTE_MASK: u32 = 0xf000_f000;
 fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, source: u32) {
     let mut words = [0u32; 8];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = rd32(x.b, source + 4 * i as u32);
+        *w = crate::tables::engine().long(x.b, source + 4 * i as u32);
     }
     for w in words.iter_mut().take(6) {
         *w |= PALETTE_MASK;

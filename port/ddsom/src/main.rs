@@ -1,13 +1,12 @@
 //! Dungeons & Dragons: Shadow over Mystara — port Rust jouable.
 //!
 //! ddsom [roms_dir] [--assets dir] : extracted ROMs (ddsom.zip + dl-1425.bin from qsound.zip), default
-//! ../rom. With `--assets`, the graphics and samples come from the folder produced by `extract`
-//! (PNG and WAV) instead of the graphics and sound ROMs (`dd2.11m`...`dd2.20m` not read); `--assets` alone
-//! (without a folder) reads `../assets`.
-//! The game runs without the 68000: only the routines rewritten in Rust (`docs/noyau.md`). With `--assets`
-//! and no ROM folder, it plays **without any ROM at all**: everything comes from the assets folder (program tables,
-//! graphics, sound driver data, DSP tables, samples; `docs/without-rom.md`), the sound driver is
-//! the Rust one, and no ROM file is opened.
+//! ../rom. With `--assets`, everything comes from the folder produced by `extract` (`--assets` alone, without a
+//! folder, reads `../assets`).
+//! The game runs without the 68000: only the routines rewritten in Rust (`docs/noyau.md`), on a machine without ROM
+//! (`cps2::Machine::game`). It loads the typed game data (`ddsom_data::GameData`), the tile atlas, the data of the
+//! Rust sound driver, the DSP tables and the sample bank: from the assets folder (PNG, WAV, JSON; no ROM file is
+//! opened, docs/sans-rom.md), or extracted in memory from the ROMs.
 //! Diagnostics (build with `--features original`): `DDSOM_ORIGINE=1` (original code at arcade speed), `DDSOM_INTERP=1`
 //! (everything interpreted); these modes
 //! read the ROMs.
@@ -57,48 +56,46 @@ fn main() {
         (Some(_), None) if no_68k => None,
         (_, r) => Some(r.unwrap_or_else(|| DEFAULT_ROMS.into())),
     };
-    let contents = match (&assets, &romdir) {
-        (Some(dir), None) => ddsom_assets::rebuild::contents(dir),
-        (Some(dir), Some(romdir)) => ddsom_assets::tile_atlas(&dir.join("gfx"))
-            .and_then(|gfx| Ok((gfx, ddsom_assets::samples::bank(dir)?.bytes)))
-            .and_then(|(gfx, pcm)| cps2::Contents::from_roms(romdir, Some(gfx), Some(pcm))),
-        (None, Some(romdir)) => cps2::Contents::from_roms(romdir, None, None),
+    // the game data and what the game machine holds: from the assets folder, or extracted from the ROMs
+    let loaded = match (&assets, &romdir) {
+        (Some(dir), _) => extract::install_game_assets(dir),
+        (None, Some(romdir)) => extract::install_game(romdir),
         (None, None) => unreachable!(),
     };
-    // the game data: from the assets folder, or extracted from the ROMs
-    let game_data = match (&assets, &romdir) {
-        (Some(dir), _) => ddsom_data::GameData::load(dir),
-        (None, Some(romdir)) => extract::to_data(romdir),
-        (None, None) => unreachable!(),
-    };
-    let contents = contents.and_then(|c| Ok((c, game_data?)));
-    let contents = match contents {
-        Ok((c, game_data)) => {
-            ddsom_data::install(game_data);
-            c
-        }
+    // the original code (diagnostics) runs on a machine with the ROMs
+    let originals = match (&romdir, no_68k) {
+        (Some(romdir), false) => Some(cps2::Contents::from_roms(romdir, None, None)),
+        _ => None,
+    }
+    .transpose();
+    let (contents, originals) = match loaded.and_then(|c| Ok((c, originals?))) {
+        Ok(c) => c,
         Err(e) => {
             match (&assets, &romdir) {
-                (Some(dir), None) => eprintln!("Cannot load the assets from {}: {e}", dir.display()),
-                (_, Some(romdir)) => eprintln!("Cannot load the ROMs from {}: {e}", romdir.display()),
+                (Some(dir), _) => eprintln!("Cannot load the assets from {}: {e}", dir.display()),
+                (None, Some(romdir)) => eprintln!("Cannot load the ROMs from {}: {e}", romdir.display()),
                 (None, None) => unreachable!(),
             }
             std::process::exit(1);
         }
     };
     // a fresh machine: at startup, and on each resume from a save (`save.rs`)
-    let machine = |eeprom: Option<&[u8]>| {
-        let mut m = Machine::ddsom(contents.clone(), eeprom);
-        if no_68k {
+    let machine = |eeprom: Option<&[u8]>| match &originals {
+        // the game: no ROM, the Rust sound driver
+        None => {
+            let mut m = Machine::game(contents.clone(), eeprom);
             ddsom_game::install_no_68k(&mut m);
-        } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
-            #[cfg(feature = "original")]
-            ddsom_rc::install(&mut m);
+            m
         }
-        // the sound driver rewritten in Rust, never the Z80 program (with or without ROMs; the Z80 region rebuilt from
-        // the assets has only the driver's data). Already the case unless cargo unified the `z80` feature of `cps2`.
-        m.sound.use_rust_driver();
-        m
+        Some(c) => {
+            let mut m = Machine::ddsom(c.clone(), eeprom);
+            #[cfg(feature = "original")]
+            if std::env::var_os("DDSOM_ORIGINE").is_some() {
+                ddsom_rc::install(&mut m);
+            }
+            m.sound.use_rust_driver();
+            m
+        }
     };
     let mut m = machine(eeprom.as_deref());
 

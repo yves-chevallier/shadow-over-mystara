@@ -402,8 +402,6 @@ const BUTTONS_NOW: u32 = 0x01;
 const BUTTONS_BEFORE: u32 = 0x07;
 /// Words reset to zero by a level skip (status of each player and of its weapons).
 const PLAYER_RESET: [u32; 8] = [0x5e2, 0x7e2, 0x9e2, 0xbe2, 0x602, 0x802, 0xa02, 0xc02];
-/// ROM word whose bit 15 enables the debug level skip.
-const DEBUG_SWITCH: u32 = 0xc0;
 /// Last scene number.
 const LAST_SCENE: i8 = 0x6c;
 /// Level skip buttons: next scene, previous scene.
@@ -523,9 +521,9 @@ pub fn after_world(b: &mut Cps2Bus) {
 }
 
 /// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production
-/// game (bit 15 of the ROM word `0xc0` is zero).
+/// game (bit 15 of the ROM word `0xc0`, word 0 of `startup/header`, is zero).
 pub fn debug_scene_skip(b: &mut Cps2Bus) {
-    if rd16(b, DEBUG_SWITCH) & 0x8000 != 0 {
+    if crate::tables::engine_table!("startup/header").at16(b, 0) & 0x8000 != 0 {
         let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
         if pressed & BUTTONS_NEXT == BUTTONS_NEXT {
             change_scene(b, true);

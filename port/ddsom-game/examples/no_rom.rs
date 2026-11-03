@@ -1,101 +1,159 @@
-//! The game without ROM: does a machine built from the extracted resources alone play like the one with the ROMs?
+//! The game without ROM: does the game loaded from the extracted resources alone play like the one extracted from the
+//! ROMs?
 //!
 //!   no_rom <roms> <eeprom> <assets> <scenario>:<frames> ...
 //!
-//! Two machines without 68000 (`ddsom_game::install_no_68k`) with the Rust sound driver replay each scenario:
-//!   R: contents read from the ROMs (`cps2::Contents::from_roms`);
-//!   A: contents rebuilt from the assets folder (`ddsom_assets::rebuild::contents`), no ROM file
-//!       opened: 68000 program reduced to its tables, Z80 region without program, DSP reduced to its tables.
-//! At every frame: the displayed frame, the work RAM, the GFX RAM, the object RAM, the palette, the shared RAM
-//! and the audio samples must be identical. A stop of the game without 68000 (address without native) on both
-//! machines at the same frame ends the scenario without counting it as a failure (a hole of the no-68000 mode, not of the
-//! resources). Output: "IDENTICAL" or the first difference, per scenario.
+//! The game (machine without ROM, `cps2::Machine::game`, without 68000, Rust sound driver) replays each scenario twice,
+//! in two processes (the game data are installed once per process):
+//!   R: game data, residue and machine contents extracted in memory from the ROMs (`extract::install_game`);
+//!   A: the same loaded from the assets folder (`extract::install_game_assets`), no ROM file opened.
+//! At every frame: the displayed frame, the audio samples, the work RAM, the GFX RAM, the object RAM, the palette and
+//! the shared RAM must be identical (compared through a hash per frame and per part). A stop of the game without 68000
+//! on both at the same frame ends the scenario without counting it as a failure (a hole of the no-68000 mode, not of
+//! the resources). Output: "IDENTICAL" or the first difference, per scenario, and the consultations of the residue.
 
+use std::hash::Hasher;
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
 
-use cps2::{Contents, Machine};
+/// FNV-1a 64 bits.
+struct Fnv(u64);
+impl Hasher for Fnv {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ b as u64).wrapping_mul(0x100000001b3);
+        }
+    }
+}
 
-fn machine(contents: Contents, eeprom: Option<&[u8]>) -> Machine {
-    let mut m = Machine::ddsom(contents, eeprom);
+fn hash_words(w: &[u16]) -> u64 {
+    let mut h = Fnv(0xcbf29ce484222325);
+    for v in w {
+        h.write(&v.to_le_bytes());
+    }
+    h.finish()
+}
+
+/// Child process: plays the scenario in one mode and prints one line per frame (the hash of each part), then the
+/// residue line.
+fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, frames: usize) {
+    let ee = std::fs::read(eeprom).ok();
+    let contents = match mode {
+        "roms" => extract::install_game(Path::new(roms)).expect("roms"),
+        _ => extract::install_game_assets(Path::new(assets)).expect("assets"),
+    };
+    let mut m = cps2::Machine::game(contents, ee.as_deref());
     ddsom_game::install_no_68k(&mut m);
-    m.sound.use_rust_driver();
-    m
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    for f in 0..frames {
+        script.apply(f, &mut m);
+        let image = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
+            Ok(image) => image,
+            Err(e) => {
+                let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
+                match msg.strip_prefix(ddsom_game::no68k::STOP) {
+                    Some(stop) => {
+                        writeln!(out, "stop {}", stop.chars().take(200).collect::<String>().replace('\n', " ")).unwrap();
+                        break;
+                    }
+                    None => std::panic::resume_unwind(e),
+                }
+            }
+        };
+        let mut hi = Fnv(0xcbf29ce484222325);
+        for p in &image {
+            hi.write(p);
+        }
+        let mut ha = Fnv(0xcbf29ce484222325);
+        for s in m.sound.audio.drain(..) {
+            ha.write(&s[0].to_le_bytes());
+            ha.write(&s[1].to_le_bytes());
+        }
+        let b = &m.bus;
+        let mut hq = Fnv(0xcbf29ce484222325);
+        hq.write(&b.qram);
+        let parts = [
+            ("displayed frame", hi.finish()),
+            ("audio samples", ha.finish()),
+            ("work RAM", hash_words(&b.ram)),
+            ("GFX RAM", hash_words(&b.gfxram)),
+            ("object RAM 0", hash_words(&b.objram[0])),
+            ("object RAM 1", hash_words(&b.objram[1])),
+            ("palette", hash_words(&b.palette)),
+            ("shared RAM", hq.finish()),
+        ];
+        let line: Vec<String> = parts.iter().map(|(name, h)| format!("{name}={h:016x}")).collect();
+        writeln!(out, "frame {}", line.join(";")).unwrap();
+    }
+    let residue: u64 = ddsom_game::data::residue().iter().map(|r| r.1).sum();
+    writeln!(out, "residue {residue}").unwrap();
 }
 
-/// A frame, or the stop message of the game without 68000.
-fn image(m: &mut Machine) -> Result<Vec<[u8; 3]>, String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())).map_err(|e| {
-        let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
-        match msg.strip_prefix(ddsom_game::no68k::STOP) {
-            Some(m) => m.chars().take(200).collect(),
-            None => std::panic::resume_unwind(e),
-        }
-    })
-}
-
-/// First part of the state that differs between the two machines.
-fn gap(r: &Machine, a: &Machine) -> Option<String> {
-    let first = |x: &[u16], y: &[u16]| x.iter().zip(y).position(|(p, q)| p != q);
-    if let Some(i) = first(&r.bus.ram, &a.bus.ram) {
-        return Some(format!("RAM {:06x}: {:04x} instead of {:04x}", 0xff0000 + 2 * i, a.bus.ram[i], r.bus.ram[i]));
-    }
-    if let Some(i) = first(&r.bus.gfxram, &a.bus.gfxram) {
-        return Some(format!("GFX RAM {:06x}", 0x900000 + 2 * i));
-    }
-    for k in 0..2 {
-        if first(&r.bus.objram[k], &a.bus.objram[k]).is_some() {
-            return Some(format!("RAM d'objets, banque {k}"));
-        }
-    }
-    if first(&r.bus.palette, &a.bus.palette).is_some() {
-        return Some("palette".into());
-    }
-    if let Some(i) = r.bus.qram.iter().zip(&a.bus.qram).position(|(p, q)| p != q) {
-        return Some(format!("shared RAM {i:03x}"));
-    }
-    None
+/// The lines of a child process playing `scenario` in `mode`.
+fn child(mode: &str, a: &[String], scenario: &str, frames: usize) -> impl Iterator<Item = String> {
+    let exe = std::env::current_exe().expect("executable");
+    let mut c = Command::new(exe)
+        .args(["--play", mode, &a[1], &a[2], &a[3], scenario, &frames.to_string()])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("child process");
+    BufReader::new(c.stdout.take().unwrap()).lines().map_while(Result::ok)
 }
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    if let [_, flag, mode, roms, eeprom, assets, scenario, frames] = &a[..] {
+        if flag == "--play" {
+            play(mode, roms, eeprom, assets, scenario, frames.parse().expect("frames"));
+            return;
+        }
+    }
     if a.len() < 5 {
         eprintln!("usage: no_rom <roms> <eeprom> <assets> <scenario>:<frames> ...");
         std::process::exit(2);
     }
-    let ee = std::fs::read(&a[2]).ok();
     let mut failures = 0;
     for spec in &a[4..] {
         let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
         let frames: usize = frames.parse().expect("frames");
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
-        let roms = Contents::from_roms(Path::new(&a[1]), None, None).expect("roms");
-        let assets = ddsom_assets::rebuild::contents(Path::new(&a[3])).expect("assets");
-        let (mut mr, mut ma) = (machine(roms, ee.as_deref()), machine(assets, ee.as_deref()));
         let t0 = std::time::Instant::now();
-        let mut verdict = format!("IDENTICAL over {frames} frames");
-        for f in 0..frames {
-            script.apply(f, &mut mr);
-            script.apply(f, &mut ma);
-            let (ir, ia) = (image(&mut mr), image(&mut ma));
-            let (sr, sa): (Vec<_>, Vec<_>) = (std::mem::take(&mut mr.sound.audio), std::mem::take(&mut ma.sound.audio));
-            let diff = match (&ir, &ia) {
-                (Err(_), Err(_)) => {
-                    verdict = format!("IDENTICAL over {f} frames (then both stop without 68000: {})", ir.unwrap_err());
+        let (mut r, mut s) = (child("roms", &a, path, frames), child("assets", &a, path, frames));
+        let mut verdict = None;
+        let mut residue = (String::new(), String::new());
+        for f in 1.. {
+            match (r.next(), s.next()) {
+                (Some(x), Some(y)) if x.starts_with("residue") => {
+                    residue = (x, y);
                     break;
                 }
-                (Ok(x), Ok(y)) if x != y => Some("displayed frame".to_string()),
-                (Ok(_), Ok(_)) if sr != sa => Some("audio samples".to_string()),
-                (Ok(_), Ok(_)) => gap(&mr, &ma),
-                (Err(m), Ok(_)) => Some(format!("stop of the ROM machine alone: {m}")),
-                (Ok(_), Err(m)) => Some(format!("stop of the assets machine alone: {m}")),
-            };
-            if let Some(d) = diff {
-                verdict = format!("DIFFERENT at frame {}: {d}", f + 1);
-                failures += 1;
-                break;
+                (Some(x), Some(y)) if x == y && x.starts_with("stop") => {
+                    verdict = Some(format!("IDENTICAL over {} frames (then both stop without 68000: {})", f - 1, &x[5..]));
+                }
+                (Some(x), Some(y)) if x == y => {}
+                (Some(x), Some(y)) => {
+                    let what = x
+                        .split(';')
+                        .zip(y.split(';'))
+                        .find(|(p, q)| p != q)
+                        .map_or(format!("{x} / {y}"), |(p, _)| p.trim_start_matches("frame ").split('=').next().unwrap().to_string());
+                    verdict = Some(format!("DIFFERENT at frame {f}: {what}"));
+                    failures += 1;
+                    break;
+                }
+                _ => {
+                    verdict = Some(format!("DIFFERENT at frame {f}: a process ended early"));
+                    failures += 1;
+                    break;
+                }
             }
         }
-        println!("{path} : {verdict} ({:.1?})", t0.elapsed());
+        let verdict = verdict.unwrap_or(format!("IDENTICAL over {frames} frames"));
+        println!("{path} : {verdict}; {} (ROMs), {} (assets) ({:.1?})", residue.0, residue.1, t0.elapsed());
     }
     std::process::exit(if failures == 0 { 0 } else { 1 });
 }

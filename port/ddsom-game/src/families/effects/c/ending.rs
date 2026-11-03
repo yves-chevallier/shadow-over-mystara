@@ -73,9 +73,9 @@ pub(super) fn shard_rain<R: Bench>(x: &mut Cx<'_, R>) {
             crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_BLUE);
         }
         0 => {
-            // Original glitch: A1 is the handler's address (0xb997c), left by the dispatch loop:
-            // the byte "`+0x2c`" read is a constant byte of its code
-            let handler = Obj(0xb997c);
+            // Original glitch: A1 is the handler's address (0xb997c), left by the dispatch loop: the byte "`+0x2c`"
+            // read is a constant byte of its code (0xb99a8, `effects/rain_handler_facing` of the engine data)
+            let handler_facing = crate::tables::engine_table!("effects/rain_handler_facing").at8(x.b, 0);
             x.add8(f::STATE, 2);
             x.set16(Obj::VX, 0xfc00);
             x.set16(Obj::VZ, 0xf900);
@@ -86,7 +86,7 @@ pub(super) fn shard_rain<R: Bench>(x: &mut Cx<'_, R>) {
             let r = random_nibble16(x) & 0x1f;
             x.add16(Obj::Z, r);
             let mut k = (x.u8(shards::COUNT) & 0xf) as u32 * 2;
-            if handler.u8(x.b, Effect::FACING) != 0 {
+            if handler_facing != 0 {
                 let vx = x.u16(Obj::VX).wrapping_neg();
                 x.set16(Obj::VX, vx);
                 k += 0x20;

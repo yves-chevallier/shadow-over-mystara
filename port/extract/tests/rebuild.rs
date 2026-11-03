@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::rebuild::{self, Image, Program};
+use extract::rebuild::{self, Image, Program};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

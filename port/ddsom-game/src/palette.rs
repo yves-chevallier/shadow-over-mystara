@@ -19,8 +19,11 @@ const PAGES: Byte = Byte::a5(0x48e);
 pub(crate) const PALETTES: u32 = gfx::PALETTES.0;
 pub(crate) const PAGE_SIZE: u32 = 0x400;
 
-/// Colour word at `a` (palette RAM, or a work RAM copy).
+/// Colour word at `a` (palette RAM, a work RAM copy, or a palette of the library: the engine data by address).
 fn color(b: &mut Cps2Bus, a: u32) -> u16 {
+    if a & 0xff_ffff < 0x40_0000 {
+        return crate::tables::engine().word(b, a);
+    }
     Vram(a).get(b)
 }
 fn set_color(b: &mut Cps2Bus, a: u32, v: u16) {

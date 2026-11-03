@@ -302,6 +302,7 @@ fn register_map() -> [Option<Reg>; 256] {
 
 /// The tables of the DSP program (`dl-1425.bin`) that the high-level emulation reads; the rest of the program is code,
 /// which the emulation replaces. The registers designate them by DSP word address.
+#[derive(Clone)]
 pub struct DspTables {
     pan: Vec<u16>,
     adpcm_steps: Vec<u16>,
@@ -316,6 +317,18 @@ impl DspTables {
         let [pan, adpcm_steps, filters, filters_wrap] =
             DSP_TABLES.map(|(_, at, n)| (usize::from(at)..usize::from(at) + n).map(word).collect());
         DspTables { pan, adpcm_steps, filters, filters_wrap }
+    }
+
+    /// The tables of [`DSP_TABLES`] by name (`sound/qsound_dsp.json` of the assets): `table(name)` gives its words.
+    /// A missing table, or one of the wrong length, is an error.
+    pub fn from_tables<'a>(table: impl Fn(&str) -> Option<&'a [u16]>) -> Result<Self, String> {
+        let mut words = DSP_TABLES.iter().map(|&(name, _, n)| match table(name) {
+            Some(w) if w.len() == n => Ok(w.to_vec()),
+            Some(w) => Err(format!("DSP table `{name}`: {} words instead of {n}", w.len())),
+            None => Err(format!("DSP table `{name}` missing")),
+        });
+        let mut next = || words.next().unwrap();
+        Ok(DspTables { pan: next()?, adpcm_steps: next()?, filters: next()?, filters_wrap: next()? })
     }
 
     /// Pan gain at DSP address `addr` (a pan register value, plus the wet and right channel offsets). The driver only
@@ -400,8 +413,13 @@ impl QSound {
     /// `dsp_rom`: dl-1425.bin, or its tables alone (the first 0x2000 bytes, little-endian words).
     /// `samples`: sample memory (the sample ROMs, or the bank built from the WAV files).
     pub fn new(dsp_rom: &[u8], samples: Vec<u8>) -> Self {
+        Self::with_tables(DspTables::from_program(dsp_rom), samples)
+    }
+
+    /// The emulation with the DSP tables alone (`DspTables`) and the sample memory.
+    pub fn with_tables(dsp: DspTables, samples: Vec<u8>) -> Self {
         let mut q = QSound {
-            dsp: DspTables::from_program(dsp_rom),
+            dsp,
             samples: SampleBank::new(samples),
             regs: register_map(),
             data_latch: 0,

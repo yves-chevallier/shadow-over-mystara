@@ -11,7 +11,7 @@
 use super::actions::start_stand;
 use super::walk::{clamp_to_screen, move_z};
 use super::{animation, ram, Ctx, Player};
-use crate::mem::{rd16, rd32, wr32, A5};
+use crate::mem::{rd16, wr32, A5};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::player::external as ext;

@@ -17,7 +17,8 @@ const FADE_WAIT: u32 = 0x1e8;
 pub(super) const END_2411A: Steps = &[
     (0x24152, |g, p| {
         let actor = rd16(g.b, SCENE_ACTOR) as i16 as i32 as u32;
-        if rd32(g.b, actor + 4) == 0x0402_0800 {
+        // Original glitch: without an actor (0), the original reads the reset vectors (engine data by address)
+        if crate::tables::engine().long(g.b, actor + 4) == 0x0402_0800 {
             next(g, p);
         }
         anim_step(g, p);
@@ -34,7 +35,7 @@ pub(super) const END_2411A: Steps = &[
     (0x2423e, stand_after_anim),
     (0x24252, |g, p| {
         let actor = rd16(g.b, SCENE_ACTOR) as i16 as i32 as u32;
-        if p.u16(g, Obj::X).wrapping_sub(rd16(g.b, actor + 8)) <= 120 {
+        if p.u16(g, Obj::X).wrapping_sub(crate::tables::engine().word(g.b, actor + 8)) <= 120 {
             next(g, p);
             p.set_u16(g, Obj::VZ, 0x500);
             p.set_u16(g, Obj::AZ, (-56i16) as u16);
@@ -55,7 +56,7 @@ pub(super) const END_2411A: Steps = &[
     }),
     (0x242a2, |g, p| {
         let actor = rd16(g.b, SCENE_ACTOR) as i16 as i32 as u32;
-        if crate::mem::rd8(g.b, actor + 4) != 6 {
+        if crate::tables::engine().byte(g.b, actor + 4) != 6 {
             return;
         }
         next(g, p);

@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use ddsom_assets::rebuild::Program;
+use extract::rebuild::Program;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -47,7 +47,7 @@ fn main() {
     println!("# bytes read and covered, per resource file (data, program)");
     for rel in Program::FILES {
         let q = Program::load_files(Path::new(assets), &|f| f == rel).expect("resources");
-        let count = |view: char, img: &ddsom_assets::rebuild::Image| -> u64 {
+        let count = |view: char, img: &extract::rebuild::Image| -> u64 {
             reads.iter().filter(|r| r.0 == view).map(|&(_, s, e)| (s..e).filter(|&a| img.is_covered(a)).count() as u64).sum()
         };
         println!("{rel} {} {}", count('d', &q.data), count('p', &q.prog));

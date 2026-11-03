@@ -133,11 +133,6 @@ impl<'a> Ctx<'a> {
     pub fn set_v32(&mut self, off: u32, v: u32) {
         Long(A5.wrapping_add(off)).set(self.b, v)
     }
-    /// Program-space word (table addressed relative to the PC in the original), for the phase table of the game
-    /// task (`tasks/game.rs`).
-    pub fn prog16(&mut self, addr: u32) -> u16 {
-        self.b.fetch16(addr)
-    }
 
     // --- steps ----------------------------------------------------------------------------------
 

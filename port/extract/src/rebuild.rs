@@ -1,5 +1,7 @@
-//! Rebuilding of the ROM contents from the extracted resources: graphics region, QSound sample
-//! ROM and tables of the 68000 program ROM, at the original addresses.
+//! Rebuilding of the ROM contents from the extracted resources: graphics region, Z80 region, DSP program and tables
+//! of the 68000 program ROM, at the original addresses. Only for the lossless tests (`tests/rebuild.rs`,
+//! `tests/roundtrip.rs`), the measures (`examples/full_program.rs`, `examples/rom_coverage.rs`) and the remainder
+//! (`remainder.rs`): the game reads the typed data (`ddsom_data::GameData`), never a rebuilt ROM (docs/fin.md, L14).
 //!
 //! Each `put_*` function is the inverse of loading a file: it rewrites its tables as the ROM
 //! stores them (the tests of `tests/roundtrip.rs` compare the result byte for byte).
@@ -9,84 +11,19 @@
 use std::io;
 use std::path::Path;
 
-use crate::data::DataFile;
-use crate::pointers::Pointers;
-use crate::sprites::Frame;
-use crate::remainder::Remainder;
-use crate::texts;
-use crate::{
+use ddsom_assets::data::DataFile;
+use ddsom_assets::pointers::Pointers;
+use ddsom_assets::remainder::Remainder;
+use ddsom_assets::sprites::Frame;
+use ddsom_assets::texts;
+use ddsom_assets::{
     Anims, Cells, Frames, Levels, Music, Palettes, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts,
 };
 
+pub use ddsom_assets::image::Image;
+
 /// Size of the program ROM (space 0x000000-0x3fffff).
 pub const PROGRAM_SIZE: usize = 0x40_0000;
-
-/// Bytes of a ROM zone, with the list of bytes that the resources describe.
-pub struct Image {
-    pub bytes: Vec<u8>,
-    known: Vec<u64>,
-    /// Addresses where two writes contradict each other (should stay empty).
-    pub conflicts: Vec<u32>,
-}
-
-impl Image {
-    pub fn new(size: usize) -> Self {
-        Image { bytes: vec![0; size], known: vec![0; size.div_ceil(64)], conflicts: Vec::new() }
-    }
-
-    /// Writes `data` at address `at`.
-    pub fn put(&mut self, at: u32, data: &[u8]) {
-        for (i, &b) in data.iter().enumerate() {
-            let a = at as usize + i;
-            if a >= self.bytes.len() {
-                panic!("write outside the image at {a:#x}");
-            }
-            let known = self.known[a / 64] >> (a % 64) & 1 != 0;
-            if known && self.bytes[a] != b {
-                self.conflicts.push(a as u32);
-            }
-            self.bytes[a] = b;
-            self.known[a / 64] |= 1 << (a % 64);
-        }
-    }
-
-    pub fn put16(&mut self, at: u32, v: u16) {
-        self.put(at, &v.to_be_bytes());
-    }
-
-    pub fn put32(&mut self, at: u32, v: u32) {
-        self.put(at, &v.to_be_bytes());
-    }
-
-    pub fn put_words(&mut self, at: u32, words: &[u16]) {
-        let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
-        self.put(at, &bytes);
-    }
-
-    pub fn is_covered(&self, a: u32) -> bool {
-        let a = a as usize;
-        a < self.bytes.len() && self.known[a / 64] >> (a % 64) & 1 != 0
-    }
-
-    /// Covered zones `(start, end exclusive)`, sorted, non-overlapping.
-    pub fn covered(&self) -> Vec<(u32, u32)> {
-        let mut out: Vec<(u32, u32)> = Vec::new();
-        for a in 0..self.bytes.len() as u32 {
-            if self.is_covered(a) {
-                match out.last_mut() {
-                    Some(r) if r.1 == a => r.1 += 1,
-                    _ => out.push((a, a + 1)),
-                }
-            }
-        }
-        out
-    }
-
-    /// Covered bytes.
-    pub fn covered_len(&self) -> usize {
-        self.known.iter().map(|w| w.count_ones() as usize).sum()
-    }
-}
 
 /// Program ROM: data view (68000 reads) and decrypted program-space view (opcodes and
 /// PC-relative reads), like `cps2::load_program`.
@@ -343,7 +280,7 @@ impl Program {
     }
 
     /// Scroll 1: grids (padded with zeros up to the blocks) and blocks.
-    pub fn put_scroll1(&mut self, s: &crate::levels::Scroll1) {
+    pub fn put_scroll1(&mut self, s: &ddsom_assets::levels::Scroll1) {
         let mut words: Vec<u16> = s.grids.iter().flatten().copied().collect();
         words.resize((s.blocks_rom - s.grids_rom) as usize / 2, 0);
         self.data.put_words(s.grids_rom, &words);
@@ -491,30 +428,24 @@ impl Program {
 
 /// Graphics region (16x16 cells in hardware format: 4 planes per group of 8 pixels, 128 bytes per
 /// cell), as `cps2_gfx::rom::load_gfx` builds it from the ROMs. Only for the lossless tests: the game reads the
-/// cells decoded once (`crate::tile_atlas`).
+/// cells decoded once (`ddsom_assets::tile_atlas`).
 pub fn gfx_region(dir: &Path) -> io::Result<Vec<u8>> {
-    Ok(Cells::load(dir)?.to_region())
+    let cells = Cells::load(dir)?;
+    Ok((0..cells.len()).flat_map(|c| encode_cell(&cells, c)).collect())
 }
 
-impl Cells {
-    /// Bytes of cell `c` in hardware format.
-    pub fn encode(&self, c: usize) -> [u8; 128] {
-        let mut bytes = [0u8; 128];
-        for y in 0..16 {
-            for x in 0..16 {
-                let p = self.pixel(c, x, y);
-                for plane in 0..4 {
-                    bytes[y * 8 + (x / 8) * 4 + plane] |= ((p >> plane) & 1) << (7 - x % 8);
-                }
+/// Bytes of cell `c` in hardware format.
+pub fn encode_cell(cells: &Cells, c: usize) -> [u8; 128] {
+    let mut bytes = [0u8; 128];
+    for y in 0..16 {
+        for x in 0..16 {
+            let p = cells.pixel(c, x, y);
+            for plane in 0..4 {
+                bytes[y * 8 + (x / 8) * 4 + plane] |= ((p >> plane) & 1) << (7 - x % 8);
             }
         }
-        bytes
     }
-
-    /// The whole graphics region.
-    pub fn to_region(&self) -> Vec<u8> {
-        (0..self.len()).flat_map(|c| self.encode(c)).collect()
-    }
+    bytes
 }
 
 /// Z80 region (`cps2::sound::Sound::rom`) with the driver data of `sound/music.json` at their original
@@ -534,7 +465,7 @@ pub fn audio_region(dir: &Path) -> io::Result<Image> {
 /// QSound DSP program as `qsound::QSound::new` reads it (0x2000 bytes, little-endian words): only the
 /// tables of `sound/qsound_dsp.json` are filled, the code (which the high-level emulation replaces) is zero.
 pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
-    let t = crate::music::DspTables::load(&dir.join("sound/qsound_dsp.json"))?;
+    let t = ddsom_assets::music::DspTables::load(&dir.join("sound/qsound_dsp.json"))?;
     let mut bytes = vec![0u8; 0x2000];
     for table in &t.tables {
         for (k, v) in table.values.iter().enumerate() {
@@ -543,29 +474,6 @@ pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
         }
     }
     Ok(bytes)
-}
-
-/// Big-endian words of a program ROM image (view of `cps2::Cps2Bus`).
-fn words(img: &Image) -> Vec<u16> {
-    img.bytes.as_chunks::<2>().0.iter().map(|&w| u16::from_be_bytes(w)).collect()
-}
-
-/// Everything the machine stores in its chips, rebuilt from the assets folder, without any ROM: 68000
-/// program (only its tables: the game must run without the 68000, `ddsom_game::install_no_68k`), graphics,
-/// Z80 region (without its program: Rust sound driver mandatory), QSound DSP tables, samples.
-pub fn contents(dir: &Path) -> io::Result<cps2::Contents> {
-    let p = Program::load(dir)?;
-    if !p.missing.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("incomplete assets: {}", p.missing.join(", "))));
-    }
-    Ok(cps2::Contents {
-        program: words(&p.data),
-        decrypted_program: words(&p.prog),
-        graphics: crate::tile_atlas(&dir.join("gfx"))?,
-        audio: audio_region(dir)?.bytes,
-        dsp: qsound_dsp(dir)?,
-        samples: crate::samples::bank(dir)?.bytes,
-    })
 }
 
 /// First address where `img` and `rom` differ on the bytes covered by `img` (for tests and measurements).

@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use ddsom_assets::rebuild::{self, Program, PROGRAM_SIZE};
+use extract::rebuild::{self, Program, PROGRAM_SIZE};
 use ddsom_assets::remainder::{ranges, Remainder};
 
 fn main() {

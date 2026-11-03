@@ -26,6 +26,7 @@
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::tables::{self, engine_table};
 use crate::Native;
 
 mod ram {
@@ -45,13 +46,9 @@ mod ram {
 
 /// Distance between the configuration copy and its backup copy.
 const FALLBACK: u32 = 0x30;
-/// Table of default value blocks per variant (words relative to the table), in code.
+/// Table of default value blocks per variant (words relative to the table), in code (`config/variants` of the engine
+/// data; the blocks are `config/defaults@<address>`).
 const TABLE_VARIANTS: u32 = 0x2d656;
-/// Loading tables: coins per credit (words) by coin mode, two bytes then one
-/// byte by credit mode.
-const TABLE_PIECES: u32 = 0x2d38c;
-const TABLE_CREDIT_A: u32 = 0x2d40e;
-const TABLE_CREDIT_B: u32 = 0x2d426;
 
 fn a5(off: u32) -> u32 {
     crate::mem::A5.wrapping_add(off)
@@ -61,11 +58,25 @@ fn a5(off: u32) -> u32 {
 // 0x2d648: default value block of the variant (the original returns it in A6, its displacement in D0: the Rust
 // callers take the block)
 
+/// The default value block of a variant (its address, a key of the engine data), read by byte offset.
+#[derive(Clone, Copy)]
+struct Defaults(u32);
+
+impl Defaults {
+    fn byte(self, b: &mut Cps2Bus, offset: u32) -> u8 {
+        tables::engine().byte(b, self.0 + offset)
+    }
+
+    fn word(self, b: &mut Cps2Bus, offset: u32) -> u16 {
+        tables::engine().word(b, self.0 + offset)
+    }
+}
+
 /// Default value block of the current variant.
-fn block_defaults(b: &mut Cps2Bus) -> u32 {
+fn block_defaults(b: &mut Cps2Bus) -> Defaults {
     let index = crate::mem::rd16(b, crate::mem::A5 + ram::VARIANT);
-    let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32));
-    TABLE_VARIANTS.wrapping_add(displacement as i16 as u32)
+    let displacement = engine_table!("config/variants").at16(b, index as i16 as u32);
+    Defaults(TABLE_VARIANTS.wrapping_add(displacement as i16 as u32))
 }
 
 /// Bytes of the default block and the game variables they feed, in the order of the original's
@@ -76,7 +87,7 @@ const SETTINGS: [(u32, u32); 12] =
 /// 0x2d5c6: are the current settings the factory ones (default block of the variant)?
 pub fn is_factory(x: &mut crate::scene::Ctx) -> bool {
     let block = block_defaults(x.b);
-    SETTINGS.iter().all(|&(byte, variable)| rd8(x.b, block + byte) == x.v8(variable))
+    SETTINGS.iter().all(|&(byte, variable)| block.byte(x.b, byte) == x.v8(variable))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -90,7 +101,7 @@ fn defaults(b: &mut Cps2Bus) {
     let mut destination = a5(ram::CONFIG);
     for _ in 0..2 {
         for i in 0..24 {
-            let word = rd16(b, block + 2 * i);
+            let word = block.word(b, 2 * i);
             wr16(b, destination, word);
             destination += 2;
         }
@@ -104,8 +115,8 @@ fn defaults(b: &mut Cps2Bus) {
 // 0x2d662: validation and repair
 
 /// Replaces value `i` of the copy (and of its backup) with the default value.
-fn repair(b: &mut Cps2Bus, copy: u32, defaults: u32, i: u32) {
-    let d = rd8(b, defaults + i);
+fn repair(b: &mut Cps2Bus, copy: u32, defaults: Defaults, i: u32) {
+    let d = defaults.byte(b, i);
     wr8(b, copy + i, d);
     wr8(b, copy + FALLBACK + i, d);
 }
@@ -172,7 +183,7 @@ pub fn validate(b: &mut Cps2Bus) {
     }
     // byte 7: equal to the default, or greater by at most 2 to 10
     let o7 = rd8(b, copy + 7);
-    let d7 = rd8(b, defaults + 7);
+    let d7 = defaults.byte(b, 7);
     if !(o7 == d7) && !(o7.wrapping_sub(2) <= 8) {
         repair(b, copy, defaults, 7);
     }
@@ -219,7 +230,7 @@ fn variables(b: &mut Cps2Bus) {
             wr8(b, a5(0x24), 1);
             (0x0101, true)
         }
-        _ => (crate::mem::prog16(b, TABLE_PIECES + 2 * mode as u32), false),
+        _ => (engine_table!("config/coins").at16(b, 2 * mode as u32), false),
     };
     wr16(b, a5(ram::PIECES), pieces);
     if !common {
@@ -233,9 +244,10 @@ fn variables(b: &mut Cps2Bus) {
     let credit = rd8(b, a4 + 1);
     wr8(b, a5(ram::MODE_CREDIT), credit);
     let double = 2 * credit as u32;
-    let a = crate::mem::prog8(b, TABLE_CREDIT_A + double);
-    let a2 = crate::mem::prog8(b, TABLE_CREDIT_A + 1 + double);
-    let b3 = crate::mem::prog8(b, TABLE_CREDIT_B + credit as u32);
+    let credits_a = engine_table!("config/credits_a");
+    let a = credits_a.at8(b, double);
+    let a2 = credits_a.at8(b, 1 + double);
+    let b3 = engine_table!("config/credits_b").at8(b, credit as u32);
     wr8(b, a5(0x21), a);
     wr8(b, a5(0x22), a2);
     wr8(b, a5(0x20), b3);
@@ -264,9 +276,8 @@ pub const VARIABLES: Native = memory(0x2d358, "config_variables", variables);
 /// Variant signature: bytes 0x20-0x2f of the default block and of copy 1.
 const SIGNATURE: u32 = 0x20;
 const SIGNATURE_LEN: u32 = 16;
-/// "EEPROM ERROR" message (12 characters, attribute 8) displayed if writing the default values
-/// fails, and the original's endless loop.
-const MESSAGE_ERROR: u32 = 0x2d7fc;
+/// The "EEPROM ERROR" message (12 characters, `config/error_message`, attribute 8) displayed if writing the default
+/// values fails, and the original's endless loop.
 const CASE_ERROR: u32 = 0x912938;
 pub const BLOCKED: u32 = 0x2d7fa;
 
@@ -275,7 +286,7 @@ pub const BLOCKED: u32 = 0x2d7fa;
 fn signature_ok(b: &mut Cps2Bus) -> bool {
     let block = block_defaults(b);
     let copy = a5(ram::CONFIG);
-    (0..SIGNATURE_LEN).all(|k| rd8(b, block + SIGNATURE + k) == rd8(b, copy + SIGNATURE + k))
+    (0..SIGNATURE_LEN).all(|k| block.byte(b, SIGNATURE + k) == rd8(b, copy + SIGNATURE + k))
 }
 
 /// 0x2d30a: EEPROM read, default settings if needed, game variables. Returns false if writing the
@@ -305,7 +316,7 @@ fn init(b: &mut Cps2Bus) {
 /// 0x2d7d2: "EEPROM ERROR" and blocking (never seen: the emulated EEPROM does not refuse the write).
 fn error(b: &mut Cps2Bus) {
     for k in 0..12 {
-        let ch = rd8(b, MESSAGE_ERROR + k) as u16;
+        let ch = engine_table!("config/error_message").at8(b, k) as u16;
         crate::mem::wr16(b, CASE_ERROR + 0x80 * k, ch);
         crate::mem::wr16(b, CASE_ERROR + 0x80 * k + 2, 8);
     }
@@ -323,7 +334,7 @@ pub const INIT: Native = memory(0x2d30a, "config_init", init);
 pub fn reset_factory(x: &mut crate::scene::Ctx) {
     let block = block_defaults(x.b);
     for (byte, variable) in SETTINGS {
-        let v = rd8(x.b, block + byte);
+        let v = block.byte(x.b, byte);
         x.set_v8(variable, v);
     }
 }
@@ -339,7 +350,7 @@ pub fn save(b: &mut Cps2Bus) -> bool {
             crate::mem::wr8(b, copy + byte, v);
         }
         for k in 0..SIGNATURE_LEN {
-            let v = rd8(b, block + SIGNATURE + k);
+            let v = block.byte(b, SIGNATURE + k);
             crate::mem::wr8(b, copy + SIGNATURE + k, v);
         }
     }

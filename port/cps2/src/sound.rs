@@ -53,8 +53,9 @@ pub struct Sound {
     pub pc_hook: Option<PcHook>,
     #[cfg(feature = "z80")]
     pub z80: z80::Z80,
-    /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000. The Z80 runs it; the Rust driver
-    /// reads its data from it once (`ddsom_sound::SoundData::from_region`).
+    /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000. The Z80 runs it; the Rust driver of a
+    /// machine loaded from the ROMs reads its data from it once (`ddsom_sound::SoundData::from_region`). Empty on the
+    /// game machine (`with_driver`), whose driver has its data.
     pub rom: Vec<u8>,
     #[cfg(feature = "z80")]
     pub bank: usize,
@@ -92,7 +93,23 @@ impl Sound {
     /// The sound of the machine: the Rust driver, or with the `z80` feature the original Z80 program (until
     /// `use_rust_driver`).
     pub fn new(rom: Vec<u8>, qsound: QSound) -> Self {
-        let mut sound = Sound {
+        let mut sound = Self::bare(rom, qsound);
+        if !cfg!(feature = "z80") {
+            sound.use_rust_driver();
+        }
+        sound
+    }
+
+    /// The sound of the game machine: the Rust driver on its data, no Z80 region (`rom` is empty).
+    pub fn with_driver(data: ddsom_sound::SoundData, qsound: QSound) -> Self {
+        let mut sound = Self::bare(Vec::new(), qsound);
+        sound.driver = Some(ddsom_sound::Driver::new(data));
+        sound.driver_restart = true;
+        sound
+    }
+
+    fn bare(rom: Vec<u8>, qsound: QSound) -> Self {
+        Sound {
             trace: None,
             output: None,
             #[cfg(feature = "z80")]
@@ -120,11 +137,7 @@ impl Sound {
             sample_acc: 0.0,
             #[cfg(feature = "z80")]
             irq_acked: false,
-        };
-        if !cfg!(feature = "z80") {
-            sound.use_rust_driver();
         }
-        sound
     }
 
     pub fn set_reset(&mut self, asserted: bool) {

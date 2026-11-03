@@ -9,6 +9,7 @@ cps2 = { path = "../cps2", default-features = false }
 ddsom-data = { path = "../ddsom-data" }
 ddsom-sound = { path = "../ddsom-sound", features = ["serde"] }
 png = "0.17"
+qsound = { path = "../qsound" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

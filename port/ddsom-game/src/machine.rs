@@ -24,12 +24,6 @@ pub trait Machine {
     fn random(&mut self) -> u16 {
         rng::random(self.bus())
     }
-
-    /// Word of the program space (a table read PC-relative in the original: the decrypted program). Only the task of
-    /// the game phases still reads its table this way (`tasks::game`, L13).
-    fn prog16(&mut self, a: u32) -> u16 {
-        self.bus().fetch16(a)
-    }
 }
 
 impl Machine for crate::scene::Ctx<'_> {

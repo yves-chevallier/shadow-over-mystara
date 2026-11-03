@@ -4,7 +4,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::rebuild::Image;
+use crate::image::Image;
 use crate::{Music, Sample};
 
 /// Size of the QSound sample memory (the ROMs `dd2.11m` and `dd2.12m`).

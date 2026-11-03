@@ -14,7 +14,7 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
 use crate::Native;
 
@@ -55,8 +55,6 @@ pub(crate) mod ram {
 /// Size of the queue: 64 entries of 16 bytes.
 pub(crate) const MASK_HEAD: u16 = 0x3f0;
 pub(crate) const ENTRY: u16 = 0x10;
-/// Pan table (one byte per 8-pixel slice of screen), in ROM.
-const TABLE_PAN: u32 = 0xee04e;
 
 /// RAM shared with the Z80: bytes at odd addresses.
 mod z80 {
@@ -85,7 +83,6 @@ mod z80 {
 /// Display of the Z80 locks (debug screen), at the tail of VBLANK: active only if the ROM word at 0xc0
 /// (debug flag) and the word `A5+0x7fc6` are non-zero; each byte of the locks
 /// 0x618001... is written in hexadecimal (0x29d78, two digits) at an address of the text layer.
-const DEBUG_FLAG: u32 = 0xc0;
 const DEBUG_DISPLAY: u32 = 0x7fc6;
 /// (address of the text layer if it changes, lock read), in display order.
 const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
@@ -180,10 +177,10 @@ pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
 // ---------------------------------------------------------------------------------------------
 // The wrappers
 
-/// "Program space" read: the command tables are stored in the code and read by
-/// PC-relative accesses, which see the decrypted opcodes.
+/// Word of a command table: the tables are stored in the code and read PC-relative (`sound/*` of the engine data, by
+/// address).
 fn program_read(b: &mut Cps2Bus, address: u32) -> u16 {
-    b.fetch16(address & 0xff_ffff)
+    crate::tables::engine().pc_word(b, address & 0xff_ffff)
 }
 
 /// Origin of the command index in a word table in ROM.
@@ -339,7 +336,7 @@ pub fn play_with(b: &mut Cps2Bus, sound: Sound, source: Source) {
     }
 }
 
-/// Pan (0-0x2f -> byte of the ROM table) of an object: screen position of the object relative to
+/// Pan (0-0x2f -> byte of the table `sound_pan`, one byte per 8-pixel slice of screen, 0xee04e) of an object: screen position of the object relative to
 /// the camera, clamped to 0..0x178, in 8-pixel slices.
 fn pan(b: &mut Cps2Bus, object: u32) -> u8 {
     let x = rd16(b, object + 8);
@@ -348,7 +345,7 @@ fn pan(b: &mut Cps2Bus, object: u32) -> u8 {
     let gap = x.wrapping_sub(camera);
     let gap = if (gap as i16) < 0 { 0 } else { gap };
     let gap = if gap < 0x180 { gap } else { 0x178 };
-    rd8(b, TABLE_PAN + ((gap & 0x1ff) >> 3) as u32)
+    crate::tables::engine_table!("sound_pan").at8(b, ((gap & 0x1ff) >> 3) as u32)
 }
 
 /// Result of evaluating a wrapper (without effect on memory).
@@ -491,9 +488,9 @@ pub const OTHERS: [Sound; 21] = [
     PRAYER, STORM, MOON, SILENT,
 ];
 
-/// Long of the program space (tables read PC-relative).
+/// Long of a dispatcher table (read PC-relative).
 fn program_read32(b: &mut Cps2Bus, address: u32) -> u32 {
-    (program_read(b, address) as u32) << 16 | program_read(b, address + 2) as u32
+    crate::tables::engine().pc_long(b, address & 0xff_ffff)
 }
 
 fn low_word(r: u32, v: u16) -> u32 {
@@ -528,7 +525,7 @@ fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
             let i = 2 * (rd8(b, source.object() + 3) & 0xe) as u32;
             let list = program_read32(b, table + i);
             let category = rd8(b, source.object() + 0x47) as u32;
-            let a1 = rd32(b, list.wrapping_add(category));
+            let a1 = crate::tables::engine().long(b, list.wrapping_add(category));
             (a1, Source { a1: Some(a1), ..source })
         }
         Dispatch::ByA1(table) => {
@@ -598,9 +595,10 @@ pub fn send(b: &mut Cps2Bus) -> Option<u32> {
     sent
 }
 
-/// The debug display of the locks is active (program word 0xc0 and `A5+0x7fc6` non-zero).
+/// The debug display of the locks is active (program word 0xc0, word 0 of `startup/header`, and `A5+0x7fc6`
+/// non-zero).
 fn shown_locks(b: &mut Cps2Bus) -> bool {
-    rd16(b, DEBUG_FLAG) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
+    crate::tables::engine_table!("startup/header").at16(b, 0) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
 }
 
 /// 0x68c (the registers it leaves, D0 = read head and A4 after the entry transmitted, are those that VBLANK saved).
@@ -663,9 +661,9 @@ pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> bool {
 fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
     wr8(b, SERVICE_LOCK, lock);
     let line = DELAYS.wrapping_add(line as i16 as u32);
-    let delay = rd16(b, line);
+    let delay = crate::tables::engine().word(b, line);
     wr16(b, a5(ram::DELAY), delay);
-    let high = rd16(b, line + 2) as u32;
+    let high = crate::tables::engine().word(b, line + 2) as u32;
     Command { d1: high << 16 | command as u32, d2: 0, d3: 0 }
 }
 
@@ -678,4 +676,45 @@ fn version_alternative(b: &mut Cps2Bus) -> bool {
 pub fn clear_private_stack(b: &mut Cps2Bus) {
     let p = a5(ram::PRIVATE_STACK);
     wr32(b, p, p);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every table that a sound reads is in `port/extract/sound_tables.txt`, the list from which the extraction takes
+    /// them (`sound/*` of the engine data).
+    #[test]
+    fn tables_listed_for_the_extraction() {
+        let listed: std::collections::BTreeSet<(String, u32)> = include_str!("../../extract/sound_tables.txt")
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .map(|l| {
+                let (kind, at) = l.split_once(' ').unwrap();
+                (kind.to_string(), u32::from_str_radix(at.trim_start_matches("0x"), 16).unwrap())
+            })
+            .collect();
+        for s in table::WRAPPERS.iter().chain(&OTHERS) {
+            let table = match s.kind {
+                Kind::Wrapper(w) => match w.cmd {
+                    Cmd::Alternate(t) => Some(("Alternate", t)),
+                    Cmd::ByObject(t) => Some(("ByObject", t)),
+                    Cmd::ByByte2(t) => Some(("ByByte2", t)),
+                    _ => None,
+                },
+                Kind::Dispatch(d) => Some(match d {
+                    Dispatch::ByD4(t) => ("ByD4", t),
+                    Dispatch::ByVariant(t) => ("ByVariant", t),
+                    Dispatch::ByVariantLong(t) => ("ByVariantLong", t),
+                    Dispatch::ByVariantAndCategory(t) => ("ByVariantAndCategory", t),
+                    Dispatch::ByA1(t) => ("ByA1", t),
+                    Dispatch::Music { table, .. } => ("Music", table),
+                }),
+                _ => None,
+            };
+            if let Some((kind, at)) = table {
+                assert!(listed.contains(&(kind.to_string(), at)), "{kind} {at:#x} (sound {:#x}) missing", s.entry);
+            }
+        }
+    }
 }

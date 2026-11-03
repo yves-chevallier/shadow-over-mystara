@@ -170,15 +170,18 @@ pub fn install_no_68k(m: &mut cps2::Machine) {
     no68k::install(m);
 }
 
-/// The game data must be installed before the game runs (`ddsom_data::install`): the application loads them from the
-/// assets or extracts them from the ROMs. The tools extract them from the machine's program when none are installed
-/// (machines loaded from the ROMs).
+/// The game data and the residue must be installed before the game runs (`extract::install_game`,
+/// `extract::install_game_assets`): the application loads them from the assets or extracts them from the ROMs. The
+/// tools extract them from the machine's program when none are installed (machines loaded from the ROMs).
 pub fn install_data(m: &cps2::Machine) {
     #[cfg(feature = "tools")]
-    ddsom_data::install_with(|| {
-        let program = extract::Program::from_words(m.bus.rom.to_vec(), m.bus.rom_dec.to_vec());
-        extract::to_data_from(&program).expect("game data: extraction from the machine's program")
-    });
+    if let Some(rom) = m.bus.rom.as_ref().filter(|_| !ddsom_data::installed() || !ddsom_data::residue::installed()) {
+        let program = extract::Program::from_words(rom.data.clone(), rom.decrypted.clone());
+        ddsom_data::install_with(|| extract::to_data_from(&program).expect("game data: extraction from the machine's program"));
+        ddsom_data::residue::install(ddsom_data::residue::Source::Ready(program.residue()));
+    }
     #[cfg(not(feature = "tools"))]
-    let _ = (m, data::data());
+    let _ = m;
+    let _ = data::data();
+    assert!(ddsom_data::residue::installed(), "residue not installed: install the game with `extract::install_game`");
 }

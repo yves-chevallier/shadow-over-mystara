@@ -71,6 +71,7 @@ mod at {
 }
 
 /// Tile tables (ROM, data).
+/// Tile tables of the ranking screen (engine data `ranking/*`, read by address).
 mod tiles {
     /// Large digits (4 x 4 cells) of the best score.
     pub const BIG_DIGITS: u32 = 0x18d58;
@@ -151,7 +152,7 @@ impl Brush {
                 0xff => 0x81,
                 c => c,
             };
-            let t = rd16(x.b, tiles::LETTERS + 2 * c as u32);
+            let t = crate::tables::engine().word(x.b, tiles::LETTERS + 2 * c as u32);
             self.car(x, 0, t, 2);
             self.advance(0x100);
         }
@@ -160,7 +161,7 @@ impl Brush {
     fn score(&mut self, x: &mut Ctx, line: Line) {
         let score = line.score(x);
         for i in (0..7).rev() {
-            let t = rd16(x.b, tiles::DIGITS + 2 * (score >> (4 * i) & 0xf));
+            let t = crate::tables::engine().word(x.b, tiles::DIGITS + 2 * (score >> (4 * i) & 0xf));
             self.car(x, 0, t, 3);
             self.advance(0x100);
         }
@@ -196,7 +197,7 @@ fn allocated(x: &mut Ctx, pool: &pools::Pool) -> Option<u32> {
 fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     emblem(x, line);
     let mut p = Brush(p);
-    let t = rd16(x.b, tiles::RANKS + 2 * (rank - 5) as u32);
+    let t = crate::tables::engine().word(x.b, tiles::RANKS + 2 * (rank - 5) as u32);
     p.car(x, 0, t, 2);
     p.advance(0x100);
     p.case(x, 0, 0x215, 1);
@@ -206,7 +207,7 @@ fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     p.case(x, 4, 0x209, 1);
     p.advance(0x200);
     let portrait = tiles::PORTRAITS + 4 * line.character(x) as u32;
-    let (t, attr) = (rd16(x.b, portrait), rd16(x.b, portrait + 2));
+    let (t, attr) = (crate::tables::engine().word(x.b, portrait), crate::tables::engine().word(x.b, portrait + 2));
     p.block(x, t, 4, 2, attr);
     p.advance(0x2fc);
     p.name(x, line);
@@ -229,7 +230,7 @@ fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
 fn high_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     emblem(x, line);
     let mut p = Brush(p);
-    let t = rd16(x.b, tiles::BIG_RANKS + 2 * (rank - 2) as u32);
+    let t = crate::tables::engine().word(x.b, tiles::BIG_RANKS + 2 * (rank - 2) as u32);
     p.block(x, t, 6, 4, 0x1e);
     p.advance(0x14);
     p.score(x, line);
@@ -264,7 +265,7 @@ fn scenery(x: &mut Ctx) -> Flow {
     // `ori.l #0xf000f000` on the first six longs, `adda.l` (addition) on the last two
     for (source, dest) in PALETTES {
         for i in 0..8 {
-            let v = rd32(x.b, source + 4 * i);
+            let v = crate::tables::engine().long(x.b, source + 4 * i);
             let v = if i < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
             wr32(x.b, dest + 4 * i, v);
         }
@@ -356,7 +357,7 @@ fn best_score(x: &mut Ctx) {
     p.advance(0x710);
     let score = line.score(x);
     for i in (0..7).rev() {
-        let t = rd16(x.b, tiles::BIG_DIGITS + 2 * (score >> (4 * i) & 0xf));
+        let t = crate::tables::engine().word(x.b, tiles::BIG_DIGITS + 2 * (score >> (4 * i) & 0xf));
         p.block(x, t, 4, 4, 3);
         p.advance(0x200);
     }
@@ -369,7 +370,7 @@ fn best_score(x: &mut Ctx) {
     p.advance(0x200);
     let (tens, units) = divide(line.level(x) as u32, 10);
     for (k, digit) in [tens, units].into_iter().enumerate() {
-        let t = rd16(x.b, tiles::DIGITS + 2 * digit);
+        let t = crate::tables::engine().word(x.b, tiles::DIGITS + 2 * digit);
         p.car(x, 0x100 * k as u32, t, 1);
     }
 }

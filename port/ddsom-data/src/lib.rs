@@ -10,9 +10,12 @@ pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod objects;
+pub mod overreads;
 pub mod palettes;
 pub mod player_tables;
 pub mod pointers;
+pub mod remainder;
+pub mod residue;
 pub mod scene_palettes;
 pub mod spawns;
 pub mod speeds;
@@ -25,6 +28,7 @@ pub use data::DataFile;
 pub use effects::EffectTables;
 pub use levels::Levels;
 pub use objects::ObjectTables;
+pub use overreads::Overreads;
 pub use palettes::Palettes;
 pub use player_tables::PlayerTables;
 pub use scene_palettes::ScenePalettes;
@@ -99,13 +103,16 @@ pub struct GameData {
     pub boxes: DataFile,
     /// Miscellaneous tables of the original read by name (aura palettes, overlays...).
     pub rest: DataFile,
-    /// Tables of the engine: AI helpers, cameras, video, palettes, sprites, creators (docs/fin.md, L12).
+    /// Tables of the engine: AI helpers, cameras, video, palettes, sprites, creators, settings, sound commands
+    /// (docs/fin.md, L12 and L14).
     pub engine: DataFile,
+    /// The overreads of the original that the scenarios play: bytes read outside every table (docs/fin.md, L14).
+    pub overreads: Overreads,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 23] = [
+    pub const FILES: [&'static str; 24] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -129,6 +136,7 @@ impl GameData {
         "data/engine.json",
         "data/rest.json",
         "data/boxes.json",
+        "data/overreads.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -157,6 +165,7 @@ impl GameData {
             engine: DataFile::load(&dir.join(Self::FILES[20]))?,
             rest: DataFile::load(&dir.join(Self::FILES[21]))?,
             boxes: DataFile::load(&dir.join(Self::FILES[22]))?,
+            overreads: Overreads::load(&dir.join(Self::FILES[23]))?,
         })
     }
 }
@@ -172,6 +181,11 @@ pub fn install(d: GameData) -> &'static GameData {
 /// Installs the data that `make` builds, if none are installed yet.
 pub fn install_with(make: impl FnOnce() -> GameData) -> &'static GameData {
     DATA.get_or_init(make)
+}
+
+/// Game data are installed.
+pub fn installed() -> bool {
+    DATA.get().is_some()
 }
 
 /// The game data. Panics if none are installed: the application (`ddsom`) and the tools install them before the
