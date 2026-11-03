@@ -14,6 +14,7 @@ use cps2::Cps2Bus;
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
+use crate::player::tables::{player_data, byte, long, Read};
 
 mod tables {
     /// By attacker class (pointers) then victim type (pointers): reaction rows.
@@ -24,12 +25,6 @@ mod tables {
     pub const THRESHOLD_ENEMY: u32 = 0xf24fe;
     /// Second table, indexed by the threshold of the first, for victims that are not enemies.
     pub const THRESHOLD_OTHER: u32 = 0xf25ae;
-    /// By attacker class (address, in the code): table of stagger chances according to the hit.
-    pub const STUN_CLASS: u32 = 0xf1cac;
-    /// 16-bit masks: a draw of 0..15 succeeds if its bit is set.
-    pub const STUN_MASKS: u32 = 0xf1d2e;
-    /// Stagger durations.
-    pub const STUN_TIMES: u32 = 0xf1f2e;
 }
 
 /// Fields of the victim (`v`) and the attacker (`a`).
@@ -77,16 +72,16 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     let by_class = if is_enemy { tables::ENEMY } else { tables::OTHER };
     let class_offset = (rd8(g.b, att + Player::CHARACTER) as u32 & 0xe) * 2;
     let kind = rd8(g.b, v + f::KIND) as u32;
-    let per_kind = g.data32(by_class + class_offset);
-    let rows = g.data32(per_kind + 4 * kind);
+    let per_kind = long(g.b, by_class + class_offset);
+    let rows = long(g.b, per_kind + 4 * kind);
     // stun threshold: two table levels for victims that are not enemies
     let slot = (kind * 8 + ((ram::TICK.get(g.b) as u32 & 0x1c) >> 2)) & 0xffff;
-    let mut threshold = g.data8(tables::THRESHOLD_ENEMY + slot) as u32;
+    let mut threshold = player_data().hit_reactions_threshold_enemy.at8(g.b, slot) as u32;
     if !is_enemy {
-        threshold = g.data8(tables::THRESHOLD_OTHER + ((slot & 0xff00) | threshold)) as u32;
+        threshold = player_data().hit_reactions_threshold_other.at8(g.b, (slot & 0xff00) | threshold) as u32;
     }
     let threshold = threshold as u8 as i8;
-    let row = |g: &mut Ctx, n: u32| g.data8(rows + blow + n);
+    let row = |g: &mut Ctx, n: u32| byte(g.b, rows + blow + n);
 
     if rd8(g.b, att + f::ATTACK_KIND) < 2 {
         let wizard = rd8(g.b, att + Player::CHARACTER) & 0xe == 4 && blow == WIZARD_BLOW;
@@ -158,15 +153,15 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
         return;
     }
     let class_offset = (rd8(g.b, att + Player::CHARACTER) as u32 & 0xe) * 2;
-    let per_class = g.prog32(tables::STUN_CLASS + class_offset);
+    let per_class = player_data().hit_reactions_stun_class.at32(g.b, class_offset);
     let blow = rd8(g.b, att + f::BLOW_ID) as u32;
-    let chance = g.data8(per_class + (blow >> 2));
+    let chance = byte(g.b, per_class + (blow >> 2));
     if chance == 0 {
         return;
     }
     let tick = (ram::TICK.get(g.b) & 0x1e) * 2;
     let offset = (((chance - 1) as u16) << 10).wrapping_add(tick);
-    let mask = g.data16(tables::STUN_MASKS.wrapping_add(offset as i16 as i32 as u32)) as u32;
+    let mask = player_data().hit_reactions_stun_masks.at16(g.b, offset as i16 as i32 as u32) as u32;
     let roll = (g.random() & 0x1f) as u32;
     if mask >> roll & 1 != 0 {
         set_stun_time(g, v);
@@ -181,7 +176,7 @@ fn set_stun_time(g: &mut Ctx, v: u32) {
     let tick = ram::TICK.get(g.b) << 4;
     let roll = g.random() & 0xf;
     let index = timer.wrapping_add(tick).wrapping_add(roll);
-    let time = g.data8(tables::STUN_TIMES.wrapping_add(index as i16 as i32 as u32));
+    let time = player_data().hit_reactions_stun_times.at8(g.b, index as i16 as i32 as u32);
     wr8(g.b, v + f::STUN_TIME, time);
 }
 

@@ -1,13 +1,11 @@
 //! Common character code: healing, the jump skeleton and the run-up (action 0x10).
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{players, Read};
 
 // ---- healing (cleric, fighter's healing potion) -----------------------------------------------
 
-/// Hit points restored by the healing spell according to the level (`WEAPON` 0x13: potion), ROM words.
-pub(super) const HEAL_TABLE: u32 = 0x416cc;
-/// Colors of the healing sparkle: three 16-byte blocks copied into the player's palette.
-pub(super) const HEAL_FLICKER: u32 = 0x41792;
 /// Address of the palette modified by the sparkle.
 pub(super) const FLICKER_PALETTE: u32 = 0x91_c1f0;
 
@@ -16,9 +14,9 @@ pub(super) const FLICKER_PALETTE: u32 = 0x91_c1f0;
 /// an ally, and each player to heal carries the flag `0x78` (reset to zero for those examined).
 pub fn heal_scan(g: &mut Ctx, p: Player) {
     cov!();
-    let ally = find_ally(g, p, 0x50, |g, q| q.set_u8(g, 0x78, 0));
+    let ally = find_ally(g, p, 0x50, |g, q| q.set_u8(g, Player::ALLY_MARK, 0));
     if let Some(q) = ally {
-        q.set_u8(g, 0x78, 1);
+        q.set_u8(g, Player::ALLY_MARK, 1);
         if p.u8(g, field::SPELL_CANCELLED) == 0 {
             q.set_state(g, 0x0200_1c00);
             q.set_u8(g, field::SPELL_FROZEN, 0);
@@ -26,10 +24,10 @@ pub fn heal_scan(g: &mut Ctx, p: Player) {
         }
     }
     p.set_u8(g, field::AREA, 1);
-    let flags: u8 = Player::all().map(|q| q.u8(g, 0x78)).fold(0, u8::wrapping_add);
+    let flags: u8 = Player::all().map(|q| q.u8(g, Player::ALLY_MARK)).fold(0, u8::wrapping_add);
     if flags == 0 {
         p.set_u8(g, field::AREA, 0);
-        p.set_u8(g, 0x78, 1);
+        p.set_u8(g, Player::ALLY_MARK, 1);
     }
 }
 
@@ -67,7 +65,7 @@ pub fn heal_flicker(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, 0x1ed, n);
     for i in 0..4 {
-        let v = g.data32(HEAL_FLICKER + 16 * n as u32 + 4 * i);
+        let v = players("heal_flicker").at32(g.b, 16 * n as u32 + 4 * i);
         crate::mem::wr32(g.b, FLICKER_PALETTE + 4 * i, v);
     }
 }
@@ -80,7 +78,7 @@ pub fn apply_heal(g: &mut Ctx, p: Player) {
     cov!();
     let level2 = 2 * p.u8(g, Player::LEVEL) as u16;
     let kind = p.u8(g, field::SPECIAL_KIND);
-    let mut amount = if kind == 0x2c || kind == 0x2d { level2 } else { g.data16(HEAL_TABLE + level2 as u32) };
+    let mut amount = if kind == 0x2c || kind == 0x2d { level2 } else { players("heal_amounts").at16(g.b, level2 as u32) };
     let mut heal = |g: &mut Ctx, q: Player| {
         let sum = q.u16(g, Player::HP).wrapping_add(amount);
         let max = q.u16(g, Player::HP_MAX);
@@ -88,13 +86,13 @@ pub fn apply_heal(g: &mut Ctx, p: Player) {
         amount = sum;
     };
     if p.u8(g, field::AREA) == 0 {
-        p.set_u8(g, 0x78, 0);
+        p.set_u8(g, Player::ALLY_MARK, 0);
         heal(g, p);
         return;
     }
     for q in Player::all() {
-        if q.u8(g, 0x78) != 0 {
-            q.set_u8(g, 0x78, 0);
+        if q.u8(g, Player::ALLY_MARK) != 0 {
+            q.set_u8(g, Player::ALLY_MARK, 0);
             heal(g, q);
         }
     }
@@ -144,7 +142,7 @@ pub fn nothing(_: &mut Ctx, _: Player) {}
 
 /// Animation according to the jump type `+0x67`: 2 after a run, 1 forward, otherwise in place.
 pub fn by_jump_kind(g: &mut Ctx, p: Player, after_run: u16, forward: u16, standing: u16) -> u16 {
-    match p.u8(g, 0x67) {
+    match p.u8(g, Player::JUMP_KIND) {
         2 => after_run,
         1 => forward,
         _ => standing,
@@ -182,7 +180,7 @@ pub(super) fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
     g.sound(crate::sound::JUMP_VOICE, p);
-    let kind = p.u8(g, 0x67);
+    let kind = p.u8(g, Player::JUMP_KIND);
     launch_jump(g, p, kit.speeds, kind);
 }
 
@@ -218,7 +216,7 @@ pub(super) fn jump_apex(g: &mut Ctx, p: Player, kit: &JumpKit) {
         next_step(g, p);
         if p.u8(g, field::AIR_ATTACK_DONE) == 0 {
             if let Some((after_run, other)) = kit.apex_gravity {
-                let az = if p.u8(g, 0x67) == 2 { after_run } else { other };
+                let az = if p.u8(g, Player::JUMP_KIND) == 2 { after_run } else { other };
                 p.set_u16(g, Obj::AZ, az as u16);
             }
             let anim = by_jump_kind(g, p, 0x17, 0x12, 0xd);

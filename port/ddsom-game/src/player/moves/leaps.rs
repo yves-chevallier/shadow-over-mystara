@@ -1,6 +1,8 @@
 //! Leaps of the characters (action 0x12), parry and the special-move actions (combos, backstab).
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{player_data, players, pc8, long, Read};
 
 // ---- action 0x12 of the characters: leaps ---------------------------------------------------------
 
@@ -55,7 +57,7 @@ pub(super) fn air_attack(g: &mut Ctx, p: Player) {
     }
     let character = p.u8(g, Player::CHARACTER) as u32;
     let table = if p.u8(g, Player::KEYS_HELD) & 4 != 0 { 0x376e2 } else { 0x376d6 };
-    let anim = g.prog8(table + character);
+    let anim = pc8(g.b, table + character);
     animation::start_plain(g, p, anim as u16);
     item_curse(g, p);
 }
@@ -105,8 +107,6 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
 
 // ---- parry (`+5` = 8, 0x39ff0) ----------------------------------------------------------------------
 
-/// Counterattack after a parry: attack sub-action per class (code bytes).
-pub(super) const RIPOSTE: u32 = 0x3a0a2;
 
 /// 0x39ff0: after a parry, the player slides backward (speed 0x400 braked by 0x40 per frame); at
 /// rest, they resume the game at the action `+0x6f`. During the slide, the opponent's direction
@@ -149,7 +149,7 @@ pub(super) fn parry_slide(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::ACTIVE, 1);
         p.set_state(g, 0x0200_0c00);
         p.set_u32(g, Obj::VX, 0);
-        let kind = g.prog8(RIPOSTE + class as u32);
+        let kind = player_data().riposte_kinds.at8(g.b, class as u32);
         p.set_u8(g, Player::SUBACTION, kind);
     }
 }
@@ -221,7 +221,7 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
         Combo::Action12 => {
             if p.u8(g, Player::SPEED_CLASS) == 2 {
                 p.set_state(g, State::pack(2, 0, 0x1a, 0).0);
-                p.set_u8(g, 0x1e0, 0);
+                p.set_u8(g, Player::SCRIPT_TIMER, 0);
             } else {
                 p.set_state(g, State::pack(2, 0, 0x12, 0).0);
             }
@@ -244,7 +244,7 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
         }
         Combo::Attack30 => {
             let spell = if p.class(g) == 2 { 36 } else { 44 };
-            if p.u8(g, Player::SPECIAL_COUNT) != 2 || p.u8(g, 0x140) != spell {
+            if p.u8(g, Player::SPECIAL_COUNT) != 2 || p.u8(g, Player::INVENTORY) != spell {
                 return false;
             }
             p.set_state(g, State::pack(2, 0, 0xc, 0).0);
@@ -258,8 +258,6 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
 /// Orientation of an object (0 or 0x20).
 pub(super) const FACING: u32 = 0x2c;
 
-/// Table (code, 0x37588): non-zero for the enemy types that cannot be grabbed.
-pub(super) const UNGRABBABLE: u32 = 0x37588;
 /// Body boxes (data): one pointer per box set, 8-byte entries.
 pub(super) const BODY_BOXES: u32 = 0x11bffa;
 
@@ -285,11 +283,11 @@ pub(super) fn backstab(g: &mut Ctx, p: Player) -> bool {
             continue;
         }
         let kind = rd8(b, e + 2) as u32;
-        if crate::mem::prog8(b, UNGRABBABLE + kind) != 0 {
+        if players("ungrabbable").at8(b, kind) != 0 {
             continue;
         }
         let box_set = rd8(b, e + 0x2e) as u32;
-        let set = rd32(b, BODY_BOXES + 4 * box_set);
+        let set = long(b, BODY_BOXES + 4 * box_set);
         let body = set + 8 * rd8(b, e + 0x38) as u32;
         let facing = rd8(b, p.at(0x1cf));
         wr8(b, p.at(Player::FACING), facing);

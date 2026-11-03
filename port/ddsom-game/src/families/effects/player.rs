@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -26,7 +27,7 @@ pub(super) fn halo_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Z, dz);
-    let phase = player.u8(ctx.b, PlayerView::PHASE) as u32;
+    let phase = player.u8(ctx.b, Player::RANK) as u32;
     let delay = tables().halo_delays.at8(ctx.b, phase);
     o.set_u8(ctx.b, halo::DELAY, delay);
     ctx.anim_start(halo::ANIMATIONS.0, 0);
@@ -130,9 +131,9 @@ pub(super) fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         let player = crate::ram::PLAYERS.nth(i);
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
-            let dead = player.u16(ctx.b, PlayerView::LIFE) == 0;
+            let dead = player.u16(ctx.b, Player::HP) == 0;
             if !dead {
-                let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
+                let class = player.u8(ctx.b, Player::CHARACTER) >> 1;
                 if !(class != 5) {
                     let dy = o.u16(ctx.b, Obj::Y).wrapping_sub(player.u16(ctx.b, Obj::Y)).wrapping_add(0x20);
                     if !(dy > 0x40) {
@@ -377,10 +378,10 @@ pub(super) fn bubble_random<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Common cases of variant 0: `0xaabc4` (byte `+0x10d` or `+0x10e` of the player in D0).
 pub(super) fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, d0: u8) {
-    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
-    let mark = player.u8(ctx.b, PlayerView::MARK);
+    let class = player.u8(ctx.b, Player::CHARACTER) >> 1;
+    let mark = player.u8(ctx.b, Player::MARK);
     if !(mark == 0) {
-        player.set_u8(ctx.b, PlayerView::MARK, 0);
+        player.set_u8(ctx.b, Player::MARK, 0);
         bubble_reads(ctx, o, &tables().bubble_table_77, class as u16);
         return bubble_random(ctx, o);
     }
@@ -391,10 +392,10 @@ pub(super) fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj
 
 /// `0xaabac`: animation according to `+0x10d` (or `+0x10e` for character 4).
 pub(super) fn bubble_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
-    let mut d0 = player.u8(ctx.b, PlayerView::COUNTER_A);
-    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
+    let mut d0 = player.u8(ctx.b, Player::WEAPON_A);
+    let class = player.u8(ctx.b, Player::CHARACTER) >> 1;
     if !(class != 4) {
-        d0 = player.u8(ctx.b, PlayerView::COUNTER_B);
+        d0 = player.u8(ctx.b, Player::WEAPON_B);
     }
     bubble_0_common(ctx, o, player, d0);
 }
@@ -402,13 +403,13 @@ pub(super) fn bubble_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player:
 /// Tables of variant 0: the player's action `0x3d` leads to one of the ten routines.
 pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, bubble::OWNER);
-    let action = player.u8(ctx.b, PlayerView::ACTION);
+    let action = player.u8(ctx.b, Player::BUBBLE_ACTION);
     let byte = |ctx: &mut Cx<'_, R>, off: u32| player.u8(ctx.b, off) as u16;
-    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
+    let class = player.u8(ctx.b, Player::CHARACTER) >> 1;
     match action {
         0 => bubble_0_action_10d(ctx, o, player),
         2 => {
-            let d0 = player.u8(ctx.b, PlayerView::COUNTER_B);
+            let d0 = player.u8(ctx.b, Player::WEAPON_B);
             bubble_0_common(ctx, o, player, d0);
         }
         4 => {
@@ -466,9 +467,9 @@ pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         22 => bubble_shown(ctx, o, 0x23),
         // 0xaad12: the player's gauge (`+0x77`) has just been filled
         24 | 26 | 28 | 30 | 32 => {
-            let gauge = player.u8(ctx.b, PlayerView::MARK) != 0;
+            let gauge = player.u8(ctx.b, Player::MARK) != 0;
             if gauge {
-                player.set_u8(ctx.b, PlayerView::MARK, 0);
+                player.set_u8(ctx.b, Player::MARK, 0);
                 o.set_u8(ctx.b, field::MODE, 1);
                 crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xff00);
                 return bubble_shown(ctx, o, 0x24);

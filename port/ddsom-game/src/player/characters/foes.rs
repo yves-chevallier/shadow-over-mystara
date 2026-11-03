@@ -10,6 +10,7 @@ use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::ram;
+use crate::player::tables::{byte};
 
 /// Base damage.
 pub enum Damage {
@@ -71,25 +72,25 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
     for (k, pool) in [&BOSS, &ENEMY].into_iter().enumerate() {
         for o in pool.iter() {
             let live = match s.live {
-                Live::Any => o.u8(g.b, 1) != 0,
-                Live::Bit0 => o.u8(g.b, 1) & 1 != 0,
+                Live::Any => o.u8(g.b, Obj::FLAGS) != 0,
+                Live::Bit0 => o.u8(g.b, Obj::FLAGS) & 1 != 0,
                 Live::Unchecked => true,
             };
-            if o.u8(g.b, 0) == 0
+            if o.u8(g.b, Obj::ACTIVE) == 0
                 || !live
                 || (s.needs_hp && o.u16(g.b, 0x62) == 0)
                 || o.u8(g.b, 0x40) != 0
-                || (s.grounded && o.u16(g.b, 0x0c) != 0)
+                || (s.grounded && o.u16(g.b, Obj::Z) != 0)
                 || o.u32(g.b, 0x94) >> s.immune_bit & 1 != 0
             {
                 continue;
             }
-            let counter = p.u16(g, 0x190).wrapping_add(2);
-            p.set_u16(g, 0x190, counter);
+            let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
+            p.set_u16(g, Player::SPELL_KILLS, counter);
             let hits = o.u8(g.b, 0x9c).wrapping_add(1);
             o.set_u8(g.b, 0x9c, hits);
-            o.set_u32(g.b, 4, 0x0400_0000);
-            o.set_u8(g.b, 1, 1);
+            o.set_u32(g.b, Obj::STATE, 0x0400_0000);
+            o.set_u8(g.b, Obj::FLAGS, 1);
             o.set_u8(g.b, 0x49, s.reaction);
             o.set_u8(g.b, 0x48, index);
             o.set_u8(g.b, 0x4b, character);
@@ -101,13 +102,13 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
                 }
             }
             let mut d = match s.damage {
-                Damage::Table(boss, enemy) => g.data8(if k == 0 { boss } else { enemy } + level) as u16,
+                Damage::Table(boss, enemy) => byte(g.b, if k == 0 { boss } else { enemy } + level) as u16,
                 Damage::Fixed(v) => v,
             };
             for boost in s.boosts {
                 let apply = match *boost {
                     Boost::Boss(kind) => {
-                        if o.u8(g.b, 0x28) == 4 && o.u8(g.b, Obj::KIND) == kind {
+                        if o.u8(g.b, Obj::CLASS) == 4 && o.u8(g.b, Obj::KIND) == kind {
                             d += d >> 1;
                         }
                         continue;
@@ -118,9 +119,9 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
                         }
                         continue;
                     }
-                    Boost::Armor => p.u8(g, 0x166) == 4,
+                    Boost::Armor => p.u8(g, Player::ARMOR) == 4,
                     Boost::Charm(v) => {
-                        if p.u8(g, 0x165) == v {
+                        if p.u8(g, Player::TALISMAN) == v {
                             d += 5;
                         }
                         continue;
@@ -132,16 +133,16 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             }
             let hp = (o.u16(g.b, 0x62) as i16).wrapping_sub(d as i16);
             o.set_u16(g.b, 0x62, if hp < 0 { 0 } else { hp as u16 });
-            if s.undead_die && o.u8(g.b, 0x28) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
+            if s.undead_die && o.u8(g.b, Obj::CLASS) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
                 o.set_u16(g.b, 0x62, 0);
             }
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
-                p.set_u8(g, 0x18a, 1);
+                p.set_u8(g, Player::HOLY, 1);
                 let loot = o.u8(g.b, 0x9a);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
-            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
+            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, Obj::CLASS) as u32);
             crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
             if let Some(sound) = s.sound {
                 g.sound(sound, p);

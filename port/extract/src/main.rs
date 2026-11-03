@@ -54,6 +54,7 @@ fn main() {
             effects::extract(roms, &out.join("data/effects.json"))?;
             objects::extract(roms, &out.join("data/objects.json"))?;
             set::extract(roms, &out.join("data/set.json"))?;
+            player_tables::extract(roms, &out.join("data/player_tables.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {
@@ -155,6 +156,11 @@ Tables of the visual effects (EFFCT family), by name: address, space, element si
 
 Tables of the enemy shots, special objects, pickup objects and crates (ESHL, SOBJ, ITEM and BOX families), in the
 same form as data/effects.json.
+
+## data/player_tables.json
+
+Tables of the players (common state machine, cinematics, reactions to hits, spells, shots and effects of the
+players), in the same form as data/effects.json.
 
 ## data/spawns.json
 

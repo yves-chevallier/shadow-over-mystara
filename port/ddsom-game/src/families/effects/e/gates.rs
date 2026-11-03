@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -208,7 +209,7 @@ pub(super) fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
     if dx > 0x74 || dy > 0x1c {
         return;
     }
-    if !players().any(|p| p.is_active(x.b) && p.u16(x.b, PlayerView::LIFE) != 0) {
+    if !players().any(|p| p.is_active(x.b) && p.u16(x.b, Player::HP) != 0) {
         return;
     }
     // a living player enters: start of the transition
@@ -311,21 +312,21 @@ pub(super) fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     vars::INPUTS_LOCKED.set(x.b, 1);
     crate::families::scenery::resume_scenery_lit(x, crate::families::scenery::Cameras::Start);
     for p in players() {
-        if p.u8(x.b, PlayerView::ACTIVE) == 0 || p.u16(x.b, PlayerView::LIFE) == 0 {
+        if p.u8(x.b, Player::ACTIVE) == 0 || p.u16(x.b, Player::HP) == 0 {
             continue;
         }
-        p.set_u8(x.b, PlayerView::ACTIVE, 1);
+        p.set_u8(x.b, Player::ACTIVE, 1);
         p.set_u32(x.b, f::STATE, 0x0200_0000);
-        p.set_u8(x.b, PlayerView::GUARD, 0);
-        p.set_u8(x.b, PlayerView::SPECIAL, 0);
-        p.set_u8(x.b, PlayerView::RETURN_TIMER, 0x50);
+        p.set_u8(x.b, Player::SLOW, 0);
+        p.set_u8(x.b, Player::SPECIAL_ACTIVE, 0);
+        p.set_u8(x.b, Player::INVULN, 0x50);
         // 0xae388: in front of the followed object, offset according to the character
         let leader = Obj(vars::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff);
         let (lx, ly) = (leader.u16(x.b, Obj::X), leader.u16(x.b, Obj::Y));
         p.set_u16(x.b, Obj::X, lx);
         p.set_u16(x.b, Obj::Y, ly);
         p.set_u16(x.b, Obj::Z, 0);
-        let k = 2 * p.u8(x.b, PlayerView::SLOT) as u32;
+        let k = 2 * p.u8(x.b, Player::INDEX) as u32;
         let dx = tables().gate_return_offsets.at16(x.b, k);
         p.set_u16(x.b, Obj::X, lx.wrapping_add(dx));
         p.set_u16(x.b, Obj::Y, ly.wrapping_sub(0x12));

@@ -9,12 +9,14 @@
 //! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
+use crate::player::Player;
 use cps2::Cps2Bus;
 
 use crate::dispatch::Leftovers;
-use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
+use crate::player::tables::{long};
 
 /// Call counters of the rewritten routines (validation coverage).
 pub(crate) mod cov {
@@ -294,7 +296,7 @@ impl HitBox {
 /// Box `index` of the object's box set, in the pointer table `table`.
 fn hitbox(w: &mut World, table: u32, o: Obj, index: u8) -> HitBox {
     let set = o.u8(w.b, f::BOX_SET) as u32;
-    let base = rd32(w.b, table + 4 * set);
+    let base = long(w.b, table + 4 * set);
     HitBox(base + 8 * index as u32)
 }
 
@@ -618,7 +620,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         e.set_u32(w.b, f::STATE, state::BLOCKED);
         p.set_u8(w.b, f::HITSTOP, 8);
         w.set_bit(p, f::HIT_MARK, 6);
-        if p.u8(w.b, 0x47) == 0x60 {
+        if p.u8(w.b, Player::BLOW_ID) == 0x60 {
             p.set_u32(w.b, f::STATE, state::ATTACKING);
             p.set_u8(w.b, f::SUBACTION, 0x12);
         }
@@ -656,8 +658,8 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         ram::KILL_FLAG.set(w.b, v);
         p.set_u8(w.b, f::KILLS_FLAG, 1);
     }
-    if p.u8(w.b, 0x18f) != 0 {
-        let add = p.u8(w.b, 0x18e) as u16;
+    if p.u8(w.b, Player::MOVE_STATE) != 0 {
+        let add = p.u8(w.b, Player::MOVE_KIND) as u16;
         w.add16(p, f::HITS_LANDED, add);
     }
     show_enemy_hp(w, p, e);

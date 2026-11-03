@@ -21,7 +21,6 @@ use super::super::walk::{move_x, move_xz};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::machine::Machine;
 use crate::player::external as ext;
 
 mod spells;
@@ -95,8 +94,8 @@ const JUMP_KIT: common::JumpKit = common::JumpKit {
     after_recover: common::curse_check,
     finish: common::flush_pending_effect,
     takeoff: |g, p| {
-        p.set_u8(g, 0x59, 0);
-        p.set_u8(g, 0x58, 0);
+        p.set_u8(g, Player::STRIKE_STYLE, 0);
+        p.set_u8(g, Player::STRIKE, 0);
         p.set_u8(g, 0x1e8, 0);
     },
     busy: |g, p| p.u8(g, field::AIR_ATTACK_DONE) == 2,
@@ -123,17 +122,17 @@ fn air_attack(g: &mut Ctx, p: Player) {
         p.set_u8(g, field::MOVE_STATE, 0);
         p.set_u8(g, field::AIR_ATTACK_DONE, 1);
         let (mut anim, mut style) = (0xb, 1);
-        if p.u8(g, 0x67) == 2 {
+        if p.u8(g, Player::JUMP_KIND) == 2 {
             (anim, style) = (0xe, 2);
         }
         if p.u8(g, Player::KEYS_HELD) & 4 != 0 {
             (anim, style) = (0xd, 3);
         }
-        p.set_u8(g, 0x59, style);
+        p.set_u8(g, Player::STRIKE_STYLE, style);
         common::start_with_voice(g, p, anim);
         item_curse(g, p);
         common::aura_hit_countdown(g, p);
-    } else if keys & 0x80 != 0 && p.u8(g, 0x15d) == 2 && (0x23..=0x26).contains(&p.u8(g, field::ITEM)) {
+    } else if keys & 0x80 != 0 && p.u8(g, Player::SPECIAL_COUNT) == 2 && (0x23..=0x26).contains(&p.u8(g, field::ITEM)) {
         p.set_u8(g, Player::STEP, 0xc);
         p.set_u8(g, field::AIR_ATTACK_DONE, 2);
         animation::start_plain(g, p, 0x22);
@@ -146,7 +145,7 @@ fn extra_step(g: &mut Ctx, p: Player, step: u8) {
     cov!();
     match step {
         0xa => {
-            if p.u8(g, 0x59) == 3 && p.u8(g, 0x58) & 1 != 0 && p.u8(g, 0x1e8) <= 4 {
+            if p.u8(g, Player::STRIKE_STYLE) == 3 && p.u8(g, Player::STRIKE) & 1 != 0 && p.u8(g, 0x1e8) <= 4 {
                 bounce(g, p);
             } else {
                 air_fall(g, p);
@@ -169,7 +168,7 @@ fn extra_step(g: &mut Ctx, p: Player, step: u8) {
 /// Bounce: the diving strike landed, the elf goes back up (at most five times).
 fn bounce(g: &mut Ctx, p: Player) {
     cov!();
-    p.set_u8(g, 0x58, 0);
+    p.set_u8(g, Player::STRIKE, 0);
     p.set_u8(g, field::AIR_STEERED, 0);
     let n = p.u8(g, 0x1e8) + 1;
     p.set_u8(g, 0x1e8, n);
@@ -337,7 +336,7 @@ fn charge(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             common::set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
@@ -389,7 +388,7 @@ fn retreat_shot(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             animation::start_plain(g, p, 0x17);
@@ -443,10 +442,10 @@ fn whirl(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 2);
-            p.set_u8(g, 0x58, 0);
+            p.set_u8(g, Player::STRIKE, 0);
             p.set_u8(g, 0x1ef, 0);
             p.set_u8(g, 0x1e8, 0x80);
             animation::start_plain(g, p, 0x1b);
@@ -465,7 +464,7 @@ fn whirl(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
                 return;
             }
-            if p.u8(g, 0x1ef) == 0 && p.u8(g, 0x58) & 1 != 0 {
+            if p.u8(g, 0x1ef) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
                 p.set_u8(g, 0x1ef, 1);
                 let hp = (p.u16(g, Player::HP) as i16).wrapping_sub(0xc);
                 p.set_u16(g, Player::HP, if hp > 0 { hp as u16 } else { 1 });

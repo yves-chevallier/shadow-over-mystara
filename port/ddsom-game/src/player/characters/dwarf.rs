@@ -97,7 +97,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     next_step(g, p);
     p.set_u8(g, field::AIR_STEERED, 0);
     p.set_u8(g, field::AIR_ATTACK_DONE, 0);
-    let kind = p.u8(g, 0x67);
+    let kind = p.u8(g, Player::JUMP_KIND);
     let x = p.u16(g, Obj::X);
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = common::by_jump_kind(g, p, 0x15, 0x10, 0xb);
@@ -179,7 +179,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::KEYS_NEW) & 0x10 != 0 {
         p.set_u8(g, field::MOVE_STATE, 0);
         p.set_u8(g, field::AIR_ATTACK_DONE, 1);
-        let mut anim = if p.u8(g, 0x67) == 2 { 0xc } else { 9 };
+        let mut anim = if p.u8(g, Player::JUMP_KIND) == 2 { 0xc } else { 9 };
         if common::holds_special_weapon(g, p) {
             anim = 0xc;
         }
@@ -444,7 +444,7 @@ fn charge(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
@@ -525,7 +525,7 @@ fn flip(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             set_forward_motion(g, p, 0x400, 0);
@@ -580,7 +580,7 @@ fn spin_drop(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 2);
             p.set_u8(g, own::CONTACT, 0);

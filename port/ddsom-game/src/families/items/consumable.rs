@@ -1,7 +1,7 @@
+use crate::player::Player;
 use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
-use crate::families::shell::records::PlayerView;
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
@@ -39,7 +39,7 @@ pub(super) fn consumable_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Effect of a food: heals the player; at full health, score event and sound.
 pub(super) fn effect_food<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, field::OWNER);
-    let (life_max, life) = (player.u16(ctx.b, PlayerView::LIFE_MAX), player.u16(ctx.b, PlayerView::LIFE));
+    let (life_max, life) = (player.u16(ctx.b, Player::HP_MAX), player.u16(ctx.b, Player::HP));
     if !(life_max != life) {
         let event = 0x11 + ((player.u8(ctx.b, Obj::KIND) as u16) << 8);
         crate::events::enqueue_points(ctx.b, event);
@@ -49,9 +49,9 @@ pub(super) fn effect_food<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     let heal: u16 = if variant == 0 { 0x14 } else { 0x28 };
     let life = life.wrapping_add(heal);
-    player.set_u16(ctx.b, PlayerView::LIFE, life);
+    player.set_u16(ctx.b, Player::HP, life);
     if !(life <= life_max) {
-        player.set_u16(ctx.b, PlayerView::LIFE, life_max);
+        player.set_u16(ctx.b, Player::HP, life_max);
     }
     crate::sound::play(ctx.b, call::END_EFFECT, ctx.obj());
 }
@@ -59,7 +59,7 @@ pub(super) fn effect_food<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Potions: the player receives a countdown of 0x2d0 frames and flags +0x180..0x184.
 pub(super) fn effect_potion<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, bytes: &[(u32, u8)]) {
     let player = pointer(ctx, o, field::OWNER);
-    player.set_u16(ctx.b, PlayerView::POTION_TIMER, 0x2d0);
+    player.set_u16(ctx.b, Player::AURA_TIMER, 0x2d0);
     for &(off, v) in bytes {
         player.set_u8(ctx.b, off, v);
     }

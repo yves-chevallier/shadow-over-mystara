@@ -74,7 +74,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STEP, 0xa);
     p.set_u8(g, field::MOVE_STATE, 0);
     p.set_u8(g, field::AIR_ATTACK_DONE, 1);
-    let mut anim = if p.u8(g, 0x67) == 2 { 4 } else { 1 };
+    let mut anim = if p.u8(g, Player::JUMP_KIND) == 2 { 4 } else { 1 };
     if p.u8(g, Player::KEYS_HELD) & 4 != 0 {
         anim = 3;
     }
@@ -126,9 +126,9 @@ fn rod_shot(g: &mut Ctx, p: Player) {
         }
         p.set_u8(g, Player::WEAPON_B, 0x22);
         for i in 0..6u32 {
-            if p.u8(g, 0x140 + i) == 0x50 {
-                p.set_u8(g, 0x140 + i, 0x56);
-                p.set_u8(g, 0x148 + i, 0);
+            if p.u8(g, Player::INVENTORY + i) == 0x50 {
+                p.set_u8(g, Player::INVENTORY + i, 0x56);
+                p.set_u8(g, Player::QUANTITIES + i, 0);
                 crate::families::effects_creators::for_players::thrown_shard(&mut g.leftovers, g.b, p.obj(), tag as u8);
                 crate::families::creators::for_players::set_a(&mut g.leftovers, g.b, p.obj(), sound as u8);
                 return;

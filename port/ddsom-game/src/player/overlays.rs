@@ -15,11 +15,11 @@
 use super::checks::team_score_reached;
 use super::init::overlay;
 use super::{Ctx, Player, PLAYER_COUNT};
-use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::machine::Machine;
+use crate::player::tables::{player_data, byte, word, long, Read};
 
 /// ROM tables (data): one pointer per character to rows of 8 bytes
 /// (animation, x offset, z offset, flip, depth).
@@ -28,8 +28,6 @@ mod tables {
     pub const BODY: u32 = 0x395d4;
     /// Shield numbered ≥ 0x28 (`+0x44`).
     pub const SHIELD_HIGH: u32 = 0x39604;
-    /// Animation scripts by weapon number (pointers).
-    pub const ANIMATIONS: u32 = 0x396e8;
     /// Palettes that sparkle under bonus (8 blocks of 32 bytes).
     pub const POWER_PALETTES: u32 = 0x397e0;
 }
@@ -71,14 +69,14 @@ fn select_table(g: &mut Ctx, frame: u32) {
 /// Row `index` of the table of `character` (D2.w = index × 8).
 fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
     cov!();
-    let base = g.data32(table + 4 * character) + 8 * index;
+    let base = long(g.b, table + 4 * character) + 8 * index;
     set_low_word(&mut g.leftovers.d2, (index << 3) as u16);
     Row {
-        anim: g.data16(base),
-        dx: g.data16(base + 2) as i16,
-        dz: g.data16(base + 4) as i16,
-        flip: g.data8(base + 6),
-        behind: g.data8(base + 7),
+        anim: word(g.b, base),
+        dx: word(g.b, base + 2) as i16,
+        dz: word(g.b, base + 4) as i16,
+        flip: byte(g.b, base + 6),
+        behind: byte(g.b, base + 7),
     }
 }
 
@@ -109,7 +107,7 @@ fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
 /// Loads animation `n` of the weapon script `weapon` into the sub-object.
 fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     cov!();
-    let set = g.data32(tables::ANIMATIONS + 4 * weapon);
+    let set = player_data().overlay_animations.at32(g.b, 4 * weapon);
     let off = rd16(g.b, set.wrapping_add(2 * n as u32)) as i16 as i32 as u32;
     load_entry(g.b, o, set.wrapping_add(off), false);
     if rd8(g.b, o.at(0x38)) != 0 {
@@ -227,10 +225,10 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
     // D.b receives each counter examined: the last one remains, whether or not it matches
     let kind = p.u8(g, Player::WEAPON_B);
     let charge = match kind {
-        0x24 => p.u8(g, 0x18c),
-        0x25 => p.u8(g, 0x18b),
-        0x26 => p.u8(g, 0x18d),
-        _ => p.u8(g, 0x191),
+        0x24 => p.u8(g, Player::GLOW_SHIELD),
+        0x25 => p.u8(g, Player::GLOW_WEAPON),
+        0x26 => p.u8(g, Player::GLOW_RING),
+        _ => p.u8(g, Player::GLOW_OTHER),
     };
     if !(0x24..=0x27).contains(&kind) || (charge as i8) > 5 {
         return;
@@ -256,7 +254,7 @@ fn sparkle(g: &mut Ctx, target: u32) {
     // the original loads the eight longs into D0-D6 and A3, then stores them all at once: D2-D5 stay
     let mut words = [0u32; 8];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = rd32(g.b, src + 4 * i as u32);
+        *w = long(g.b, src + 4 * i as u32);
         wr32(g.b, SPARKLE_RAM + 4 * i as u32, *w);
     }
     (g.leftovers.d2, g.leftovers.d3, g.leftovers.d4, g.leftovers.d5) = (words[2], words[3], words[4], words[5]);

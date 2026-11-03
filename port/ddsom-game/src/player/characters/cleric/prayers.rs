@@ -1,6 +1,9 @@
 //! Prayers of the cleric, continued: beam, banish, holy light, protection, blessing, heal.
 
+use crate::player::Player;
+use crate::objects::Obj;
 use super::*;
+use crate::player::tables::{pc8, pc16, byte};
 
 /// 0x4187e, no. 0x27: holy ray. Gesture 0x30 prays; at the gesture a healing effect is born, then the ray
 /// (0x4b5ac, D0 = 1) aims at a monster, stored in `SPELL_TARGET`, which receives the flag `+0x5e` at the end.
@@ -106,11 +109,11 @@ pub(super) fn banish_foes(g: &mut Ctx, p: Player) -> u8 {
     cov!();
     let mut found = 0u8;
     let level = p.u8(g, Player::LEVEL) as u32;
-    let mut left = g.prog8(counts::BANISH + level);
+    let mut left = pc8(g.b, counts::BANISH + level);
     for pool in [&BOSS, &ENEMY] {
         for o in pool.iter() {
-            if o.u8(g.b, 0) == 0
-                || o.u8(g.b, 1) & 1 == 0
+            if o.u8(g.b, Obj::ACTIVE) == 0
+                || o.u8(g.b, Obj::FLAGS) & 1 == 0
                 || o.u16(g.b, 0x62) == 0
                 || o.u8(g.b, 0x40) != 0
                 || o.u32(g.b, 0x94) >> 19 & 1 != 0
@@ -187,17 +190,17 @@ pub(super) fn holy_damage(g: &mut Ctx, p: Player) {
     let (index, character) = (p.u8(g, Player::INDEX), p.u8(g, Player::CHARACTER));
     for (pool, table) in [(&BOSS, damage::BOSS), (&ENEMY, damage::ENEMY)] {
         for o in pool.iter() {
-            if o.u8(g.b, 0) == 0
-                || o.u8(g.b, 1) & 1 == 0
+            if o.u8(g.b, Obj::ACTIVE) == 0
+                || o.u8(g.b, Obj::FLAGS) & 1 == 0
                 || o.u16(g.b, 0x62) == 0
                 || o.u8(g.b, 0x40) != 0
-                || o.u16(g.b, 0x0c) != 0
+                || o.u16(g.b, Obj::Z) != 0
                 || o.u32(g.b, 0x94) >> 20 & 1 != 0
             {
                 continue;
             }
-            o.set_u32(g.b, 4, 0x0400_0000);
-            o.set_u8(g.b, 1, 1);
+            o.set_u32(g.b, Obj::STATE, 0x0400_0000);
+            o.set_u8(g.b, Obj::FLAGS, 1);
             o.set_u8(g.b, 0x48, index);
             o.set_u8(g.b, 0x49, 0x10);
             o.set_u8(g.b, 0x4b, character);
@@ -208,26 +211,26 @@ pub(super) fn holy_damage(g: &mut Ctx, p: Player) {
             }
             let facing = o.u8(g.b, 0x2c);
             o.set_u8(g.b, 0x4a, facing);
-            let counter = p.u16(g, 0x190).wrapping_add(2);
-            p.set_u16(g, 0x190, counter);
+            let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
+            p.set_u16(g, Player::SPELL_KILLS, counter);
             let hits = o.u8(g.b, 0x9c).wrapping_add(1);
             o.set_u8(g.b, 0x9c, hits);
-            let mut damage = g.data8(table + level) as u16;
-            if p.u8(g, 0x166) == 4 {
+            let mut damage = byte(g.b, table + level) as u16;
+            if p.u8(g, Player::ARMOR) == 4 {
                 damage = damage.wrapping_add(damage >> 2);
             }
             let hp = (o.u16(g.b, 0x62) as i16).wrapping_sub(damage as i16);
             o.set_u16(g.b, 0x62, if hp < 0 { 0 } else { hp as u16 });
-            if o.u8(g.b, 0x28) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
+            if o.u8(g.b, Obj::CLASS) != 4 && matches!(o.u8(g.b, Obj::KIND), 0 | 0x13) {
                 o.set_u16(g.b, 0x62, 0);
             }
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
-                p.set_u8(g, 0x18a, 1);
+                p.set_u8(g, Player::HOLY, 1);
                 let loot = o.u8(g.b, 0x9a);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
-            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
+            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, Obj::CLASS) as u32);
             crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
         }
     }
@@ -284,7 +287,7 @@ pub(super) fn protect_players(g: &mut Ctx, p: Player) {
     common::clear_spell_state(g);
     p.set_u8(g, field::SPELL_CANCELLED, 0);
     let level = p.u8(g, Player::LEVEL) as u32;
-    let duration = g.prog16(durations::PROTECTION + 2 * level);
+    let duration = pc16(g.b, durations::PROTECTION + 2 * level);
     for q in Player::all() {
         if q.u8(g, Player::ACTIVE) != 0 && q.u16(g, Player::HP) != 0 && q.u8(g, Player::POWER_10F) == 0 {
             q.set_u16(g, Player::AURA_TIMER, duration);
@@ -348,7 +351,7 @@ pub(super) fn prayer_blessing(g: &mut Ctx, p: Player) {
 pub(super) fn bless_ally(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
-    let duration = g.prog16(durations::BLESSING + 2 * level);
+    let duration = pc16(g.b, durations::BLESSING + 2 * level);
     let ally = common::find_ally(g, p, 0x4c, |_, _| ());
     if let Some(q) = ally {
         if p.u8(g, field::SPELL_CANCELLED) == 0 {

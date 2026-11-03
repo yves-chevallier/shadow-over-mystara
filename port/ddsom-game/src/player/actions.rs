@@ -233,12 +233,12 @@ fn grabbed(g: &mut Ctx, p: Player) {
         }
         2 => {
             animation::step(g, p);
-            if p.u8(g, 0x33) == 0 {
+            if p.u8(g, Player::ANIM_EVENT) == 0 {
                 return;
             }
             let step = p.u8(g, Player::STEP) + 2;
             p.set_u8(g, Player::STEP, step);
-            let holder = p.u16(g, 0x8c) as i16 as i32 as u32 & 0xff_ffff;
+            let holder = p.u16(g, Player::HOLDER) as i16 as i32 as u32 & 0xff_ffff;
             let kind = crate::mem::rd8(g.b, holder + 2);
             if kind != 6 && kind != 8 {
                 wr8(g.b, holder + 5, 4);
@@ -247,7 +247,7 @@ fn grabbed(g: &mut Ctx, p: Player) {
         4 => {
             if animation::step(g, p) {
                 p.set_u8(g, Player::ACTIVE, 1);
-                p.set_u16(g, 0x8c, 0);
+                p.set_u16(g, Player::HOLDER, 0);
                 to_stand(g, p);
             }
         }

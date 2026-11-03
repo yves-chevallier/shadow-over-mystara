@@ -1,6 +1,9 @@
 //! Special attack of the cleric: equipment swap, turning away the undead, prayer skeleton, hold, storm, swarm.
 
+use crate::player::Player;
+use crate::objects::Obj;
 use super::*;
+use crate::player::tables::{players, Read};
 
 // ---- special attack (0x406d4) --------------------------------------------------------------
 
@@ -68,10 +71,10 @@ pub(super) fn swap_equipment(g: &mut Ctx, p: Player) {
 pub(super) fn scare_undead(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL);
-    let talisman = p.u8(g, 0x165) == 3;
+    let talisman = p.u8(g, Player::TALISMAN) == 3;
     for k in 0..23 {
         let o = Obj(A5 + 0x299e + 0xc0 * k);
-        let in_play = o.u8(g.b, 0) != 0 && o.u8(g.b, 1) & 1 != 0;
+        let in_play = o.u8(g.b, Obj::ACTIVE) != 0 && o.u8(g.b, Obj::FLAGS) & 1 != 0;
         let kind = o.u8(g.b, Obj::KIND);
         let counter = if in_play && kind == 1 {
             0x1f0
@@ -125,8 +128,6 @@ pub(super) fn cancel_prayer(g: &mut Ctx, p: Player, spark: u16) {
 
 /// Table (code bytes): maximum number of monsters hit per level, per prayer.
 pub(super) mod counts {
-    pub const HOLD: u32 = 0x4131e;
-    pub const CURE: u32 = 0x40ece;
     pub const BANISH: u32 = 0x41afe;
 }
 
@@ -197,12 +198,12 @@ pub(super) fn prayer_hold(g: &mut Ctx, p: Player) {
 pub(super) fn hold_foes(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
-    let mut left = g.prog8(counts::HOLD + level);
+    let mut left = players("hold_counts").at8(g.b, level);
     let (index, character) = (p.u8(g, Player::INDEX), p.u8(g, Player::CHARACTER));
     for pool in [&BOSS, &ENEMY] {
         for o in pool.iter() {
-            if o.u8(g.b, 0) == 0
-                || o.u8(g.b, 1) & 1 == 0
+            if o.u8(g.b, Obj::ACTIVE) == 0
+                || o.u8(g.b, Obj::FLAGS) & 1 == 0
                 || o.u16(g.b, 0x62) == 0
                 || o.u8(g.b, 0x40) != 0
                 || o.u8(g.b, 0x49) == 0x9c
@@ -210,7 +211,7 @@ pub(super) fn hold_foes(g: &mut Ctx, p: Player) {
             {
                 continue;
             }
-            o.set_u32(g.b, 4, 0x0400_0000);
+            o.set_u32(g.b, Obj::STATE, 0x0400_0000);
             o.set_u8(g.b, 0x49, 0x9c);
             o.set_u8(g.b, 0x48, index);
             o.set_u8(g.b, 0x4b, character);
@@ -268,7 +269,7 @@ pub(super) fn prayer_swarm(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
                     let level = p.u8(g, Player::LEVEL) as u32;
-                    let count = g.prog8(counts::CURE + level).wrapping_sub(1);
+                    let count = players("cure_counts").at8(g.b, level).wrapping_sub(1);
                     spawn::swarm(g, p, count as u32 + 1);
                 }
                 animation::start_plain(g, p, 0x2d);

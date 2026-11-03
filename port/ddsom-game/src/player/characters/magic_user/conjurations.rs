@@ -1,6 +1,9 @@
 //! Spells of the magic-user, continued: storm, rain, witch, curse, wave, portal, summon, wall, drain, sacrifice.
 
+use crate::player::Player;
+use crate::objects::Obj;
 use super::*;
+use crate::player::tables::{pc16};
 
 /// 0x4722a, no. 0x1c (h): storm. Two variants depending on facing: to the right (steps 0 to 6, bolt
 /// then effect 0x4cd8e) or to the left (steps 8 to 0xe, effect 0x4d020).
@@ -299,7 +302,7 @@ pub(super) fn aim_at_center(g: &mut Ctx, p: Player, speeds: u32, vz: u16, az: i1
         }
         index = index.wrapping_add(2);
     }
-    let speed = g.prog16(speeds + index as u32);
+    let speed = pc16(g.b, speeds + index as u32);
     let speed = if p.u8(g, Player::FACING) != 0 { speed } else { (speed as i16).wrapping_neg() as u16 };
     p.set_u16(g, Obj::VX, speed);
     p.set_u16(g, Obj::VZ, vz);
@@ -535,9 +538,9 @@ pub(super) fn drain(g: &mut Ctx, p: Player) {
                 animation::start_plain(g, p, 0x32);
                 p.set_u8(g, Player::WEAPON_B, 0x22);
                 for i in 0..6u32 {
-                    if p.u8(g, 0x140 + i) == 0x4f {
-                        p.set_u8(g, 0x140 + i, 0x56);
-                        p.set_u8(g, 0x148 + i, 0);
+                    if p.u8(g, Player::INVENTORY + i) == 0x4f {
+                        p.set_u8(g, Player::INVENTORY + i, 0x56);
+                        p.set_u8(g, Player::QUANTITIES + i, 0);
                     }
                 }
             }
@@ -560,15 +563,15 @@ pub(super) fn sacrifice(g: &mut Ctx, p: Player) {
     let (index, character) = (p.u8(g, Player::INDEX), p.u8(g, Player::CHARACTER));
     for pool in [&BOSS, &ENEMY] {
         for o in pool.iter() {
-            if o.u8(g.b, 0) == 0 || o.u8(g.b, 1) == 0 || o.u8(g.b, 0x40) != 0 {
+            if o.u8(g.b, Obj::ACTIVE) == 0 || o.u8(g.b, Obj::FLAGS) == 0 || o.u8(g.b, 0x40) != 0 {
                 continue;
             }
-            let counter = p.u16(g, 0x190).wrapping_add(2);
-            p.set_u16(g, 0x190, counter);
+            let counter = p.u16(g, Player::SPELL_KILLS).wrapping_add(2);
+            p.set_u16(g, Player::SPELL_KILLS, counter);
             let hits = o.u8(g.b, 0x9c).wrapping_add(1);
             o.set_u8(g.b, 0x9c, hits);
-            o.set_u32(g.b, 4, 0x0400_0000);
-            o.set_u8(g.b, 1, 1);
+            o.set_u32(g.b, Obj::STATE, 0x0400_0000);
+            o.set_u8(g.b, Obj::FLAGS, 1);
             o.set_u8(g.b, 0x49, 0xa8);
             o.set_u8(g.b, 0x48, index);
             o.set_u8(g.b, 0x4b, character);
@@ -578,19 +581,19 @@ pub(super) fn sacrifice(g: &mut Ctx, p: Player) {
                 o.set_u8(g.b, 0x4a, 0x20);
             }
             let kind = o.u8(g.b, Obj::KIND);
-            if o.u8(g.b, 0x28) == 4 && matches!(kind, 0xf | 0x14) {
+            if o.u8(g.b, Obj::CLASS) == 4 && matches!(kind, 0xf | 0x14) {
                 let hp = (o.u16(g.b, 0x62) as i16).wrapping_sub(0x1f4);
                 o.set_u16(g.b, 0x62, if hp < 0 { 0 } else { hp as u16 });
             } else {
                 o.set_u16(g.b, 0x62, 1);
             }
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
-                p.set_u8(g, 0x18a, 1);
+                p.set_u8(g, Player::HOLY, 1);
                 let loot = o.u8(g.b, 0x9a);
                 ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | kind as u32;
-            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
+            let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, Obj::CLASS) as u32);
             crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
         }
     }

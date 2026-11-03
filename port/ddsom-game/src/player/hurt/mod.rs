@@ -17,6 +17,7 @@ use crate::mem::{wr16, wr8};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
+use crate::player::tables::{player_data, pc16, Read};
 
 mod throws;
 pub use throws::*;
@@ -49,8 +50,6 @@ mod steps {
 const HURT_ACTIONS: u32 = 0x3a0f4;
 const DOWN_ACTIONS: u32 = 0x3b820;
 
-/// Reaction animations (sets of long entries per character, read as data).
-const HURT_ANIMATIONS: u32 = 0x3bb52;
 
 /// Rewritten reactions and steps: original address -> Rust routine.
 const HANDLERS: &[(u32, Handler)] = &[
@@ -193,7 +192,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     }),
     (0x3a238, |g, p| {
         animation::step(g, p);
-        if p.u8(g, 0x33) != 0 {
+        if p.u8(g, Player::ANIM_EVENT) != 0 {
             next_step(g, p);
         }
     }),
@@ -238,7 +237,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     }),
     (0x3b054, |g, p| {
         let ended = animation::step(g, p);
-        if ended || (p.u8(g, Player::SLOW) != 0 && p.u8(g, 0x33) != 0) {
+        if ended || (p.u8(g, Player::SLOW) != 0 && p.u8(g, Player::ANIM_EVENT) != 0) {
             next_step(g, p);
         }
     }),
@@ -264,7 +263,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x3ac86, |g, p| start_slide(g, p, 0x400)),
     (0x3acba, |g, p| hurled_slide(g, p, 24)),
     (0x3acfe, |g, p| {
-        if p.u8(g, 0x33) == 0 {
+        if p.u8(g, Player::ANIM_EVENT) == 0 {
             move_xz(g, p);
             if altitude(g, p) <= 0 {
                 p.set_u32(g, Obj::Z, 0);
@@ -314,7 +313,7 @@ const HANDLERS: &[(u32, Handler)] = &[
             return face_attacker(g, p);
         }
         p.set_u8(g, Player::STEP, 0x10);
-        let freeze = p.u8(g, 0x57);
+        let freeze = p.u8(g, Player::HIT_FREEZE);
         p.set_u8(g, Player::HITSTOP, freeze);
         face_attacker(g, p);
         let anim = if p.u8(g, Player::SLOW) != 0 { 2 } else { 0 };
@@ -416,7 +415,7 @@ fn hurt_slow(g: &mut Ctx, p: Player) {
     next_step(g, p);
     p.set_u16(g, Obj::VX, 0x280);
     p.set_u16(g, Obj::AX, (-0x50i16) as u16);
-    let freeze = p.u8(g, 0x57);
+    let freeze = p.u8(g, Player::HIT_FREEZE);
     p.set_u8(g, Player::HITSTOP, freeze);
     p.set_u8(g, Player::TIMER_6F, 8);
     face_attacker(g, p);
@@ -438,7 +437,7 @@ fn hurt_short(g: &mut Ctx, p: Player) {
         return run_at(g, p, 0x3b8c4);
     }
     next_step(g, p);
-    let freeze = p.u8(g, 0x57);
+    let freeze = p.u8(g, Player::HIT_FREEZE);
     p.set_u8(g, Player::HITSTOP, freeze);
     p.set_u8(g, Player::TIMER_6F, 8);
     face_attacker(g, p);
@@ -497,7 +496,7 @@ pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
 /// the original, what follows finds `index` and the offset (`Ctx::jumped`, D0.b and D1.w).
 fn jump_table(g: &mut Ctx, p: Player, base: u32, index: u8) {
     cov!();
-    let offset = g.prog16(base + index as u32);
+    let offset = pc16(g.b, base + index as u32);
     g.jumped = super::Jumped { index, offset };
     run_at(g, p, base.wrapping_add(offset as i16 as i32 as u32));
 }
@@ -515,7 +514,7 @@ fn jump(g: &mut Ctx, p: Player, base: u32) {
 pub fn hurt_animation(g: &mut Ctx, p: Player, n: u16) {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let set = g.data32(HURT_ANIMATIONS + 4 * character);
+    let set = player_data().hurt_animations.at32(g.b, 4 * character);
     let script = script_of(g.b, set, n);
     load_entry(g.b, p.obj(), script, true);
 }
@@ -524,7 +523,7 @@ pub fn hurt_animation(g: &mut Ctx, p: Player, n: u16) {
 /// inverted) and their horizontal speed inverts accordingly.
 fn face_attacker(g: &mut Ctx, p: Player) {
     cov!();
-    let facing = p.u8(g, 0x56) ^ 0x20;
+    let facing = p.u8(g, Player::ATTACKER_FACING) ^ 0x20;
     p.set_u8(g, Player::FACING, facing);
     if facing != 0 {
         let vx = p.u32(g, Obj::VX).wrapping_neg();
@@ -569,7 +568,7 @@ fn set_launch(g: &mut Ctx, p: Player, vx: u16, vz: u16) {
     p.set_u16(g, Obj::AX, 0);
     p.set_u16(g, Obj::VZ, vz);
     p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
-    let freeze = p.u8(g, 0x57);
+    let freeze = p.u8(g, Player::HIT_FREEZE);
     p.set_u8(g, Player::HITSTOP, freeze);
 }
 
@@ -605,7 +604,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
 /// 0x3b7f4: player on the ground (`+4` = 4).
 pub fn downed(g: &mut Ctx, p: Player) {
     cov!();
-    p.set_u8(g, 0x192, 0);
+    p.set_u8(g, Player::GET_UP_MARK, 0);
     p.set_u16(g, Player::DYING_TIMER, 0);
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, DOWN_ACTIONS, action);

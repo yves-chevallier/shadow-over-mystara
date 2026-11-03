@@ -1,7 +1,9 @@
 //! Parries, enemy attacks, crates, pushes and pickable items.
 
+use crate::player::Player;
 use super::*;
 use crate::machine::Machine;
+use crate::player::tables::{pc8, pc16, byte};
 
 // ---------------------------------------------------------------------------------------------
 // Parries: a player's attack crosses that of an enemy or an enemy shot
@@ -72,7 +74,7 @@ pub(super) fn clash_with_enemy_shot(w: &mut World, p: Obj, s: Obj) {
         return;
     }
     let kind = s.u8(w.b, f::KIND) as u32;
-    let need = w.prog8(0x27fd6 + kind);
+    let need = pc8(w.b, 0x27fd6 + kind);
     let weapon = p.u8(w.b, f::WEAPON_10E);
     let ok = match need {
         1 => true,
@@ -175,7 +177,7 @@ pub(super) struct Reaction {
 
 pub(super) fn reaction(w: &mut World, table: u32, id: u8) -> Reaction {
     let at = table + 4 * id as u32;
-    Reaction { ground: rd8(w.b, at), air: rd8(w.b, at + 1), power: rd8(w.b, at + 2), power_hell: rd8(w.b, at + 3) }
+    Reaction { ground: byte(w.b, at), air: byte(w.b, at + 1), power: byte(w.b, at + 2), power_hell: byte(w.b, at + 3) }
 }
 
 /// Attack power: "hell" value beyond difficulty 5.
@@ -253,7 +255,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
         return;
     }
     // protections according to equipment: table by shot type (bytes in ROM), 1 = parryable, 2 = magic
-    let guard = rd8(w.b, rom::SHOT_GUARD + kind as u32);
+    let guard = byte(w.b, rom::SHOT_GUARD + kind as u32);
     if p.u8(w.b, f::GEAR_165) == 2 && guard == 1 {
         return;
     }
@@ -285,7 +287,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
         // reduction by (armour, class): words in ROM, 8 per class
         let class = (p.u8(w.b, f::VARIANT) >> 1) as u32;
         let at = 0x27732 + 2 * armor as u32 + 8 * class;
-        let reduction = w.prog16(at);
+        let reduction = pc16(w.b, at);
         dmg = dmg.wrapping_sub(reduction);
     }
     if (dmg as i16) < 0 {
@@ -306,7 +308,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
 pub(super) fn box_damage(w: &mut World, bx: Obj) -> u16 {
     let row = (bx.u8(w.b, f::HP_MAX) as u32) << 4;
     let tick = (ram::TICK.get(w.b) >> 1) & 0xf;
-    w.prog16(0x28334 + row + 2 * tick as u32)
+    pc16(w.b, 0x28334 + row + 2 * tick as u32)
 }
 
 /// 0x2806a: (thrown) crates hurt the players.
@@ -319,7 +321,7 @@ pub(super) fn boxes_hit_players(w: &mut World) {
         if !w.is_active(p) || p.u8(w.b, f::BODY_BOX) == 0 || (p.u8(w.b, f::DYING) as i8) > 0 {
             continue;
         }
-        if p.u8(w.b, f::ACTION) == 0x14 && p.u8(w.b, 0x8b) == 2 {
+        if p.u8(w.b, f::ACTION) == 0x14 && p.u8(w.b, Player::CARRY) == 2 {
             continue;
         }
         let body = object_box(w, rom::BODY, p, f::BODY_BOX);
@@ -510,31 +512,31 @@ pub(super) fn push_enemy(w: &mut World, p: Obj, mine: HitBox, e: Obj, theirs: Hi
         w.add16(p, f::X, d);
         if p.u16(w.b, f::Z) != 0
             || p.u8(w.b, f::SUBSTATE) != 0
-            || p.u8(w.b, 0x8a) != 0
-            || p.u8(w.b, 0x10f) != 0
-            || p.u8(w.b, 0x6a) == 4
+            || p.u8(w.b, Player::SLOW_8A) != 0
+            || p.u8(w.b, Player::POWER_10F) != 0
+            || p.u8(w.b, Player::SUBACTION) == 4
             || p.u8(w.b, f::KEYS_NEW) & 0x10 == 0
         {
             return false;
         }
         p.set_u32(w.b, f::STATE, state::ATTACKING);
-        p.set_u8(w.b, 0x6a, 4);
+        p.set_u8(w.b, Player::SUBACTION, 4);
         true
     } else {
         let d = if push.neg_y { push.depth_y.wrapping_neg() } else { push.depth_y };
         w.add16(p, f::Y, d);
         if p.u16(w.b, f::Z) != 0
             || p.u8(w.b, f::SUBSTATE) != 0
-            || p.u8(w.b, 0x8a) != 0
-            || p.u8(w.b, 0x10f) != 0
-            || p.u8(w.b, 0x6a) == 0x10
+            || p.u8(w.b, Player::SLOW_8A) != 0
+            || p.u8(w.b, Player::POWER_10F) != 0
+            || p.u8(w.b, Player::SUBACTION) == 0x10
             || p.u8(w.b, f::KEYS_NEW) & 0x10 == 0
             || push.neg_y
         {
             return false;
         }
         p.set_u32(w.b, f::STATE, state::ATTACKING);
-        p.set_u8(w.b, 0x6a, 0x10);
+        p.set_u8(w.b, Player::SUBACTION, 0x10);
         true
     }
 }
@@ -560,8 +562,8 @@ pub(super) fn push_box(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: Hit
     if bx.u8(w.b, f::ACTIVE) == 2
         || p.u16(w.b, f::Z) != 0
         || p.u8(w.b, f::SUBSTATE) != 0
-        || p.u8(w.b, 0x8a) != 0
-        || p.u8(w.b, 0x10f) != 0
+        || p.u8(w.b, Player::SLOW_8A) != 0
+        || p.u8(w.b, Player::POWER_10F) != 0
         || (bx.u8(w.b, f::KIND) != 1 && bx.u16(w.b, f::Z) != 0)
         || p.u8(w.b, f::KEYS_NEW) & 0x10 == 0
     {
@@ -569,7 +571,7 @@ pub(super) fn push_box(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: Hit
     }
     if p.u8(w.b, f::VARIANT) >> 1 == 1
         && p.u32(w.b, f::STATE) & !0xff == state::ATTACKING
-        && p.u8(w.b, 0x6a) == 0x18
+        && p.u8(w.b, Player::SUBACTION) == 0x18
     {
         return false;
     }
@@ -594,13 +596,13 @@ pub(super) fn grab_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
     if p.u8(w.b, f::VARIANT) >> 1 == 4 {
         return false;
     }
-    if p.u8(w.b, 0x66) != 0 {
+    if p.u8(w.b, Player::SLOW) != 0 {
         return true;
     }
     p.set_u32(w.b, f::STATE, state::GRABBED);
-    p.set_u8(w.b, 0x8a, 1);
-    p.set_u8(w.b, 0x8b, 0);
-    p.set_u32(w.b, 0x86, bx.long_ref());
+    p.set_u8(w.b, Player::SLOW_8A, 1);
+    p.set_u8(w.b, Player::CARRY, 0);
+    p.set_u32(w.b, Player::LINK, bx.long_ref());
     bx.set_u8(w.b, f::ACTIVE, 2);
     bx.set_u16(w.b, 0x6c, p.word());
     bx.set_u32(w.b, f::STATE, state::PLAYER_HURT);
@@ -620,8 +622,8 @@ pub(super) fn shove_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
         return false;
     }
     p.set_u32(w.b, f::STATE, state::GRABBED);
-    p.set_u8(w.b, 0x8b, 4);
-    p.set_u32(w.b, 0x86, bx.long_ref());
+    p.set_u8(w.b, Player::CARRY, 4);
+    p.set_u32(w.b, Player::LINK, bx.long_ref());
     bx.set_u8(w.b, f::ACTIVE, 2);
     bx.set_u16(w.b, 0x6c, p.word());
     true
@@ -664,7 +666,7 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
         w.add16(p, f::X, d);
         let keys = p.u8(w.b, f::KEYS_HELD);
         if keys & 1 != 0 {
-            p.set_u8(w.b, 0x16f, 8);
+            p.set_u8(w.b, Player::CONTACT, 8);
             if p.u8(w.b, f::FLIP) == 0 {
                 return false;
             }
@@ -674,7 +676,7 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
             }
             return false;
         }
-        p.set_u8(w.b, 0x16f, 6);
+        p.set_u8(w.b, Player::CONTACT, 6);
         if keys & 2 == 0 || p.u8(w.b, f::FLIP) != 0 {
             return false;
         }
@@ -691,14 +693,14 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
     }
     let keys = p.u8(w.b, f::KEYS_HELD);
     if keys & 8 != 0 {
-        p.set_u8(w.b, 0x16f, 2);
+        p.set_u8(w.b, Player::CONTACT, 2);
         let py = p.u16(w.b, f::Y);
         if py <= bx.u16(w.b, f::Y) {
             return barrel_kick(w, p, bx);
         }
         return false;
     }
-    p.set_u8(w.b, 0x16f, 4);
+    p.set_u8(w.b, Player::CONTACT, 4);
     if keys & 4 == 0 {
         return false;
     }
@@ -720,7 +722,7 @@ pub(super) fn barrel_kick(w: &mut World, p: Obj, bx: Obj) -> bool {
         return false;
     }
     p.set_u32(w.b, f::STATE, state::GRABBING);
-    p.set_u32(w.b, 0x86, bx.long_ref());
+    p.set_u32(w.b, Player::LINK, bx.long_ref());
     bx.set_u8(w.b, 0x66, 1);
     bx.set_u16(w.b, 0x6c, p.word());
     true
@@ -740,7 +742,7 @@ pub(super) fn players_pick_up_items(w: &mut World) {
             || p.u8(w.b, f::BODY_BOX) == 0
             || p.u16(w.b, f::Z) != 0
             || p.u8(w.b, f::SUBSTATE) != 0
-            || p.u8(w.b, 0x8a) != 0
+            || p.u8(w.b, Player::SLOW_8A) != 0
             || matches!(p.u8(w.b, f::ACTION), 0xe | 0x22 | 0x2e | 0x28)
         {
             continue;
@@ -785,11 +787,11 @@ pub(super) fn item_taken_by_button(w: &mut World, p: Obj, item: Obj) -> bool {
         return false;
     }
     if item.u8(w.b, f::KIND) != 8 {
-        if p.u16(w.b, f::ACTION) != 0x0c00 || p.u8(w.b, 0x6a) > 8 {
+        if p.u16(w.b, f::ACTION) != 0x0c00 || p.u8(w.b, Player::SUBACTION) > 8 {
             return false;
         }
         p.set_u32(w.b, f::STATE, state::PICKING_UP);
-        p.set_u16(w.b, 0x8c, item.word());
+        p.set_u16(w.b, Player::HOLDER, item.word());
     }
     item.set_u8(w.b, f::HIT_MARK, 1);
     let k = p.u8(w.b, f::KIND) & 3;
@@ -805,7 +807,7 @@ pub(super) fn item_taken_by_walking(w: &mut World, p: Obj, item: Obj) {
         return;
     }
     let kind = item.u8(w.b, f::KIND) as u32;
-    if w.prog8(0x285e0 + kind) == 0 {
+    if pc8(w.b, 0x285e0 + kind) == 0 {
         return;
     }
     item.set_u8(w.b, f::HIT_MARK, 2);

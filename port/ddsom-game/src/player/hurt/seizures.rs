@@ -1,6 +1,7 @@
 //! Reactions with their own automaton: crash landing (0x34), hurled out (0x3e), shock (0x22), dizzy (0x24),
 //! fallen (0x38), sitting (0x28), frozen (stepped reaction 0x3b30e), held (0x32).
 
+use crate::player::Player;
 use super::*;
 
 // ---- reaction 0x34 (0x3b4c4): violent fall ------------------------------------------------------
@@ -56,7 +57,7 @@ pub(super) fn hurl(g: &mut Ctx, p: Player, vz: u16, anim: u16) {
     p.set_u16(g, Obj::AX, 0);
     p.set_u16(g, Obj::VZ, vz);
     p.set_u16(g, Obj::AZ, (-4i16) as u16);
-    let freeze = p.u8(g, 0x57);
+    let freeze = p.u8(g, Player::HIT_FREEZE);
     p.set_u8(g, Player::HITSTOP, freeze);
     face_attacker(g, p);
     p.set_u8(g, Player::TIMER_6F, 18);
@@ -445,7 +446,7 @@ pub(super) fn frozen_start(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_state(g, 0x0400_2c0a);
-    p.set_u8(g, 0x53, 1);
+    p.set_u8(g, Player::HITSTOP, 1);
     g.sound(FROZEN_DEATH_SOUND, p);
     p.set_u8(g, Player::TIMER_6F, 60);
     hurt_animation(g, p, 21);
@@ -505,7 +506,7 @@ pub(super) fn frozen_wait(g: &mut Ctx, p: Player, next: u16) {
 pub(super) fn frozen_end(g: &mut Ctx, p: Player) {
     cov!();
     if ram::FROZEN.get(g.b) != 0 {
-        p.set_u8(g, 0x7e, 0x20);
+        p.set_u8(g, Player::INVULN, 0x20);
         return recover(g, p);
     }
     let left = ram::PLAYERS_ALIVE.get(g.b).wrapping_sub(1);

@@ -355,9 +355,9 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     cov!();
     p.set_u16(g, Player::AURA_TIMER, duration);
     p.set_u8(g, Player::AURA, 1);
-    if p.u8(g, 0x167) == 2 {
+    if p.u8(g, Player::FREE_ITEM) == 2 {
         p.set_u8(g, Player::AURA, 3);
-        p.set_u8(g, 0x167, 0xff);
+        p.set_u8(g, Player::FREE_ITEM, 0xff);
     }
     p.set_u8(g, Player::AURA_B, 0);
     p.set_u8(g, Player::AURA_C, 0);

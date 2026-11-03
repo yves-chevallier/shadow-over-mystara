@@ -1,6 +1,8 @@
 //! Simple reactions, airborne throws, falls, slides, bounces and getting up (steps shared by the
 //! reactions of the hit state and of the downed state).
 
+use crate::player::Player;
+use crate::objects::Obj;
 use super::*;
 
 // ---- simple reactions ------------------------------------------------------------------------
@@ -19,8 +21,8 @@ pub(super) fn flinch(g: &mut Ctx, p: Player) {
         if (left - 1) & 1 == 0 {
             shift = -shift;
         }
-        let x = p.u16(g, 8).wrapping_add(shift as u16);
-        p.set_u16(g, 8, x);
+        let x = p.u16(g, Obj::X).wrapping_add(shift as u16);
+        p.set_u16(g, Obj::X, x);
         return;
     }
     if animation::step(g, p) {
@@ -37,7 +39,7 @@ pub(super) fn start_flinch(g: &mut Ctx, p: Player, anim: u16) {
     next_step(g, p);
     p.set_u16(g, Obj::VX, 0x280);
     p.set_u16(g, Obj::AX, (-0x50i16) as u16);
-    let freeze = p.u8(g, 0x57);
+    let freeze = p.u8(g, Player::HIT_FREEZE);
     p.set_u8(g, Player::HITSTOP, freeze);
     p.set_u8(g, Player::TIMER_6F, 8);
     face_attacker(g, p);
@@ -438,7 +440,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
             for (field, v) in [(Obj::VX, 0x180), (Obj::AX, 0), (Obj::VZ, 0x400), (Obj::AZ, 0xffc0), (Obj::VY, 0xffc0), (Obj::AY, 0)] {
                 p.set_u16(g, field, v);
             }
-            p.set_u8(g, 0x53, 0);
+            p.set_u8(g, Player::HITSTOP, 0);
             if p.faces_left(g) {
                 let both = p.u32(g, Obj::VX).wrapping_neg();
                 p.set_u32(g, Obj::VX, both);

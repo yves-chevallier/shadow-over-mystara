@@ -1,6 +1,8 @@
 //! Scene entries of the players (state `+4` = 0, `+5` = 4): common tools and routines 0x23ac8 to 0x253a0.
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{pc16, pc32};
 
 // =================================================================================================
 // Scene entries (`+5` = 0, table 0x23826 indexed by scene)
@@ -109,7 +111,7 @@ pub(super) fn anim_0(g: &mut Ctx, p: Player) {
 /// Word of the table `table` for the player's rank (index `2 × rank`, byte).
 pub(super) fn per_rank16(g: &mut Ctx, p: Player, table: u32) -> u16 {
     let index = (p.u8(g, RANK).wrapping_mul(2)) as u32;
-    g.prog16(table + index)
+    pc16(g.b, table + index)
 }
 
 /// End of the animation: still pose; in the meantime, the hero's cry at the gesture (fighter and elf).
@@ -119,10 +121,10 @@ pub(super) fn pose_with_shout(g: &mut Ctx, p: Player) {
         start_stand(g, p);
         return;
     }
-    if p.u8(g, 0x33) == 0 {
+    if p.u8(g, Player::ANIM_EVENT) == 0 {
         return;
     }
-    p.set_u8(g, 0x33, 0);
+    p.set_u8(g, Player::ANIM_EVENT, 0);
     if matches!(p.class(g), 0 | 2) {
         super::super::spawn::swap(g, p, 0);
     }
@@ -156,7 +158,7 @@ pub(crate) fn place_by_focus(g: &mut Ctx, p: Player, table: u32) -> u32 {
     p.set_u16(g, Obj::Y, y);
     p.set_u16(g, Obj::Z, 0);
     let index = 2 * p.u8(g, Player::INDEX) as u32;
-    let dx = g.prog16(table + index);
+    let dx = pc16(g.b, table + index);
     p.set_u16(g, Obj::X, x.wrapping_add(dx));
     focus
 }
@@ -166,7 +168,7 @@ pub(crate) fn place_by_focus(g: &mut Ctx, p: Player, table: u32) -> u32 {
 pub(super) const INTRO_23AC8: Steps = &[
     (0x23adc, |g, p| {
         appear(g, p, true, true);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u16(g, WAIT, 80);
         animation::start(g, p, 2);
     }),
@@ -178,7 +180,7 @@ pub(super) const INTRO_23AC8: Steps = &[
 pub(super) fn intro_23b32(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::ACTION) == 0 {
         appear(g, p, true, false);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u8(g, ARMED, 1);
         start_stand(g, p);
     } else if ram::PHASE.get(g.b) == PLAYING_PHASE {
@@ -192,7 +194,7 @@ pub(super) const INTRO_24FE2: Steps = &[
     (0x25006, |g, p| {
         next(g, p);
         p.set_u8(g, Player::ACTIVE, 1);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u8(g, ARMED, 0);
         p.set_u16(g, WAIT, 136);
         p.set_u32(g, Obj::VX, 0x0200_0000);
@@ -248,7 +250,7 @@ pub(super) const INTRO_24FE2: Steps = &[
         next(g, p);
         p.set_u16(g, WAIT, 320);
         let at = 0x25154 + 8 * p.u8(g, RANK) as u32;
-        let (vx, vy, delay) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4));
+        let (vx, vy, delay) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4));
         p.set_u16(g, Obj::VX, vx);
         p.set_u16(g, Obj::VY, vy);
         p.set_u16(g, TIMER_B, delay);
@@ -268,7 +270,7 @@ pub(super) const INTRO_24FE2: Steps = &[
             next(g, p);
             p.set_u16(g, WAIT, 6);
             let k = p.u8(g, RANK) as u32;
-            let drift = g.prog32(0x251ce + 4 * k);
+            let drift = pc32(g.b, 0x251ce + 4 * k);
             p.set_u32(g, Obj::VY, drift);
             p.set_u16(g, Obj::VZ, 0x580);
             p.set_u16(g, Obj::AZ, (-56i16) as u16);
@@ -309,7 +311,7 @@ pub(super) fn turn_after_wait(g: &mut Ctx, p: Player) {
 pub(super) const INTRO_2522E: Steps = &[
     (0x25240, |g, p| {
         appear(g, p, false, true);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u16(g, WAIT, 80);
         anim_0(g, p);
         follow_focus(g, p);
@@ -333,7 +335,7 @@ pub(super) fn follow_focus(g: &mut Ctx, p: Player) {
 pub(super) const INTRO_252AC: Steps = &[
     (0x252c2, |g, p| {
         appear(g, p, false, true);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u16(g, WAIT, 80);
         anim_0(g, p);
     }),
@@ -344,7 +346,7 @@ pub(super) const INTRO_252AC: Steps = &[
         p.set_u16(g, Obj::Y, y.wrapping_sub(17));
         p.set_u16(g, Obj::Z, 0);
         let index = 2 * p.u8(g, Player::INDEX) as u32;
-        let dx = g.prog16(0x25348 + index);
+        let dx = pc16(g.b, 0x25348 + index);
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
         if crate::mem::rd8(g.b, focus + 5) == 0 {
             anim_step(g, p);
@@ -354,7 +356,7 @@ pub(super) const INTRO_252AC: Steps = &[
         p.set_u16(g, Obj::VZ, 0x500);
         p.set_u16(g, Obj::AZ, (-56i16) as u16);
         p.set_u32(g, Obj::VX, 0);
-        let drift = g.prog32(0x25350 + 2 * index);
+        let drift = pc32(g.b, 0x25350 + 2 * index);
         p.set_u32(g, Obj::VY, drift);
         anim_c(g, p, 0);
     }),

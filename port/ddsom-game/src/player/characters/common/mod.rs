@@ -20,8 +20,8 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
-use crate::machine::Machine;
 use crate::player::external as ext;
+use crate::player::tables::{pc16, word};
 
 mod jumps;
 pub use jumps::*;
@@ -181,7 +181,7 @@ pub fn launch_jump(g: &mut Ctx, p: Player, table: u32, kind: u8) {
     cov!();
     let row = table + 8 * kind as u32;
     for (i, off) in [0x14, 0x16, 0x18, 0x1a].into_iter().enumerate() {
-        let v = g.data16(row + 2 * i as u32);
+        let v = word(g.b, row + 2 * i as u32);
         p.set_u16(g, off, v);
     }
     if p.u8(g, Player::FACING) == 0 {
@@ -191,14 +191,14 @@ pub fn launch_jump(g: &mut Ctx, p: Player, table: u32, kind: u8) {
 
 /// `neg.l (0x14,A0)`: the long (speed, acceleration) is negated as a block.
 pub fn negate_horizontal_speed(g: &mut Ctx, p: Player) {
-    let v = p.u32(g, 0x14).wrapping_neg();
-    p.set_u32(g, 0x14, v);
+    let v = p.u32(g, Obj::VX).wrapping_neg();
+    p.set_u32(g, Obj::VX, v);
 }
 
 /// The horizontal speed has changed direction relative to the facing (it is negative once oriented
 /// in the facing direction): the momentum is exhausted.
 pub fn momentum_reversed(g: &mut Ctx, p: Player) -> bool {
-    let v = p.u16(g, 0x14) as i16;
+    let v = p.u16(g, Obj::VX) as i16;
     let along = if p.u8(g, Player::FACING) == 0 { v.wrapping_neg() } else { v };
     along < 0
 }
@@ -207,14 +207,14 @@ pub fn momentum_reversed(g: &mut Ctx, p: Player) -> bool {
 /// direction in the air (`AIR_STEERED`), it no longer moves until it has returned to its starting point.
 pub fn drift(g: &mut Ctx, p: Player) {
     cov!();
-    let jump_kind = p.u8(g, 0x67);
+    let jump_kind = p.u8(g, Player::JUMP_KIND);
     if jump_kind == 0 {
         return;
     }
     if p.u8(g, field::AIR_STEERED) != 0 {
         // the direction changed in the air: the momentum is resumed until back at the start
-        let travelled = p.u16(g, 0x08).wrapping_sub(p.u16(g, field::TAKEOFF_X)) as i16;
-        let travelled = if (p.u16(g, 0x16) as i16) < 0 { travelled } else { travelled.wrapping_neg() };
+        let travelled = p.u16(g, Obj::X).wrapping_sub(p.u16(g, field::TAKEOFF_X)) as i16;
+        let travelled = if (p.u16(g, Obj::AX) as i16) < 0 { travelled } else { travelled.wrapping_neg() };
         if travelled < 0 {
             return;
         }
@@ -226,7 +226,7 @@ pub fn drift(g: &mut Ctx, p: Player) {
 /// character around and gives a horizontal push of `push` (only once per jump).
 pub fn air_steer(g: &mut Ctx, p: Player, push: i16) {
     cov!();
-    if p.u8(g, field::AIR_STEERED) != 0 || (p.u16(g, 0x18) as i16) < 0 {
+    if p.u8(g, field::AIR_STEERED) != 0 || (p.u16(g, Obj::VZ) as i16) < 0 {
         return;
     }
     let keys = p.u8(g, Player::KEYS_HELD) & 3;
@@ -238,7 +238,7 @@ pub fn air_steer(g: &mut Ctx, p: Player, push: i16) {
         return;
     }
     p.flip(g);
-    p.set_u16(g, 0x16, push as u16);
+    p.set_u16(g, Obj::AX, push as u16);
     p.set_u8(g, field::AIR_STEERED, 1);
 }
 
@@ -278,10 +278,10 @@ pub fn aura_hit_countdown(g: &mut Ctx, p: Player) {
 /// (key 4) or a turn with button 1 pressed launches the turning attack (`turn_attack`).
 pub fn follow_up(g: &mut Ctx, p: Player) {
     cov!();
-    if p.u16(g, 0x0c) != 0 {
+    if p.u16(g, Obj::Z) != 0 {
         return;
     }
-    if p.u8(g, Player::KEYS_NEW) & 0x80 != 0 && p.u8(g, 0x15c) == 0 && p.u8(g, field::ITEM) == 0x2d
+    if p.u8(g, Player::KEYS_NEW) & 0x80 != 0 && p.u8(g, Player::SPECIAL_ACTIVE) == 0 && p.u8(g, field::ITEM) == 0x2d
         && turn_attack(g, p) {
             return;
         }
@@ -432,8 +432,8 @@ pub fn consume_charge(g: &mut Ctx, p: Player) {
 /// Dust at the feet: effect 0xb10c8 with speeds read from a two-word-per-class table.
 fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
-    let vx = g.prog16(table + 4 * class) as u32;
-    let vy = g.prog16(table + 2 + 4 * class) as u32;
+    let vx = pc16(g.b, table + 4 * class) as u32;
+    let vy = pc16(g.b, table + 2 + 4 * class) as u32;
     // the speeds stay in D2 and D3 (leftovers of the original)
     (g.leftovers.d2, g.leftovers.d3) = (vx, vy);
     g.shock(p, 0, 0x101, vx as u16, vy as u16);
@@ -455,7 +455,7 @@ pub fn dust_run(g: &mut Ctx, p: Player) {
     if phase != 0 {
         return;
     }
-    let speed = (p.u16(g, 0x14) as i16).unsigned_abs();
+    let speed = (p.u16(g, Obj::VX) as i16).unsigned_abs();
     if speed > 0x200 {
         dust(g, p, tables::DUST_RUN);
     }
@@ -475,7 +475,7 @@ pub fn dust_jump(g: &mut Ctx, p: Player) {
 pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     cov!();
     let row = tables::SPARKS + 8 * kind as u32;
-    let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
+    let (d0, d1, d2, height) = (pc16(g.b, row), pc16(g.b, row + 2), pc16(g.b, row + 4), pc16(g.b, row + 6));
     // the speed and the height stay in D2-D4 (leftovers of the original)
     crate::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
     g.leftovers.d4 = height as u32;

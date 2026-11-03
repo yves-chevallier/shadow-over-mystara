@@ -1,6 +1,8 @@
 //! Guard, slow end, rare poses (actions 0x26, 0x2c, 0x30), hop, fall-in, push and spell fizzle.
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{pc16};
 
 // ---- guard (actions 0x16 and 0x18, 0x35d52 and 0x35dca) ---------------------------------------------
 
@@ -115,8 +117,8 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
                 return;
             }
             let row = PUFFS + 8 * p.u8(g, RARE_TIMER) as u32;
-            let height = g.prog16(row + 6);
-            let (variant, setting, vx) = (g.prog16(row) as u8, g.prog16(row + 2), g.prog16(row + 4));
+            let height = pc16(g.b, row + 6);
+            let (variant, setting, vx) = (pc16(g.b, row) as u8, pc16(g.b, row + 2), pc16(g.b, row + 4));
             // the speeds and the height stay in D2-D4 (leftovers of the original)
             crate::mem::set_low_word(&mut g.leftovers.d2, vx);
             g.leftovers.d4 = height as u32;
@@ -268,7 +270,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     let step = p.u8(g, Player::STEP);
     let key = match step {
         0 => {
-            let first = p.u8(g, 0x16f);
+            let first = p.u8(g, Player::CONTACT);
             p.set_u8(g, Player::STEP, first);
             p.set_u8(g, Player::TIMER_6F, 32);
             animation::start(g, p, 58);
@@ -312,7 +314,7 @@ pub(super) fn push_dust(g: &mut Ctx, p: Player) {
         return;
     }
     let at = 0x36eea + 8 * p.class(g) as u32;
-    let (d0, d1, d2, d3) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4), g.prog16(at + 6));
+    let (d0, d1, d2, d3) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4), pc16(g.b, at + 6));
     // D4.w: the offset of the row (leftover of the original)
     let row_offset = 8 * p.class(g) as u16;
     crate::mem::set_low_word(&mut g.leftovers.d4, row_offset);

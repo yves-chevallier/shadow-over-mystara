@@ -6,15 +6,12 @@
 //! slot.
 
 use super::{ram, Ctx, Player};
-use crate::mem::{rd32, wr32};
-use crate::machine::Machine;
+use crate::mem::wr32;
+use crate::player::tables::{player_data, long, Read};
 
 /// Character palette RAM (two bytes per color, 16 colors per block).
 const PALETTE_RAM: u32 = 0x91_c000;
 
-/// Offset (code words, 0x378aa) of each character's palette block in the palette RAM
-/// and in the source blocks.
-const PALETTE_OFFSETS: u32 = 0x378aa;
 
 /// Aura palettes: each character has 8 blocks of 32 bytes, alternated every 8 frames.
 mod sources {
@@ -28,7 +25,7 @@ mod sources {
 fn copy_palette(g: &mut Ctx, src: u32, dst: u32) {
     cov!();
     for i in 0..8 {
-        let v = rd32(g.b, src + 4 * i);
+        let v = long(g.b, src + 4 * i);
         wr32(g.b, dst + 4 * i, v);
     }
 }
@@ -36,7 +33,7 @@ fn copy_palette(g: &mut Ctx, src: u32, dst: u32) {
 fn palette_slot(g: &mut Ctx, p: Player) -> u32 {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    g.prog16(PALETTE_OFFSETS + 2 * character) as i16 as i32 as u32
+    player_data().aura_palette_offsets.at16(g.b, 2 * character) as i16 as i32 as u32
 }
 
 /// 0x377cc: aura A, the player blinks every other frame (the "hidden" bit follows the counter).
@@ -63,8 +60,8 @@ fn cycle_palette(g: &mut Ctx, p: Player, aura: u32, base: u32) {
     if tick != 0 {
         return;
     }
-    let step = p.u8(g, 0x7f).wrapping_add(1);
-    p.set_u8(g, 0x7f, step);
+    let step = p.u8(g, Player::AURA_STEP).wrapping_add(1);
+    p.set_u8(g, Player::AURA_STEP, step);
     let character = p.u8(g, Player::CHARACTER) as u32;
     let src = base + ((step as u32 & 7) << 5) + (character << 8);
     let dst = PALETTE_RAM + palette_slot(g, p);

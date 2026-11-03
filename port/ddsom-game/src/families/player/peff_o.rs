@@ -1,6 +1,8 @@
 //! Player effects (PEFF), fifteenth series: type 24 (the interface's pile of gold that takes back the player's items in
 //! exchange for points). See `docs/families/joueur.md`.
 
+use super::vars;
+use crate::player::Player;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, wr8};
@@ -8,14 +10,12 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
+use crate::player::tables::{player_data, byte, word, Read};
 
 const ANIMS: u32 = 0x1c40c6;
 /// Position of the icon per player (X, Y): two versions according to `A5+0x20` (1: one-player screen).
 const PLAYER_SPOTS_A: u32 = 0x4d792;
 const PLAYER_SPOTS_B: u32 = 0x4d782;
-/// Per-character tables (pointers) giving, for each piece of equipment, 0 (nothing), 1 (sold `+0x148` times), ≥ 2 (sold
-/// once) or negative (exchanged for nothing).
-const SELL_TABLES: u32 = 0x4d884;
 /// Prices in points (BCD on 3 bytes, 4 bytes per piece of equipment).
 const PRICES: u32 = 0x4db30;
 
@@ -39,25 +39,25 @@ mod coins {
     use super::*;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        match x.u8(0x4) {
+        match x.u8(Obj::STATE) {
             0 => {
-                x.add8(0x4, 2);
-                x.set8(0x16, 0);
-                let table = if x.a5_u8(0x20) == 1 { PLAYER_SPOTS_A } else { PLAYER_SPOTS_B };
-                let (cx, cy) = (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y));
+                x.add8(Obj::STATE, 2);
+                x.set8(Obj::AX, 0);
+                let table = if vars::VERSION.get(x.b) == 1 { PLAYER_SPOTS_A } else { PLAYER_SPOTS_B };
+                let (cx, cy) = (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b));
                 let owner = x.linked(f::OWNER);
-                let row = (owner.u8(x.b, 0x2) as u32) << 2;
-                let dx = x.data16(table + row);
-                let dy = x.data16(table + row + 2);
-                x.set16(0x8, cx.wrapping_add(dx));
-                x.set16(0x10, cy.wrapping_add(dy));
+                let row = (owner.u8(x.b, Player::INDEX) as u32) << 2;
+                let dx = word(x.b, table + row);
+                let dy = word(x.b, table + row + 2);
+                x.set16(Obj::X, cx.wrapping_add(dx));
+                x.set16(Obj::Y, cy.wrapping_add(dy));
                 x.anim(ANIMS, 0x2b);
                 x.reinsert();
             }
             2 => {
                 check(x);
-                let delta = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
-                x.add32(0x8, delta);
+                let delta = vars::CAM_X_LONG.get(x.b).wrapping_sub(vars::PREV_CAM_X.get(x.b));
+                x.add32(Obj::X, delta);
             }
             _ => x.free(&pools::EFFCT),
         }
@@ -70,24 +70,24 @@ mod coins {
         let had = flags & 1 != 0;
         x.set8(0x17, flags & !1);
         if had {
-            x.set16(0x1a, 0);
+            x.set16(Obj::AZ, 0);
         }
         let d0 = linked.u16(x.b, 0x5c);
-        if d0 == 0 && x.u16(0x1a) != 0 {
+        if d0 == 0 && x.u16(Obj::AZ) != 0 {
             x.set8(0x17, 1);
         } else {
-            x.set16(0x1a, d0);
+            x.set16(Obj::AZ, d0);
         }
-        let dx = linked.u16(x.b, 0x8).wrapping_sub(x.u16(0x8));
+        let dx = linked.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
         if dx > 0x18 {
             return away(x);
         }
-        let dy = x.u16(0x10).wrapping_sub(linked.u16(x.b, 0x10)).wrapping_sub(linked.u16(x.b, 0xc));
+        let dy = x.u16(Obj::Y).wrapping_sub(linked.u16(x.b, Obj::Y)).wrapping_sub(linked.u16(x.b, Obj::Z));
         if dy > 0x20 {
             return away(x);
         }
-        if x.u8(0x16) == 0 {
-            x.set8(0x16, 1);
+        if x.u8(Obj::AX) == 0 {
+            x.set8(Obj::AX, 1);
             return x.anim(ANIMS, 0x2c);
         }
         if x.u8(0x17) == 0 {
@@ -97,24 +97,24 @@ mod coins {
     }
 
     fn away<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x16) == 0 {
+        if x.u8(Obj::AX) == 0 {
             return;
         }
-        x.set8(0x16, 0);
+        x.set8(Obj::AX, 0);
         x.anim(ANIMS, 0x2b);
     }
 
     /// `0x4d81c`: the linked player (`+0x1a`) hands back the equipment of its slot `+3`.
     fn sell<R: Bench>(x: &mut Cx<'_, R>) {
-        let who = Obj(x.u16(0x1a) as i16 as i32 as u32 & 0xff_ffff);
+        let who = Obj(x.u16(Obj::AZ) as i16 as i32 as u32 & 0xff_ffff);
         let player_word = who.u16(x.b, f::OWNER);
         let player = Obj(player_word as i16 as i32 as u32 & 0xff_ffff);
-        let rank = who.u8(x.b, 0x3) as u32;
+        let rank = who.u8(x.b, Player::CHARACTER) as u32;
         let slot = player.0 + rank;
-        let character = (player.u8(x.b, 0x3) & 0xe) as u32;
-        let table = x.rom32(SELL_TABLES + character * 2);
+        let character = (player.u8(x.b, Player::CHARACTER) & 0xe) as u32;
+        let table = player_data().sell_tables.at32(x.b, character * 2);
         let id = crate::mem::rd8(x.b, slot + 0x140) as u32;
-        let code = x.data8(table + id);
+        let code = byte(x.b, table + id);
         if code == 0 {
             return;
         }
@@ -133,7 +133,7 @@ mod coins {
             // 3 decimal bytes of `price+1..price+3` added to `(0x115..0x117, player)`
             let mut carry = false;
             for k in (1..=3u32).rev() {
-                let add = x.data8(price + k);
+                let add = byte(x.b, price + k);
                 let sum = crate::mem::rd8(x.b, player.0 + 0x114 + k);
                 let (r, c) = bcd_add(sum, add, carry);
                 wr8(x.b, player.0 + 0x114 + k, r);

@@ -10,10 +10,11 @@
 //! Recognizer (6 bytes): two automata (progress byte, delay byte) for the normal orientation
 //! (`+0`) and mirrored (`+2`); `+4`: sequence finished; `+5`: orientation at completion.
 
+use crate::objects::Obj;
 use super::moves::{combo, Combo};
 use super::{ram, Ctx, Player};
-use crate::mem::{rd16, wr8, A5};
-use crate::machine::Machine;
+use crate::mem::{wr8, A5};
+use crate::player::tables::{pc32, byte, word};
 
 /// Action gates: nine bytes (one per triggerable action) followed by three others, read from
 /// the code on each frame.
@@ -57,7 +58,7 @@ mod tables {
 fn set_gates(g: &mut Ctx, variant: u32) {
     cov!();
     for k in 0..3 {
-        let v = g.prog32(variant + 0x16 + 4 * k);
+        let v = pc32(g.b, variant + 0x16 + 4 * k);
         crate::mem::wr32(g.b, GATES + 4 * k, v);
     }
 }
@@ -105,7 +106,7 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
         wr8(g.b, p.at(rec + 4), 0);
     }
     let at = crate::mem::rd8(g.b, p.at(state)) as u32;
-    let mask = g.data8(table + at);
+    let mask = byte(g.b, table + at);
     held &= mask;
     prev &= mask;
     low8(&mut g.leftovers.d2, held);
@@ -113,7 +114,7 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     if (mask as i8) < 0 && prev == held {
         return false;
     }
-    let mut expected = g.data8(table + at + 1);
+    let mut expected = byte(g.b, table + at + 1);
     low8(&mut g.leftovers.d3, expected);
     if expected & mirror != 0 {
         expected ^= mirror;
@@ -123,7 +124,7 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     if !matched {
         return false;
     }
-    if rd16(g.b, table + at + 2) == 0xffff {
+    if word(g.b, table + at + 2) == 0xffff {
         wr8(g.b, p.at(rec + 5), side);
         wr8(g.b, p.at(rec + 4), 1);
         return true;
@@ -177,7 +178,7 @@ fn select_gates(g: &mut Ctx, p: Player) {
     }
     let action = p.u8(g, Player::ACTION);
     if p.u16(g, Player::HP) == 0
-        || p.u16(g, 0xc) != 0
+        || p.u16(g, Obj::Z) != 0
         || p.u8(g, Player::SLOW_8A) != 0
         || matches!(action, 0x14 | 0x22 | 0x28 | 0x2a | 0xe)
         || p.u8(g, Player::SUBACTION) == 0x18
@@ -198,7 +199,7 @@ fn select_gates(g: &mut Ctx, p: Player) {
         0xa => return set_gates(g, SUBACTION_A),
         _ => {}
     }
-    if p.u8(g, 0x15c) != 0 {
+    if p.u8(g, Player::SPECIAL_ACTIVE) != 0 {
         return set_gates(g, HOLDING);
     }
     clear_gates(g);
@@ -261,7 +262,7 @@ pub fn all_ready(g: &mut Ctx) -> bool {
     for q in Player::all() {
         let busy = q.u8(g, Player::ACTIVE) == 0
             || q.u16(g, Player::HP) == 0
-            || q.u16(g, 0xc) != 0
+            || q.u16(g, Obj::Z) != 0
             || q.state(g) & !0xff == 0x0200_2000
             || q.u8(g, Player::KEYS_PREV) & 0x70 != 0x70;
         if busy {

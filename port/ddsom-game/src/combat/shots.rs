@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::machine::Machine;
+use crate::player::tables::{pc8};
 
 // ---------------------------------------------------------------------------------------------
 // Player shots against enemies
@@ -115,7 +116,7 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
 pub(super) fn kill_small_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("kill_small_enemy");
     let t = shot.u8(w.b, f::KIND) as u32;
-    if w.prog8(0x26856 + t) == 0 || e.u8(w.b, f::CLASS) != 2 {
+    if pc8(w.b, 0x26856 + t) == 0 || e.u8(w.b, f::CLASS) != 2 {
         return;
     }
     let k = e.u8(w.b, f::KIND);

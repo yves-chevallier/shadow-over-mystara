@@ -21,8 +21,8 @@ use super::walk::{move_x, move_xz, move_z};
 use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
-use crate::machine::Machine;
 use crate::player::external as ext;
+use crate::player::tables::{player_data, pc16, pc32, Read};
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -33,14 +33,8 @@ mod rom {
 
 /// Code tables.
 mod tables {
-    /// Cinematics by scene: one routine address (long) per scene number.
-    pub const BY_SCENE: u32 = 0x23826;
     /// Revival: offsets (words) relative to the table, indexed by step `+6`.
     pub const REVIVE_STEPS: u32 = 0x23b98;
-    /// Waiting for the controls: routine addresses, indexed by `+6`.
-    pub const WAIT_STEPS: u32 = 0x23d66;
-    /// End cinematics by scene.
-    pub const END_BY_SCENE: u32 = 0x23f4e;
     /// Steps of the scene 1 cinematic.
     pub const SCENE1_STEPS: u32 = 0x24eae;
     /// Walk-in: steps.
@@ -49,8 +43,6 @@ mod tables {
     pub const WAIT_SUBSTEPS: u32 = 0x23d7a;
     /// Durations (words) of the scene entry by player.
     pub const WALK_IN_WAIT: u32 = 0x23a56;
-    pub const SCENE1_WAIT: u32 = 0x24f38;
-    pub const WAIT_DELAYS: u32 = 0x23dac;
     /// Waiting for the controls, step 4 (`+7`): walks to the spot, then thrown by the boss.
     pub const THROWN_SUBSTEPS: u32 = 0x23e0e;
     /// Target depth (words) by player.
@@ -128,7 +120,7 @@ fn run_at(g: &mut Ctx, p: Player, addr: u32) {
 fn step_table(g: &mut Ctx, p: Player, base: u32) {
     cov!();
     let step = p.u8(g, Player::ACTION) as u32;
-    let offset = g.prog16(base + step) as i16 as i32 as u32;
+    let offset = pc16(g.b, base + step) as i16 as i32 as u32;
     run_at(g, p, base.wrapping_add(offset));
 }
 
@@ -136,7 +128,7 @@ fn step_table(g: &mut Ctx, p: Player, base: u32) {
 fn substep_table(g: &mut Ctx, p: Player, base: u32) {
     cov!();
     let step = p.u8(g, Player::STEP) as u32;
-    let offset = g.prog16(base + step) as i16 as i32 as u32;
+    let offset = pc16(g.b, base + step) as i16 as i32 as u32;
     run_at(g, p, base.wrapping_add(offset));
 }
 
@@ -146,7 +138,7 @@ pub fn update(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::SUB) {
         0 => {
             let scene = ram::SCENE.get(g.b) as u32;
-            let routine = g.prog32(tables::BY_SCENE + 4 * scene);
+            let routine = player_data().scripted_by_scene.at32(g.b, 4 * scene);
             run_at(g, p, routine);
             ACTORS.reinsert(g.b, p.obj());
         }
@@ -156,7 +148,7 @@ pub fn update(g: &mut Ctx, p: Player) {
         }
         8 => {
             let step = p.u8(g, Player::ACTION) as u32;
-            let routine = g.prog32(tables::WAIT_STEPS + step);
+            let routine = player_data().scripted_wait_steps.at32(g.b, step);
             run_at(g, p, routine);
             if !throw_button(g, p) {
                 special_attack(g, p);
@@ -189,7 +181,7 @@ fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     if scene > LAST_END_SCENE {
         NO_END
     } else {
-        g.prog32(tables::END_BY_SCENE + 4 * scene)
+        player_data().scripted_end_by_scene.at32(g.b, 4 * scene)
     }
 }
 
@@ -210,8 +202,8 @@ fn next_step(g: &mut Ctx, p: Player) {
 /// Countdown at `+0x1e0` (word); true when it reaches zero.
 fn countdown(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    let left = p.u16(g, 0x1e0).wrapping_sub(1);
-    p.set_u16(g, 0x1e0, left);
+    let left = p.u16(g, Player::SCRIPT_TIMER).wrapping_sub(1);
+    p.set_u16(g, Player::SCRIPT_TIMER, left);
     left == 0
 }
 
@@ -225,7 +217,7 @@ fn give_control(g: &mut Ctx, p: Player) {
 fn per_player(g: &mut Ctx, p: Player, table: u32) -> u16 {
     cov!();
     let k = p.u8(g, Player::INDEX) as u32;
-    g.prog16(table + 2 * k)
+    pc16(g.b, table + 2 * k)
 }
 
 // ---- scene 1 cinematic: walking in, pose, final run ------------------------
@@ -235,9 +227,9 @@ fn scene1_start(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
     p.set_u8(g, Player::ACTIVE, 1);
-    p.set_u8(g, 0x15c, 0);
-    p.set_u8(g, 0x68, 0);
-    p.set_u16(g, 0x1e0, 0x120);
+    p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
+    p.set_u8(g, Player::ARMED, 0);
+    p.set_u16(g, Player::SCRIPT_TIMER, 0x120);
     p.set_u32(g, Obj::VX, 0x0200_0000);
     p.set_u32(g, Obj::VZ, 0);
     p.set_u32(g, Obj::VY, 0);
@@ -252,7 +244,7 @@ fn scene1_walk(g: &mut Ctx, p: Player) {
         animation::start(g, p, 0);
         return;
     }
-    if p.u16(g, 0x1e0) > 0x50 {
+    if p.u16(g, Player::SCRIPT_TIMER) > 0x50 {
         return;
     }
     animation::step(g, p);
@@ -264,9 +256,9 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SUB_STEP.get(g.b) == 6 {
         next_action(g, p);
-        let k = p.u8(g, 0x7d) as u32;
-        let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
-        p.set_u16(g, 0x1e0, delay);
+        let k = p.u8(g, Player::RANK) as u32;
+        let delay = player_data().scripted_scene1_wait.at16(g.b, 2 * k);
+        p.set_u16(g, Player::SCRIPT_TIMER, delay);
         crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     }
     animation::step(g, p);
@@ -277,7 +269,7 @@ fn scene1_wait(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
         next_action(g, p);
-        p.set_u8(g, 0x68, 1);
+        p.set_u8(g, Player::ARMED, 1);
         animation::start(g, p, 0x33);
         return;
     }
@@ -292,10 +284,10 @@ fn scene1_pose(g: &mut Ctx, p: Player) {
         animation::start(g, p, 0);
         return;
     }
-    if p.u8(g, 0x33) == 0 {
+    if p.u8(g, Player::ANIM_EVENT) == 0 {
         return;
     }
-    p.set_u8(g, 0x33, 0);
+    p.set_u8(g, Player::ANIM_EVENT, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
         super::spawn::swap(g, p, 0);
@@ -310,9 +302,9 @@ fn scene1_dash_start(g: &mut Ctx, p: Player) {
         return;
     }
     next_action(g, p);
-    p.set_u16(g, 0x1e0, 0x70);
+    p.set_u16(g, Player::SCRIPT_TIMER, 0x70);
     p.set_u8(g, Obj::SPEED_INDEX, 0xa);
-    let table = g.prog32(0x1b84 + 4 * 0x21);
+    let table = pc32(g.b, 0x1b84 + 4 * 0x21);
     crate::objects::motion::select_speed_table(g.b, p.obj(), table);
     animation::start(g, p, 7);
 }
@@ -335,21 +327,21 @@ fn walk_in_start(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
     p.set_u16(g, Player::ACTIVE, 0x0101);
-    p.set_u8(g, 0x15c, 0);
-    p.set_u8(g, 0x68, 0);
-    p.set_u16(g, 0x1e0, 0x50);
+    p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
+    p.set_u8(g, Player::ARMED, 0);
+    p.set_u16(g, Player::SCRIPT_TIMER, 0x50);
     animation::start(g, p, 2);
 }
 
 /// 0x23a2e: the player advances 2 pixels per frame.
 fn walk_in_walk(g: &mut Ctx, p: Player) {
     cov!();
-    let x = p.u16(g, 8).wrapping_add(2);
-    p.set_u16(g, 8, x);
+    let x = p.u16(g, Obj::X).wrapping_add(2);
+    p.set_u16(g, Obj::X, x);
     if countdown(g, p) {
         next_action(g, p);
         let wait = per_player(g, p, tables::WALK_IN_WAIT);
-        p.set_u16(g, 0x1e0, wait);
+        p.set_u16(g, Player::SCRIPT_TIMER, wait);
         start_stand(g, p);
         return;
     }
@@ -361,7 +353,7 @@ fn walk_in_wait(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
         next_action(g, p);
-        p.set_u8(g, 0x68, 1);
+        p.set_u8(g, Player::ARMED, 1);
         animation::start(g, p, 0x33);
         return;
     }
@@ -376,10 +368,10 @@ fn walk_in_pose(g: &mut Ctx, p: Player) {
         start_stand(g, p);
         return;
     }
-    if p.u8(g, 0x33) == 0 {
+    if p.u8(g, Player::ANIM_EVENT) == 0 {
         return;
     }
-    p.set_u8(g, 0x33, 0);
+    p.set_u8(g, Player::ANIM_EVENT, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
         super::spawn::swap(g, p, 0);
@@ -413,7 +405,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
     p.set_u8(g, Player::ACTIVE, 2);
-    p.set_u8(g, 0x68, 1);
+    p.set_u8(g, Player::ARMED, 1);
     p.set_u8(g, Player::FACING, 0x20);
     p.set_u16(g, Obj::VZ, (-0x300i16) as u16);
     p.set_u16(g, Obj::AZ, (-0x80i16) as u16);
@@ -476,7 +468,7 @@ fn revive_frozen(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
     p.set_u8(g, Player::ACTIVE, 2);
-    p.set_u8(g, 0x68, 1);
+    p.set_u8(g, Player::ARMED, 1);
     p.set_u8(g, Player::INVULN, 0x96);
     let flags = p.u8(g, Player::FLAGS) & !2;
     p.set_u8(g, Player::FLAGS, flags);
@@ -504,7 +496,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     let flags = p.u8(g, Player::FLAGS) & !2;
     p.set_u8(g, Player::FLAGS, flags);
     p.set_u8(g, Player::FACING, 0x20);
-    p.set_u8(g, 0x68, 0);
+    p.set_u8(g, Player::ARMED, 0);
     crate::placement::place_on_free_ground(g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
     crate::families::small::revive(&mut g.leftovers, g.b, p.obj());
@@ -520,9 +512,9 @@ fn wait_start(g: &mut Ctx, p: Player) {
     next_step(g, p);
     let flags = p.u8(g, Player::FLAGS) & !2;
     p.set_u8(g, Player::FLAGS, flags);
-    let k = p.u8(g, 0x7d) as u32;
-    let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
-    p.set_u16(g, 0x1e0, delay);
+    let k = p.u8(g, Player::RANK) as u32;
+    let delay = player_data().scripted_wait_delays.at16(g.b, 2 * k);
+    p.set_u16(g, Player::SCRIPT_TIMER, delay);
     crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     animation::step(g, p);
     g.sound(rom::INTRO_ACTION, p);

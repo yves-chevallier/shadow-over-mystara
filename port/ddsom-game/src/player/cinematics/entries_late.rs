@@ -1,6 +1,8 @@
 //! Scene entries of the players, continued: routines 0x2541a to 0x25f7e (walk-ins, jumps, falls).
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{pc8, pc16};
 
 // ---- 0x2541a, 0x25504, 0x255ea, 0x2564a, 0x256c2, 0x257a4 -------------------------------------------
 
@@ -15,7 +17,7 @@ pub(super) fn wait_then_walk(g: &mut Ctx, p: Player) {
 pub(super) const INTRO_2541A: Steps = &[
     (0x25434, |g, p| {
         appear(g, p, true, false);
-        p.set_u8(g, 0x15c, 0);
+        p.set_u8(g, Player::SPECIAL_ACTIVE, 0);
         p.set_u16(g, WAIT, 224);
         animation::start(g, p, 2);
     }),
@@ -23,7 +25,7 @@ pub(super) const INTRO_2541A: Steps = &[
     (0x2546a, |g, p| {
         walk_right(g, p, WAIT, |g, p| {
             let index = p.u8(g, Player::INDEX) as u32;
-            let wait = g.prog16(0x25492 + 2 * index);
+            let wait = pc16(g.b, 0x25492 + 2 * index);
             p.set_u16(g, WAIT, wait);
             start_stand(g, p);
         })
@@ -151,7 +153,7 @@ pub(super) const INTRO_25814: Steps = &[
     (0x25854, |g, p| {
         walk_right(g, p, WAIT, |g, p| {
             let at = 0x2589a + 8 * p.u8(g, RANK) as u32;
-            let (vx, vz, az, height) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4), g.prog16(at + 6));
+            let (vx, vz, az, height) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4), pc16(g.b, at + 6));
             p.set_u16(g, Obj::VX, vx);
             p.set_u16(g, Obj::AX, 0);
             p.set_u16(g, Obj::VZ, vz);
@@ -222,7 +224,7 @@ pub(super) const INTRO_25954: Steps = &[
         p.set_u16(g, Obj::VZ, (-256i16) as u16);
         p.set_u16(g, Obj::AZ, (-64i16) as u16);
         let at = 0x259b0 + 8 * p.u8(g, RANK) as u32;
-        let (x, z, y, wait) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4), g.prog16(at + 6));
+        let (x, z, y, wait) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4), pc16(g.b, at + 6));
         p.set_u16(g, Obj::X, x);
         p.set_u16(g, Obj::Z, z);
         p.set_u16(g, Obj::Y, y);
@@ -259,8 +261,8 @@ pub(super) fn intro_25a24(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::ACTIVE, 1);
     p.set_u8(g, ARMED, 1);
     let at = 0x25a6c + 8 * p.u8(g, RANK) as u32;
-    let (x, z, y) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4));
-    let facing = g.prog8(at + 7);
+    let (x, z, y) = (pc16(g.b, at), pc16(g.b, at + 2), pc16(g.b, at + 4));
+    let facing = pc8(g.b, at + 7);
     p.set_u16(g, Obj::X, x);
     p.set_u16(g, Obj::Z, z);
     p.set_u16(g, Obj::Y, y);
@@ -319,7 +321,7 @@ pub(super) const INTRO_25BA0: Steps = &[
         appear(g, p, false, false);
         let x = ram::CAMERA_X.get(g.b);
         let at = 0x25bf6 + 4 * p.u8(g, RANK) as u32;
-        let (dx, dy) = (g.prog16(at), g.prog16(at + 2));
+        let (dx, dy) = (pc16(g.b, at), pc16(g.b, at + 2));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
         p.set_u16(g, Obj::Y, 280u16.wrapping_add(dy));
         p.set_u32(g, Obj::Z, 0);
@@ -402,7 +404,7 @@ pub(super) const INTRO_25E28: Steps = &[
         p.set_u16(g, Obj::AZ, (-64i16) as u16);
         p.set_u16(g, Obj::Z, 256);
         let k = (p.u8(g, RANK) & 3) as u32;
-        let delay = g.prog16(0x25e82 + 2 * k);
+        let delay = pc16(g.b, 0x25e82 + 2 * k);
         p.set_u16(g, TIMER_B, delay);
         animation::start(g, p, 56);
         p.set_u8(g, 0x3b, 0);
@@ -449,7 +451,7 @@ pub(super) const INTRO_25F7E: Steps = &[
         p.set_u16(g, WAIT, 32);
         let (x, y) = (ram::CAMERA_X.get(g.b), ram::CAMERA_Y.get(g.b));
         let k = (p.u8(g, RANK) & 3) as u32;
-        let (dx, dy) = (g.prog16(0x26004 + 4 * k), g.prog16(0x26006 + 4 * k));
+        let (dx, dy) = (pc16(g.b, 0x26004 + 4 * k), pc16(g.b, 0x26006 + 4 * k));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
         p.set_u16(g, Obj::Y, y.wrapping_add(dy));
         p.set_u8(g, Player::FACING, if k & 1 != 0 { 0 } else { 0x20 });
@@ -459,7 +461,7 @@ pub(super) const INTRO_25F7E: Steps = &[
         if ram::SUB_STEP.get(g.b) == 8 && countdown(g, p, WAIT) {
             next(g, p);
             let k = (p.u8(g, RANK) & 3) as u32;
-            let wait = g.prog16(0x26040 + 2 * k);
+            let wait = pc16(g.b, 0x26040 + 2 * k);
             p.set_u16(g, WAIT, wait);
             animation::start(g, p, 2);
         }

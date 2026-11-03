@@ -1,6 +1,7 @@
 //! Special attack of the magic-user and its first spells (sparks, bolt, frost, quake).
 
 use super::*;
+use crate::player::tables::{player_data, pc16, Read};
 
 // ---- special attack (0x4619e) --------------------------------------------------------------
 
@@ -102,11 +103,9 @@ pub(super) fn linger(g: &mut Ctx, p: Player) {
 /// ROM word (code) indexed by the caster's level.
 pub(super) fn by_level(g: &mut Ctx, p: Player, table: u32) -> u16 {
     let level = p.u8(g, Player::LEVEL) as u32;
-    g.prog16(table + 2 * level)
+    pc16(g.b, table + 2 * level)
 }
 
-/// Bytes (code): variant number of the gesture of spell 0x18 per level.
-pub(super) const SPARK_GESTURES: u32 = 0x46a46;
 
 /// 0x469b0, no. 0x18 (h): burst of sparks, alternating two variants at each gesture.
 pub(super) fn sparks(g: &mut Ctx, p: Player) {
@@ -123,7 +122,7 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 0);
                 let level = p.u8(g, Player::LEVEL) as u32;
-                let gesture = g.prog8(SPARK_GESTURES + level) as u16;
+                let gesture = player_data().magic_user_spark_gestures.at8(g.b, level) as u16;
                 animation::start_plain(g, p, 0x36 + gesture);
                 g.sound(crate::sound::CMD_70, p);
             }

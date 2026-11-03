@@ -13,8 +13,8 @@ use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move
 use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
-use crate::machine::Machine;
 use crate::player::external as ext;
+use crate::player::tables::{pc16};
 
 mod climb;
 pub use climb::*;
@@ -190,7 +190,7 @@ const HELD: u32 = Player::LINK;
 
 /// 0x35c26: pick up (`+0x8b` = 0) or drop (2) the carried object.
 pub fn carry(g: &mut Ctx, p: Player) {
-    match p.u8(g, 0x8b) {
+    match p.u8(g, Player::CARRY) {
         0 => {}
         2 => {
             if animation::step(g, p) {
@@ -263,7 +263,7 @@ fn throw(g: &mut Ctx, p: Player) {
 /// 0x35ca8: puts the object in front of the player (offsets per class, table 0x35ce2).
 fn put_down(g: &mut Ctx, p: Player, held: u32) {
     let at = 0x35ce2 + 4 * p.class(g) as u32;
-    let (mut dx, dz) = (g.prog16(at), g.prog16(at + 2));
+    let (mut dx, dz) = (pc16(g.b, at), pc16(g.b, at + 2));
     if p.faces_left(g) {
         dx = dx.wrapping_neg();
     }
@@ -308,10 +308,10 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
                 return;
             }
             p.set_u8(g, Player::ACTIVE, 1);
-            p.set_u8(g, 0x7e, 0x10);
+            p.set_u8(g, Player::INVULN, 0x10);
             p.set_u8(g, Player::SLOW, 0);
-            let flags = p.u8(g, 1) & !2;
-            p.set_u8(g, 1, flags);
+            let flags = p.u8(g, Player::FLAGS) & !2;
+            p.set_u8(g, Player::FLAGS, flags);
             to_stand(g, p);
         }
         _ => {}

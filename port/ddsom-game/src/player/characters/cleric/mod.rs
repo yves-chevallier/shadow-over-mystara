@@ -24,6 +24,7 @@ use crate::mem::{wr8, A5};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::external as ext;
+use crate::player::tables::{players, Read};
 
 mod turning;
 pub use turning::*;
@@ -102,7 +103,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, field::MOVE_STATE, 0);
     p.set_u8(g, field::AIR_ATTACK_DONE, 1);
-    let mut anim = if p.u8(g, 0x67) == 2 { 0xc } else { 9 };
+    let mut anim = if p.u8(g, Player::JUMP_KIND) == 2 { 0xc } else { 9 };
     if p.u8(g, Player::KEYS_HELD) & 4 != 0 {
         anim = 0xb;
     }
@@ -242,7 +243,7 @@ fn charge(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             common::set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
@@ -316,7 +317,7 @@ fn leap(g: &mut Ctx, p: Player) {
                 return;
             }
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             p.set_u32(g, Obj::VX, 0x0080_0000);
@@ -385,16 +386,13 @@ fn leap(g: &mut Ctx, p: Player) {
 fn leap_mace_begin(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::STEP, 8);
-    p.set_u8(g, 0x5b, 0);
+    p.set_u8(g, Player::STRIKE_HITS, 0);
     p.set_u8(g, field::MOVE_STATE, 1);
     p.set_u8(g, field::MOVE_KIND, 1);
     p.set_u8(g, 0x1e8, 0);
     animation::start_plain(g, p, 0x19);
 }
 
-/// Table (code bytes, 0x4054e): two bytes per level, number of undead turned away by the
-/// prayer (monsters of type 1 and type 5).
-const UNDEAD_COUNTS: u32 = 0x4054e;
 
 /// Turning away the undead (0x40506): the cleric prays, the screen flashes, then the undead on
 /// screen (types 1 and 5) flee, in a number limited by the level, unless the cleric has a talisman
@@ -405,8 +403,8 @@ fn turn_undead(g: &mut Ctx, p: Player) {
         0 => {
             next_step(g, p);
             let level = 2 * p.u8(g, Player::LEVEL) as u32;
-            let (first, second) = (g.prog8(UNDEAD_COUNTS + level), g.prog8(UNDEAD_COUNTS + level + 1));
-            let (first, second) = if p.u8(g, 0x165) == 3 { (0xff, 0xff) } else { (first, second) };
+            let (first, second) = (players("undead_counts").at8(g.b, level), players("undead_counts").at8(g.b, level + 1));
+            let (first, second) = if p.u8(g, Player::TALISMAN) == 3 { (0xff, 0xff) } else { (first, second) };
             p.set_u8(g, 0x1f0, first);
             p.set_u8(g, 0x1f1, second);
             animation::start_plain(g, p, 0x21);

@@ -9,6 +9,7 @@
 //! Inputs (`KEYS_HELD`, `KEYS_NEW`): bits 0..3 directions, 4 button 1 (attack), 5 button 2 (jump),
 //! 6 button 3 (throw), 7 button 4 (special).
 
+use crate::objects::Obj;
 use crate::machine::Machine;
 use super::actions::to_stand;
 use super::{animation, combos};
@@ -16,6 +17,7 @@ use super::states::{action, main, state, sub, State};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8, A5};
 use crate::objects::pools;
+use crate::player::tables::{player_data, players, long, Read};
 
 /// Buttons (bits of `KEYS_*`).
 pub mod key {
@@ -86,7 +88,7 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
     if p.u8(g, Player::SLOW_8A) != 0 {
         // lets go of what they hold: the linked object is ordered to leave
         p.set_state(g, State::pack(main::PLAYING, sub::ACTING, action::RELEASE, 0).0);
-        p.set_u8(g, 0x8b, 2);
+        p.set_u8(g, Player::CARRY, 2);
         p.set_u8(g, Player::SLOW_8A, 0);
         let held = p.u32(g, Player::LINK);
         wr8(g.b, held + 5, 6);
@@ -118,7 +120,7 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
 /// 3 vertical, 0 in place, 1 forward, 2 after a run.
 pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    if ram::FROZEN.get(g.b) != 0 || p.u8(g, 0x15c) != 0 || p.u8(g, Player::SLOW_8A) != 0 {
+    if ram::FROZEN.get(g.b) != 0 || p.u8(g, Player::SPECIAL_ACTIVE) != 0 || p.u8(g, Player::SLOW_8A) != 0 {
         return false;
     }
     let dir = p.u8(g, Player::KEYS_HELD) & key::DIRECTIONS;
@@ -135,17 +137,17 @@ pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
         animation::start(g, p, 8);
         return true;
     }
-    p.set_u8(g, 0x67, 3);
+    p.set_u8(g, Player::JUMP_KIND, 3);
     let mut anim = 0xa;
     if dir != key::UP {
-        p.set_u8(g, 0x67, 0);
+        p.set_u8(g, Player::JUMP_KIND, 0);
         if dir & key::HORIZONTAL != 0 {
-            p.set_u8(g, 0x67, 1);
+            p.set_u8(g, Player::JUMP_KIND, 1);
             anim = 0xf;
         }
         if p.u8(g, Player::ACTION) == action::RUN {
             combos::clear_recognizers(g, p);
-            p.set_u8(g, 0x67, 2);
+            p.set_u8(g, Player::JUMP_KIND, 2);
             anim = 0x14;
         }
     }
@@ -154,8 +156,6 @@ pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// Type of the thrown object per character (code bytes, 0x371b2).
-const THROW_KIND: u32 = 0x371b2;
 
 /// 0x3714c: button 3 (throw). Creates a player effect linked to the player (`0x15a`). Returns true when
 /// the original leaves Z at 0: allocation failure, or non-zero effect type. Nothing is done if the button is
@@ -163,7 +163,7 @@ const THROW_KIND: u32 = 0x371b2;
 pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if p.u8(g, Player::KEYS_NEW) & key::THROW == 0
-        || p.u8(g, 0x15c) != 0
+        || p.u8(g, Player::SPECIAL_ACTIVE) != 0
         || p.u8(g, Player::SLOW_8A) != 0
         || p.u8(g, Player::POWER_10F) != 0
         || matches!(p.u8(g, Player::ACTION), 0xc | 0xe)
@@ -177,16 +177,14 @@ pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
     wr8(g.b, effect.0, 1);
     wr8(g.b, effect.0 + 3, 0xff);
     crate::mem::wr16(g.b, effect.0 + 0x50, p.0 as u16);
-    p.set_u16(g, 0x15a, effect.0 as u16);
-    p.set_u8(g, 0x15c, 1);
+    p.set_u16(g, Player::SPECIAL_EFFECT, effect.0 as u16);
+    p.set_u8(g, Player::SPECIAL_ACTIVE, 1);
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let kind = g.prog8(THROW_KIND + character);
+    let kind = players("throw_kind").at8(g.b, character);
     wr8(g.b, effect.0 + 2, kind);
     kind != 0
 }
 
-/// Table (code bytes, 0x372e4): special attack animation according to the stored identifier.
-const SPECIAL_ANIM: u32 = 0x372e4;
 
 /// 0x371be: button 4 (special attack), only in game phase 0xc.
 pub fn special_attack(g: &mut Ctx, p: Player) {
@@ -194,10 +192,10 @@ pub fn special_attack(g: &mut Ctx, p: Player) {
     if ram::PHASE.get(g.b) != 0xc || ram::PAUSE.get(g.b) != 0 {
         return;
     }
-    if p.u8(g, Player::KEYS_NEW) & key::SPECIAL == 0 || p.u8(g, 0x15c) != 0 {
+    if p.u8(g, Player::KEYS_NEW) & key::SPECIAL == 0 || p.u8(g, Player::SPECIAL_ACTIVE) != 0 {
         return;
     }
-    if p.u16(g, Player::MAIN) != 0x200 || p.u8(g, Player::POWER_10F) != 0 || p.u16(g, 0xc) != 0 {
+    if p.u16(g, Player::MAIN) != 0x200 || p.u8(g, Player::POWER_10F) != 0 || p.u16(g, Obj::Z) != 0 {
         return;
     }
     if matches!(p.u8(g, Player::ACTION), 0xc | 0xe | 0x14 | 0x22) || p.u8(g, Player::SLOW_8A) != 0 {
@@ -229,8 +227,8 @@ pub fn special_attack(g: &mut Ctx, p: Player) {
     };
     if ready {
         p.set_state(g, state::SPECIAL.0);
-        let anim = g.prog8(SPECIAL_ANIM + id as u32);
-        p.set_u8(g, 0x15e, anim);
+        let anim = players("special_anim").at8(g.b, id as u32);
+        p.set_u8(g, Player::SPECIAL_KIND, anim);
     } else if p.state(g) & !0xff != 0x0200_3200 {
         p.set_state(g, State::pack(main::PLAYING, sub::ACTING, action::SPELL_FIZZLE, 0).0);
     }
@@ -248,7 +246,7 @@ pub fn near_death(g: &mut Ctx, p: Player) {
     }
     if p.class(g) == 4 && p.u8(g, Player::WEAPON_B) == 0x21 {
         p.set_state(g, state::SPECIAL.0);
-        p.set_u8(g, 0x15e, 0x24);
+        p.set_u8(g, Player::SPECIAL_KIND, 0x24);
     }
 }
 
@@ -288,8 +286,6 @@ fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
     (r as u8, out)
 }
 
-/// Words (code, 0x37784): for each 4-bit draw, the mask of the draws that trigger the effect.
-const CURSE_MASKS: u32 = 0x37784;
 
 /// 0x376ee: cursed items (weapons 0xe and 0xf): on each hit, a draw decides an effect (the
 /// player drops their weapon, or a monster appears). Returns the inverse of Z like the original.
@@ -300,7 +296,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
         return true;
     }
     let pick = (g.random() & 0xf) as u32;
-    let mask = g.prog16(CURSE_MASKS + 2 * pick);
+    let mask = player_data().curse_masks.at16(g.b, 2 * pick);
     let bit = g.random() & 0xf;
     if mask >> bit & 1 != 0 {
         if weapon != 0xe {
@@ -316,7 +312,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
             return curse_fall(g, p);
         }
         let facing = p.u8(g, Player::FACING);
-        p.set_u8(g, 0x4a, facing);
+        p.set_u8(g, Player::OVERLAY_ATTACK, facing);
         p.set_state(g, 0x0204_3600);
         super::spawn::cursed_weapon(g, p);
     }
@@ -335,7 +331,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
 /// 0x37768: the cursed player loses their weapon (becomes a weapon 0xd) if on the ground.
 fn curse_fall(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    if p.u16(g, 0xc) == 0 {
+    if p.u16(g, Obj::Z) == 0 {
         p.set_u8(g, Player::WEAPON_A, 0xd);
         p.set_state(g, 0x0200_2600);
         wr8(g.b, CURSE_DROPPED, 1);
@@ -349,6 +345,7 @@ const CURSE_DROPPED: u32 = A5 - 0x5b82;
 /// Box tables in ROM (data): pointer per box set, then 8 bytes per box.
 mod boxes {
     pub const BODY: u32 = 0x11bffa;
+    /// Attack box sets (`sprites/tables.json`, box table `attack`).
     pub const ATTACK: u32 = 0x11c23a;
 }
 
@@ -358,7 +355,7 @@ mod boxes {
 pub fn target_in_range(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let box_set = p.u8(g, Player::BOX_SET) as u32;
-    let set = g.data32(boxes::ATTACK + 4 * box_set);
+    let set = long(g.b, boxes::ATTACK + 4 * box_set);
     for (slot, sub) in [(1u32, 2u8), (2, 4)] {
         let attack_box = set + 8 * slot;
         if probe(g, p, attack_box, slot == 2) {

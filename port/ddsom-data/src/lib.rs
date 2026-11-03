@@ -10,6 +10,7 @@ pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod objects;
+pub mod player_tables;
 pub mod pointers;
 pub mod scene_palettes;
 pub mod spawns;
@@ -23,6 +24,7 @@ pub use data::DataFile;
 pub use effects::EffectTables;
 pub use levels::Levels;
 pub use objects::ObjectTables;
+pub use player_tables::PlayerTables;
 pub use scene_palettes::ScenePalettes;
 pub use spawns::Spawns;
 pub use speeds::Speeds;
@@ -64,11 +66,16 @@ pub struct GameData {
     pub set: DataFile,
     /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
     pub dialogs: DataFile,
+    /// Tables of the players read by name or address (`player/`, `combat/`, `families/player/`; docs/fin.md, L10).
+    pub player_tables: PlayerTables,
+    /// Per-character tables of the players (`data/players.json`) and combat reaction tables (`data/combat.json`).
+    pub players: DataFile,
+    pub combat: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 9] = [
+    pub const FILES: [&'static str; 12] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -78,6 +85,9 @@ impl GameData {
         "sprites/tables.json",
         "data/set.json",
         "data/dialogs.json",
+        "data/player_tables.json",
+        "data/players.json",
+        "data/combat.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -92,6 +102,9 @@ impl GameData {
             sprite_tables: SpriteTables::load(&dir.join(Self::FILES[6]))?,
             set: DataFile::load(&dir.join(Self::FILES[7]))?,
             dialogs: DataFile::load(&dir.join(Self::FILES[8]))?,
+            player_tables: PlayerTables::load(&dir.join(Self::FILES[9]))?,
+            players: DataFile::load(&dir.join(Self::FILES[10]))?,
+            combat: DataFile::load(&dir.join(Self::FILES[11]))?,
         })
     }
 }

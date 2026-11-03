@@ -92,7 +92,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     p.set_u8(g, field::AIR_ATTACK_DONE, 1);
     let heavy = common::holds_heavy_second(g, p);
     let mut anim = if heavy { 9 } else { 0x2a };
-    if p.u8(g, 0x67) == 2 {
+    if p.u8(g, Player::JUMP_KIND) == 2 {
         anim = if heavy { 0xc } else { 0x2b };
     }
     if common::holds_special_weapon(g, p) {
@@ -273,7 +273,7 @@ fn charge(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
@@ -361,7 +361,7 @@ fn leap(g: &mut Ctx, p: Player) {
             clear_recognizers(g, p);
             if common::holds_heavy_second(g, p) {
                 next_step(g, p);
-                p.set_u8(g, 0x5b, 0);
+                p.set_u8(g, Player::STRIKE_HITS, 0);
                 p.set_u8(g, field::MOVE_STATE, 1);
                 p.set_u8(g, field::MOVE_KIND, 1);
                 p.set_u16(g, Obj::VX, 0x200);
@@ -403,7 +403,7 @@ fn leap(g: &mut Ctx, p: Player) {
 fn leap_light_begin(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::STEP, 0xe);
-    p.set_u8(g, 0x5b, 0);
+    p.set_u8(g, Player::STRIKE_HITS, 0);
     p.set_u8(g, field::MOVE_STATE, 1);
     p.set_u8(g, field::MOVE_KIND, 1);
     p.set_u16(g, Obj::VX, 0x200);
@@ -513,10 +513,10 @@ fn whirl(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 2);
-            p.set_u8(g, 0x58, 0);
+            p.set_u8(g, Player::STRIKE, 0);
             p.set_u8(g, 0x1ec, 0);
             let anim = if p.u16(g, Obj::Z) != 0 { 0x1c } else { 0x1b };
             animation::start_plain(g, p, anim);
@@ -534,7 +534,7 @@ fn whirl(g: &mut Ctx, p: Player) {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::blood(g, p);
             }
-            if p.u8(g, 0x1ec) == 0 && p.u8(g, 0x58) & 1 != 0 {
+            if p.u8(g, 0x1ec) == 0 && p.u8(g, Player::STRIKE) & 1 != 0 {
                 p.set_u8(g, 0x1ec, 1);
                 let hp = (p.u16(g, Player::HP) as i16).wrapping_sub(0xc);
                 p.set_u16(g, Player::HP, if hp > 0 { hp as u16 } else { 1 });
@@ -592,7 +592,7 @@ fn swap_equipment(g: &mut Ctx, p: Player) {
             let second = p.u8(g, Player::WEAPON_B);
             if second <= 7 && second & 4 != 0 {
                 // the shield in hand is replaced by the heavy equipment 0x28 + protection level
-                let protection = p.u8(g, 0x164);
+                let protection = p.u8(g, Player::WORN_4);
                 p.set_u8(g, Player::WEAPON_B, 0x28u8.wrapping_add(protection));
                 p.set_u8(g, field::ITEM, second.wrapping_add(0x2e));
                 p.set_u8(g, Player::WEAPON_A, new);

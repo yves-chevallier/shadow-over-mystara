@@ -22,8 +22,8 @@ use super::super::{animation, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::machine::Machine;
 use crate::player::external as ext;
+use crate::player::tables::{pc16};
 
 /// Identifiers (original addresses) of the routines reached: player effects, created objects and sounds of the thief.
 mod rom {
@@ -119,7 +119,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     let anim = common::by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
     g.sound(crate::sound::JUMP_VOICE, p);
-    let kind = p.u8(g, 0x67);
+    let kind = p.u8(g, Player::JUMP_KIND);
     common::launch_jump(g, p, JUMP_SPEEDS, kind);
 }
 
@@ -139,7 +139,7 @@ fn rise(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
     move_z(g, p);
-    if p.u8(g, 0x67) != 0 {
+    if p.u8(g, Player::JUMP_KIND) != 0 {
         move_x(g, p);
         limit_speed(g, p);
     }
@@ -160,7 +160,7 @@ fn rise(g: &mut Ctx, p: Player) {
 fn apex(g: &mut Ctx, p: Player) {
     cov!();
     move_z(g, p);
-    if p.u8(g, 0x67) != 0 {
+    if p.u8(g, Player::JUMP_KIND) != 0 {
         move_x(g, p);
         limit_speed(g, p);
     }
@@ -282,7 +282,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
     }
     p.set_u8(g, Player::STEP, 2);
     p.set_u8(g, field::AIR_ATTACK_DONE, 0);
-    p.set_u8(g, 0x67, 1);
+    p.set_u8(g, Player::JUMP_KIND, 1);
     p.set_u8(g, own::DOUBLE_JUMP_USED, 1);
     p.set_u16(g, Obj::VZ, 0x600);
     p.set_u16(g, Obj::AZ, (-0x38i16) as u16);
@@ -292,7 +292,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
     if keys & 1 == 0 {
         p.set_u16(g, Obj::VX, (-0x200i16) as u16);
         if keys & 2 == 0 {
-            p.set_u8(g, 0x67, 0);
+            p.set_u8(g, Player::JUMP_KIND, 0);
             p.set_u32(g, Obj::VX, 0);
         }
     }
@@ -324,7 +324,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::STEP, 0xa);
         p.set_u8(g, field::MOVE_STATE, 0);
         p.set_u8(g, field::AIR_ATTACK_DONE, 1);
-        let mut anim = if p.u8(g, 0x67) == 2 { 8 } else { 5 };
+        let mut anim = if p.u8(g, Player::JUMP_KIND) == 2 { 8 } else { 5 };
         if p.u8(g, Player::KEYS_HELD) & 4 != 0 {
             anim = 7;
         }
@@ -426,7 +426,7 @@ fn charge(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
@@ -488,7 +488,7 @@ fn leap_kick(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             p.set_u16(g, Obj::VZ, 0x600);
@@ -536,9 +536,9 @@ fn back_kick(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
             next_step(g, p);
-            p.set_u8(g, 0x5b, 0);
+            p.set_u8(g, Player::STRIKE_HITS, 0);
             p.set_u8(g, 0x1ec, 0);
-            p.set_u8(g, 0x67, 0);
+            p.set_u8(g, Player::JUMP_KIND, 0);
             p.set_u16(g, Obj::VZ, 0x380);
             p.set_u16(g, Obj::AZ, (-0x38i16) as u16);
             let vx = if p.u8(g, Player::FACING) != 0 { 0xfd00 } else { 0x300 };
@@ -581,7 +581,7 @@ fn backstab(g: &mut Ctx, p: Player) {
         0 => {
             next_step(g, p);
             p.set_u8(g, field::MOVE_STATE, 0);
-            p.set_u8(g, 0x67, 0);
+            p.set_u8(g, Player::JUMP_KIND, 0);
             animation::start_plain(g, p, 0x14);
             clear_recognizers(g, p);
         }
@@ -652,8 +652,8 @@ fn appear_behind_shadow(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::FACING, v);
     p.flip(g);
     let row = BACKSTAB_OFFSETS + 4 * rd8(g.b, shadow + 2) as u32;
-    let mut dx = g.prog16(row) as i16;
-    let dz = g.prog16(row + 2);
+    let mut dx = pc16(g.b, row) as i16;
+    let dz = pc16(g.b, row + 2);
     if rd8(g.b, shadow + Player::FACING) == 0 {
         dx = dx.wrapping_neg();
     }

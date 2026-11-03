@@ -1,6 +1,8 @@
 //! Step tables of the end-of-scene cinematics (routines 0x2411a to 0x24de6).
 
+use crate::player::Player;
 use super::*;
+use crate::player::tables::{pc8, pc16, word, long};
 
 // ---- 0x2411a ----------------------------------------------------------------------------------
 
@@ -52,7 +54,7 @@ pub(super) const END_2411A: Steps = &[
         p.set_u16(g, TIMER, 136);
         p.set_u8(g, Player::FACING, 0x20);
         let at = 0x242dc + 4 * rank(g, p);
-        let (x, y) = (g.prog16(at), g.prog16(at + 2));
+        let (x, y) = (pc16(g.b, at), pc16(g.b, at + 2));
         p.set_u16(g, Obj::X, x);
         p.set_u16(g, Obj::Y, y);
         animation::start(g, p, 2);
@@ -91,7 +93,7 @@ pub(super) const END_2434E: Steps = &[
         start_victory(g, p);
         let scene = ram::SCENE.get(g.b);
         if scene == 46 {
-            p.set_u8(g, 0x193, 1);
+            p.set_u8(g, Player::MAGIC_USED, 1);
         }
         if matches!(scene, 46 | 58 | 66) {
             elf_effect(g, p);
@@ -139,7 +141,7 @@ pub(super) const END_243D6: Steps = &[
 /// Final direction per rank (code bytes).
 pub(super) fn final_facing(g: &mut Ctx, p: Player, table: u32) -> u8 {
     let k = rank(g, p) & 3;
-    g.prog8(table + k)
+    pc8(g.b, table + k)
 }
 
 pub(super) const END_2447E: Steps = &[
@@ -188,7 +190,7 @@ pub(super) const END_245EC: Steps = &[
         }
         next(g, p);
         let k = rank(g, p);
-        let delay = g.prog8(0x24660 + k);
+        let delay = pc8(g.b, 0x24660 + k);
         p.set_u8(g, TIMER, delay);
         start_stand(g, p);
         crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
@@ -260,9 +262,9 @@ pub(super) fn fade_out(g: &mut Ctx, p: Player) {
     }
     let character = p.u8(g, Player::CHARACTER) as u32;
     let from = FADE_PALETTES + 384 * set as u32 + 32 * character;
-    let to = PALETTE_RAM.wrapping_add(rd16(g.b, FADE_TARGETS + 2 * character) as i16 as i32 as u32);
+    let to = PALETTE_RAM.wrapping_add(word(g.b, FADE_TARGETS + 2 * character) as i16 as i32 as u32);
     for i in 0..8 {
-        let v = rd32(g.b, from + 4 * i);
+        let v = long(g.b, from + 4 * i);
         wr32(g.b, to + 4 * i, v);
     }
     p.set_u8(g, 0x1e8, 12);
@@ -274,7 +276,7 @@ pub(super) fn fade_out(g: &mut Ctx, p: Player) {
 pub(super) const END_247B2: Steps = &[
     (0x247e4, |g, p| {
         next(g, p);
-        let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
+        let anim = if p.u8(g, Player::HOLY) != 0 { 36 } else { 35 };
         animation::start(g, p, anim);
         reset_speed_class(g, p);
         g.sound(ext::sound::FANFARE, p);
@@ -436,7 +438,7 @@ pub(super) const END_24BE2: Steps = &[
         if scene_step(g) == 36 {
             next(g, p);
             let k = rank(g, p) & 3;
-            let delay = g.prog16(0x24d50 + 2 * k);
+            let delay = pc16(g.b, 0x24d50 + 2 * k);
             p.set_u16(g, TIMER, delay);
         }
         anim_step(g, p);
@@ -500,7 +502,7 @@ pub(super) const END_24DE6: Steps = &[
         next(g, p);
         let (x, y) = (ram::CAMERA_X.get(g.b), ram::CAMERA_Y.get(g.b));
         let at = 0x24e66 + 4 * (rank(g, p) & 3);
-        let (dx, dy) = (g.prog16(at), g.prog16(at + 2));
+        let (dx, dy) = (pc16(g.b, at), pc16(g.b, at + 2));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
         p.set_u16(g, Obj::Y, y.wrapping_add(dy));
         victory_pose(g, p);

@@ -1,6 +1,7 @@
+use crate::player::Player;
 use super::*;
 use crate::ram;
-use crate::families::shell::records::{Base, PlayerView, view};
+use crate::families::shell::records::{Base, view};
 use crate::families::shell::tables::{tables, Read};
 
 const HITS_TO_BREAK: u8 = 3;
@@ -84,13 +85,13 @@ fn probe<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
             x.set8(Base::SUB_STEP, 1);
         }
     }
-    if (p.u8(x.b, PlayerView::HIT) as i8) > 0 {
+    if (p.u8(x.b, Player::STRIKE) as i8) > 0 {
         hit(x, p);
     }
 }
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
-    p.set_u8(x.b, PlayerView::HIT, 0xff);
+    p.set_u8(x.b, Player::STRIKE, 0xff);
     let n = x.u8(Target::HITS) + 1;
     x.set8(Target::HITS, n);
     if n < HITS_TO_BREAK {

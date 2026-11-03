@@ -14,7 +14,7 @@ use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::player::ram;
-use crate::machine::Machine;
+use crate::player::tables::{player_data, players, pc8, Read};
 
 /// Bytes of the created object.
 mod field {
@@ -561,16 +561,16 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     if rd16(g.b, rod.counter) != 0 {
         return;
     }
-    let forward = p.u8(g, 0x2c) != 0;
+    let forward = p.u8(g, Player::FACING) != 0;
     let (mut variant, mut delay) = (0u8, 1u8);
     let mut offset = if forward { first_offset } else { first_offset.wrapping_neg() };
-    let level = p.u8(g, 0x10c) as u32;
+    let level = p.u8(g, Player::LEVEL) as u32;
     // `subq.w #1` on a zero count would give 65,536 iterations: the full pool stops them
-    let mut left = (g.prog8(counts + level) as u16).wrapping_sub(1);
+    let mut left = (pc8(g.b, counts + level) as u16).wrapping_sub(1);
     while let Some(o) = create(g, p, &pools::PSHL, rod.kind) {
         let alive = rd16(g.b, rod.counter);
         wr16(g.b, rod.counter, alive.wrapping_add(1));
-        let (facing, x, y) = (p.u8(g, 0x2c), p.u16(g, Obj::X), p.u16(g, Obj::Y));
+        let (facing, x, y) = (p.u8(g, Player::FACING), p.u16(g, Obj::X), p.u16(g, Obj::Y));
         o.set_u8(g.b, Obj::VARIANT, variant);
         o.set_u8(g.b, 0x5c, delay);
         o.set_u8(g.b, 0x2c, facing);
@@ -612,8 +612,8 @@ pub fn rod_shot(g: &mut Ctx, p: Player, shot: RodShot) {
 /// failure does not consume a charge.
 fn rod_ball(g: &mut Ctx, p: Player) {
     cov!();
-    let level = p.u8(g, 0x10c) as u32;
-    let most = g.prog8(0x534b8 + level) as i16;
+    let level = p.u8(g, Player::LEVEL) as u32;
+    let most = pc8(g.b, 0x534b8 + level) as i16;
     let alive = rd16(g.b, ROD_BALL.counter) as i16;
     if most <= alive {
         return;
@@ -679,14 +679,13 @@ pub fn shadow(g: &mut Ctx, p: Player) {
 /// 0x53918: the witch, five shots (parameters 0 to 4); the byte `+0x2d` of each comes from the table 0x5394e.
 pub fn witch(g: &mut Ctx, p: Player) {
     cov!();
-    const SLOTS: u32 = 0x5394e;
     for n in 0..5u8 {
         let Some(o) = create(g, p, &pools::PSHL, kind::WITCH) else { return };
         let facing = p.u8(g, Player::FACING);
         o.set_u8(g.b, Player::FACING, facing);
         o.set_u16(g.b, field::LINK, p.0 as u16);
-        let slot = g.prog8(SLOTS + n as u32);
-        o.set_u8(g.b, 0x2d, slot);
+        let slot = player_data().spawn_slots.at8(g.b, n as u32);
+        o.set_u8(g.b, Obj::SPEED_INDEX, slot);
         o.set_u8(g.b, 0x5d, n);
     }
 }
@@ -695,13 +694,11 @@ pub fn witch(g: &mut Ctx, p: Player) {
 /// and against bosses) depend on the player's level (`+0x10c`).
 pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     cov!();
-    const POWER: u32 = 0x10_41f2;
-    const POWER_BOSS: u32 = 0x10_4210;
     let Some(o) = create(g, p, &pools::PSHL, kind::WITCH) else { return };
     o.set_u8(g.b, Obj::VARIANT, v);
     o.set_u16(g.b, field::LINK, p.0 as u16);
-    let level = p.u8(g, 0x10c) as u32;
-    let (power, boss) = (g.data8(POWER + level), g.data8(POWER_BOSS + level));
+    let level = p.u8(g, Player::LEVEL) as u32;
+    let (power, boss) = (players("magic_damage/2").at8(g.b, level), players("magic_damage/2").at8(g.b, 30 + level));
     o.set_u8(g.b, 0x45, power);
     o.set_u8(g.b, 0x46, boss);
 }
@@ -732,7 +729,7 @@ fn shard_place(g: &mut Ctx, p: Player, o: Obj) {
 /// non-zero. Nothing without `+0x68`, nor during a scenario.
 pub fn dying_shards(g: &mut Ctx, p: Player) {
     cov!();
-    if p.u8(g, 0x68) == 0 || ram::INPUT_RAW.get(g.b) != 0 {
+    if p.u8(g, Player::ARMED) == 0 || ram::INPUT_RAW.get(g.b) != 0 {
         return;
     }
     let Some(o) = create(g, p, &pools::PEFF, kind::SHARD) else { return };
@@ -743,7 +740,7 @@ pub fn dying_shards(g: &mut Ctx, p: Player) {
         let v = p.u8(g, off);
         o.set_u8(g.b, off, v);
     }
-    if p.u16(g, 0x42) == 0 {
+    if p.u16(g, Player::SHIELD_LOW_FRAME) == 0 {
         return;
     }
     let Some(o) = create(g, p, &pools::PEFF, kind::SHARD) else { return };
@@ -825,7 +822,7 @@ pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
     let step = step_of(g, p);
     if !columns {
         if effect(g, p, kind::WAVE_BOLT, None, |g, o| o.set_u8(g.b, 0x59, step)).is_some() {
-            p.set_u16(g, 0x12, 0x8000);
+            p.set_u16(g, Player::Y_FRACTION, 0x8000);
         }
         return;
     }

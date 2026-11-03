@@ -14,8 +14,8 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, wr32, A5};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
-use crate::machine::Machine;
 use crate::player::external as ext;
+use crate::player::tables::{pc16};
 
 mod endings;
 use endings::*;
@@ -74,7 +74,7 @@ fn steps(g: &mut Ctx, p: Player, table: u32, last: Option<u8>, steps: Steps) {
 /// Runs step `+6` of the routine with table `table`.
 fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     let step = p.u8(g, Player::ACTION);
-    let offset = g.prog16(table + step as u32);
+    let offset = pc16(g.b, table + step as u32);
     let at = table.wrapping_add(offset as i16 as i32 as u32);
     // like the original dispatch: D0 = step, D1 = offset (some steps pass them as they are to the
     // routines they call, so 0xb378a reads its setting in D1)
@@ -148,7 +148,7 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
 
 /// Victory pose (animation 35, or 36 if `+0x18a`) and sound.
 fn victory_pose(g: &mut Ctx, p: Player) {
-    let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
+    let anim = if p.u8(g, Player::HOLY) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
     g.sound(ext::sound::FANFARE, p);
 }
@@ -168,7 +168,7 @@ fn anim_c(g: &mut Ctx, p: Player, n: u32) {
 /// turn (next step, animation 5) or, already turned, walk (two steps further, animation 2).
 fn face_place(g: &mut Ctx, p: Player, places: u32) {
     let at = places + 4 * rank(g, p);
-    let (x, y) = (g.prog16(at), g.prog16(at + 2));
+    let (x, y) = (pc16(g.b, at), pc16(g.b, at + 2));
     p.set_u16(g, TARGET_X, x);
     p.set_u16(g, TARGET_Y, y);
     turn_toward(g, p, x);

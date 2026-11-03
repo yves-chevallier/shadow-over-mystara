@@ -1,8 +1,9 @@
+use crate::player::Player;
 use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
 use crate::ram;
-use crate::families::shell::records::{Host, PlayerView, view};
+use crate::families::shell::records::{Host, view};
 use crate::families::shell::tables::{box_byte, tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x17e048);
@@ -344,7 +345,7 @@ fn players() -> impl Iterator<Item = Obj> {
 
 /// Player in normal play: active, alive (non-zero HP), state 2, not invulnerable.
 fn alive<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
-    p.u8(x.b, Obj::ACTIVE) != 0 && p.u8(x.b, PlayerView::DYING) == 0 && p.u8(x.b, Obj::STATE) == 2 && p.u8(x.b, PlayerView::SHIELDED) == 0 && p.u16(x.b, PlayerView::LIFE) != 0
+    p.u8(x.b, Obj::ACTIVE) != 0 && p.u8(x.b, Player::INVULN) == 0 && p.u8(x.b, Obj::STATE) == 2 && p.u8(x.b, Player::POWER_10F) == 0 && p.u16(x.b, Player::HP) != 0
 }
 
 /// The veil hurts the players touched by the attack (boxes `+0x3e`).
@@ -468,16 +469,16 @@ fn overlap<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
 fn hurt<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     p.set_u32(x.b, Obj::STATE, 0x0204_2000);
     let mut hp = 0u16;
-    if p.u8(x.b, PlayerView::ATTACK_A) == 0x2c || p.u8(x.b, PlayerView::ATTACK_B) == 0x2c {
-        hp = p.u16(x.b, PlayerView::LIFE);
-        let half = p.u16(x.b, PlayerView::LIFE_MAX) >> 1;
+    if p.u8(x.b, Player::WEAPON_A) == 0x2c || p.u8(x.b, Player::WEAPON_B) == 0x2c {
+        hp = p.u16(x.b, Player::HP);
+        let half = p.u16(x.b, Player::HP_MAX) >> 1;
         let below = s16(hp) < s16(half);
         hp = hp.wrapping_sub(half);
         if below {
             hp = 0;
         }
     }
-    p.set_u16(x.b, PlayerView::LIFE, hp);
+    p.set_u16(x.b, Player::HP, hp);
     if hp == 0 {
         let n = ram::PLAYERS_ALIVE.get(x.b).wrapping_sub(1);
         ram::PLAYERS_ALIVE.set(x.b, n);

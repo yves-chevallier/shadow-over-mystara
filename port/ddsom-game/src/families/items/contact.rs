@@ -1,7 +1,8 @@
+use crate::player::Player;
 use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
-use crate::families::shell::records::{Base, PlayerView, SetView};
+use crate::families::shell::records::{Base, SetView};
 use crate::families::shell::tables::{box_byte, held8, tables, Read};
 use ddsom_data::effects::Table;
 
@@ -53,7 +54,7 @@ pub(super) fn player_key<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, my_
     if dead {
         return false;
     }
-    let busy = player.u8(ctx.b, PlayerView::BUSY) != 0;
+    let busy = player.u8(ctx.b, Player::AURA) != 0;
     if busy {
         return false;
     }

@@ -1,6 +1,7 @@
 //! Climbing (action 0x1a) and the exit from the scene (action 0x20).
 
 use super::*;
+use crate::player::tables::{player_data, word, long, Read};
 
 // ---- climb (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
 
@@ -19,8 +20,6 @@ pub(super) mod climb_field {
     pub const HELD_ITEM: u32 = 0x140;
 }
 
-/// Attack animation from the climb, per character (second table).
-pub(super) const CLIMB_ATTACKS: u32 = 0x35eee;
 
 /// Action 0x1a (0x35e56): climb (h). The player rises in Z through an oscillation table, moves
 /// according to the directions (up: climbs, down: descends to the ground, sides: walk or run), and can
@@ -43,7 +42,7 @@ pub fn climb(g: &mut Ctx, p: Player) {
     if pressed & 0x10 != 0 {
         p.set_u8(g, Player::STEP, 0x10);
         let character = p.u8(g, Player::CHARACTER) as u32;
-        let anim = g.prog8(CLIMB_ATTACKS + character);
+        let anim = player_data().climb_attacks.at8(g.b, character);
         animation::start_plain(g, p, anim as u16);
     } else if pressed & 0x80 != 0
         && p.class(g) == 2
@@ -88,7 +87,7 @@ pub(super) fn climb_hold(g: &mut Ctx, p: Player) {
     }
     let sway = p.u8(g, climb_field::SWAY) as u32;
     let table = p.u32(g, climb_field::SPEED_TABLE);
-    let vz = g.data16(table + 4 * sway + 2);
+    let vz = word(g.b, table + 4 * sway + 2);
     p.set_u16(g, Obj::VZ, vz);
     let z = (p.u32(g, Obj::Z) as i32).wrapping_add(((vz as u32) << 16) as i32 >> 8);
     p.set_u32(g, Obj::Z, z as u32);
@@ -388,10 +387,10 @@ pub(super) fn exit_fade(g: &mut Ctx, p: Player) {
     }
     let character = p.u8(g, Player::CHARACTER) as u32;
     let from = EXIT_PALETTES + (0x180 * stage as u32 + (character << 5)) as u16 as i16 as i32 as u32;
-    let slot = g.data16(EXIT_PALETTE_SLOTS + 2 * character) as i16 as i32 as u32;
+    let slot = player_data().exit_palette_slots.at16(g.b, 2 * character) as i16 as i32 as u32;
     let to = 0x91c000u32.wrapping_add(slot);
     for i in 0..8 {
-        let v = rd32(g.b, from + 4 * i);
+        let v = long(g.b, from + 4 * i);
         wr32(g.b, to + 4 * i, v);
     }
     p.set_u8(g, exit_field::FADE_TIMER, 0xc);
