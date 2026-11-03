@@ -18,6 +18,11 @@
 //! | state 4 | `hit` | reactions to hits (specific routines), knockback, on the ground, death |
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
+use crate::objects::Obj;
+use crate::record::record;
+use crate::player::Player;
+use super::shell::records::Base;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -25,41 +30,49 @@ mod attacks;
 mod hit;
 mod moves;
 
-/// Fields specific to this type.
-mod g {
-    /// Player proximity level (0 to 7) during the wake-up.
-    pub const NEAR: u32 = 0x2f;
-    pub const NEAR_MAX: u32 = 0x30;
-    /// Non-zero byte: gravity is applied at the end of the frame (`gravity`).
-    pub const FALLS: u32 = 0xa2;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const WALK_STEPS: u32 = 0x6b;
-    pub const IDLE_COUNT: u32 = 0x6e;
-    pub const WALK_DELAY: u32 = 0x71;
-    /// Memory of the current animation: set (0, 2 or 4) and number.
-    pub const ANIM_SET: u32 = 0xa0;
-    pub const ANIM_N: u32 = 0xa1;
-    pub const HIT_BUDGET: u32 = 0xa5;
-    /// Timer (byte or word depending on the step).
-    pub const TIMER: u32 = 0xa6;
-    /// State to resume after an about-face (long).
-    pub const SAVED_STATE: u32 = 0xa8;
-    /// Aimed point (words) and rotation direction of the trajectory.
-    pub const SPOT_X: u32 = 0xae;
-    pub const SPOT_Z: u32 = 0xb0;
-    pub const SPIN: u32 = 0xb3;
-    pub const DOWN_TIME: u32 = 0x84;
-    pub const SHAKE: u32 = 0x90;
-    /// Saved byte "the pause has been seen".
-    pub const PAUSE_SEEN: u32 = 0x42;
+/// Fields of this boss beyond those of `Enemy` and `Boss` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Boss16(pub Obj);
+
+impl Boss16 {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Boss16 {
+        /// Player proximity level (0 to 7) during the wake-up.
+        near, set_near, NEAR: u8 @ 0x2f;
+        near_max, set_near_max, NEAR_MAX: u8 @ 0x30;
+        /// Saved byte "the pause has been seen".
+        pause_seen, set_pause_seen, PAUSE_SEEN: u8 @ 0x42;
+        /// Memory of the current animation: set (0, 2 or 4) and number.
+        anim_set, set_anim_set, ANIM_SET: u16 @ 0xa0;
+        anim_n, set_anim_n, ANIM_N: u8 @ 0xa1;
+        /// Non-zero byte: gravity is applied at the end of the frame (`gravity`).
+        falls, set_falls, FALLS: u8 @ 0xa2;
+        /// Cue of the attack in progress for the linked effects (trail, flames), cleared every frame (h).
+        attack_cue, set_attack_cue, ATTACK_CUE: u8 @ 0xa4;
+        /// Hits taken before the boss reacts (h).
+        hit_budget, set_hit_budget, HIT_BUDGET: u8 @ 0xa5;
+        /// Timer (byte or word depending on the step).
+        timer, set_timer, TIMER: u8 @ 0xa6;
+        /// State to resume after an about-face (long).
+        saved_state, set_saved_state, SAVED_STATE: u32 @ 0xa8;
+        /// Aimed point (words) and rotation direction of the trajectory.
+        spot_x, set_spot_x, SPOT_X: u16 @ 0xae;
+        spot_z, set_spot_z, SPOT_Z: u16 @ 0xb0;
+        spin, set_spin, SPIN: u8 @ 0xb3;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_A: u32 = 0x17efe8;
-const SET_B: u32 = 0x17f002;
-const SET_C: u32 = 0x17f046;
+const SET_A: RomAddr = RomAddr(0x17efe8);
+const SET_B: RomAddr = RomAddr(0x17f002);
+const SET_C: RomAddr = RomAddr(0x17f046);
 
 /// States set in one go (`+4..+7`).
 mod state {
@@ -76,36 +89,36 @@ mod state {
 
 /// 0x95256: starts animation `n` of set `set` (of kind `kind`) via the AI, unless it is already the current one.
 fn play_set<R: Bench>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
-    if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
+    if x.u8(Boss16::ANIM_SET) == kind && x.u8(Boss16::ANIM_N) == n as u8 {
         return;
     }
-    x.set8(ANIM_SET, kind);
-    x.set8(ANIM_N, n as u8);
+    x.set8(Boss16::ANIM_SET, kind);
+    x.set8(Boss16::ANIM_N, n as u8);
     lib::start(x, set, n);
 }
 
 /// 0x95234: animation `n` of the movement set.
 fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play_set(x, SET_A, 0, n);
+    play_set(x, SET_A.0, 0, n);
 }
 
 /// 0x95240: animation `n` of the attack set.
 fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play_set(x, SET_B, 2, n);
+    play_set(x, SET_B.0, 2, n);
 }
 
 /// 0x9524c: animation `n` of the hits-received set.
 fn anim_c<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play_set(x, SET_C, 4, n);
+    play_set(x, SET_C.0, 4, n);
 }
 
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x95210: cancels the speeds.
 fn stop<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set32(0x14, 0);
-    x.set32(0x18, 0);
-    x.set32(0x1c, 0);
+    x.set32(Enemy::VX_LONG, 0);
+    x.set32(Enemy::VZ_LONG, 0);
+    x.set32(Enemy::VY_LONG, 0);
 }
 
 /// 0x93420: no target left, wait.
@@ -114,15 +127,15 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn next7<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
 }
 fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
-/// 0x95220: the camera in use (its record; X at `+8`, Y at `+0xc`).
-fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
-    crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
+/// 0x95220: position of the camera in use.
+fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
+    crate::ram::camera(x.b)
 }
 
 /// 0x950b8: is the target behind the boss? (with no target, the boss waits and the answer is yes.)
@@ -132,7 +145,7 @@ fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return true;
     }
     let t = x.linked(f::TARGET);
-    let mut d = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8));
+    let mut d = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
@@ -146,11 +159,11 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return true;
     }
     let t = x.linked(f::TARGET);
-    let dz = t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)).wrapping_add(0x20);
+    let dz = t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
     if dz <= 0x40 {
         return false;
     }
-    let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
+    let dx = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xc0);
     dx > 0x180
 }
 
@@ -173,18 +186,18 @@ fn edge_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 /// 0x951dc: soft gravity when the step asked for it (`+0xa2`): the boss falls back to the ground.
 fn gravity<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(FALLS) == 0 {
+    if x.u8(Boss16::FALLS) == 0 {
         return;
     }
-    x.set8(FALLS, 0);
+    x.set8(Boss16::FALLS, 0);
     x.move_z();
-    if (x.u16(0x1a) as i16) >= 0 {
-        x.set16(0x1a, (-0x18i16) as u16);
+    if (x.u16(Enemy::GRAVITY) as i16) >= 0 {
+        x.set16(Enemy::GRAVITY, (-0x18i16) as u16);
     }
-    if (x.u16(0xc) as i16) < 0 {
-        x.set16(0xc, 0);
-        x.set16(0x18, 0x200);
-        x.set16(0x1a, (-0x18i16) as u16);
+    if (x.u16(Obj::Z) as i16) < 0 {
+        x.set16(Obj::Z, 0);
+        x.set16(Enemy::VZ, 0x200);
+        x.set16(Enemy::GRAVITY, (-0x18i16) as u16);
     }
 }
 
@@ -192,11 +205,11 @@ fn gravity<R: Bench>(x: &mut Cx<'_, R>) {
 fn count_victims<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut n = 0;
     for k in 0..4u32 {
-        let p = crate::objects::Obj(0xff85de + 0x200 * k);
-        if p.u8(x.b, 0) == 0 {
+        let p = crate::ram::PLAYERS.nth(k);
+        if p.u8(x.b, Obj::ACTIVE) == 0 {
             continue;
         }
-        let mut d = p.u16(x.b, 0x8).wrapping_sub(x.u16(0x8));
+        let mut d = p.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
         if x.u8(f::FLIP) == 0 {
             d = d.wrapping_neg();
         }
@@ -204,7 +217,7 @@ fn count_victims<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
             continue;
         }
         if p.u32(x.b, f::STATE) & !0xff == 0x0200_0e00 {
-            p.set_u8(x.b, 0x189, 1);
+            p.set_u8(x.b, Player::SPELL_CANCELLED, 1);
             n += 1;
         }
     }
@@ -216,7 +229,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.tick_counters();
-    x.set8(0xa4, 0);
+    x.set8(Boss16::ATTACK_CUE, 0);
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -235,16 +248,16 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     var::SCENE_LEVEL.set(x.b, 0);
-    if (x.u8(3) as i8) < 2 {
+    if (x.u8(Enemy::VARIANT) as i8) < 2 {
         let (variant, z) = if (var::SCROLL_Y.get(x.b) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
-        x.set8(3, variant);
-        x.set16(0x10, z);
+        x.set8(Enemy::VARIANT, variant);
+        x.set16(Obj::Y, z);
     }
     x.set8(f::SUB, 0);
     x.set16(f::SUB2, 0);
     var::BOSS_FIGHT.set(x.b, 1);
-    x.set8(0x93, 1);
-    x.set8(0x9a, 0xff);
+    x.set8(Boss::DEATH_CREDIT, 1);
+    x.set8(Boss::DEATH_VALUE, 0xff);
     pick_target(x);
     lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x30);
@@ -254,22 +267,22 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
-    for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::AI_ROW_8E, 3), (Enemy::AI_SHOT, 0xff), (Enemy::AI_68, 8), (Enemy::AI_69, 8)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set8(0, 2);
-    for (off, v) in [(0x6a, 3), (0x6c, 4), (0x6d, 8), (TIMER, 0)] {
+    x.set8(Enemy::ACTIVE, 2);
+    for (off, v) in [(Enemy::AI_WANDER_ROW, 3), (Enemy::AI_WAIT_MASKS, 4), (Enemy::AI_WAIT_ROW, 8), (Boss16::TIMER, 0)] {
         x.set8(off, v);
     }
     let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
-    x.set8(0x72, speed);
-    x.set8(0x73, speed);
-    for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x4a), (0x7f, 0), (0x81, 0), (0x80, 0x1a), (0xbf, 0)] {
+    x.set8(Enemy::AI_DECISION_A, speed);
+    x.set8(Enemy::AI_DECISION_B, speed);
+    for (off, v) in [(Enemy::AI_BOX_CHANCE, 1), (Enemy::AI_BOX_ANIM, 0x44), (Enemy::AI_BYTE_ROW, 6), (Enemy::EVENT_KIND, 0x4a), (Enemy::EVENT_LOW, 0), (Enemy::LOOT, 0), (Enemy::LOOT_ROW, 0x1a), (Enemy::ANIM_VARIANT, 0)] {
         x.set8(off, v);
     }
     effct_trio_2e(x);
-    x.set16(ANIM_SET, 0xffff);
+    x.set16(Boss16::ANIM_SET, 0xffff);
     anim_a(x, 0);
     lib::sound(x, crate::sound::CMD_25);
 }
@@ -279,15 +292,15 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x933b8: one group per frame; during a stage pause, the boss stays waiting (0x020a0200) as long as players
 /// are under its grip.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(HIT_BUDGET, 5);
+    x.set8(Boss16::HIT_BUDGET, 5);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if x.u8(f::SUB) == 0 || paused_dispatch(x) {
         group(x);
         gravity(x);
-        if tst8(x, TIMER).gt() {
-            sub8(x, TIMER, 1);
-            x.set8(0x38, 0);
+        if tst8(x, Boss16::TIMER).gt() {
+            sub8(x, Boss16::TIMER, 1);
+            x.set8(Enemy::FRAME_TAG, 0);
         }
     }
     lib::keep_on_screen(x, 0x40);
@@ -298,17 +311,17 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x933d0..0x93452: true if the group must run this frame (outside pause, or waiting for a pause).
 fn paused_dispatch<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) == 0 {
-        x.set8(PAUSE_SEEN, 0);
+        x.set8(Boss16::PAUSE_SEEN, 0);
         return true;
     }
     let held = x.u32(f::STATE) & !0xff;
     if held == state::IDLE_PAUSED {
         return true;
     }
-    if x.u8(PAUSE_SEEN) != 0 {
+    if x.u8(Boss16::PAUSE_SEEN) != 0 {
         return false;
     }
-    x.set8(PAUSE_SEEN, 0xff);
+    x.set8(Boss16::PAUSE_SEEN, 0xff);
     if count_victims(x) == 0 {
         return false;
     }
@@ -340,10 +353,10 @@ fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
-    let step = x.data8(0x94e7c + row + r);
+    let step = byte(x, "boss_16/next_attacks", row + r);
     x.set8(f::SUB2, step);
     x.set16(f::STATE, 0x0208);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 handlers! {

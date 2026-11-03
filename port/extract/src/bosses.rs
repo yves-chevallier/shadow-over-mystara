@@ -168,6 +168,14 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(data("boss_15/attack_picks", 0x91a28, "i8*16", &[], 4));
     s.push(prog("boss_15/cooldowns", 0x91a18, "i8", &[], 16));
     s.push(prog("boss_15/leap", 0x91b94, "i16", &[], 2));
+    // ---- boss 16 ----
+    s.push(prog("boss_16/shake_times", 0x94368, "u8", &[], 4));
+    s.push(prog("boss_16/deaths", 0x94644, "addr", &[], 43));
+    rank(s, "boss_16/next_attacks", 0x94e7c);
+    s.push(prog("boss_16/proximity", 0x93562, "u8", &[], 32));
+    upto(s, "boss_16/near_limits", 0x93512, true, "u8", 0x10);
+    s.push(data("boss_16/attack_picks", 0x94a24, "u8", &[], 32));
+    s.push(prog("boss_16/spots", 0x951b0, "i16*2 u8*2", &[], 4));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.
