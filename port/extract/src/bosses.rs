@@ -176,6 +176,25 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     upto(s, "boss_16/near_limits", 0x93512, true, "u8", 0x10);
     s.push(data("boss_16/attack_picks", 0x94a24, "u8", &[], 32));
     s.push(prog("boss_16/spots", 0x951b0, "i16*2 u8*2", &[], 4));
+    // ---- boss 17 ----
+    s.push(prog("boss_17/walk_delays", 0x96f08, "u8", &[], PER_RANK));
+    s.push(prog("boss_17/walk_delays_slow", 0x96f28, "u8", &[], PER_RANK));
+    s.push(prog("boss_17/walk_steps", 0x96f6c, "u8", &[], 32));
+    s.push(prog("boss_17/walk_steps_slow", 0x96f8c, "u8", &[], 32));
+    // By difficulty (`RANK & 0x1e`) and number of players.
+    s.push(prog("boss_17/strike_limits", 0x97382, "u8", &[], 64));
+    s.push(prog("boss_17/slow_times", 0x973e4, "u16", &[], 64));
+    s.push(prog("boss_17/slow_modes", 0x974aa, "x8", &[], 32));
+    s.push(prog("boss_17/slow_modes_b", 0x974ca, "x8", &[], 32));
+    s.push(prog("boss_17/spawn_counts", 0x97530, "i8", &[], 64));
+    upto(s, "boss_17/spawn_spots", 0x97570, true, "i16*2", 0x80);
+    decision(rom, s, "boss_17/close", &[0x96ffa], 0x9700a);
+    decision(rom, s, "boss_17/front", &[0x97054, 0x97064], 0x97074);
+    decision(rom, s, "boss_17/mid", &[0x970aa], 0x970ba);
+    decision(rom, s, "boss_17/far", &[0x9713a, 0x9714a], 0x9715a);
+    // Entry of the front and far decisions per phase (and side): relative words to the routines.
+    s.push(prog("boss_17/front_phases", 0x97026, "i16", &[], 5));
+    s.push(prog("boss_17/far_phases", 0x970e4, "i16", &[], 10));
     // ---- boss 13 (dragon) ----
     // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
     // original) until a word exceeds the camera.

@@ -31,41 +31,41 @@ pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x971f4: standing, motionless and vulnerable.
 pub(super) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set32(f::STATE, STAND);
 }
 
 /// 0x97204: interrupts the action in progress (the state is saved in `+0xa2`).
 pub(super) fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     let state = x.u32(f::STATE);
-    x.set32(SAVED_STATE, state);
+    x.set32(Boss::SAVED_STATE, state);
     x.set32(f::STATE, INTERRUPTED);
 }
 
 /// 0x97218: walk toward a player (shot 0x31).
 pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(SHOT, 0x31);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Boss::SHOT, 0x31);
     x.set32(f::STATE, CHASE);
 }
 
 /// 0x9722e: walk toward a player (shot 0x32).
 pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(SHOT, 0x32);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Boss::SHOT, 0x32);
     x.set32(f::STATE, CHASE_B);
 }
 
 /// 0x97288 : charge.
 pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     x.set32(f::STATE, DASH);
 }
 
 /// 0x97296: attack 0 (vulnerable).
 pub(super) fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set32(f::STATE, ATTACK_0);
 }
 
@@ -76,7 +76,7 @@ pub(super) fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x972b4: attack 4, invulnerable.
 pub(super) fn attack_4_shielded<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(INVULNERABLE, 1);
+    x.set8(Boss::INVULNERABLE, 1);
     attack_4(x);
 }
 
@@ -91,7 +91,7 @@ pub(super) fn attack_6<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn attack<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     x.set32(f::STATE, state);
 }
 
@@ -103,7 +103,7 @@ fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x972e0: attack 10 if the boss is on screen and has some left.
 pub(super) fn attack_10<R: Bench>(x: &mut Cx<'_, R>) {
-    if off_screen(x) || (x.u8(BUDGET_A) as i8) <= 0 {
+    if off_screen(x) || (x.u8(Boss17::BUDGET_A) as i8) <= 0 {
         return attack_6(x);
     }
     attack(x, ATTACK_10);
@@ -111,7 +111,7 @@ pub(super) fn attack_10<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x97302 : attaque 12.
 pub(super) fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
-    if off_screen(x) || (x.u8(BUDGET_B) as i8) <= 0 {
+    if off_screen(x) || (x.u8(Boss17::BUDGET_B) as i8) <= 0 {
         return attack_6(x);
     }
     attack(x, ATTACK_12);
@@ -119,10 +119,10 @@ pub(super) fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x97324: attack 14 (dropping objects), as long as there are some left to drop.
 pub(super) fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(BUDGET_C) == 0 {
+    if x.u8(Boss17::BUDGET_C) == 0 {
         return attack_6(x);
     }
-    if (x.u8(SPAWNED) as i8) > 0 {
+    if (x.u8(Boss17::SPAWNED) as i8) > 0 {
         return chase(x);
     }
     attack(x, ATTACK_14);
@@ -130,17 +130,17 @@ pub(super) fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x97340: attack 16 (end of the slow motion).
 pub(super) fn attack_16<R: Bench>(x: &mut Cx<'_, R>) {
-    if (x.u8(SLOW) as i8) > 0 {
+    if (x.u8(Boss17::SLOW) as i8) > 0 {
         return chase(x);
     }
-    x.set8(STRIKES, 0);
+    x.set8(Boss17::STRIKES, 0);
     attack(x, ATTACK_16);
 }
 
 /// 0x97252: the charge if the boss is in the useful band of the screen, otherwise attack 4 when it faces the right
 /// way.
 pub(super) fn dash_or_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    let here = x.u16(0x8);
+    let here = x.u16(Obj::X);
     let mut edge = camera_x(x).wrapping_add(0x38);
     let mut side = 0x20;
     if !Fl::sub16(edge, here).ge() {
@@ -161,86 +161,75 @@ pub(super) fn dash_or_attack<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x97162: variant 0, arrival on stage.
 pub(super) fn start_intro<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(ANIM_KIND, 0x30);
+    x.set8(Boss::ANIM_KIND, 0x30);
     x.set32(f::STATE, 0x0200_0000);
 }
 
 /// 0x97172: exit from the arrival cutscene.
 pub(super) fn start_appear<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(ANIM_KIND, 0x31);
+    x.set8(Boss::ANIM_KIND, 0x31);
     x.set32(f::STATE, 0x0200_0200);
 }
 
 /// 0x97182: death, start of the ending cutscene.
 pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(ANIM_KIND, 0x32);
-    x.set8(SLOW, 0);
-    x.set8(0, 2);
+    x.set8(Boss::ANIM_KIND, 0x32);
+    x.set8(Boss17::SLOW, 0);
+    x.set8(Enemy::ACTIVE, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     var::PLAYERS_FROZEN.set(x.b, 1);
     var::BOSS_FIGHT.set(x.b, 0);
-    let kind = x.u8(0x2);
+    let kind = x.u8(Enemy::KIND);
     var::DEFEAT_NAME.set(x.b, kind);
     var::DEFEAT_FIRST.set(x.b, 1);
-    let bar = x.u8(0x7e);
+    let bar = x.u8(Enemy::EVENT_KIND);
     var::DEFEAT_BONUS.set(x.b, bar);
-    if x.u16(0x54) != 0 {
-        let killer = x.linked(0x54);
-        killer.set_u8(x.b, 0x18a, 1);
+    if x.u16(Enemy::HOLDER) != 0 {
+        let killer = x.linked(Enemy::HOLDER);
+        killer.set_u8(x.b, Player::HOLY, 1);
     }
     x.set32(f::STATE, 0x0200_0400);
 }
 
 /// 0x971ce : variante 1.
 pub(super) fn start_variant1<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(ANIM_KIND, 0x33);
+    x.set8(Boss::ANIM_KIND, 0x33);
     var::NO_WALK_IN.set(x.b, 1);
     x.set32(f::STATE, 0x0200_0600);
 }
 
 /// 0x971e4 : variante 2.
 pub(super) fn start_variant2<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(ANIM_KIND, 0x34);
+    x.set8(Boss::ANIM_KIND, 0x34);
     x.set32(f::STATE, 0x0200_0800);
 }
 
 // --- tirages ------------------------------------------------------------------------------------
 
-/// Table byte read from the ROM (`(table,PC,Dn)` addressing).
-fn table8<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
-    x.rom8(table + index)
-}
-
-fn table16<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
-    x.rom16(table + index)
-}
-
 /// 0x96ef0: delay before the next step, depending on difficulty.
 pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {
-    let level = var::RANK.get(x.b) as u32;
-    let v = table8(x, 0x96f08, level);
-    x.set8(WALK_DELAY, v);
+    let v = per_rank(x, "boss_17/walk_delays");
+    x.set8(Boss::WALK_DELAY, v);
 }
 
 /// 0x96efc: same, table of the slow walks.
 pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    let level = var::RANK.get(x.b) as u32;
-    let v = table8(x, 0x96f28, level);
-    x.set8(WALK_DELAY, v);
+    let v = per_rank(x, "boss_17/walk_delays_slow");
+    x.set8(Boss::WALK_DELAY, v);
 }
 
 /// 0x96f48: number of steps of a walk.
 pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0x1f;
-    let v = table8(x, 0x96f6c, r);
-    x.set8(WALK_STEPS, v);
+    let v = byte(x, "boss_17/walk_steps", r);
+    x.set8(Boss::WALK_STEPS, v);
 }
 
 /// 0x96f5a.
 pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0x1f;
-    let v = table8(x, 0x96f8c, r);
-    x.set8(WALK_STEPS, v);
+    let v = byte(x, "boss_17/walk_steps_slow", r);
+    x.set8(Boss::WALK_STEPS, v);
 }
 
 /// Index into the difficulty table: `(difficulty & 0x1e) × k + (players - 1)`.
@@ -253,8 +242,8 @@ fn level_index<R: Bench>(x: &mut Cx<'_, R>, k: u32) -> u32 {
 /// 0x97364: number of hits before the charge, depending on difficulty and number of players.
 pub(super) fn pick_strike_limit<R: Bench>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
-    let v = table8(x, 0x97382, i);
-    x.set8(STRIKE_LIMIT, v);
+    let v = byte(x, "boss_17/strike_limits", i);
+    x.set8(Boss17::STRIKE_LIMIT, v);
 }
 
 /// 0x973c2: duration of the slow motion (word).
@@ -262,8 +251,8 @@ pub(super) fn pick_slow_time<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
-    let v = table16(x, 0x973e4, i);
-    x.set16(SLOW_TIME, v);
+    let v = word(x, "boss_17/slow_times", i);
+    x.set16(Boss17::SLOW_TIME, v);
 }
 
 /// 0x97464: slow-motion mode (1 or 2), drawn from a bit mask by difficulty and number of players.
@@ -273,15 +262,16 @@ pub(super) fn pick_slow_mode<R: Bench>(x: &mut Cx<'_, R>) {
     let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
     let i = row + level;
     let bit = (x.random() as u32) & 0x1f & 7;
-    let (table, set_means_one) = if x.u8(Obj::VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
-    let set = table8(x, table, i) >> bit & 1 != 0;
-    x.set8(SLOW, if set == set_means_one { 1 } else { 2 });
+    let (table, set_means_one) =
+        if x.u8(Obj::VARIANT) == 0 { ("boss_17/slow_modes", true) } else { ("boss_17/slow_modes_b", false) };
+    let set = byte(x, table, i) >> bit & 1 != 0;
+    x.set8(Boss17::SLOW, if set == set_means_one { 1 } else { 2 });
 }
 
 /// 0x974ea: drops a number of objects read from table 0x97530 (difficulty, players).
 pub(super) fn spawn_by_level<R: Bench>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
-    let count = table8(x, 0x97530, i) as i8 as i16;
+    let count = byte(x, "boss_17/spawn_counts", i) as i8 as i16;
     spawn_ring(x, count);
 }
 
@@ -290,14 +280,14 @@ pub(super) fn spawn_ring<R: Bench>(x: &mut Cx<'_, R>, count: i16) {
     let mut d5 = count as u16;
     loop {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
-        let dx = table16(x, 0x97570, i);
-        let dy = table16(x, 0x97572, i);
+        let dx = word(x, "boss_17/spawn_spots", i);
+        let dy = word(x, "boss_17/spawn_spots", i + 2);
         let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         // (D0, D1, D2) = (x, 0, y); D2 (low word) remains
         *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
         if crate::families::creators::enemy_1_at_pure(x.b, x.o, (px, 0, py)).is_some() {
-            x.add8(SPAWNED, 1);
+            x.add8(Boss17::SPAWNED, 1);
         }
         if d5 == 0 {
             break;
@@ -321,9 +311,7 @@ pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u
 /// 0x96fe4: a player is very close ahead; table 0x96ffa chooses the entry of 0x9700a.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0xf;
-    let pick = table8(x, 0x96ffa, r);
-    let target = 0x9700a_i32 + table16(x, 0x9700a, pick as u32) as i16 as i32;
-    match target as u32 {
+    match decide(x, "boss_17/close_picks", r, "boss_17/close_jumps") {
         0x97288 => dash(x),
         t => unreachable!("0x96fe4: target {t:x}"),
     }
@@ -332,16 +320,13 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x9700c: a player is ahead: depending on the combat phase, a charge or an attack.
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0xf;
-    let phase = x.u8(PHASE) as i8 as i32;
-    let entry = x.rom16(0x97026 + (2 * phase) as u32) as i16 as i32;
-    let kind = 0x97026 + entry;
-    let pick = match kind as u32 {
-        0x97030 | 0x97036 => table8(x, 0x97054, r),
-        0x9703c | 0x97042 | 0x97048 => table8(x, 0x97064, r),
+    let phase = x.u8(Boss::PHASE) as i8 as i32;
+    let picks = match jump_target(x, "boss_17/front_phases", (2 * phase) as u32) {
+        0x97030 | 0x97036 => "boss_17/front_picks_0",
+        0x9703c | 0x97042 | 0x97048 => "boss_17/front_picks_1",
         t => unreachable!("0x9700c: target {t:x}"),
     };
-    let target = 0x97074_i32 + table16(x, 0x97074, pick as u32) as i16 as i32;
-    match target as u32 {
+    match decide(x, picks, r, "boss_17/front_jumps") {
         0x97252 => dash_or_attack(x),
         0x972ba => attack_4(x),
         t => unreachable!("0x9700c: target {t:x}"),
@@ -351,9 +336,7 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x97078: a player is at mid-distance; `side` = 1 or 2 (0x1047a).
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 0xf;
-    let pick = table8(x, 0x970aa, r);
-    let target = 0x970ba_i32 + table16(x, 0x970ba, pick as u32) as i16 as i32;
-    match target as u32 {
+    match decide(x, "boss_17/mid_picks", r, "boss_17/mid_jumps") {
         0x97296 => attack_0(x),
         0x972a6 => attack_2(x),
         0x972ba => attack_4(x),
@@ -364,14 +347,11 @@ pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x970c0: a player is far; `side` = 1 or 2.
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = (x.random() as u32) & 0xf;
-    let entry = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
-    let which = x.rom16(0x970e4 + entry) as i16 as i32;
-    let routine = 0x970e4 + which;
-    // ten routines: the first four read 0x9713a, the others 0x9714a
-    let table = if (0x970f8..0x97110).contains(&routine) { 0x9713a } else { 0x9714a };
-    let pick = table8(x, table, r);
-    let target = 0x9715a_i32 + table16(x, 0x9715a, pick as u32) as i16 as i32;
-    match target as u32 {
+    let entry = (side as u32 - 1) * 2 + 4 * (x.u8(Boss::PHASE) as i8 as i32 as u32);
+    let routine = jump_target(x, "boss_17/far_phases", entry);
+    // ten routines: the first four read the first pick table, the others the second
+    let picks = if (0x970f8..0x97110).contains(&routine) { "boss_17/far_picks_0" } else { "boss_17/far_picks_1" };
+    match decide(x, picks, r, "boss_17/far_jumps") {
         0x97296 => attack_0(x),
         0x972c8 => attack_6(x),
         0x972e0 => attack_10(x),
