@@ -131,6 +131,11 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    boss 7 et 8 en `match` : fichiers de L9a à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante
    d'adresse ROM. **Réextraire les assets** (`data/enemies.json`). Pour L9b : « Pour L9b » dans fin.md, outils
    `tools/boss_refactor/`.
+   **Lot L9b (boss 10 à 22, dragon)** fait (branche `wt-l9b-boss`, [fin.md](fin.md) « Résultat L9b ») : 138 tables
+   de plus dans `data/enemies.json` (décisions des boss 17, 18, 21, chaîne du boss 11 extraite, oscillation et seuils
+   du dragon...), un `record!` par boss, variables A5 nommées, `set_abs8`/`A5_DEATH` retirés : **toute la zone
+   `bosses`** à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante d'adresse ROM. **Réextraire les
+   assets** (`data/enemies.json`).
 
 8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
    `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées

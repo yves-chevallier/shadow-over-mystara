@@ -70,6 +70,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | Ennemis après L8b (`enemy_*/`, `enemy_*.rs`, façades) | 107 | 33 188 | 0 | 0 | 0 | 8 | 0 | 0 | `enemy_beetle.rs` (793) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
 | Boss après L9a (boss 0, 1, 3 à 9 et `boss_common/` : 42 fichiers, à 0 ; reste L9b) | 86 | 30 840 | 107 (L9a 0) | 1 899 (L9a 0) | 107 (L9a 0) | 127 | 0 | 58 (L9a 0) | `boss_5.rs` (775) |
+| Boss après L9b (`families/boss*`, toute la zone) | 86 | 30 965 | 0 | 0 | 0 | 9 | 0 | 0 | `boss_5.rs` (776) |
 | Joueurs (`player/`, `families/player/`, `combat*`) | 57 | 29 048 | 378 | 2 545 | 67 | 383 | 68 | 494 | `player/hurt.rs` (1 761) |
 | Écrans (`modes/`, `hud/`, `service/`, `scene/`, `credits*`, `text`, `popups`) | 41 | 18 134 | 62 | 15 | 137 | 1 637 | 74 | 437 | `scene/exit.rs` (1 535) |
 | Communs des familles (`cx.rs`, `mod.rs`, `small.rs`, `creators.rs`) | 4 | 1 413 | 11 | 164 | 20 | 61 | 1 | 7 | `creators.rs` (520) |
@@ -880,8 +881,8 @@ libre.
 
 ### Vague 3 (trois agents)
 
-**L9. Boss** (grand, coupé : L9a boss 0 à 9, L9b boss 10 à 22, avec `boss_common.rs` dans L9a) — L9a **fait**
-(branche `wt-l9a-boss`, voir « Résultat L9a » et « Pour L9b »)
+**L9. Boss** (grand, coupé : L9a boss 0 à 9, L9b boss 10 à 22, avec `boss_common.rs` dans L9a) — **fait** (L9a :
+branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, voir « Résultat L9b »)
 * (b) 207 accesseurs ROM : tables de décision des boss 5, 7, 17 et 21, vitesses du boss 15 (0x1c67b8), oscillation du
   dragon (0x8faa2), chaîne du boss 11 (`0x1069f8`..., lignes de 32 octets et trajectoires : la seule donnée de jeu
   relevée mais non extraite, [assets.md](assets.md)).
@@ -945,6 +946,60 @@ libre.
     boss 15 ;
   * les tables de réactions des boss 10, 11, 16, 17, 19, 21, 22 sont déjà déclarées (`reactions/boss_*`) :
     `reaction_routine(x, REACTIONS)`.
+* Résultat L9b (boss 10, 11/12, 15/20, 16, 17, 18, 19/14, 21, 2/22 de `boss_22/`, dragon `boss_dragon.rs` ; restes de
+  `boss_common`) :
+  * (a) Rien à découper : plus gros fichier de la zone 776 lignes (`boss_5.rs`), aucun fichier de L9b au-delà de
+    800 lignes.
+  * (b) Données : 138 tables de plus dans `data/enemies.json` (268 pour les boss) (sections `// ---- boss N ----` de
+    `extract/src/bosses.rs`, mêmes formes que L9a) : décisions des boss 17, 18 et 21 (`decision(...)`, plus les tables
+    d'entrée par phase et côté `front_phases`/`far_phases`/`far_levels`, mots relatifs lus par `jump_target`), tables
+    par rang, par difficulté et par nombre de joueurs, coins et points de téléportation, lancers ; réactions relatives du
+    boss 18 (`boss_18/reactions`, par code / 2) ; **chaîne du boss 11 extraite** (`boss_11/rows` : 22 lignes de 32
+    octets par pose ; `boss_11/paths` : 12 × deux adresses ; `boss_11/paths/{0,8,10}` : 32 orientations × 32
+    inclinaisons × 4 mots ; `boss_11/rises/{0,8,10}` : 32 mots), lue par `boss_11::chain` (`path16` : résolution de
+    l'adresse parmi les six tables, sans balayage) ; chemin d'approche `boss_11/route_0` lu par adresse
+    (`tables::held16`). Oscillation du dragon 0x8faa2 (`boss_13/bob_speeds`, fenêtres de quatre mots tous les deux
+    mots) et seuils 0x8f97a (`boss_13/stops`). Vitesses par table de `speeds.json` désignées par adresse
+    (`tables::speed16` : sinus du boss 15 0x1c67b6, poussée 0x1c6636, tables de vitesse des objets),
+    `tables::circle` (arc du boss 11). Réactions par `reaction_routine` (boss 11, 16, 19 ; 10, 17, 21 déjà) ;
+    aiguillages relatifs du boss 11 (0x8d5ca : lecture sans effet, D1 n'est pas un reste ; 0x8dbde..., 0x8ed7a,
+    0x8efa2) et du boss 19 (0x90ada) en `match` sur l'octet (outil `jt.py`, étendu à `dispatch0`).
+  * Lectures au-delà des tables gardées comme l'original (glitches d'origine, tables étendues) : `boss_11/give_up_masks`
+    (16 masques, l'index ajoute l'octet fort d'un D2 laissé par les tests de boîte : 0x4008 octets, observé jusqu'à
+    0x288), `boss_22/counter_chances` (cinq longs, lus par lignes de 16 octets : code lu à partir de deux joueurs),
+    `boss_13/stops` (quatre seuils puis le code, 48 mots).
+  * (c) Champs : un `record!` par boss (`Boss10`, `Boss11` et `Ring`, `Boss15`, `Boss16`, `Boss17`, `Boss18`,
+    `Boss19`, `Boss21`, `Boss22`, `Dragon` et `Leader`) ; le gabarit `Boss` `+0xa0..+0xbd` pour 10, 17, 18 et 21
+    (`Boss::TIMER2` remplace leurs `COUNT`, `Boss::IDLE_COUNT` leurs `APPROACH`) ; `Boss::WEAK_ELEMENT` /
+    `RESISTED_ELEMENT` (`+0x9e/+0x9f`, `combat::damage`). Objets créés par les champs des autres lots : `ShotB::HOST`,
+    `Shot32`, `Shot33` (tirs ESHL 0x20/0x21), `Base::SETTING`, `Enemy::CREATOR`, `Message::DONE`, `Player::…`
+    (`SPELL_FROZEN`, `HELD`, `TIMER_6F`, `SUBACTION`, `SLOW`, `CARRY`, `AURA`, `HOLY`, `SPELL_CANCELLED`). Variables
+    (`boss_common::vars`) : `INPUT_MASK` `A5+0x43`, `BLINK_SUSPENDED`, `NO_WALK_IN`, `NO_VICTORY`, `LANDING_CUE`
+    `A5+0x500`, `ALT_CAMERA_EDGES` `A5+0xa`, `END_COUNTDOWN` `A5-0x713a`, `SCENE_SEQUENCE` `A5-0x55c8`,
+    `RANK_HIGH` (octet fort de `RANK`, lu comme un octet par le boss 11), réexports `DISPLAY_PANELS`,
+    `SCROLL_Y_PLANE1` ; aucune ne masque une variable d'`enemy_common::vars` (vérifié nom par nom). Joueurs par
+    `ram::PLAYERS`, caméra par `ram::camera`, places libres ESHL par `pools::ESHL.free_count`.
+  * `boss_common` : `set_abs8` et `A5_DEATH` retirés (relevé de la défaite par `record_defeat`, ou `var::DEFEAT_*` /
+    `DEFEAT_NAME_WORD` quand le premier octet n'est pas 0) ; `leader` et `scroll_x` déplacés dans `boss_dragon.rs`,
+    leur seul utilisateur.
+  * Outils (`tools/boss_refactor/`) : `self_fields.py` (champs propres du boss et des objets créés, sans prendre
+    `x.set8(off, 0)` pour un décalage, fichier `SPEC` des noms par receveur), `a5vars.py` (variables A5, `set_abs8`),
+    `jt.py` (aussi `dispatch0`), `check_tables.py` (tables lues par adresse).
+  * Mesures (`measure_end.py`, zone `bosses`, depuis L9a) : 86 → 86 fichiers, 30 844 → 30 965 lignes, accesseurs ROM
+    107 → 0, décalages littéraux 1 899 → 0, `A5 + littéral` 107 → 0, constantes d'adresses ROM 58 → 0, `rd*`/`wr*`
+    127 → 9 (chaîne du boss 11 passée par les champs `Ring` ; restent : colonne ESHL 0x47, cible du boss 11, le mot
+    relu à `A0 - 0x7f92` des boss 11 et 19, palette du boss 22, contrôle vidéo du boss 9), plus gros fichier 776.
+  * Fuzz (mêmes graines que main) : `fuzz_boss` (bot_char0 4500/60, boss11_scene42 3000/40 graine 7, boss17_scene13
+    3000/40 graine 3, `DDSOM_ETATS=1`) VALIDE, sorties identiques à main ; `fuzz_enemy families` (kobold_scene7
+    3000/40) : sortie identique à main (mêmes paniques d'états tirés hors contrat).
+  * Validation : voir « Validation L9b » ci-dessous.
+* Validation L9b : (à compléter par la validation finale)
+* Pour L12 et la suite : toute la zone `bosses` est à 0 (accesseurs, décalages, `A5`, constantes) ; les tables des
+  boss sont lues par nom (`boss_common::{byte, word, long, per_rank, decide, jump_target}`) sauf celles désignées
+  par une adresse rangée en ROM (`tables::held16`, `tables::speed16`, `tables::reactions`) ; les décisions
+  gardent comme clé l'adresse du talon d'état (`match` sur `decide(...)`), à transformer en index si L13 traite les
+  tables d'aiguillage ; `Boss`/`Enemy`/`Player` portent les champs communs, les vues de tirs (`Shot32`, `Shot33`,
+  `ShotB`) restent dans `eshl_b`.
 
 **L10. Joueurs** (grand) — **fait** (branche `wt-l10-joueurs`, voir « Résultat »)
 * Périmètre : `player/`, `families/player/`, `combat/`, `combat.rs`.

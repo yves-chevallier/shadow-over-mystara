@@ -510,3 +510,20 @@ Les deux cas apparaissent dans le résidu de la validation (une lecture chacun) 
   `boss_3::body::push` prend désormais la forme (1 ou 2). Une forme 3 et au-delà (jamais posée : `push_players` ne
   pose que 1 et 2) ferait sauter l'original dans le code qui suit (0x88ad4) : `bad_index`, comme l'`unreachable!` qui
   précédait.
+
+## Lot L9b (boss 10 à 22, dragon ; wt-l9b-boss)
+
+Aucun comportement du jeu retiré. Seuls des restes du port, sans effet, sont supprimés :
+
+* **Lectures d'aiguillage sans effet du boss 11** : `run` (0x8d5ca) et `dispatch` relisaient l'entrée de la table
+  relative pour la ranger dans D1 (`setw(x, 1, …)`), mais D1 n'est pas un reste relu (`dispatch::Leftovers` : D2 à
+  D5) : l'écriture ne faisait rien, la lecture est retirée ; les aiguillages deviennent des `match` sur l'octet d'état
+  (`jt.py`). Un index hors table tombe comme avant dans le bras `_`.
+* **Tables relatives à une seule cible utile** : boss 11, orientation des anneaux (0x8ed7a : l'entrée 0 fixe les
+  angles, les autres entrées lisibles mènent hors du code des poses ; les lignes n'emploient que 1) et poses
+  (0x8efa2, entrée 7 = 0x9031e, hors code) ; boss 19, tremblement (0x90ada, quatre entrées pour `t & 3`) : `match`
+  sur l'index, le cas hors table gardant le bras `_` d'avant. Nature : aiguillage de l'original.
+* **Lectures au-delà des tables gardées** (pas du code mort, glitches d'origine) : `boss_11/give_up_masks`,
+  `boss_22/counter_chances`, `boss_13/stops` sont extraites avec le code qui les suit, que l'original lit comme
+  des données ([fin.md](fin.md), « Résultat L9b »).
+

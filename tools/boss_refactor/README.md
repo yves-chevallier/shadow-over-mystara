@@ -14,3 +14,11 @@ aucune valeur : ils remplacent un littéral par un nom de même valeur. Lancer `
   le programme déchiffré (`PROG_DEC`, par défaut `/home/ycr/som/prog_dec.bin`) ; un bras qui reçoit l'adresse (`t =>`)
   est à reprendre à la main.
 * `check_tables.py` : tables lues mais non déclarées dans `extract/src/bosses.rs`, et l'inverse.
+* `[TEMPLATE=1] [SPEC=spec.py] self_fields.py apply FICHIERS` (lot L9b) : comme `common_fields.py`, mais seulement
+  pour le receveur `x` (le boss) et sans prendre `x.set8(off, 0)` pour un décalage ; les autres receveurs prennent
+  les champs communs d'`Obj` ; `SPEC = {(receveur, décalage, largeur): nom}` pour le reste (`("x", 0xb2, 8)`,
+  `("shot", 0x58, 8)`...). Attention : un même nom de receveur peut désigner deux types d'objets (`shot` : ESHL 0x20
+  ou 0x21), à corriger à la main.
+* `a5vars.py apply FICHIERS` (lot L9b) : `x.a5_u8(0x50)`, `x.set_a5_u16(0x51e, v)`, `set_abs8(x, 0xff8043, v)` vers
+  les variables nommées de `boss_common::vars` (table `VARS` du script, à la largeur de la variable).
+

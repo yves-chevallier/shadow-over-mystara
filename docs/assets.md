@@ -874,8 +874,10 @@ relevées mais non extraites :
 
 | Domaine | Adresse | Structure | Consommateur |
 |---|---|---|---|
-| Chef 11 (chaîne) | `0x1069f8`, `0x106cb8`... | lignes de 32 octets par pose `+0xaa`, trajectoires (pointeurs puis tables de 0x100 octets par orientation) ; suit la région `reactions` de `combat.json`, fin non mesurée | `families/boss_11/chain.rs` |
 | Objets | `0xda398` | 12 adresses par personnage (suit la table `loot`) | `families/items.rs` |
+
+La chaîne du chef 11 (`0x1069f8`, `0x106cb8`...) est extraite depuis le lot L9b (`data/enemies.json`,
+`boss_11/rows`, `boss_11/paths`, `boss_11/paths/*`, `boss_11/rises/*` ; [fin.md](fin.md), « Résultat L9b »).
 
 ## Palettes des scènes : `scene_palettes.json`
 
