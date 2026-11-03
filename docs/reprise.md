@@ -156,7 +156,6 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    `PlayerFields` de L6 et `Prey` de L8b fusionnées), vues `Shot` et `Victim` des tirs et effets : zone `players` à
    0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral` ; restent 141 constantes d'adresses de tables lues par
    adresse.
-||||||| Stash base
 9. **Lot L11 (écrans)** fait (branche `wt-l11-ecrans`, [fin.md](fin.md) « L11 », « Résultat ») : `modes/`, `hud/`,
    `service/`, `scene/`, crédits, textes et bulles sans accesseur ROM, sans constante d'adresse ROM, sans décalage
    littéral ni `A5 + littéral`, 3 `rd*`/`wr*` bruts (contre 1 637) ; nouvelle couche `hw/` (`hw::video`, `hw::io`),
@@ -170,6 +169,16 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    la nôtre (verrou posé par `0xc9d16` en `0xc9d5c`) ; scénario `scenarios/modes/name_entry_overflow.txt` VALIDE,
    validation à 309 scénarios. Aucune option `DDSOM_*` ajoutée (décision de l'utilisateur si l'on veut reproduire le
    bug).
+
+11. **Lot L12 (moteur et communs des familles)** fait (branche `wt-l12-moteur`, [fin.md](fin.md) « L12 »,
+   « Résultat ») : `ai_aids/` et `camera_modes/` découpés ; nouveau `data/engine.json` et `GameData` charge aussi
+   `levels.json`, `terrain.json`, `scene_palettes.json`, `palettes.png`, `rest.json`, `boxes.json` (**réextraire les
+   assets**) ; `crate::tables` (`Table`, `Tables`, `engine()`, `engine_table!`, `boxes()`) ; `Enemy` dans
+   `objects/enemy.rs`, champs communs dans `Obj`, `scroll::Camera`, variables partagées dans `ram.rs`. Zone du lot
+   sans accesseur ROM, sans décalage littéral ni `A5 + littéral`, 11 `rd*`/`wr*`. Pour la série 5 : L13 (`dispatch`,
+   `tasks/game` lisent encore la ROM : `Machine::prog16`), L14 (le jeu sans image ROM : seul le résidu lit encore le
+   bus), L15 (`World`, couches : `tables` et `objects` sont de la couche monde, `ai_aids`/`effects_aids` dépendent
+   encore de `families`).
 
 ## Méthode qui marche
 

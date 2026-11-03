@@ -1125,7 +1125,8 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
 
 ### Vague 4
 
-**L12. Moteur et communs des familles** (moyen, seul, car il touche les API communes)
+**L12. Moteur et communs des familles** (moyen, seul, car il touche les API communes) — **fait** (branche
+`wt-l12-moteur`, voir « Résultat »)
 * Périmètre : `objects/`, `ai.rs`, `ai_aids.rs` (1 431 lignes), `aids.rs`, `effects_aids.rs`, `terrain.rs`,
   `scroll.rs`, `camera_modes.rs` (1 605), `palette.rs`, `video.rs`, `sprites.rs`, `placement.rs`, `events.rs`,
   `families/{cx,mod,small,creators}.rs`.
@@ -1136,6 +1137,63 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
   * `camera_modes.rs` passe sur `Cx` et `Machine` au lieu de sa copie d'accesseurs ;
   * les 4 `alloc` se réduisent à `objects/pools.rs` plus `Current::alloc` ;
   * `random` se réduit à `rng.rs`.
+* Résultat :
+  * (a) Découpage (79f257a) : `ai_aids.rs` en `ai_aids/` (`mod` : animations par clé, paliers de PV, atterrissage ;
+    `hitbox` : posture, boîte devant un adversaire et restes de registres ; `walk` : points de marche ; `grabs` :
+    attaques sur les joueurs, saisies, poussées ; `draws` : tirages par ligne, parades, compte à rebours ; `loot` :
+    débris et butin) ; `camera_modes.rs` en `camera_modes/` (`mod` : initialisation et mise à jour ; `follow`,
+    `stage`, `modes`, `camera2`). `examples/names` identique ; 309/309 VALID (mode par défaut).
+  * (b) Données : **nouveau `data/engine.json`** (`extract/src/engine.rs`, constructeur de tables de `set.rs` :
+    tables d'adresses et tables désignées, étendue automatique ; 402 tables : `ai/*`, `aids/directions`,
+    `placement/*`, `scroll/*`, `camera/*`, `camera2/*`, `video/*`, `sprites/*`, `small/*`, `creators/*`,
+    `rank/presets`, `palette/from_zero`, `ai/hp_thresholds`), test `engine_lossless`, `to_data` étendu. `GameData`
+    charge aussi `levels.json`, `terrain.json`, `scene_palettes.json`, `palettes.png` (`ddsom_data::Palettes`, crate
+    `png` dans `ddsom-data`), `data/rest.json` et `data/boxes.json` (**23 fichiers**). Lecture par `crate::tables`
+    (nouveau) : `Table` (déplacée d'`enemy_common::tables`, qui la réutilise) et `Tables` (par nom, et par adresse dans
+    des plages d'octets fusionnées) ; `tables::engine()` réunit `engine.json`, `enemies.json`, `scenes.json`,
+    `rest.json` par nom et, par adresse, les cartes des décors, les cartes et types de terrain, les tables des
+    palettes de scène, la bibliothèque de palettes, les boîtes de collision et les textes (`texts.json`, dialogues) ;
+    `engine_table!("nom")` résout une table une fois par site d'appel. Les aides à la visée (`ai_aids`), les scrolls
+    et les chargeurs de grilles (cartes de `levels.json` lues comme l'original les adresse), les caméras (tables par
+    scène de `scenes.json`), les palettes, les sprites (boîtes de visibilité, marques au sol, ombres = boîtes de
+    collision typées, textes), la visibilité (`cull`), le terrain, le rang, les événements, les créateurs ne lisent
+    plus la ROM. Lectures hors des tables de l'original nommées ([code-mort.md](code-mort.md), « Lot L12 ») ; résidu
+    0 pour la zone (restent les clés de L1 et `damage_crit_row` de L10).
+  * (c) Champs et variables : `Enemy` déplacée dans `objects/enemy.rs` (couche monde) et complétée (paramètres d'IA
+    `AI_GOAL_X/Y`, `AI_LAST_POINT`, `AI_BEHAVIOUR`, `AI_OFFSCREEN`, `AI_DRAW_85`, `ONCE_*`, `HIT_BY`, `ANIM_MASTER`) :
+    `ai::f`, `ai_aids::f`/`g` supprimés ; `Obj` porte les champs communs (`FLIP`, `TERRAIN`, `OWN_PALETTE`,
+    `PALETTE`, `BOX_SET`, `SETTING`, `BODY_BOX`, `PUSH_BOX`, `ATTACK_BOX`, `GROUND_MARK`, `BOUNDS`, `PRIORITY`,
+    `ARG`, `OWNER`, `TIED`, `ATTACHED_A/B`) ; `scroll::Camera` (`record!` des deux caméras, champs de `scroll::cam` et
+    de `camera_modes::f` réunis) ; vues locales nommées pour les objets créés (`ai_aids::Debris`, `Treasure`,
+    `effects_aids::Created`, `Census`, `small::Spawn`). Variables partagées dans `ram.rs` (`SHAKE`, `CAMERA1_X/Y`,
+    `CAMERA2_X/Y`, `LEVEL`, `LEVEL_ROW`, `SCENE_LEVEL`, `STAGE_CLOCK`, `CUTSCENE`, `PLAYERS_FROZEN`, `INPUT_MASK`,
+    `LEADER`, `PHASE_LONG`, `CABINET_PLAYERS`, `GAME_OVER_DELAY`), réexportées par les `vars` des familles qui les
+    déclaraient en double ; `video::VIDEO_CONTROL`, `LAYER_ENABLE`, `OBJECT_BANK`. Vidéo par `hw::video` (`Vram`,
+    `Cell`, `palette`, `regs`, nouveaux `ROW_SCROLL_OFFSET` et `OBJECT_BANK`).
+  * Factorisation : `camera_modes` sur `Cx<()>` (`Machine`, `Current::alloc`/`move_z`, champs de `Camera`) au lieu
+    de sa copie d'accesseurs ; `alloc` d'`ai_aids` remplacé par `Pool::alloc` ; tirages par `rng`. `Cx` passe par
+    `Obj` et `ram::{Byte, Word, Long}` ; ses accesseurs de ROM et `Machine::prog8/prog32/data*` sont retirés.
+  * Restes des autres lots : `Victim` (joueurs) fusionnée dans `Enemy`, `Leader` (dragon) dans `Player::STEP_X`,
+    `Host::LIFE/LIFE_MAX` remplacés par `Enemy::HP/HP_MAX` ; `SetObj::PARAM/ARG/OWNER` et `WindowEffect::WINDOW`
+    déclarés sur les champs communs d'`Obj` (`SETTING`, `ARG`, `OWNER`, `TIED`) ; les 16 extraits de la
+    bibliothèque de palettes d'`effects.json` et d'`objects.json` sont lus dans `palettes.png`
+    (`palette::library_excerpt!`) et retirés de ces fichiers ; les fiches, le butin et l'usure des caisses ne sont
+    plus que dans `data/boxes.json` (retirés d'`objects.json`) ; clés du résidu de L1 documentées. Non faits : les
+    141 constantes d'adresses de tables de la zone des joueurs et les lectures par adresse `held16`/`speed16`/
+    `reactions`/`screens::tables::Rom` (L13/L14 : il faut d'abord savoir quelles adresses restent des clés d'état).
+  * Mesures (`measure_end.py`, fichiers du lot : 24 → 35 fichiers, 10 346 → 10 844 lignes) : accesseurs ROM 58 → 0,
+    décalages littéraux 194 → 0, `A5 + littéral` 73 → 0, `rd*`/`wr*` 815 → 11 (les accesseurs primitifs d'`Obj` et
+    le repli sur le bus des lectures de RAM de `tables`), constantes d'adresses ROM 114 → 10 (des décalages A5 et des
+    adresses de RAM que le script compte, plus l'adresse `0xff1190` du tampon des éclairs), plus gros fichier 1 605 →
+    829 (`scroll.rs`). Tout le jeu : accesseurs ROM 76 → 13 (hors zone : `config`, `mem`, `data`, `dispatch`,
+    `tasks/game`), décalages littéraux 194 → 0, `A5 + littéral` 76 → 3, `rd*`/`wr*` 2 312 → 1 505, constantes
+    d'adresses ROM 518 → 414, fichiers de plus de 1 500 lignes 1 → 0, plus gros fichier 916 lignes
+    (`player/spawn.rs`).
+  * `render_check` identique au code d'avant le lot (d1ea264) sur attract, bot30k, boss10_scene65, cov_4p_a (4 000
+    images, avec les ROMs et avec `DDSOM_ASSETS`) ; `mame_snapshots` réussi. `bench` bot30k 12 000 images (meilleur de
+    3, en alternance avec d1ea264) : sans rendu 19 567 images/s (base 19 408), avec rendu 3 887 (base 3 857), même
+    empreinte `a65ecd8aa6e38d4f`.
+  * Validation : VALIDATION_A_COMPLETER.
 
 ### Série 5 (un agent, transverse)
 

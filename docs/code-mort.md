@@ -527,3 +527,44 @@ Aucun comportement du jeu retiré. Seuls des restes du port, sans effet, sont su
   `boss_22/counter_chances`, `boss_13/stops` sont extraites avec le code qui les suit, que l'original lit comme
   des données ([fin.md](fin.md), « Résultat L9b »).
 
+
+## Lot L12 (moteur et communs des familles ; wt-l12-moteur)
+
+Aucun comportement du jeu retiré. Restes du port supprimés :
+
+* **Accesseurs de ROM sans appelant** : `Cx::data8/16/32`, `rom8/16`, `rom_i16`, `ram8`, `set_ram8` et
+  `Machine::prog8/prog32/data8/16/32` (plus aucun lecteur ; les données passent par les tables typées). Restent
+  `Machine::prog16` (table des phases de `tasks::game`, lot L13) et les lectures du résidu (`Missing::pc_*`).
+* **Constantes d'adresses de routines sans lecteur** : `families::cx::sub` (0x24a8, 0x24b0) et `families::rom`
+  (0xfbae, 0x33fe4).
+* **Copies locales** : `alloc` d'`ai_aids` et de `camera_modes` (désormais `Pool::alloc` et `Current::alloc`),
+  accesseurs `u8/set8/add16…` et `rom16/data32` de `camera_modes::Cam` (le contexte est un `Cx` : champs de
+  `scroll::Camera`), `prog8` local d'`ai_aids`, champs `ai::f`, `ai_aids::f`/`g` (vue `Enemy`).
+
+Lectures de l'original hors des tables, désormais **nommées** dans `data/engine.json` (glitches d'origine gardés) :
+
+* **Palettes depuis l'adresse 0** (`palette/from_zero`, 0x0-0x400) : une entrée nulle des pages de palettes d'une
+  scène fait copier à l'original 32 palettes depuis l'adresse 0 (vecteurs de reset et début du programme).
+* **Réglages du rang** (`rank/presets`, 9 lignes) : la table a 6 lignes (0x1f1d8-0x1f238) ; un numéro de ligne
+  `A5+0x2a` au-delà de 5 lit les octets du code qui suit (relevé par les scénarios jusqu'à 0x1f25e).
+* **Seuils de PV** (`ai/hp_thresholds`, 16 blocs de 0x100 octets) : une phase au-delà de la deuxième lit le bloc
+  suivant (celui d'un autre ennemi), comme l'original ; les familles passent un numéro de bloc.
+* **Boîtes de visibilité et marques au sol au-delà des tables** (`sprites/bounds_beyond`, `sprites/marks_beyond`) :
+  un octet d'index au-delà des 128 boîtes et des 97 marques de `sprites/tables.json` lit les octets qui suivent (code
+  compris) ; relevé : marques 112 et 224, boîte 158.
+* **Grilles de la couche 2 hors des cartes** (`video/scroll2_grids`, `video/scroll2_tail`) : les chargeurs de blocs
+  lisent des grilles que nulle carte de scène n'emploie (fonds des écrans), au-delà des bandes de `levels.json`.
+* **Textes des sprites** (`sprites/texts@…`) : chaînes affichées en sprites, relevées par lecteur (`native_zones.txt`).
+
+Clés du résidu restantes (toutes antérieures à L12, comptées par `validate`, aucune du moteur) :
+
+* `anim entry` 0x1af22c, 0x1af354, 0x1af49a, 0x1b1fc2, 0x1b21c2, 0x1b21c3, 0x1b21c6, 0x1b21f6, 0x1bf902 et
+  `anim set` 0x1b21c2, 0x1b670a, 0x1bf8fe : scripts d'animation incohérents de l'original (un pointeur d'animation
+  pris dans des données qui ne sont pas des entrées ; leurs « images » ne sont pas des images) ; lot L1 ;
+* `frame` 0x32003200, 0xb200b30, 0xb400b50, 0x23002310, 0x2ab02ac0, 0x7c0208 : pointeurs d'image formés de mots de
+  tuiles par ces mêmes entrées incohérentes (l'image n'est jamais une vraie image) ; lot L1 ;
+* `speed table` 0x0 : un objet sans table de vitesses lit la table 0 ; lot L1 ;
+* `damage_crit_row` 0x3c84 : ligne de critiques lue au-delà de sa table (zone des joueurs, lot L10).
+
+Ces lectures sont des glitches d'origine qu'aucune table ne décrit (adresses arbitraires) : elles restent comptées
+par le résidu (fatales avec `DDSOM_STRICT=1`), lues sur le bus en mode ROM et dans `reste.json` sans ROM.
