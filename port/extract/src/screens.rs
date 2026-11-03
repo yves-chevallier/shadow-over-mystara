@@ -118,6 +118,11 @@ fn scenes(t: &mut Tables) {
     // scenes past the tables of `scenes.json` (the demonstration scenes 109 to 114 read one entry further)
     t.data("shop_of_scene_tail", 0xf7b2a, "u8", Some(0x18));
     t.prog("exit_sequence_tail", 0xf31de, "u8", Some(0xc));
+    // the shop's exit message lists and bytes read past its tables (data space)
+    t.data("shop_exit_message_lists", 0xf7c30, "u8", Some(0xf7d5e - 0xf7c30));
+    t.data("shop_tail", 0xf7e5c, "u8", Some(0xf7e92 - 0xf7e5c));
+    // waits of the boss intermission by the number of players (PC-relative words)
+    t.prog("intermission_waits", 0x21c94, "u16", Some(5));
     // transitions (`transition/`): answers of the questions, scrolling texts, remaining-time prizes
     for at in [0xf847c, 0xf92e4, 0xf932e, 0xf937a, 0xf99e2] {
         t.prog(&format!("transition_answers@{at:#x}"), at, "u8", None);
