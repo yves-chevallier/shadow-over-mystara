@@ -104,7 +104,7 @@ mod ice {
                     // Original glitch: `andi.b #0xf,D0` then index D0.w: the high byte of the draw enters the delay
                     // index
                     let index = (w & 0xff00 | w & 0xf) as i16 as i32 as u32;
-                    let delay = player_data().ice_delays.at8(x.b, index);
+                    let delay = player_data().ice_delays.byte_past(x.b, index);
                     x.set8(TIMER, delay);
                 }
                 bounce(x);

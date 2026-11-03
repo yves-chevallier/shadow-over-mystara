@@ -14,7 +14,7 @@ use cps2::Cps2Bus;
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
-use crate::player::tables::{player_data, byte, long, Aligned, Read};
+use crate::player::tables::{player_data, byte, long, Aligned};
 
 mod tables {
     /// By attacker class (pointers) then victim type (pointers): reaction rows.
@@ -76,9 +76,9 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     let rows = long(g.b, per_kind + 4 * kind);
     // stun threshold: two table levels for victims that are not enemies
     let slot = (kind * 8 + ((ram::TICK.get(g.b) as u32 & 0x1c) >> 2)) & 0xffff;
-    let mut threshold = player_data().hit_reactions_threshold_enemy.at8(g.b, slot) as u32;
+    let mut threshold = player_data().hit_reactions_threshold_enemy.byte_past(g.b, slot) as u32;
     if !is_enemy {
-        threshold = player_data().hit_reactions_threshold_other.at8(g.b, (slot & 0xff00) | threshold) as u32;
+        threshold = player_data().hit_reactions_threshold_other.byte_past(g.b, (slot & 0xff00) | threshold) as u32;
     }
     let threshold = threshold as u8 as i8;
     let row = |g: &mut Ctx, n: u32| byte(g.b, rows + blow + n);
@@ -161,7 +161,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     }
     let tick = (ram::TICK.get(g.b) & 0x1e) * 2;
     let offset = (((chance - 1) as u16) << 10).wrapping_add(tick);
-    let mask = player_data().hit_reactions_stun_masks.word_at(g.b, offset as i16 as i32 as u32) as u32;
+    let mask = player_data().hit_reactions_stun_masks.word_past(g.b, offset as i16 as i32 as u32) as u32;
     let roll = (g.random() & 0x1f) as u32;
     if mask >> roll & 1 != 0 {
         set_stun_time(g, v);
@@ -176,7 +176,7 @@ fn set_stun_time(g: &mut Ctx, v: u32) {
     let tick = ram::TICK.get(g.b) << 4;
     let roll = g.random() & 0xf;
     let index = timer.wrapping_add(tick).wrapping_add(roll);
-    let time = player_data().hit_reactions_stun_times.at8(g.b, index as i16 as i32 as u32);
+    let time = player_data().hit_reactions_stun_times.byte_past(g.b, index as i16 as i32 as u32);
     wr8(g.b, v + f::STUN_TIME, time);
 }
 

@@ -102,9 +102,9 @@ mod shop {
             }
         }
         let index = (scene as u16).wrapping_sub(FIRST_SCENE).wrapping_mul(4) as i16 as u32;
-        let a = player_data().shop_scripts_a.long_at(x.b, index);
+        let a = player_data().shop_scripts_a.long_past(x.b, index);
         x.set32(Obj::VY, a);
-        let b = player_data().shop_scripts_b.long_at(x.b, index);
+        let b = player_data().shop_scripts_b.long_past(x.b, index);
         x.set32(SCRIPT_B, b);
         let variant = x.u8(Obj::VARIANT) as u32;
         x.anim(ANIMS.0, variant);

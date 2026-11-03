@@ -97,6 +97,9 @@ tables! {
     hail_speed_tables: prog 4 @ 0x4baf6;
     /// `peff_e`: Ice delays (h).
     ice_delays: prog 1 @ 0x4bd98;
+    /// `peff_e`: The code bytes around `ice_delays` that its index reaches (original glitch: the high byte of the
+    /// random draw enters the index, -0x8000..0x7f0f).
+    ice_delays_reach: prog 1 @ 0x43d98 .. 0x53ca8;
     /// `peff_e`: Bounce angle bytes (up, down, left, right...).
     ice_bounce_left: data 1 @ 0x4be70;
     /// `peff_e`: Ice bounce right (h).
@@ -248,9 +251,9 @@ tables! {
     /// `hit_reactions`: By attacker class (address, in the code): table of stagger chances according to the hit.
     hit_reactions_stun_class: prog 4 @ 0xf1cac;
     /// `hit_reactions`: 16-bit masks: a draw of 0..15 succeeds if its bit is set.
-    hit_reactions_stun_masks: data 2 @ 0xf1d2e;
+    hit_reactions_stun_masks: data 2 @ 0xf1d2e .. 0xf1f2e;
     /// `hit_reactions`: Stagger durations.
-    hit_reactions_stun_times: data 1 @ 0xf1f2e;
+    hit_reactions_stun_times: data 1 @ 0xf1f2e .. 0xf24fe;
     /// `hit_reactions`: Stun thresholds: 8 bytes per victim type, one per eighth of the random counter.
     hit_reactions_threshold_enemy: data 1 @ 0xf24fe;
     /// `hit_reactions`: Second table, indexed by the threshold of the first, for victims that are not enemies.
@@ -644,5 +647,5 @@ tables! {
     /// `spawn`: Shots of a star row of the wand, by level.
     rod_star_counts: prog 1 @ 0x5367c;
     /// `combos`: Code of the gate variants, whose `move.l` immediates (three longs at +0x16, +0x1a, +0x1e of each variant) are read as data.
-    combo_gates: prog 2 @ 0xf19c2 .. 0xf1b22;
+    combo_gates: prog 2 @ 0xf19c2 .. 0xf1b26;
 }

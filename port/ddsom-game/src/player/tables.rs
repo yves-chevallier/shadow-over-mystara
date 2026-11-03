@@ -26,6 +26,26 @@ use crate::data::{data, Missing, RomAddr};
 /// tools (fuzz) and some glitches do.
 pub(crate) trait Aligned: Read {
     fn rom(&self) -> u32;
+    fn program(&self) -> bool;
+
+    /// Byte at offset `off`, read by address: an offset past the table (or negative) reads the tables that follow
+    /// (or precede) it, like the original.
+    fn byte_past(&self, b: &mut Cps2Bus, off: u32) -> u8 {
+        let a = self.rom().wrapping_add(off);
+        if self.program() { pc8(b, a) } else { byte(b, a) }
+    }
+
+    /// Word at offset `off`, read by address (see `byte_past`).
+    fn word_past(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+        let a = self.rom().wrapping_add(off);
+        if self.program() { pc16(b, a) } else { word(b, a) }
+    }
+
+    /// Long at offset `off`, read by address (see `byte_past`).
+    fn long_past(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+        let a = self.rom().wrapping_add(off);
+        if self.program() { pc32(b, a) } else { long(b, a) }
+    }
 
     /// Word at offset `off`, the address rounded down to even.
     fn word_at(&self, b: &mut Cps2Bus, off: u32) -> u16 {
@@ -41,6 +61,9 @@ pub(crate) trait Aligned: Read {
 impl Aligned for Table {
     fn rom(&self) -> u32 {
         self.rom
+    }
+    fn program(&self) -> bool {
+        self.program
     }
 }
 
