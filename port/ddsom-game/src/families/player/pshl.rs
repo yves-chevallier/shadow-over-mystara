@@ -15,7 +15,7 @@ use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, word, Read};
+use crate::player::tables::{player_data, word, Aligned, Read};
 
 const SFX_HIT_WALL: crate::sound::Sound = crate::sound::CMD_122_222;
 const SFX_LAND: crate::sound::Sound = crate::sound::CMD_123_223;
@@ -116,8 +116,8 @@ mod thrown {
                 let y = owner.u32(x.b, Obj::Y).wrapping_sub(1);
                 x.set32(Obj::Y, y);
                 let row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2 & 0xffff;
-                let dx = player_data().thrown_offsets.at16(x.b, row);
-                let dz = player_data().thrown_offsets.at16(x.b, row + 2);
+                let dx = player_data().thrown_offsets.word_at(x.b, row);
+                let dz = player_data().thrown_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
@@ -220,8 +220,8 @@ mod flung {
                     row += 4;
                 }
                 let row = row << 2;
-                let dx = player_data().flung_offsets.at16(x.b, row);
-                let dz = player_data().flung_offsets.at16(x.b, row + 2);
+                let dx = player_data().flung_offsets.word_at(x.b, row);
+                let dz = player_data().flung_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
@@ -305,8 +305,8 @@ mod arc {
                 x.set16(Obj::VZ, 0x300);
                 x.set16(Obj::AZ, -0x38i16 as u16);
                 let row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2 & 0xffff;
-                let dx = player_data().arc_offsets.at16(x.b, row);
-                let dz = player_data().arc_offsets.at16(x.b, row + 2);
+                let dx = player_data().arc_offsets.word_at(x.b, row);
+                let dz = player_data().arc_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
@@ -398,8 +398,8 @@ mod bouncer {
                 x.set16(Obj::VZ, 0x800);
                 x.set16(Obj::AZ, -0x60i16 as u16);
                 let row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2 & 0xffff;
-                let dx = player_data().bouncer_offsets.at16(x.b, row);
-                let dz = player_data().bouncer_offsets.at16(x.b, row + 2);
+                let dx = player_data().bouncer_offsets.word_at(x.b, row);
+                let dz = player_data().bouncer_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
@@ -562,7 +562,7 @@ mod burst {
         x.add8(Obj::STATE, 2);
         x.set8(f::BOX_SET, 6);
         let count = rd16(x.b, FLAMES) as u32;
-        let table = player_data().burst_offset_tables.at32(x.b, count << 2 & 0xffff);
+        let table = player_data().burst_offset_tables.long_at(x.b, count << 2 & 0xffff);
         let k = (x.u8(Shot::SETTING) as u32) << 2 & 0xffff;
         let dx = word(x.b, table + k);
         let dy = word(x.b, table + k + 2);

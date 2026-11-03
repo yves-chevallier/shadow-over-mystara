@@ -9,7 +9,7 @@ use super::peff_shop;
 use crate::mem::rd16;
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, word, Read};
+use crate::player::tables::{player_data, byte, word, Aligned};
 
 /// Type 44 (0x517dc): pellet placed on the secondary camera at a column offset (`+3`), animated by set `0x1bcbbe` (or
 /// `0x1bcd5a` in the alternate palette); it leaves when it exits the screen at the bottom.
@@ -35,7 +35,7 @@ mod badge {
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
         let variant = x.u8(Obj::VARIANT) as u32;
-        let column = player_data().badge_columns.at16(x.b, 2 * variant);
+        let column = player_data().badge_columns.word_at(x.b, 2 * variant);
         let cam_x = vars::CAM2_X.get(x.b);
         x.set16(Obj::X, column.wrapping_add(cam_x));
         let cam_y = vars::CAM2_Y.get(x.b);
@@ -102,9 +102,9 @@ mod shop {
             }
         }
         let index = (scene as u16).wrapping_sub(FIRST_SCENE).wrapping_mul(4) as i16 as u32;
-        let a = player_data().shop_scripts_a.at32(x.b, index);
+        let a = player_data().shop_scripts_a.long_at(x.b, index);
         x.set32(Obj::VY, a);
-        let b = player_data().shop_scripts_b.at32(x.b, index);
+        let b = player_data().shop_scripts_b.long_at(x.b, index);
         x.set32(SCRIPT_B, b);
         let variant = x.u8(Obj::VARIANT) as u32;
         x.anim(ANIMS, variant);

@@ -10,7 +10,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, Read};
+use crate::player::tables::{player_data, byte, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -73,9 +73,9 @@ mod orbit {
         x.set8(Obj::COUNTER_53, delay);
         x.set8(f::BOX_SET, 8);
         let row = v << 3;
-        let dx = player_data().orbit_offsets.at16(x.b, row);
-        let dz = player_data().orbit_offsets.at16(x.b, row + 2);
-        let dy = player_data().orbit_offsets.at16(x.b, row + 4);
+        let dx = player_data().orbit_offsets.word_at(x.b, row);
+        let dz = player_data().orbit_offsets.word_at(x.b, row + 2);
+        let dy = player_data().orbit_offsets.word_at(x.b, row + 4);
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, dy);
         let dx = signed(dx, x.u8(f::FLIP) != 0);

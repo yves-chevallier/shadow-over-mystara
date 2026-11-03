@@ -3,7 +3,7 @@
 use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
-use crate::player::tables::{players, Read};
+use crate::player::tables::{players, Aligned};
 
 // ---- healing (cleric, fighter's healing potion) -----------------------------------------------
 
@@ -66,7 +66,7 @@ pub fn heal_flicker(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, Player::SPELL_REPEAT, n);
     for i in 0..4 {
-        let v = players("heal_flicker").at32(g.b, 16 * n as u32 + 4 * i);
+        let v = players("heal_flicker").long_at(g.b, 16 * n as u32 + 4 * i);
         crate::mem::wr32(g.b, FLICKER_PALETTE + 4 * i, v);
     }
 }
@@ -79,7 +79,7 @@ pub fn apply_heal(g: &mut Ctx, p: Player) {
     cov!();
     let level2 = 2 * p.u8(g, Player::LEVEL) as u16;
     let kind = p.u8(g, field::SPECIAL_KIND);
-    let mut amount = if kind == 0x2c || kind == 0x2d { level2 } else { players("heal_amounts").at16(g.b, level2 as u32) };
+    let mut amount = if kind == 0x2c || kind == 0x2d { level2 } else { players("heal_amounts").word_at(g.b, level2 as u32) };
     let mut heal = |g: &mut Ctx, q: Player| {
         let sum = q.u16(g, Player::HP).wrapping_add(amount);
         let max = q.u16(g, Player::HP_MAX);

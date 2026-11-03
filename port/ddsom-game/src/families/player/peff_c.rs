@@ -10,7 +10,7 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, Read};
+use crate::player::tables::{player_data, byte, Aligned, Read};
 
 /// Type 2 (0x4a880): halo of the player who holds pose 0x18 (`+0x6a` of the player) as long as its animation runs (set
 /// 0x1b540c).
@@ -185,7 +185,7 @@ mod cure {
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         let r = (x.rand_and(7)) * 2;
-        let vz = player_data().cure_spark_vz.at16(x.b, r);
+        let vz = player_data().cure_spark_vz.word_at(x.b, r);
         x.set16(Obj::VZ, vz);
         x.set16(Obj::AZ, 0);
         let r = x.rand_and(7);
@@ -399,7 +399,7 @@ mod holy {
         let owner = x.linked(f::OWNER);
         let player = owner.u8(x.b, Player::LEVEL) as u32;
         let row = player_data().holy_script_by_player.at8(x.b, player) as u32;
-        let script = player_data().holy_scripts.at32(x.b, row);
+        let script = player_data().holy_scripts.long_at(x.b, row);
         x.set32(SCRIPT, script);
         x.set16(TIMER, 8);
         x.set8(DURATION, 0);
@@ -422,7 +422,7 @@ mod holy {
                 crate::sound::play(x.b, SFX_END, x.o);
             } else {
                 // the table designates the shake by its routine (0x2824, 0x2860, 0x289c)
-                let mode = crate::camera_modes::shake::of_routine(player_data().holy_shake_table.at32(x.b, command as u32));
+                let mode = crate::camera_modes::shake::of_routine(player_data().holy_shake_table.long_at(x.b, command as u32));
                 crate::camera_modes::start_shake(x.b, mode, duration as u16);
             }
         }

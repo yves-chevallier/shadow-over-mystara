@@ -14,7 +14,7 @@ use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned};
 
 /// Merchant message to display (word, A5 - 0x554e) and the two shop sounds (D0 unused: the message is read from RAM).
 const MESSAGE: u32 = A5 - 0x554e;
@@ -122,7 +122,7 @@ mod item {
         }
         x.add8(Obj::STATE, 2);
         for (k, off) in [ZONE, ZONE + 2, DEPTH, DEPTH + 2].into_iter().enumerate() {
-            let v = player_data().item_zone_sizes.at16(x.b, 2 * k as u32);
+            let v = player_data().item_zone_sizes.word_at(x.b, 2 * k as u32);
             x.set16(off, v);
         }
         if x.u8(STOCK) != 0 {
@@ -130,13 +130,13 @@ mod item {
             x.set8(STOCK, v);
         }
         let v = variant as u32;
-        let price = player_data().item_prices.at32(x.b, 4 * v);
+        let price = player_data().item_prices.long_at(x.b, 4 * v);
         x.set32(PRICE, price);
-        let message = player_data().item_messages.at16(x.b, 2 * v);
+        let message = player_data().item_messages.word_at(x.b, 2 * v);
         x.set16(OWN_MESSAGE, message);
-        let purchase = player_data().item_purchases.at16(x.b, 2 * v);
+        let purchase = player_data().item_purchases.word_at(x.b, 2 * v);
         x.set16(PURCHASE_INDEX, purchase);
-        let anim = player_data().item_animations.at16(x.b, 2 * v);
+        let anim = player_data().item_animations.word_at(x.b, 2 * v);
         let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT } else { ANIMS };
         x.anim_start(set, anim);
         x.reinsert();

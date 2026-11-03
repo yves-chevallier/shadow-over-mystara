@@ -17,7 +17,7 @@ use crate::mem::{wr16, wr8};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
-use crate::player::tables::{player_data, pc16, Read};
+use crate::player::tables::{player_data, pc16, Aligned};
 
 mod throws;
 pub use throws::*;
@@ -514,7 +514,7 @@ fn jump(g: &mut Ctx, p: Player, base: u32) {
 pub fn hurt_animation(g: &mut Ctx, p: Player, n: u16) {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let set = player_data().hurt_animations.at32(g.b, 4 * character);
+    let set = player_data().hurt_animations.long_at(g.b, 4 * character);
     let script = script_of(g.b, set, n);
     load_entry(g.b, p.obj(), script, true);
 }

@@ -12,7 +12,7 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned, Read};
 
 const SPEEDS: u32 = 0x1c89b6;
 
@@ -102,7 +102,7 @@ mod storm {
         let py = owner.u16(x.b, Obj::Y);
         x.set16(Obj::Y, py);
         let k = (x.u8(Shot::SETTING) as u32) << 3;
-        let (dx, dz, dy) = (player_data().storm_offsets_a.at16(x.b, k), player_data().storm_offsets_a.at16(x.b, k + 2), player_data().storm_offsets_a.at16(x.b, k + 4));
+        let (dx, dz, dy) = (player_data().storm_offsets_a.word_at(x.b, k), player_data().storm_offsets_a.word_at(x.b, k + 2), player_data().storm_offsets_a.word_at(x.b, k + 4));
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, dy);
@@ -238,7 +238,7 @@ mod storm {
         if x.u8(Shot::SUB_STATE) != 0 {
             let parent = x.linked(PARENT);
             let k = (x.u8(Shot::SETTING) as u32) << 2;
-            let (dx, dz) = (player_data().storm_offsets_b.at16(x.b, k), player_data().storm_offsets_b.at16(x.b, k + 2));
+            let (dx, dz) = (player_data().storm_offsets_b.word_at(x.b, k), player_data().storm_offsets_b.word_at(x.b, k + 2));
             x.set16(Obj::X, dx);
             x.set16(Obj::Z, dz);
             let (px, pz) = (parent.u16(x.b, Obj::X), parent.u16(x.b, Obj::Z));
@@ -272,7 +272,7 @@ mod storm {
         x.set8(Shot::SETTING, n);
         crate::sound::play(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
-        let (dx, dz) = (player_data().storm_offsets_b.at16(x.b, k), player_data().storm_offsets_b.at16(x.b, k + 2));
+        let (dx, dz) = (player_data().storm_offsets_b.word_at(x.b, k), player_data().storm_offsets_b.word_at(x.b, k + 2));
         x.set16(Obj::X, dx);
         x.set16(Obj::Z, dz);
         let parent = x.linked(PARENT);
@@ -357,8 +357,8 @@ mod whirl {
         let (mut dx, mut dz) = (-0x37i16 as u16, 0x4au16);
         if owner.u8(x.b, Player::SPECIAL_KIND) != 0x25 {
             let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-            dx = player_data().whirl_offsets.at16(x.b, row);
-            dz = player_data().whirl_offsets.at16(x.b, row + 2);
+            dx = player_data().whirl_offsets.word_at(x.b, row);
+            dz = player_data().whirl_offsets.word_at(x.b, row + 2);
         }
         *x.c.d2() = dz as u32;
         let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
@@ -529,8 +529,8 @@ mod target {
                 let owner = follow_owner(x);
                 x.add16(Obj::Y, 0xffff);
                 let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-                let dx = player_data().target_offsets.at16(x.b, row);
-                let dz = player_data().target_offsets.at16(x.b, row + 2);
+                let dx = player_data().target_offsets.word_at(x.b, row);
+                let dz = player_data().target_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if owner.u8(x.b, f::FLIP) != 0 {

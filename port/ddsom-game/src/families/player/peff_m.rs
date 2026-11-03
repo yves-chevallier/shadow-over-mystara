@@ -12,7 +12,7 @@ use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, long, Read};
+use crate::player::tables::{player_data, byte, long, Aligned};
 
 const SFX_BITE: crate::sound::Sound = crate::sound::CMD_16C;
 const ANIMS: u32 = 0x1bc346;
@@ -129,8 +129,8 @@ mod pet {
         x.set16(Obj::Z, pz);
         x.set8(Shot::BLOW_ID, step);
         let row = (step as u32) << 2;
-        let dx = player_data().peff_m_offsets.at16(x.b, row);
-        let dz = player_data().peff_m_offsets.at16(x.b, row + 2);
+        let dx = player_data().peff_m_offsets.word_at(x.b, row);
+        let dz = player_data().peff_m_offsets.word_at(x.b, row + 2);
         x.add16(Obj::Z, dz);
         let dx = signed(dx, x.u8(f::FLIP) != 0);
         x.add16(Obj::X, dx);

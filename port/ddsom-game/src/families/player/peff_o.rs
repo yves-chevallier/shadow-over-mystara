@@ -10,7 +10,7 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, word, Read};
+use crate::player::tables::{player_data, byte, word, Aligned};
 
 const ANIMS: u32 = 0x1c40c6;
 /// Position of the icon per player (X, Y): two versions according to `A5+0x20` (1: one-player screen).
@@ -117,7 +117,7 @@ mod coins {
         let rank = who.u8(x.b, Player::CHARACTER) as u32;
         let slot = player.0 + rank;
         let character = (player.u8(x.b, Player::CHARACTER) & 0xe) as u32;
-        let table = player_data().sell_tables.at32(x.b, character * 2);
+        let table = player_data().sell_tables.long_at(x.b, character * 2);
         let id = crate::mem::rd8(x.b, slot + 0x140) as u32;
         let code = byte(x.b, table + id);
         if code == 0 {

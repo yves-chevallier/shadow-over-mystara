@@ -14,7 +14,7 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::player::external as ext;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned};
 
 mod climb;
 pub use climb::*;
@@ -264,7 +264,7 @@ fn throw(g: &mut Ctx, p: Player) {
 fn put_down(g: &mut Ctx, p: Player, held: u32) {
     let at = 4 * p.class(g) as u32;
     let t = &player_data().put_down_offsets;
-    let (mut dx, dz) = (t.at16(g.b, at), t.at16(g.b, at + 2));
+    let (mut dx, dz) = (t.word_at(g.b, at), t.word_at(g.b, at + 2));
     if p.faces_left(g) {
         dx = dx.wrapping_neg();
     }

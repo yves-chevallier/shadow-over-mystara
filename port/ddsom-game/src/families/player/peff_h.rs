@@ -11,7 +11,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, pc16, byte, long, Read};
+use crate::player::tables::{player_data, pc16, byte, long, Aligned};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -207,7 +207,7 @@ mod strike {
                     x.set_bit(Obj::FLAGS, 1, true);
                     // Original glitch: the original re-reads `(0x168,A1)` with the A1 left by the dispatch loop, the
                     // address of the handler (0x4e038): a word of its code, and not the player
-                    let timer = player_data().lightning_code_word.at16(x.b, 0) & 1;
+                    let timer = player_data().lightning_code_word.word_at(x.b, 0) & 1;
                     if timer != 0 {
                         x.set_bit(Obj::FLAGS, 1, false);
                     }
@@ -329,8 +329,8 @@ mod ring {
                     x.add16(Obj::Z, dz);
                 } else {
                     let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-                    let dx = player_data().ring_offsets.at16(x.b, row);
-                    let dz = player_data().ring_offsets.at16(x.b, row + 2);
+                    let dx = player_data().ring_offsets.word_at(x.b, row);
+                    let dz = player_data().ring_offsets.word_at(x.b, row + 2);
                     let dx = signed(dx, x.u8(f::FLIP) != 0);
                     x.add16(Obj::X, dx);
                     x.add16(Obj::Z, dz);
@@ -410,10 +410,10 @@ mod moon {
                 x.add8(Obj::STATE, 2);
                 follow_owner(x);
                 let row = (x.u8(Obj::VARIANT) as u32) << 3;
-                let dx = player_data().moon_offsets.at16(x.b, row);
-                let dz = player_data().moon_offsets.at16(x.b, row + 2);
-                let dy = player_data().moon_offsets.at16(x.b, row + 4);
-                let dp = player_data().moon_offsets.at16(x.b, row + 6);
+                let dx = player_data().moon_offsets.word_at(x.b, row);
+                let dz = player_data().moon_offsets.word_at(x.b, row + 2);
+                let dy = player_data().moon_offsets.word_at(x.b, row + 4);
+                let dp = player_data().moon_offsets.word_at(x.b, row + 6);
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);

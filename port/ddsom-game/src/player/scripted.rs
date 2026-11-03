@@ -22,7 +22,7 @@ use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::player::external as ext;
-use crate::player::tables::{player_data, pc16, Read};
+use crate::player::tables::{player_data, pc16, Aligned};
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -138,7 +138,7 @@ pub fn update(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::SUB) {
         0 => {
             let scene = ram::SCENE.get(g.b) as u32;
-            let routine = player_data().scripted_by_scene.at32(g.b, 4 * scene);
+            let routine = player_data().scripted_by_scene.long_at(g.b, 4 * scene);
             run_at(g, p, routine);
             ACTORS.reinsert(g.b, p.obj());
         }
@@ -148,7 +148,7 @@ pub fn update(g: &mut Ctx, p: Player) {
         }
         8 => {
             let step = p.u8(g, Player::ACTION) as u32;
-            let routine = player_data().scripted_wait_steps.at32(g.b, step);
+            let routine = player_data().scripted_wait_steps.long_at(g.b, step);
             run_at(g, p, routine);
             if !throw_button(g, p) {
                 special_attack(g, p);
@@ -181,7 +181,7 @@ fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     if scene > LAST_END_SCENE {
         NO_END
     } else {
-        player_data().scripted_end_by_scene.at32(g.b, 4 * scene)
+        player_data().scripted_end_by_scene.long_at(g.b, 4 * scene)
     }
 }
 
@@ -257,7 +257,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
     if ram::SUB_STEP.get(g.b) == 6 {
         next_action(g, p);
         let k = p.u8(g, Player::RANK) as u32;
-        let delay = player_data().scripted_scene1_wait.at16(g.b, 2 * k);
+        let delay = player_data().scripted_scene1_wait.word_at(g.b, 2 * k);
         p.set_u16(g, Player::SCRIPT_TIMER, delay);
         crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     }
@@ -512,7 +512,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let flags = p.u8(g, Player::FLAGS) & !2;
     p.set_u8(g, Player::FLAGS, flags);
     let k = p.u8(g, Player::RANK) as u32;
-    let delay = player_data().scripted_wait_delays.at16(g.b, 2 * k);
+    let delay = player_data().scripted_wait_delays.word_at(g.b, 2 * k);
     p.set_u16(g, Player::SCRIPT_TIMER, delay);
     crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     animation::step(g, p);

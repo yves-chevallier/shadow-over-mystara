@@ -11,7 +11,7 @@ use super::pshell::*;
 use crate::families::effects_creators::leftovers::OnBench;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, word, Read};
+use crate::player::tables::{player_data, byte, word, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -68,7 +68,7 @@ mod trail {
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
         let player_row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2;
-        let records = player_data().trail_poses.at32(x.b, player_row);
+        let records = player_data().trail_poses.long_at(x.b, player_row);
         let row = (x.u8(Obj::VARIANT) as u32) << 3;
         let dx = word(x.b, records + row);
         let dz = word(x.b, records + row + 2);
@@ -139,8 +139,8 @@ mod bubble {
                 x.set16(Shot::Y_FRACTION, 0);
                 owner.set_u16(x.b, Player::Y_FRACTION, 0x8000);
                 let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-                let mut dx = player_data().bubble_offsets.at16(x.b, row);
-                let mut dz = player_data().bubble_offsets.at16(x.b, row + 2);
+                let mut dx = player_data().bubble_offsets.word_at(x.b, row);
+                let mut dz = player_data().bubble_offsets.word_at(x.b, row + 2);
                 if vars::SLOW_MODE.get(x.b) != 0 {
                     dz = dz.wrapping_sub(0x30);
                 }
@@ -266,13 +266,13 @@ mod flash {
         let k = x.u8(Shot::SETTING) as u32;
         *x.c.d3() = k;
         let row = k << 2;
-        let dx = player_data().flash_corners.at16(x.b, row);
-        let dz = player_data().flash_corners.at16(x.b, row + 2);
+        let dx = player_data().flash_corners.word_at(x.b, row);
+        let dz = player_data().flash_corners.word_at(x.b, row + 2);
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         let flip = player_data().flash_flips.at8(x.b, k);
         x.set8(f::FLIP, flip);
-        let delay = player_data().flash_delays.at16(x.b, 2 * k);
+        let delay = player_data().flash_delays.word_at(x.b, 2 * k);
         x.set16(DELAY, delay);
         let anim = if k > 1 { 2 } else { 1 };
         x.anim(ANIMS, anim);

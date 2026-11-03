@@ -11,7 +11,7 @@ use super::pshell::*;
 use crate::mem::{rd32, wr32};
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned};
 
 /// Palette window of the graphics RAM copied by the effects (8 longs).
 const PALETTE_WINDOW: u32 = 0x91c1e0;
@@ -184,8 +184,8 @@ mod lamp {
         x.add16(Obj::Z, 0x40);
         x.add16(Obj::Y, 0xffff);
         let row = (x.u8(Obj::FRAME_DATA_A) as u32) * 2;
-        let dx = player_data().lamp_offsets_x.at16(x.b, row);
-        let dz = player_data().lamp_offsets_z.at16(x.b, row);
+        let dx = player_data().lamp_offsets_x.word_at(x.b, row);
+        let dz = player_data().lamp_offsets_z.word_at(x.b, row);
         *x.c.d2() = dz as u32;
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);

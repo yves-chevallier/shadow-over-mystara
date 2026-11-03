@@ -17,7 +17,7 @@ use super::states::{action, main, state, sub, State};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8, A5};
 use crate::objects::pools;
-use crate::player::tables::{player_data, players, byte, long, Read};
+use crate::player::tables::{player_data, players, byte, long, Aligned, Read};
 
 /// Buttons (bits of `KEYS_*`).
 pub mod key {
@@ -296,7 +296,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
         return true;
     }
     let pick = (g.random() & 0xf) as u32;
-    let mask = player_data().curse_masks.at16(g.b, 2 * pick);
+    let mask = player_data().curse_masks.word_at(g.b, 2 * pick);
     let bit = g.random() & 0xf;
     if mask >> bit & 1 != 0 {
         if weapon != 0xe {

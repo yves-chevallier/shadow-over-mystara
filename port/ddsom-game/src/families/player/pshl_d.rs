@@ -13,7 +13,7 @@ use crate::mem::{rd16, wr16};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, players, Read};
+use crate::player::tables::{player_data, players, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -476,8 +476,8 @@ mod fireball {
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-                let mut dx = player_data().fireball_offsets.at16(x.b, row);
-                let dz = player_data().fireball_offsets.at16(x.b, row + 2);
+                let mut dx = player_data().fireball_offsets.word_at(x.b, row);
+                let dz = player_data().fireball_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 x.set16(Obj::VX, -0x500i16 as u16);
                 x.set16(Obj::AX, -0x40i16 as u16);
@@ -578,8 +578,8 @@ mod bolt {
                     x.add32(Obj::Y, 0xfffe_8000);
                 } else {
                     let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-                    let dx = player_data().bolt_offsets.at16(x.b, row);
-                    let dz = player_data().bolt_offsets.at16(x.b, row + 2);
+                    let dx = player_data().bolt_offsets.word_at(x.b, row);
+                    let dz = player_data().bolt_offsets.word_at(x.b, row + 2);
                     *x.c.d2() = dz as u32;
                     let dx = signed(dx, x.u8(f::FLIP) != 0);
                     *x.c.d3() = 0xfffe_8000;

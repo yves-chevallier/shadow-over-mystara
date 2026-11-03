@@ -9,7 +9,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -125,7 +125,7 @@ mod prayer {
             x.add16(Obj::Y, 2);
         }
         let class = owner.u8(x.b, Player::LEVEL) as u32;
-        let life = player_data().prayer_durations.at16(x.b, class * 2);
+        let life = player_data().prayer_durations.word_at(x.b, class * 2);
         x.set16(TIMER, life);
         x.anim(ANIMS, 0);
         x.reinsert();

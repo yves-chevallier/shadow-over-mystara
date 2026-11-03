@@ -12,7 +12,7 @@ use super::pshell::*;
 use crate::mem::{rd8, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, long, Read};
+use crate::player::tables::{player_data, byte, long, Aligned};
 
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
@@ -95,8 +95,8 @@ mod guardian {
         x.set32(Obj::VY, 0);
         let (mut vx, mut angle) = (-0x200i16 as u16, 0x18u8);
         let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-        let mut dx = player_data().peff_n_offsets.at16(x.b, row);
-        let dz = player_data().peff_n_offsets.at16(x.b, row + 2);
+        let mut dx = player_data().peff_n_offsets.word_at(x.b, row);
+        let dz = player_data().peff_n_offsets.word_at(x.b, row + 2);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         if flip != 0 {

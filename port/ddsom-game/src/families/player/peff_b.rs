@@ -9,7 +9,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, word, Read};
+use crate::player::tables::{player_data, word, Aligned};
 
 /// Type 11 (0x4b93c): hailstorm. The parent (variant 0) counts 0x70 frames while creating, every 8 frames, two
 /// hailstones (variant 1, directions 0 and 1); each hailstone circles around its starting position following a speed
@@ -102,7 +102,7 @@ mod hail {
     /// `0x4bae6`: speed table from `+0x58`.
     fn select_table<R: Bench>(x: &mut Cx<'_, R>) {
         let index = x.u8(TIMER) as u32;
-        let table = player_data().hail_speed_tables.at32(x.b, index);
+        let table = player_data().hail_speed_tables.long_at(x.b, index);
         x.set32(Obj::SPEED_TABLE, table);
     }
 
@@ -217,7 +217,7 @@ mod spark {
         let r = x.rand_mask(0x7f);
         x.add16(Obj::Z, r);
         let row = x.rand_mask(0x18) as u32;
-        let (vx, vz, az) = (player_data().spark_throws.at16(x.b, row), player_data().spark_throws.at16(x.b, row + 2), player_data().spark_throws.at16(x.b, row + 4));
+        let (vx, vz, az) = (player_data().spark_throws.word_at(x.b, row), player_data().spark_throws.word_at(x.b, row + 2), player_data().spark_throws.word_at(x.b, row + 4));
         x.set16(Obj::VX, vx);
         x.set16(Obj::VZ, vz);
         x.set16(Obj::AZ, az);
@@ -321,7 +321,7 @@ mod witch {
             x.set16(Obj::VX, vx.wrapping_neg());
             d2 += 0x20;
         }
-        let base = player_data().witch_spread.at16(x.b, d2);
+        let base = player_data().witch_spread.word_at(x.b, d2);
         let jitter = x.rand_mask(3);
         x.add16(Obj::X, jitter + base);
         let anim = x.rand_mask(1) + 1;

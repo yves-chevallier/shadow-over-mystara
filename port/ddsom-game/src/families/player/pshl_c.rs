@@ -11,7 +11,7 @@ use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, byte, Read};
+use crate::player::tables::{player_data, byte, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -54,8 +54,8 @@ mod jet {
                 x.set16(Obj::VZ, 0x300);
                 x.set16(Obj::AZ, -0x38i16 as u16);
                 let row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2 & 0xffff;
-                let dx = player_data().jet_offsets.at16(x.b, row);
-                let dz = player_data().jet_offsets.at16(x.b, row + 2);
+                let dx = player_data().jet_offsets.word_at(x.b, row);
+                let dz = player_data().jet_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
@@ -139,8 +139,8 @@ mod item {
                 x.copy_pos(owner);
                 x.add16(Obj::Y, 0xffff);
                 let row = (owner.u8(x.b, Player::CHARACTER) as u32) << 2 & 0xffff;
-                let dx = player_data().item_offsets.at16(x.b, row);
-                let dz = player_data().item_offsets.at16(x.b, row + 2);
+                let dx = player_data().item_offsets.word_at(x.b, row);
+                let dz = player_data().item_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
@@ -230,8 +230,8 @@ mod volley {
                     v = 0x10;
                 }
                 let row = v * 2;
-                let dx = player_data().volley_offsets.at16(x.b, row);
-                let dz = player_data().volley_offsets.at16(x.b, row + 2);
+                let dx = player_data().volley_offsets.word_at(x.b, row);
+                let dz = player_data().volley_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
                 x.add16(Obj::X, dx);

@@ -4,7 +4,7 @@ use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
 use crate::machine::Machine;
-use crate::player::tables::{player_data, combat, Read, Table};
+use crate::player::tables::{player_data, combat, Aligned, Read, Table};
 
 // ---------------------------------------------------------------------------------------------
 // Parries: a player's attack crosses that of an enemy or an enemy shot
@@ -292,7 +292,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
     if (armor as i8) >= 0 {
         // reduction by (armour, class): words in ROM, 8 per class
         let class = (p.u8(w.b, f::VARIANT) >> 1) as u32;
-        let reduction = player_data().armor_reductions.at16(w.b, 2 * armor as u32 + 8 * class);
+        let reduction = player_data().armor_reductions.word_at(w.b, 2 * armor as u32 + 8 * class);
         dmg = dmg.wrapping_sub(reduction);
     }
     if (dmg as i16) < 0 {
@@ -313,7 +313,7 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
 pub(super) fn box_damage(w: &mut World, bx: Obj) -> u16 {
     let row = (bx.u8(w.b, f::HP_MAX) as u32) << 4;
     let tick = (ram::TICK.get(w.b) >> 1) & 0xf;
-    player_data().crate_damage.at16(w.b, row + 2 * tick as u32)
+    player_data().crate_damage.word_at(w.b, row + 2 * tick as u32)
 }
 
 /// 0x2806a: (thrown) crates hurt the players.

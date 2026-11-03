@@ -9,7 +9,7 @@ use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Current;
-use crate::player::tables::{player_data, pc16, Read};
+use crate::player::tables::{player_data, pc16, Aligned};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -167,8 +167,8 @@ mod chip {
                 x.set16(Shot::Y_FRACTION, 0);
                 owner.set_u16(x.b, Player::Y_FRACTION, 0x8000);
                 let row = ((x.u8(Obj::VARIANT) >> 1) as u32) << 2;
-                let dx = player_data().chip_offsets.at16(x.b, row);
-                let dz = player_data().chip_offsets.at16(x.b, row + 2);
+                let dx = player_data().chip_offsets.word_at(x.b, row);
+                let dz = player_data().chip_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(Obj::X, dx);
@@ -210,11 +210,11 @@ mod chunk {
                     let host = x.linked(HOST);
                     x.add8(Obj::STATE, 2);
                     let class = host.u8(x.b, Player::WEAPON_B) as u32;
-                    let set = player_data().overlay_animations.at32(x.b, 4 * class);
+                    let set = player_data().overlay_animations.long_at(x.b, 4 * class);
                     let row = (host.u16(x.b, HOST) as u32) << 3 & 0xffff;
-                    let d0 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row);
-                    let d2 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row + 2);
-                    let d3 = crate::families::effects::tables::tables().hand_offsets.at16(x.b, row + 4);
+                    let d0 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row);
+                    let d2 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row + 2);
+                    let d3 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row + 4);
                     *x.c.d2() = d2 as u32;
                     *x.c.d3() = d3 as u32;
                     let dx = signed(d2, host.u8(x.b, f::FLIP) != 0);
@@ -268,9 +268,9 @@ mod rain {
                 x.set16(Obj::X, cx);
                 x.set16(Obj::Y, cy);
                 let row = (x.u8(Obj::VARIANT) as u32) << 3;
-                let dx = player_data().rain_offsets.at16(x.b, row);
-                let dz = player_data().rain_offsets.at16(x.b, row + 2);
-                let delay = player_data().rain_offsets.at16(x.b, row + 4);
+                let dx = player_data().rain_offsets.word_at(x.b, row);
+                let dz = player_data().rain_offsets.word_at(x.b, row + 2);
+                let delay = player_data().rain_offsets.word_at(x.b, row + 4);
                 x.set16(Obj::Z, dz);
                 x.set16(DELAY, delay);
                 x.add16(Obj::X, dx);
@@ -286,7 +286,7 @@ mod rain {
                 }
                 if x.anim_step() {
                     let r = x.rand_and(3) * 2;
-                    let d = player_data().rain_delays.at16(x.b, r);
+                    let d = player_data().rain_delays.word_at(x.b, r);
                     x.set16(DELAY, d);
                     x.anim(ANIMS, 1);
                     if (x.u16(TIMER) as i16) < 0 {

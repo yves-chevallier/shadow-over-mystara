@@ -19,7 +19,7 @@ use crate::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::player::tables::{player_data, byte, word, long, Read};
+use crate::player::tables::{player_data, byte, word, long, Aligned};
 
 /// ROM tables (data): one pointer per character to rows of 8 bytes
 /// (animation, x offset, z offset, flip, depth).
@@ -107,7 +107,7 @@ fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
 /// Loads animation `n` of the weapon script `weapon` into the sub-object.
 fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     cov!();
-    let set = player_data().overlay_animations.at32(g.b, 4 * weapon);
+    let set = player_data().overlay_animations.long_at(g.b, 4 * weapon);
     let script = crate::objects::anim::script_of(g.b, set, n);
     load_entry(g.b, o, script, false);
     if rd8(g.b, o.at(0x38)) != 0 {

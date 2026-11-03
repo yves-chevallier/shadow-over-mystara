@@ -3,7 +3,7 @@
 use crate::objects::Obj;
 use crate::player::Player;
 use super::*;
-use crate::player::tables::{player_data, word, long, Read};
+use crate::player::tables::{player_data, word, long, Aligned, Read};
 
 // ---- climb (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
 
@@ -389,7 +389,7 @@ pub(super) fn exit_fade(g: &mut Ctx, p: Player) {
     }
     let character = p.u8(g, Player::CHARACTER) as u32;
     let from = EXIT_PALETTES + (0x180 * stage as u32 + (character << 5)) as u16 as i16 as i32 as u32;
-    let slot = player_data().exit_palette_slots.at16(g.b, 2 * character) as i16 as i32 as u32;
+    let slot = player_data().exit_palette_slots.word_at(g.b, 2 * character) as i16 as i32 as u32;
     let to = 0x91c000u32.wrapping_add(slot);
     for i in 0..8 {
         let v = long(g.b, from + 4 * i);

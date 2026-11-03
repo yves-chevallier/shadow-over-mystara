@@ -9,7 +9,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
-use crate::player::tables::{player_data, players, Read};
+use crate::player::tables::{player_data, players, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -123,16 +123,16 @@ mod ground {
             let half = owner.u8(x.b, Player::CHARACTER) >> 1;
             let extra = if half == 2 { 0 } else { 0x14 };
             let row = ((x.u8(LEVEL_SHOWN) as u32) << 2) + extra;
-            let dx = player_data().ground_pose_a.at16(x.b, row);
-            let dz = player_data().ground_pose_a.at16(x.b, row + 2);
+            let dx = player_data().ground_pose_a.word_at(x.b, row);
+            let dz = player_data().ground_pose_a.word_at(x.b, row + 2);
             *x.c.d2() = dz as u32;
             let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
             x.add16(Obj::X, dx);
             x.add16(Obj::Z, dz);
         } else {
             let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
-            let dx = player_data().ground_pose_b.at16(x.b, row);
-            let dz = player_data().ground_pose_b.at16(x.b, row + 2);
+            let dx = player_data().ground_pose_b.word_at(x.b, row);
+            let dz = player_data().ground_pose_b.word_at(x.b, row + 2);
             *x.c.d2() = dz as u32;
             let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
             x.add16(Obj::X, dx);

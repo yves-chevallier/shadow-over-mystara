@@ -13,7 +13,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
-use crate::player::tables::{player_data, byte, Read};
+use crate::player::tables::{player_data, byte, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -259,8 +259,8 @@ mod ice {
                 let a = x.rand_and(0xf);
                 let b = x.rand_and(0xf);
                 let (a2, b2) = (b * 2, a * 2);
-                let dx = player_data().ice_scatter_x.at16(x.b, a2);
-                let dy = player_data().ice_scatter_y.at16(x.b, b2);
+                let dx = player_data().ice_scatter_x.word_at(x.b, a2);
+                let dy = player_data().ice_scatter_y.word_at(x.b, b2);
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Y, dy);
                 // Original glitch: the leftovers of 0x24b0 (D2 = the terrain) are re-read by the bounce of a following
@@ -295,7 +295,7 @@ mod ice {
                 }
                 x.add8(Obj::STATE, 2);
                 let k = x.u8(Shot::SETTING) as u32;
-                let dx = player_data().ice_spread.at16(x.b, k);
+                let dx = player_data().ice_spread.word_at(x.b, k);
                 let dx = signed(dx, x.u8(f::FLIP) == 0);
                 x.add16(Obj::X, dx);
                 x.anim(ANIMS, 4);
@@ -448,9 +448,9 @@ mod banish {
         x.set8(HOLD, hold);
         let kind = target.u8(x.b, Enemy::KIND) as u32;
         let row = kind * 2;
-        let mut frame = player_data().banish_frames_a.at16(x.b, row);
+        let mut frame = player_data().banish_frames_a.word_at(x.b, row);
         if target.u8(x.b, Enemy::CLASS) != 4 {
-            frame = player_data().banish_frames_b.at16(x.b, row);
+            frame = player_data().banish_frames_b.word_at(x.b, row);
         }
         let anim = frame & 0xff00 | (frame as u8).wrapping_add(k) as u16;
         let n = anim;

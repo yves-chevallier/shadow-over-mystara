@@ -21,6 +21,29 @@ pub(crate) use ddsom_data::player_tables::PlayerTables;
 
 use crate::data::{data, Missing, RomAddr};
 
+/// Word and long reads of a table as the 68000 bus does them: the address is rounded down to an even address (the
+/// bus ignores bit 0 for a word; `rd16`, `fetch16`). The original never reads a word at an odd address, but the
+/// tools (fuzz) and some glitches do.
+pub(crate) trait Aligned: Read {
+    fn rom(&self) -> u32;
+
+    /// Word at offset `off`, the address rounded down to even.
+    fn word_at(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+        self.at16(b, off.wrapping_sub(self.rom().wrapping_add(off) & 1))
+    }
+
+    /// Long at offset `off`, the address rounded down to even.
+    fn long_at(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+        self.at32(b, off.wrapping_sub(self.rom().wrapping_add(off) & 1))
+    }
+}
+
+impl Aligned for Table {
+    fn rom(&self) -> u32 {
+        self.rom
+    }
+}
+
 /// The tables of `data/player_tables.json`.
 pub(crate) fn player_data() -> &'static PlayerTables {
     &data().player_tables
@@ -96,6 +119,7 @@ pub(crate) fn pc8(b: &mut Cps2Bus, a: u32) -> u8 {
 
 /// Word at the address `a` of a table read PC-relative.
 pub(crate) fn pc16(b: &mut Cps2Bus, a: u32) -> u16 {
+    let a = a & !1;
     match holding(a, true) {
         Some((t, off)) => t.at16(b, off),
         None => residue(a, true).word_in(b, a, true),
@@ -104,6 +128,7 @@ pub(crate) fn pc16(b: &mut Cps2Bus, a: u32) -> u16 {
 
 /// Long at the address `a` of a table read PC-relative.
 pub(crate) fn pc32(b: &mut Cps2Bus, a: u32) -> u32 {
+    let a = a & !1;
     match holding(a, true) {
         Some((t, off)) => t.at32(b, off),
         None => residue(a, true).long_in(b, a, true),
@@ -130,6 +155,7 @@ pub(crate) fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
 
 /// Word at the address `a` of a table (data space).
 pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
+    let a = a & !1;
     if a & 0xff_ffff >= RAM {
         return crate::mem::rd16(b, a);
     }
@@ -147,6 +173,7 @@ pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
 
 /// Long at the address `a` of a table (data space).
 pub(crate) fn long(b: &mut Cps2Bus, a: u32) -> u32 {
+    let a = a & !1;
     if a & 0xff_ffff >= RAM {
         return crate::mem::rd32(b, a);
     }

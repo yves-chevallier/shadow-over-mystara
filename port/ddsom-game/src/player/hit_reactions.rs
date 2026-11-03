@@ -14,7 +14,7 @@ use cps2::Cps2Bus;
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
-use crate::player::tables::{player_data, byte, long, Read};
+use crate::player::tables::{player_data, byte, long, Aligned, Read};
 
 mod tables {
     /// By attacker class (pointers) then victim type (pointers): reaction rows.
@@ -153,7 +153,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
         return;
     }
     let class_offset = (rd8(g.b, att + Player::CHARACTER) as u32 & 0xe) * 2;
-    let per_class = player_data().hit_reactions_stun_class.at32(g.b, class_offset);
+    let per_class = player_data().hit_reactions_stun_class.long_at(g.b, class_offset);
     let blow = rd8(g.b, att + f::BLOW_ID) as u32;
     let chance = byte(g.b, per_class + (blow >> 2));
     if chance == 0 {
@@ -161,7 +161,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     }
     let tick = (ram::TICK.get(g.b) & 0x1e) * 2;
     let offset = (((chance - 1) as u16) << 10).wrapping_add(tick);
-    let mask = player_data().hit_reactions_stun_masks.at16(g.b, offset as i16 as i32 as u32) as u32;
+    let mask = player_data().hit_reactions_stun_masks.word_at(g.b, offset as i16 as i32 as u32) as u32;
     let roll = (g.random() & 0x1f) as u32;
     if mask >> roll & 1 != 0 {
         set_stun_time(g, v);

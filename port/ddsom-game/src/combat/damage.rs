@@ -9,7 +9,7 @@ use crate::families::enemy_common::records::Enemy;
 use super::*;
 use crate::objects::pools;
 use crate::machine::Machine;
-use crate::player::tables::{player_data, pc16, byte, Read};
+use crate::player::tables::{player_data, pc16, byte, Aligned, Read};
 
 /// Scale tables of the program ROM. The tables read by PC-relative addressing in the original
 /// are in the program space (`pc8`/`pc16`), the others as ordinary reads.
@@ -114,7 +114,7 @@ fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
     if row == 0 {
         return d5;
     }
-    let mask = player_data().damage_crit_mask.at16(w.b, row as u32);
+    let mask = player_data().damage_crit_mask.word_at(w.b, row as u32);
     let bit = w.random() & 15;
     if mask >> bit & 1 == 0 {
         return d5;
@@ -306,7 +306,7 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     if (chance as i8) < 0 {
         chance = 0;
     }
-    let mask = (player_data().damage_loot_mask.at16(w.b, 4 * chance as u32) as u32) << 16 | player_data().damage_loot_mask.at16(w.b, 4 * chance as u32 + 2) as u32;
+    let mask = (player_data().damage_loot_mask.word_at(w.b, 4 * chance as u32) as u32) << 16 | player_data().damage_loot_mask.word_at(w.b, 4 * chance as u32 + 2) as u32;
     let bit = w.random() & 0x1f;
     if mask >> bit & 1 == 0 {
         return;

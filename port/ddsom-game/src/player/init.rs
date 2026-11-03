@@ -14,7 +14,7 @@ use cps2::Cps2Bus;
 use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{wr32, A5};
 use crate::Native;
-use crate::player::tables::{player_data, players, pc32, byte, word, long, Read};
+use crate::player::tables::{player_data, players, pc32, byte, word, long, Aligned, Read};
 
 /// Program ROM tables: one pointer per character (12), each to its own table.
 pub(crate) mod tables {
@@ -144,7 +144,7 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     cov!();
     // only pointer table read in data space (`lea` then register indexing)
     let character = p.u8(g, Player::CHARACTER) as u32;
-    let t = players("gear_by_level").at32(g.b, 4 * character);
+    let t = players("gear_by_level").long_at(g.b, 4 * character);
     let level = p.u8(g, Player::LEVEL) as u32;
     let row = t + 0x30 * level;
     for i in 0..longs {
@@ -169,7 +169,7 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
 pub fn raise_spells(g: &mut Ctx, p: Player) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let level = p.u8(g, Player::LEVEL).wrapping_sub(player_data().init_base_level.at8(g.b, class)) as u32;
-    let row = player_data().init_minima.at32(g.b, 4 * class) + 10 * level;
+    let row = player_data().init_minima.long_at(g.b, 4 * class) + 10 * level;
     if byte(g.b, row) as i8 >= 0 {
         for i in 0..9 {
             let minimum = byte(g.b, row + 1 + i) as i8;
@@ -385,7 +385,7 @@ const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
 /// (`+0x40`, bit 31 of `+0x94`) is thrown (state `0x04000000`, reaction 12, direction opposite to its own) and loses
 /// HP (bosses with 32 HP or less are spared, and keep at least 1 HP).
 fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
-    let damage = players("shock_damage").at16(g.b, 2 * strength as u32) & 63;
+    let damage = players("shock_damage").word_at(g.b, 2 * strength as u32) & 63;
     crate::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
     for pool in [&crate::objects::pools::BOSS, &crate::objects::pools::ENEMY] {
         for o in pool.iter() {

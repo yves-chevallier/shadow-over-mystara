@@ -16,7 +16,7 @@ use super::states::sub;
 use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
 use crate::mem::{wr32, wr8};
 use crate::objects::lists;
-use crate::player::tables::{player_data, Read};
+use crate::player::tables::{player_data, Aligned};
 
 /// One frame of all the active players.
 pub fn update_all(g: &mut Ctx) {
@@ -239,7 +239,7 @@ fn record_high_score(g: &mut Ctx, p: Player) {
             _ => None,
         };
         let (a, b) = match preset {
-            Some(off) => (player_data().score_names.at32(g.b, off), player_data().score_names.at16(g.b, off + 4)),
+            Some(off) => (player_data().score_names.long_at(g.b, off), player_data().score_names.word_at(g.b, off + 4)),
             None => (name_a, name_b),
         };
         wr32(g.b, from + scores::NAME, a);

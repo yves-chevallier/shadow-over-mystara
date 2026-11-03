@@ -7,7 +7,7 @@
 
 use super::{ram, Ctx, Player};
 use crate::mem::wr32;
-use crate::player::tables::{player_data, long, Read};
+use crate::player::tables::{player_data, long, Aligned};
 
 /// Character palette RAM (two bytes per color, 16 colors per block).
 const PALETTE_RAM: u32 = 0x91_c000;
@@ -33,7 +33,7 @@ fn copy_palette(g: &mut Ctx, src: u32, dst: u32) {
 fn palette_slot(g: &mut Ctx, p: Player) -> u32 {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
-    player_data().aura_palette_offsets.at16(g.b, 2 * character) as i16 as i32 as u32
+    player_data().aura_palette_offsets.word_at(g.b, 2 * character) as i16 as i32 as u32
 }
 
 /// 0x377cc: aura A, the player blinks every other frame (the "hidden" bit follows the counter).
