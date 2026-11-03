@@ -65,7 +65,7 @@ fn key_bit0<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// End of a shot: the stage state is restored (`A5+0x43`), then `to`.
 fn end_shot<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
-    set_abs8(x, 0xff8043, 0xff);
+    var::INPUT_MASK.set(x.b, 0xff);
     finish(x, to);
 }
 
@@ -305,7 +305,7 @@ fn ball<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, BUDGET_A, 1);
             x.set16(TIMER, 1);
             strike_anim(x, 0x15, 9);
@@ -364,7 +364,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, BUDGET_B, 1);
             strike_anim(x, 0x16, 0xa);
         }
@@ -509,7 +509,7 @@ fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(0x7, 2);
             lib::sound(x, crate::sound::CMD_69_69);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, BUDGET_C, 1);
             x.set16(TIMER, 6);
             strike_anim(x, 0x17, 0xb);
@@ -560,7 +560,7 @@ fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0xff);
+            var::INPUT_MASK.set(x.b, 0xff);
             spawn_blast(x);
             x.set16(TIMER, 0x14);
             body(x, 2);
@@ -654,7 +654,7 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, BUDGET_E, 1);
             x.set16(TIMER, 0xa);
             lib::sound(x, crate::sound::CMD_69_69);
@@ -712,7 +712,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, BUDGET_F, 1);
             let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
             let players = var::PLAYERS_ALIVE.get(x.b) as u32;

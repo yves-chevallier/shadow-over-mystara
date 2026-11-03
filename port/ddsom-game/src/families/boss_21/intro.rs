@@ -46,7 +46,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
         }
         4 => {
             sub16(x, 0xc, 1);
-            if x.a5_u8(0x500) != 0 && cmp16(x, 0xc, 0x58).le() {
+            if var::LANDING_CUE.get(x.b) != 0 && cmp16(x, 0xc, 0x58).le() {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
             }

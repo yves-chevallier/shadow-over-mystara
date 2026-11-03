@@ -274,7 +274,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(INVULNERABLE, 1);
             x.add8(BUDGET_A, 0xff);
             let target = x.linked(f::TARGET);
@@ -330,7 +330,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             if lib::step(x) {
-                set_abs8(x, 0xff8043, 0xff);
+                var::INPUT_MASK.set(x.b, 0xff);
                 if !players_alive(x) {
                     return decide::wait(x);
                 }
@@ -353,14 +353,14 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
-            x.set_a5_u16(0x51e, 4);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::CAMERA_MODE.set(x.b, 4);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(INVULNERABLE, 1);
             x.add8(BUDGET_B, 0xff);
             strike_anim(x, 0x16, 9);
         }
         2 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
@@ -386,7 +386,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
             shot.set_u16(x.b, 0xc, pz);
         }
         4 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             if sub16(x, TIMER, 1).gt() {
                 return step_only(x);
             }
@@ -399,7 +399,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
             lib::step(x);
         }
         6 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             if sub16(x, TIMER, 1).gt() {
                 return step_only(x);
             }
@@ -413,12 +413,12 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
             if shot.u8(x.b, 0) == 0 || shot.u8(x.b, 0x5a) != 0 {
                 return breath_end(x);
             }
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             lib::step(x);
         }
         10 => {
             if lib::step(x) {
-                set_abs8(x, 0xff8043, 0xff);
+                var::INPUT_MASK.set(x.b, 0xff);
                 if !players_alive(x) {
                     return decide::wait(x);
                 }
@@ -436,7 +436,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x9676c.
 fn breath_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
-    x.set_a5_u16(0x51e, 0);
+    var::CAMERA_MODE.set(x.b, 0);
     lib::start(x, SET_STRIKE, 0xa);
 }
 
@@ -446,7 +446,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(INVULNERABLE, 1);
             x.add8(BUDGET_C, 0xff);
             strike_anim(x, 0x17, 0xb);
@@ -464,7 +464,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
                 return step_only(x);
             }
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0xff);
+            var::INPUT_MASK.set(x.b, 0xff);
             x.set8(INVULNERABLE, 0);
             decide::spawn_by_level(x);
             lib::sound(x, crate::sound::CMD_86_86);
@@ -490,7 +490,7 @@ fn final_roar<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(0, 2);
             strike_anim(x, 0x18, 0xd);
         }
@@ -533,7 +533,7 @@ fn final_roar<R: Bench>(x: &mut Cx<'_, R>) {
             if !lib::step(x) {
                 return;
             }
-            set_abs8(x, 0xff8043, 0xff);
+            var::INPUT_MASK.set(x.b, 0xff);
             x.set8(0, 1);
             x.set8(SLOW_TICK, 0);
             decide::pick_slow_time(x);

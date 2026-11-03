@@ -144,9 +144,9 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0xb4);
-    x.set_a5_u16(0x490, 3);
-    x.set_a5_u8(0x48e, 0xc);
-    x.set_a5_u8(0x48f, 9);
+    var::FADE_DELAY.set(x.b, 3);
+    var::FADE_PAGES.set(x.b, 0xc);
+    var::FADE_STEPS.set(x.b, 9);
     x.set8(BUBBLES, 4);
     x.set8(BUBBLE_TICK, 0);
     open_list(x, 0x14de);
@@ -159,7 +159,7 @@ fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if !sub8(x, BUBBLE_TICK, 1).gt() {
-        x.set_a5_u16(0x4be, 6);
+        var::SHAKE.set(x.b, 6);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
         let r = ((x.random() as u32) & 0x3f) as u8 + 0xf;
         x.set8(BUBBLE_TICK, r);
@@ -183,9 +183,9 @@ fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set_a5_u16(0x490, 3);
-    x.set_a5_u8(0x48e, 0xe);
-    x.set_a5_u8(0x48f, 9);
+    var::FADE_DELAY.set(x.b, 3);
+    var::FADE_PAGES.set(x.b, 0xe);
+    var::FADE_STEPS.set(x.b, 9);
     x.set16(BUBBLES, 0);
     open_list(x, 0x14c8);
 }
@@ -227,7 +227,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         return finish_step(x);
     }
     x.add8(f::SUB2, 2);
-    x.set_a5_u8(0x2e, 6);
+    var::SUB_STEP.set(x.b, 6);
     lib::sound(x, crate::sound::CMD_311_411_B);
     x.set32(0x14, 0);
     x.set32(0x18, 0);

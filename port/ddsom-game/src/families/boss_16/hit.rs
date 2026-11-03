@@ -90,7 +90,7 @@ fn recover_position<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x49, 0);
     x.set32(0x58, 0);
     let mut edge = var::SCROLL_X.get(x.b);
-    if x.a5_u8(0xa) != 0 {
+    if var::ALT_CAMERA_EDGES.get(x.b) != 0 {
         edge = var::CAMERA_ALT_X.get(x.b);
     }
     let mut side = 0x20u8;
@@ -301,12 +301,9 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Notifies the stage: boss defeated (type 0x10, variant 0), score `+0x7e`; death effects.
 fn announce<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_a5_u8(0x42, 1);
-    x.set_a5_u8(0x50, 0);
-    let score = x.u8(0x7e);
-    set_abs8(x, A5_DEATH, 0x10);
-    set_abs8(x, A5_DEATH + 1, 0);
-    set_abs8(x, A5_DEATH + 2, score);
+    var::PLAYERS_FROZEN.set(x.b, 1);
+    var::BOSS_FIGHT.set(x.b, 0);
+    record_defeat(x, 0x10);
     lib::drop_rewards(x);
     lib::flash_and_shake(x);
     crate::sound::service(x.b, crate::sound::Service::Ff05);

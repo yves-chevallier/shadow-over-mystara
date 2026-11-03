@@ -375,7 +375,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         st::HIT => hit::run(x),
         _ => {
             if !two(x) {
-                x.set_a5_u8(0x50, 0);
+                var::BOSS_FIGHT.set(x.b, 0);
             }
             x.free(&pools::BOSS);
         }

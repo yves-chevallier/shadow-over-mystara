@@ -44,3 +44,26 @@ pub const DEFEAT_NAME: Byte = Byte(A5 - 0x557c);
 pub const DEFEAT_NAME_WORD: Word = Word(A5 - 0x557c);
 pub const DEFEAT_FIRST: Byte = Byte(A5 - 0x557b);
 pub const DEFEAT_BONUS: Byte = Byte(A5 - 0x557a);
+/// Input mask of the players (0xff: free; 0x7f while a boss plays a cinematic attack: the players do not act) (h).
+pub const INPUT_MASK: Byte = Byte::a5(0x43);
+/// Non-zero: the blinking of the scenery objects is suspended (set by the black dragon during its cinematic) (h).
+pub const BLINK_SUSPENDED: Byte = Byte::a5(0x33);
+/// Display mode of the interface panels (`ram::DISPLAY_PANELS`).
+pub use crate::ram::DISPLAY_PANELS;
+/// Vertical scroll of plane 1 (`ram::SCROLL_Y_PLANE1`): toggled between 0 and 0x100 to shake the screen.
+pub use crate::ram::SCROLL_Y_PLANE1;
+/// Non-zero: the players do not walk into the scene (set by boss 17, variant 1) (`player::vars::NO_WALK_IN`) (h).
+pub const NO_WALK_IN: Byte = Byte::a5(0x66);
+/// Non-zero: no victory pose at the end of the scene (set by boss 21) (`player::vars::NO_VICTORY`) (h).
+pub const NO_VICTORY: Byte = Byte::a5(0x5c);
+/// Non-zero: the arrival cinematic of boss 17 or 21 may land (scene signal) (h).
+pub const LANDING_CUE: Byte = Byte::a5(0x500);
+/// Non-zero: boss 16 measures the screen edges from the alternative camera (`CAMERA_ALT_X`) (h).
+pub const ALT_CAMERA_EDGES: Byte = Byte::a5(0xa);
+/// Byte of the end countdown record (`A5-0x713a`, `hud::status`): non-zero, the black dragon withdraws and the
+/// help of the SOBJ is inhibited.
+pub const END_COUNTDOWN: Byte = Byte(A5 - 0x713a);
+/// Step of the scene sequence of the menus and cinematics (`A5-0x55c8`; `shell::vars::SCENE_ICONS`).
+pub const SCENE_SEQUENCE: Byte = Byte(A5 - 0x55c8);
+/// Number of shots of type 5 that may still be created (word; `shell::vars::LIMIT_TWELVE`) (h).
+pub const SHOT_LIMIT: Word = Word::a5(0x7e64);

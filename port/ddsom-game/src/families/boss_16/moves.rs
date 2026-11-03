@@ -129,7 +129,7 @@ fn wake_high_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let event = x.u8(0x3e);
     if event == 8 {
-        x.set_a5_u16(0x4be, 2);
+        var::SHAKE.set(x.b, 2);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
     }
     let event = x.u8(0x3e);

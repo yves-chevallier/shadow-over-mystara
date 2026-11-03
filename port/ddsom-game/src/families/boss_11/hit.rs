@@ -411,8 +411,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
         0x8e9e6 => {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             let kind = x.u8(2);
             wr8(x.b, A5.wrapping_sub(0x557c), kind);
             wr8(x.b, A5.wrapping_sub(0x557b), 0);

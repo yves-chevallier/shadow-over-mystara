@@ -212,7 +212,7 @@ fn sweep_a<R: Bench>(x: &mut Cx<'_, R>) {
             anim_b(x, 0x15);
         }
         4 => {
-            if x.a5_u16(0x6e) & 0xf == 0 {
+            if var::FRAME_COUNTER.get(x.b) & 0xf == 0 {
                 spawn_flame(x, 0, 0);
                 lib::sound(x, crate::sound::CMD_33E);
             }

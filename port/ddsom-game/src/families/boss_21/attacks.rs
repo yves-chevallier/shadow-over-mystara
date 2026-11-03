@@ -247,7 +247,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(INVULNERABLE, 1);
             sub8(x, BUDGET_A, 1);
             let target = x.linked(f::TARGET);
@@ -302,7 +302,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             if lib::step(x) {
-                set_abs8(x, 0xff8043, 0xff);
+                var::INPUT_MASK.set(x.b, 0xff);
                 finish(x, decide::chase);
             }
         }
@@ -321,14 +321,14 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.set_a5_u16(0x51e, 4);
-            set_abs8(x, 0xff8043, 0x7f);
+            var::CAMERA_MODE.set(x.b, 4);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(INVULNERABLE, 1);
             sub8(x, BUDGET_B, 1);
             strike_anim(x, 0x16, 9);
         }
         2 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             lib::step(x);
             if !take_key_keep(x) {
                 return;
@@ -355,7 +355,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             shot.set_u16(x.b, 0xc, pz);
         }
         4 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             if sub16(x, TIMER, 1).gt() {
                 return step_only(x);
             }
@@ -367,7 +367,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             step_only(x);
         }
         6 => {
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             if sub16(x, TIMER, 1).gt() {
                 return step_only(x);
             }
@@ -381,12 +381,12 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             if shot.u8(x.b, 0x5a) != 0 {
                 return cinematic_end(x);
             }
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             step_only(x);
         }
         10 => {
             if lib::step(x) {
-                set_abs8(x, 0xff8043, 0xff);
+                var::INPUT_MASK.set(x.b, 0xff);
                 finish(x, decide::stand);
             }
         }
@@ -405,7 +405,7 @@ fn take_key_keep<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 fn cinematic_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
-    x.set_a5_u16(0x51e, 0);
+    var::CAMERA_MODE.set(x.b, 0);
     strike(x, 0xa);
 }
 

@@ -152,7 +152,7 @@ pub(super) fn start_intro<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set_a5_u8(0x5c, 1);
+    var::NO_VICTORY.set(x.b, 1);
     x.set32(f::STATE, 0x0200_0200);
 }
 

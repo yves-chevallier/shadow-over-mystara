@@ -212,7 +212,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             x.move_xyz();
-            if x.a5_u16(0x6e) & 3 == 0 {
+            if var::FRAME_COUNTER.get(x.b) & 3 == 0 {
                 dust_unless_slow(x);
             }
             if cmp16(x, 0x18, 0x100).le() {

@@ -67,7 +67,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         lib::set_68(x);
     }
     if x.u8(f::SUB2) == 0 {
-        x.set_a5_u16(0x51e, 0);
+        var::CAMERA_MODE.set(x.b, 0);
         if (x.u16(f::HP) as i16) <= 0 {
             x.set8(f::SUB, 6);
             return death(x);
@@ -189,11 +189,11 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             lib::sound(x, crate::sound::CMD_390);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             crate::mem::wr16(x.b, 0xff2a84, 0x0f00);
             let bar = x.u8(0x7e);
-            set_abs8(x, 0xff2a86, bar);
+            var::DEFEAT_BONUS.set(x.b, bar);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, crate::sound::CMD_FF);
@@ -219,7 +219,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
         }
         4 => {
             x.set8(0x42, 1);
-            if (x.a5_u8(0x42) as i8) < 2 {
+            if (var::PLAYERS_FROZEN.get(x.b) as i8) < 2 {
                 return;
             }
             x.add8(f::STATE, 2);

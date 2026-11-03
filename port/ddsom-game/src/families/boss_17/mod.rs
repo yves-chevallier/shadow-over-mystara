@@ -134,8 +134,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     pick_target(x);
     x.set8(PHASES, 4);
     x.set8(f::BOX_SET, 0x31);

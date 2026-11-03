@@ -142,7 +142,7 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     sub8(x, SPECIALS, 1);
-    set_abs8(x, 0xff8043, 0x7f);
+    var::INPUT_MASK.set(x.b, 0x7f);
     x.set8(SHIELD, 8);
     x.set32(f::STATE, ATTACK_4);
     let r = (x.random() as u32) & 3;

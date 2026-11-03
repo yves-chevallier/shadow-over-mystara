@@ -21,8 +21,8 @@ pub(super) fn spawn_scene_controller<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7c600: creation. Depending on the number of players and the difficulty, a type 22 boss is linked to it (`+0xac`).
 pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_a5_u8(0x50, 1);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::BOSS_FIGHT.set(x.b, 1);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
@@ -224,7 +224,7 @@ pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
         }
         14 => {
             if x.u8(f::KEY_FRAME) == 1 {
-                x.set_a5_u16(0x51e, 4);
+                var::CAMERA_MODE.set(x.b, 4);
                 x.set8(f::KEY_FRAME, 0);
                 eshl_sweep_1d(x, 2);
             }
@@ -335,7 +335,7 @@ pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
         }
         30 => {
             if x.u8(0xaf) == 0 {
-                x.set_a5_u16(0x51e, 0);
+                var::CAMERA_MODE.set(x.b, 0);
                 return next_attack(x);
             }
             step_anim(x);
@@ -411,9 +411,9 @@ pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             next7(x);
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             x.set8(ARM_TIMER, 0x32);
-            x.set_a5_u8(0x43, 0x7f);
+            var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_ID, 0x10);
             x.set8(ANIM_LAST, 0x10);
@@ -430,9 +430,9 @@ pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
                 crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_YELLOW);
                 x.set8(0xb9, 4);
             }
-            x.set_a5_u16(0x4ba, 0);
+            var::SCROLL_Y_PLANE1.set(x.b, 0);
             if x.u8(0xb9) != 0 {
-                x.set_a5_u16(0x4ba, 0x100);
+                var::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 sub8(x, 0xb9, 1);
             }
             if x.anim_step() {
@@ -445,8 +445,8 @@ pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
         12 => {
             if x.u8(0xaf) == 0 {
                 x.set8(VULNERABLE, 0);
-                x.set_a5_u8(0x43, 0xff);
-                x.set_a5_u16(0x51e, 0);
+                var::INPUT_MASK.set(x.b, 0xff);
+                var::CAMERA_MODE.set(x.b, 0);
                 return next_attack(x);
             }
             step_anim(x);

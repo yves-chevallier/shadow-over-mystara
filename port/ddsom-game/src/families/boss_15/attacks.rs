@@ -119,7 +119,7 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-                x.set_a5_u16(0x4be, 8);
+                var::SHAKE.set(x.b, 8);
                 return settle(x);
             }
             push_players(x);
@@ -196,7 +196,7 @@ fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             x.add8(0x7, 2);
             x.set8(0x42, 1);
-            x.set_a5_u16(0x51e, 4);
+            var::CAMERA_MODE.set(x.b, 4);
             let r = (x.random() as u32) as u8 & 0x20;
             x.set8(f::FLIP, r);
             let d1: i16 = if r != 0 { -0xe0 } else { 0x260 };
@@ -281,7 +281,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
             yw = lo.wrapping_add(0x60);
         }
         x.set16(0x10, yw);
-        if x.a5_u16(0x6e) & 1 != 0 {
+        if var::FRAME_COUNTER.get(x.b) & 1 != 0 {
             let a = x.u8(0x2d).wrapping_add(1) & 0x1f;
             x.set8(0x2d, a);
         }
@@ -328,7 +328,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(0x7, 2);
-    x.set_a5_u16(0x51e, 0);
+    var::CAMERA_MODE.set(x.b, 0);
     x.set16(TIMER, 0x20);
     x.set16(0xc, 0x380);
     let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
@@ -350,7 +350,7 @@ fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x42, 1);
             x.set8(f::FLIP, 0);
             set_anim(x, 2, 0x15);
-            x.set_a5_u8(0x48e, 4);
+            var::FADE_PAGES.set(x.b, 4);
             crate::palette::or_brightness(x.b, 0xa000);
             dive_a(x);
         }
@@ -395,7 +395,7 @@ fn dive_a<R: Bench>(x: &mut Cx<'_, R>) {
 fn dive_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.set8(FOREGROUND, 1);
-    x.set_a5_u8(0x48e, 4);
+    var::FADE_PAGES.set(x.b, 4);
     crate::palette::or_brightness(x.b, 0xf000);
     dive_position(x);
     if !step(x) {

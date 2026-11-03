@@ -15,8 +15,8 @@ use crate::objects::Current;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_TICK) == 0 {
-        x.set_a5_u16(0x51e, 0);
-        x.set_a5_u8(0x43, 0xff);
+        var::CAMERA_MODE.set(x.b, 0);
+        var::INPUT_MASK.set(x.b, 0xff);
         if two(x) {
             x.set8(VULNERABLE, 0);
         }
@@ -92,8 +92,8 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             // `andi.w #3,(0x6e,A5)` also reduces the counter in the working RAM
-            let tick = x.a5_u16(0x6e) & 3;
-            x.set_a5_u16(0x6e, tick);
+            let tick = var::FRAME_COUNTER.get(x.b) & 3;
+            var::FRAME_COUNTER.set(x.b, tick);
             if tick == 0 {
                 lib::shock(x, 1, 2, 0x30, 0xffff);
             }
@@ -190,14 +190,11 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 }
             }
             if last {
-                x.set_a5_u8(0x42, 1);
-                x.set_a5_u8(0x50, 0);
-                let score = x.u8(0x7e);
-                set_abs8(x, A5_DEATH, 2);
-                set_abs8(x, A5_DEATH + 1, 0);
-                set_abs8(x, A5_DEATH + 2, score);
+                var::PLAYERS_FROZEN.set(x.b, 1);
+                var::BOSS_FIGHT.set(x.b, 0);
+                record_defeat(x, 2);
                 x.set8(0x93, 1);
-                x.set_a5_u8(0x4f, 0xff);
+                var::BOSS_DOWN.set(x.b, 0xff);
                 crate::sound::service(x.b, crate::sound::Service::Ff05);
                 lib::sound(x, crate::sound::CMD_FF);
                 lib::flash_and_shake(x);

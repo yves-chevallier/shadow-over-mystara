@@ -177,13 +177,13 @@ pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SLOW, 0);
     x.set8(0, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set_a5_u8(0x42, 1);
-    x.set_a5_u8(0x50, 0);
+    var::PLAYERS_FROZEN.set(x.b, 1);
+    var::BOSS_FIGHT.set(x.b, 0);
     let kind = x.u8(0x2);
-    set_abs8(x, 0xff2a84, kind);
-    set_abs8(x, 0xff2a85, 1);
+    var::DEFEAT_NAME.set(x.b, kind);
+    var::DEFEAT_FIRST.set(x.b, 1);
     let bar = x.u8(0x7e);
-    set_abs8(x, 0xff2a86, bar);
+    var::DEFEAT_BONUS.set(x.b, bar);
     if x.u16(0x54) != 0 {
         let killer = x.linked(0x54);
         killer.set_u8(x.b, 0x18a, 1);
@@ -194,7 +194,7 @@ pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x971ce : variante 1.
 pub(super) fn start_variant1<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x33);
-    x.set_a5_u8(0x66, 1);
+    var::NO_WALK_IN.set(x.b, 1);
     x.set32(f::STATE, 0x0200_0600);
 }
 

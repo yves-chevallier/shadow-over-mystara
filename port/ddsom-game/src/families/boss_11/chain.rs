@@ -474,7 +474,7 @@ fn pose_1<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
         put8(x, a1 + 0x43, d1);
         return true;
     }
-    if x.a5_u16(0x6e) & 1 == 0 {
+    if var::FRAME_COUNTER.get(x.b) & 1 == 0 {
         return true;
     }
     let mut d2 = x.u8(0xac);

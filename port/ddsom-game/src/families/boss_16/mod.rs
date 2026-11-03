@@ -233,7 +233,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::STATE, 2);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     var::SCENE_LEVEL.set(x.b, 0);
     if (x.u8(3) as i8) < 2 {
         let (variant, z) = if (var::SCROLL_Y.get(x.b) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
@@ -242,7 +242,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(f::SUB, 0);
     x.set16(f::SUB2, 0);
-    x.set_a5_u8(0x50, 1);
+    var::BOSS_FIGHT.set(x.b, 1);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);

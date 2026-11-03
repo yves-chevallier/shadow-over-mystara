@@ -60,8 +60,8 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(STUN, v);
         }
         x.set8(INVULNERABLE, 0);
-        set_abs8(x, 0xff8043, 0xff);
-        x.set_a5_u16(0x51e, 0);
+        var::INPUT_MASK.set(x.b, 0xff);
+        var::CAMERA_MODE.set(x.b, 0);
         lib::set_68(x);
         if x.u8(Obj::VARIANT) == 0 && tst16(x, f::HP).le() {
             return decide::start_death(x);
@@ -285,13 +285,13 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
                 return decide::start_death(x);
             }
             x.add8(f::SUB2, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             let kind = x.u8(0x2);
-            set_abs8(x, 0xff2a84, kind);
-            set_abs8(x, 0xff2a85, 0);
+            var::DEFEAT_NAME.set(x.b, kind);
+            var::DEFEAT_FIRST.set(x.b, 0);
             let bar = x.u8(0x7e);
-            set_abs8(x, 0xff2a86, bar);
+            var::DEFEAT_BONUS.set(x.b, bar);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);

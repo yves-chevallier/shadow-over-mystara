@@ -510,7 +510,7 @@ pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
         }
         x.set32(f::STATE, state::STAND);
         x.set8(SECOND_FX, 0);
-        return x.set_a5_u16(0x51e, 0);
+        return var::CAMERA_MODE.set(x.b, 0);
     }
     if second_form(x) {
         if x.u8(f::SUB2) == 0 {

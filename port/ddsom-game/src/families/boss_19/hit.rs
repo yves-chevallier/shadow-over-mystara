@@ -325,11 +325,11 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             set_abs16(x, 0xff2a84, 0x1300);
             let bar = x.u8(0x7e);
-            set_abs8(x, 0xff2a86, bar);
+            var::DEFEAT_BONUS.set(x.b, bar);
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);
@@ -400,11 +400,11 @@ fn death_green<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             set_abs16(x, 0xff2a84, 0x0e00);
             let bar = x.u8(0x7e);
-            set_abs8(x, 0xff2a86, bar);
+            var::DEFEAT_BONUS.set(x.b, bar);
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);

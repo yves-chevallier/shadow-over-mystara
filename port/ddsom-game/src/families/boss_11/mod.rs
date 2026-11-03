@@ -275,7 +275,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, crate::sound::CMD_20);
     lib::empty_popups(x);
     lib::clear_popup(x);
-    x.set_a5_u8(0x50, 1);
+    var::BOSS_FIGHT.set(x.b, 1);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     x.set8(0x7e, 0x4e);
@@ -294,7 +294,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SLOW, 0);
     lib::initial_hp_boss(x);
     lib::create_set_14(x);
-    x.set_a5_u32(0x38, 0x0459_5900);
+    var::STAGE_CLOCK.set(x.b, 0x0459_5900);
     var::SCENE_LEVEL.set(x.b, 0);
     lib::create_set_15(x);
     lib::clear_popup(x);

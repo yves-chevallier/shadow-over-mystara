@@ -57,7 +57,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(STUN, v);
         }
         x.set8(INVULNERABLE, 0);
-        x.set_a5_u16(0x51e, 0);
+        var::CAMERA_MODE.set(x.b, 0);
         lib::set_68(x);
         if out_of_hp(x) {
             return down(x);

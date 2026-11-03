@@ -46,7 +46,7 @@ fn dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
-        set_abs8(x, 0xff8043, 0xff);
+        var::INPUT_MASK.set(x.b, 0xff);
         lib::set_68(x);
     }
     let code = (x.u8(REACTION) as u32) >> 1;
@@ -300,7 +300,7 @@ fn hit_i<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::FREEZE, 0);
             x.set16(f::HP, 0);
             x.set32(f::STATE, 0x0406_0000);
-            set_abs8(x, 0xff804f, 0xff);
+            var::BOSS_DOWN.set(x.b, 0xff);
         }
         _ => {}
     }
@@ -381,13 +381,13 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set_a5_u8(0x42, 1);
-            x.set_a5_u8(0x50, 0);
+            var::PLAYERS_FROZEN.set(x.b, 1);
+            var::BOSS_FIGHT.set(x.b, 0);
             let kind = x.u8(0x2);
-            set_abs8(x, 0xff2a84, kind);
-            set_abs8(x, 0xff2a85, 0);
+            var::DEFEAT_NAME.set(x.b, kind);
+            var::DEFEAT_FIRST.set(x.b, 0);
             let bar = x.u8(0x7e);
-            set_abs8(x, 0xff2a86, bar);
+            var::DEFEAT_BONUS.set(x.b, bar);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, crate::sound::CMD_FF);

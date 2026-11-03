@@ -21,20 +21,9 @@ pub use records::{Boss, Message};
 pub use warrior::hp_threshold;
 /// Work RAM variables read by the bosses (those of the enemies included).
 pub use vars as var;
-use crate::mem::A5;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
-
-/// The object followed by the camera, if there is one.
-pub fn leader<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    (var::LEADER.get(x.b) != 0).then(|| Obj(var::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff))
-}
-
-/// Camera abscissa.
-pub fn scroll_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
-    var::SCROLL_X.get(x.b)
-}
 
 /// Abscissa of the camera in use (1, or 2 if `A5+0x36`).
 pub fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
@@ -212,10 +201,6 @@ pub fn camera_y<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     v.get(x.b)
 }
 
-/// Address of the "boss defeated" record (`var::DEFEAT_NAME`...), for the bosses of L9b that still write it by
-/// address.
-pub const A5_DEATH: u32 = A5 - 0x557c;
-
 /// The "boss defeated" record of the stage tally (`var::DEFEAT_*`): the banner name `name` (the type of the boss),
 /// 0, then the index of the bonus (`Enemy::EVENT_KIND` of the boss).
 pub fn record_defeat<R: Bench>(x: &mut Cx<'_, R>, name: u8) {
@@ -229,11 +214,6 @@ pub fn record_defeat<R: Bench>(x: &mut Cx<'_, R>, name: u8) {
 /// stuck: we give up after 64 attempts.
 pub fn alloc_retry<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Option<Obj> {
     (0..64).find_map(|_| x.alloc(pool))
-}
-
-/// Writes a byte at an absolute address of the work RAM.
-pub fn set_abs8<R: Bench>(x: &mut Cx<'_, R>, addr: u32, v: u8) {
-    crate::mem::wr8(x.b, addr, v);
 }
 
 // --- common subroutines called by the original boss code -------------------------

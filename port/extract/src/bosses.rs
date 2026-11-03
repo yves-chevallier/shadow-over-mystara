@@ -17,7 +17,7 @@ const BY_RANK: (&str, usize) = ("u8*32", 16);
 /// One byte per difficulty level (`rank`, 0 to 31).
 const PER_RANK: usize = 32;
 
-/// Tables of the bosses 0 to 9 and of `boss_common`.
+/// Tables of the bosses and of `boss_common`.
 pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     let rank = |s: &mut Vec<Spec>, name: &str, at: u32| s.push(data(name, at, BY_RANK.0, &[], BY_RANK.1));
     let mut upto = |s: &mut Vec<Spec>, name: &str, at: u32, program: bool, format: &'static str, max: u32| {
@@ -129,6 +129,16 @@ pub(crate) fn specs(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("boss_9/speeds_hard", 0x8c092, "u8", &[], 0x28));
     upto(s, "boss_9/speeds", 0x8c0ba, true, "u8", 0x28);
     pointed(rom, s, "boss_9/dash_chances", 0x8c20c, 5, false, ("x32", PER_RANK));
+    // ---- boss 10 ----
+    s.push(prog("boss_10/next_steps", 0x8d540, "u8", &[], 32));
+    s.push(prog("boss_10/walk_delays", 0x8d47c, "u8", &[], PER_RANK));
+    s.push(prog("boss_10/walk_steps", 0x8d4ce, "u8", &[], 32));
+    // ---- boss 13 (dragon) ----
+    // Four thresholds, then the code that follows: the stage index keeps growing past them (read as data, like the
+    // original) until a word exceeds the camera.
+    s.push(prog("boss_13/stops", 0x8f97a, "i16", &[], 48));
+    // Windows of four words starting every two words (8 draws).
+    s.push(data("boss_13/bob_speeds", 0x8faa2, "i16", &[], 18));
 }
 
 /// A decision: the pick tables `picks` (16 bytes each, program space) named `<name>_picks` (one table) or

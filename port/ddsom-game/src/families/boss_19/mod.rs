@@ -191,8 +191,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         lib::empty_popups(x);
         lib::clear_popup(x);
         lib::clear_all_popups(x);
-        x.set_a5_u32(0x38, 0x0459_5900);
-        x.set_a5_u8(0x50, 1);
+        var::STAGE_CLOCK.set(x.b, 0x0459_5900);
+        var::BOSS_FIGHT.set(x.b, 1);
         x.set8(0x93, 1);
         x.set8(0x9a, 0xff);
         lib::initial_hp_boss(x);

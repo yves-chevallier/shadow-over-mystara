@@ -205,7 +205,7 @@ fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
         }
         3 => {
             if sub16(x, TIMER, 1).le() {
-                x.set_a5_u32(0x38, 0x0459_5900);
+                var::STAGE_CLOCK.set(x.b, 0x0459_5900);
                 for (off, v) in [(0x7e, 0x23), (0x7f, 0), (0x80, 0x1b), (0x81, 0x16)] {
                     x.set8(off, v);
                 }
@@ -411,7 +411,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, true);
-                set_abs8(x, 0xff2a38, 0x10);
+                var::SCENE_SEQUENCE.set(x.b, 0x10);
             }
         }
         _ => {}
@@ -497,7 +497,7 @@ fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
         }
         2 => {
             sub16(x, 0xc, 1);
-            let low = if second { cmp16(x, 0xc, 0x50).le() } else { x.a5_u8(0x500) != 0 && cmp16(x, 0xc, 0x50).le() };
+            let low = if second { cmp16(x, 0xc, 0x50).le() } else { var::LANDING_CUE.get(x.b) != 0 && cmp16(x, 0xc, 0x50).le() };
             if low {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x14);
@@ -542,7 +542,7 @@ fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
                 x.add8(0x7, 2);
                 let scene = var::SCENE.get(x.b);
                 if scene == 0x2c || scene == 0x6f {
-                    x.set_a5_u8(0x2e, 6);
+                    var::SUB_STEP.set(x.b, 6);
                 }
                 body(x, 0);
             }
@@ -552,7 +552,7 @@ fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
                 lib::step(x);
                 return;
             }
-            x.set_a5_u32(0x38, 0x0459_5900);
+            var::STAGE_CLOCK.set(x.b, 0x0459_5900);
             for (off, v) in [(0x7e, 0x26), (0x7f, 0), (0x80, 0x1c), (0x81, 0x17)] {
                 x.set8(off, v);
             }
