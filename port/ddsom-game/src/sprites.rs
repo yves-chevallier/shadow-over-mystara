@@ -32,12 +32,12 @@ mod var {
     pub const ACTORS_LONG: Long = Long::a5(0x5be);
     pub const FOREGROUND_LONG: Long = Long::a5(0x5c2);
     /// Texts in sprites: (string pointer, x, y) x 3.
-    pub const TEXTS: [u32; 3] = [crate::mem::A5 + 0x5c6, crate::mem::A5 + 0x5ce, crate::mem::A5 + 0x5d6];
+    pub const TEXTS: [u32; 3] = [Long::a5(0x5c6).0, Long::a5(0x5ce).0, Long::a5(0x5d6).0];
     /// List already built for this frame (reset to 0 by VBLANK).
     pub const BUILT: Word = Word::a5(0x7fce);
     /// Lists of visible objects by category: counters and write pointers (five words each).
-    pub const VISIBLE_COUNT: u32 = crate::mem::A5 + 0x7e72;
-    pub const VISIBLE_PTR: u32 = crate::mem::A5 + 0x7e7c;
+    pub const VISIBLE_COUNT: u32 = Word::a5(0x7e72).0;
+    pub const VISIBLE_PTR: u32 = Word::a5(0x7e7c).0;
 }
 
 /// A text displayed in sprites: string pointer, then x and y.

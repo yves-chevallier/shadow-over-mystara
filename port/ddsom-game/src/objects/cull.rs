@@ -23,9 +23,6 @@ pub fn camera(b: &mut Cps2Bus) -> u32 {
     A5 + if CAMERA_ALT_ACTIVE.is_set(b) { super::ram::ALT_CAMERA } else { super::ram::CAMERA }
 }
 
-/// Object byte designating its visibility box (`Obj::BOUNDS`).
-pub(crate) const BOUNDS_INDEX: u32 = Obj::BOUNDS;
-
 /// Visibility box `i` (`sprites/tables.json`, `bounds`: dx, width, dy, height), or the words the original reads past
 /// the table (`sprites/bounds_beyond`).
 pub(crate) fn visibility_box(b: &mut Cps2Bus, i: u8) -> [u16; 4] {

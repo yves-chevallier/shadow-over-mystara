@@ -20,11 +20,10 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::A5;
 use crate::ram::{Byte, Long, Word};
 use crate::regs;
 
-pub(crate) const BASE: u32 = A5 + 0x7f92;
+pub(crate) const BASE: u32 = crate::ai::RANK.0;
 pub(crate) const CURRENT: u32 = 0x00;
 pub(crate) const MAX: u32 = 0x02;
 pub(crate) const MIN: u32 = 0x04;

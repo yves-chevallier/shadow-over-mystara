@@ -146,7 +146,7 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let class = obj.u8(b, Obj::CLASS);
     c.flags_logic(class as u32, Size::Byte);
     let visible = if class != 0 {
-        let index = lsl_word(c, obj.u8(b, BOUNDS_INDEX) as u16, 3);
+        let index = lsl_word(c, obj.u8(b, Obj::BOUNDS) as u16, 3);
         let t = crate::data::data().sprite_tables.bounds_rom + index as u32;
         c.d[0] = index as u32;
         load_screen_x(c, b, 0, obj, cam);

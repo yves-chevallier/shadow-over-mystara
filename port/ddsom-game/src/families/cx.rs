@@ -127,13 +127,6 @@ impl<R: Bench> Cx<'_, R> {
     }
 }
 
-/// Subroutines called by address (the object engine, for its part, is called through `objects::Current`).
-pub mod sub {
-    /// Attribute of the terrain under the object (D2); `terrain_at` takes (D0, D1) = (x, y).
-    pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
-    pub const TERRAIN_AT: u32 = 0x24b0;
-}
-
 impl<R> Cx<'_, R> {
     // --- fields of the current object --------------------------------------------------------
 

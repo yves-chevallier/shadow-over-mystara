@@ -121,12 +121,6 @@ pub const NATIVES: &[Native] = &[
     effects::EFFCT_62,
 ];
 
-/// Game routines called by the handlers (original addresses).
-pub mod rom {
-    pub const IN_ZONE: u32 = 0xfbae;
-    pub const SHADOW: u32 = 0x33fe4;
-}
-
 /// `addq.b #n,(off,A0)`: adds `n` to a byte of the object (modulo 256).
 pub(crate) fn add_u8<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32, n: u8) {
     let v = o.u8(x.b, off).wrapping_add(n);

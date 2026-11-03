@@ -15,7 +15,6 @@ use cps2::Cps2Bus;
 
 use crate::data::data;
 use crate::hw::video::Vram;
-use crate::mem::A5;
 use crate::objects::Obj;
 use crate::ram::{Byte, Long, Word};
 use crate::record::record;
@@ -106,8 +105,8 @@ record! {
 }
 
 /// Cameras 1 (scroll layer 2) and 2 (scroll layer 3).
-pub const CAMERA_1: Camera = Camera(Obj(A5 + 0x4fe));
-pub const CAMERA_2: Camera = Camera(Obj(A5 + 0x54e));
+pub const CAMERA_1: Camera = Camera(Obj(Long::a5(0x4fe).0));
+pub const CAMERA_2: Camera = Camera(Obj(Long::a5(0x54e).0));
 /// Non-zero: the terrain is drawn instead of the scenery (debug).
 const TERRAIN_VIEW: Byte = Byte::a5(0x37);
 /// Scroll distance of layer 1 (background movement), as a long.

@@ -36,6 +36,7 @@ mod recorder;
 use presentation::*;
 use recorder::*;
 pub use recorder::{reset_recorder, stop_recorder};
+#[cfg(feature = "tools")]
 pub(crate) use recorder::reset_recorder_by;
 
 /// Fields of the mode machine state block.
