@@ -4,7 +4,7 @@
 use crate::ram::{Byte, Long, Word};
 
 /// Video flags (word; bit 0 of the low byte `+0x13`: row scroll of layer 1) and image of the layer enable register.
-pub const VIDEO_FLAGS: Word = Word::a5(0x12);
+pub use crate::video::VIDEO_CONTROL as VIDEO_FLAGS;
 pub const VIDEO_FLAGS_LOW: Byte = Byte::a5(0x13);
 pub const LAYERS: Word = Word::a5(0x14);
 /// Cabinet type (number of players, h).

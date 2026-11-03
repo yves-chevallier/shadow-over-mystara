@@ -12,6 +12,8 @@ use crate::ram::{Byte, Word};
 use crate::tables::engine;
 use crate::Native;
 
+/// Copy of the video control register (`regs::VIDEO_CONTROL`; bit 0: per-line scroll of layer 2).
+pub const VIDEO_CONTROL: Word = Word::a5(0x12);
 /// Image of the layer enable register (written at `regs::LAYER_CONTROL`).
 pub const LAYER_ENABLE: Word = Word::a5(0x14);
 /// Base of the object table (value of `regs::OBJECT_BASE`).

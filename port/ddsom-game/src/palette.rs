@@ -6,30 +6,42 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32};
+use ddsom_data::Palettes;
+
+use crate::hw::video::{self as gfx, Vram};
+use crate::ram::{Byte, Long, Word};
+use crate::tables::engine;
 use crate::video::hw;
 use crate::Native;
 
-/// Palette pages concerned (bit k: page 0x91c000 + 0x400 k).
-const PAGES: u32 = 0x48e;
-pub(crate) const PALETTES: u32 = 0x91c000;
+/// Palette pages concerned (bit k: page k), the state of the fades (`fade`).
+const PAGES: Byte = Byte::a5(0x48e);
+pub(crate) const PALETTES: u32 = gfx::PALETTES.0;
 pub(crate) const PAGE_SIZE: u32 = 0x400;
 
+/// Colour word at `a` (palette RAM, or a work RAM copy).
+fn color(b: &mut Cps2Bus, a: u32) -> u16 {
+    Vram(a).get(b)
+}
+fn set_color(b: &mut Cps2Bus, a: u32, v: u16) {
+    Vram(a).set(b, v)
+}
+
 fn for_each_color(b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
-    let pages = rd8(b, crate::mem::A5 + PAGES);
+    let pages = PAGES.get(b);
     for k in 0..4 {
         if pages & (1 << k) != 0 {
             let page = PALETTES + PAGE_SIZE * k;
             for i in 0..PAGE_SIZE / 2 {
                 let a = page + 2 * i;
-                let v = f(rd16(b, a));
-                wr16(b, a, v);
+                let v = f(color(b, a));
+                set_color(b, a, v);
             }
         }
     }
 }
 
-/// 0x168e: brightness `level` added (OR) to the colours of the checked pages (`A5+0x48e`), or cleared if `level`
+/// 0x168e: brightness `level` added (OR) to the colours of the checked pages (`PAGES`), or cleared if `level`
 /// is zero.
 pub fn or_brightness(b: &mut Cps2Bus, level: u16) {
     for_each_color(b, |col| if level == 0 { col & 0x0fff } else { col | level });
@@ -54,12 +66,9 @@ pub fn set_brightness(b: &mut Cps2Bus, level: u16) {
 // Brightness fades (V3): one step, repeated by the tasks and subroutines of `tasks::fading`
 // ---------------------------------------------------------------------------------------------
 
-/// State of a fade (A5 + 0x48e): byte of the pages concerned (bit k: page k), number of steps remaining,
-/// delay between two steps (word) and addresses of the four pages to process.
-mod fade {
-    pub const PAGES: u32 = 0;
-    pub const PAGE_PTR: u32 = 4;
-}
+/// State of a fade (from `PAGES`): byte of the pages concerned (bit k: page k), number of steps remaining, delay
+/// between two steps (word) and addresses of the four pages to process (`PAGE_POINTERS`).
+const PAGE_POINTERS: [Long; 4] = [Long::a5(0x492), Long::a5(0x496), Long::a5(0x49a), Long::a5(0x49e)];
 
 /// Number of colours in a page.
 const COLORS: u32 = 512;
@@ -71,7 +80,7 @@ const BRIGHTNESS: u16 = 0xf000;
 /// 0x1602: adds the step (±0x1000) to the brightness of the page's 512 colours, unless the first
 /// colour is already at the end (0 going down, 0xf000 going up) or it would reach 0.
 fn fade_page(b: &mut Cps2Bus, page: u32, delta: u32) {
-    let first = rd16(b, page) & BRIGHTNESS;
+    let first = color(b, page) & BRIGHTNESS;
     let at_end = if (delta as i32) < 0 { first == 0 } else { first == BRIGHTNESS };
     if at_end || first.wrapping_add(delta as u16) & BRIGHTNESS == 0 {
         return;
@@ -82,7 +91,7 @@ fn fade_page(b: &mut Cps2Bus, page: u32, delta: u32) {
 /// 0x164e: like `fade_page` on the 48 colours at the end of the first page, without a stop test; going
 /// down, the brightness of the first colour is tested before the step.
 fn fade_partial_page(b: &mut Cps2Bus, page: u32, delta: u32) {
-    let mut first = rd16(b, page);
+    let mut first = color(b, page);
     if (delta as i32) >= 0 {
         first = first.wrapping_add(delta as u16);
     }
@@ -96,21 +105,21 @@ fn fade_partial_page(b: &mut Cps2Bus, page: u32, delta: u32) {
 fn add_to_colors(b: &mut Cps2Bus, page: u32, n: u32, delta: u16) {
     for i in 0..n {
         let a = page + 2 * i;
-        let color = rd16(b, a).wrapping_add(delta);
-        wr16(b, a, color);
+        let v = color(b, a).wrapping_add(delta);
+        set_color(b, a, v);
     }
 }
 
 /// Pages checked in the fade state, with their address.
-fn selected_pages(b: &mut Cps2Bus, state: u32) -> Vec<(usize, u32)> {
-    let flags = rd8(b, state + fade::PAGES);
-    (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, rd32(b, state + fade::PAGE_PTR + 4 * k as u32))).collect()
+fn selected_pages(b: &mut Cps2Bus) -> Vec<(usize, u32)> {
+    let flags = PAGES.get(b);
+    (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PAGE_POINTERS[k].get(b))).collect()
 }
 
-/// One brightness fade step (`0x158e`, or `0x15c8` if `partial`) on the pages of the fade state
-/// (`A5 + 0x48e`), with step `delta` (±0x1000).
+/// One brightness fade step (`0x158e`, or `0x15c8` if `partial`) on the pages of the fade state (`PAGES`), with
+/// step `delta` (±0x1000).
 pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partial: bool) {
-    for (k, page) in selected_pages(b, crate::mem::A5 + PAGES) {
+    for (k, page) in selected_pages(b) {
         if partial && k == 0 {
             fade_partial_page(b, page, delta);
         } else {
@@ -123,39 +132,39 @@ pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partial: bool) {
 // Loading the scene palettes from the ROM library (V3)
 // ---------------------------------------------------------------------------------------------
 
-/// Palette library (0x253000-0x293000): palettes of 16 colours, 32 bytes each.
-const LIBRARY: u32 = 0x253000;
-/// Per scene: 32 displacements (words) in the library, a negative displacement leaves the palette.
-const STAGE_PALETTES: u32 = 0x2ae81e;
-/// Palettes added after those of the scene: address (long, 0 = none) per scene, in code.
-pub(crate) const STAGE_EXTRA: u32 = 0x1a41c;
+// The tables of the scene palettes (`scene_palettes.json`, read by address as the original indexes them): the
+// palette numbers of each scene, the extra palettes, the sets and the pages 1 to 3; the palettes come from the library
+// (`palettes.png`).
+
+/// Palettes added after those of the scene (three palettes per scene).
 pub(crate) const EXTRA_PALETTES: u32 = 3;
 /// Scenes whose 32 palettes are loaded (the others: 29).
 const FULL_RANGE: std::ops::Range<u8> = 0x45..0x5a;
-pub(crate) const STAGE_VAR: u32 = 0x34;
 pub(crate) const PALETTE_BYTES: u32 = 32;
 
+/// Copies the 16 colours at `from` (the library, a table of the original or the RAM) to `to`.
 fn copy_palette(b: &mut Cps2Bus, from: u32, to: u32) {
     for i in 0..PALETTE_BYTES / 4 {
-        let long = rd32(b, from + 4 * i);
-        wr32(b, to + 4 * i, long);
+        let long = engine().long(b, from + 4 * i);
+        Vram(to + 4 * i).set_long(b, long);
     }
 }
 
-fn prog_long(b: &mut Cps2Bus, a: u32) -> u32 {
-    (crate::mem::prog16(b, a) as u32) << 16 | crate::mem::prog16(b, a + 2) as u32
-}
-
-/// Address of a code table indexed by `n * 4` (16-bit computation, signed word). The tables read through
-/// a PC-relative access (pages 1 to 3) are in the program space; those whose address goes through
-/// a register (`lea (d,PC),A3` then indexing) in the data space.
+/// Address of the entry `n` of a table of addresses (index `n * 4` computed on 16 bits, signed word). The tables read
+/// through a PC-relative access (pages 1 to 3) are in the program space; those whose address goes through a register
+/// (`lea (d,PC),A3` then indexing) in the data space.
 fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
     let at = table.wrapping_add((n as u16).wrapping_shl(2) as i16 as u32);
     if program {
-        prog_long(b, at)
+        engine().pc_long(b, at)
     } else {
-        rd32(b, at)
+        engine().long(b, at)
     }
+}
+
+/// The scene palette tables.
+fn scene_palettes() -> &'static ddsom_data::ScenePalettes {
+    &crate::data::data().scene_palettes
 }
 
 /// Number of palettes in the list of scene `stage`: 32 for the scenes of `FULL_RANGE`, 29 for the others (the lower
@@ -170,28 +179,28 @@ pub(crate) fn stage_count(stage: u8) -> u32 {
 
 /// Displacement list (words, 64 bytes per scene) of the scene in the low word of `d0`.
 pub(crate) fn stage_list(d0: u32) -> u32 {
-    STAGE_PALETTES + ((d0 as u16) << 6) as i16 as u32
+    scene_palettes().stages_rom + ((d0 as u16) << 6) as i16 as u32
 }
 
-/// Address of the extra palettes of the current scene (`A5 + 0x34`), 0 if it has none.
-pub(crate) fn stage_extra(b: &mut Cps2Bus, a5: u32) -> u32 {
-    let current = rd8(b, a5 + STAGE_VAR) as u32;
-    table_entry(b, STAGE_EXTRA, current, false)
+/// Address of the extra palettes of the current scene, 0 if it has none.
+pub(crate) fn stage_extra(b: &mut Cps2Bus) -> u32 {
+    let current = crate::ram::SCENE.get(b) as u32;
+    table_entry(b, scene_palettes().extra.rom, current, false)
 }
 
 /// 0x1a36c: palettes of scene `d0` (low byte) starting at `dst`, then the extra palettes
-/// of the current scene (`A5 + 0x34`).
-pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, a5: u32, d0: u32, mut dst: u32) {
+/// of the current scene.
+pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, d0: u32, mut dst: u32) {
     let mut list = stage_list(d0);
     for _ in 0..stage_count(d0 as u8) {
-        let offset = rd16(b, list);
+        let offset = engine().word(b, list);
         list += 2;
         if offset & 0x8000 == 0 {
-            copy_palette(b, LIBRARY + offset as i16 as u32, dst);
+            copy_palette(b, Palettes::ROM + offset as i16 as u32, dst);
         }
         dst += PALETTE_BYTES;
     }
-    let extra = stage_extra(b, a5);
+    let extra = stage_extra(b);
     if extra != 0 {
         for i in 0..EXTRA_PALETTES {
             copy_palette(b, extra + i * PALETTE_BYTES, dst);
@@ -202,27 +211,27 @@ pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, a5: u32, d0: u32, mut dst: u3
 
 /// The eight longs of a palette, as `movem.l (A),{D1-D6,A1,A2}` loads them.
 pub(crate) fn palette_longs(b: &mut Cps2Bus, at: u32) -> [u32; 8] {
-    std::array::from_fn(|i| rd32(b, at + 4 * i as u32))
+    std::array::from_fn(|i| Vram(at + 4 * i as u32).long(b))
 }
 
 /// 0x1a360: palettes of the current scene in page 0.
 pub fn load_scene_palettes(b: &mut Cps2Bus) {
-    let stage = rd8(b, crate::mem::A5 + STAGE_VAR) as u32;
-    load_stage_palettes(b, crate::mem::A5, stage, PALETTES);
+    let stage = crate::ram::SCENE.get(b) as u32;
+    load_stage_palettes(b, stage, PALETTES);
 }
 
 /// 0x1a366: palettes of scene `scene` in page 0 (then the extras of the current scene).
 pub fn load_scene_palettes_of(b: &mut Cps2Bus, scene: u8) {
-    load_stage_palettes(b, crate::mem::A5, scene as u32, PALETTES);
+    load_stage_palettes(b, scene as u32, PALETTES);
 }
 
-/// 0x1a3d4: the 32 palettes of set D0 (address in code at `0x1a3fc + 4 D0`) in page 0.
-pub(crate) const SETS: u32 = 0x1a3fc;
+/// Palettes in a page.
 pub(crate) const PAGE_PALETTES: u32 = 32;
 
-/// Returns the source address (0: set absent).
+/// 0x1a3d4: the 32 palettes of set D0 (address in the table of the sets) in page 0. Returns the source address (0:
+/// set absent).
 pub(crate) fn load_set(b: &mut Cps2Bus, d0: u32) -> u32 {
-    let source = table_entry(b, SETS, d0, false);
+    let source = table_entry(b, scene_palettes().sets.rom, d0, false);
     if !(source == 0) {
         for i in 0..PAGE_PALETTES {
             copy_palette(b, source + i * PALETTE_BYTES, PALETTES + i * PALETTE_BYTES);
@@ -236,12 +245,10 @@ pub fn load_palette_set(b: &mut Cps2Bus, n: u16) {
     load_set(b, n as u32);
 }
 
-/// Pages 1 to 3: code table (address per scene), "current scene" entry, "given D0" entry.
-pub(crate) const PAGE_TABLES: [(u32, u32, u32); 3] = [(0x1a62c, 0x1a608, 0x1a60a), (0x1a6a0, 0x1a678, 0x1a67e), (0x1a8d4, 0x1a8ac, 0x1a8b2)];
-
-/// Source of page `k + 1`: entry `d0` of the page table.
+/// Source of page `k + 1`: entry `d0` of the page table (the loaders: 0x1a608/0x1a60a, 0x1a678/0x1a67e,
+/// 0x1a8ac/0x1a8b2, "current scene" and "given D0" entries).
 pub(crate) fn page_source(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
-    table_entry(b, PAGE_TABLES[k].0, d0, true)
+    table_entry(b, scene_palettes().pages[k].rom, d0, true)
 }
 
 /// The 32 palettes of page `k + 1` according to the page table, entry `d0`.
@@ -263,7 +270,7 @@ pub fn load_palette_page(b: &mut Cps2Bus, page: usize, n: u16) {
 
 /// 0x1a678, 0x1a8ac: page 2 or 3 according to the current scene (0x1a608: page 1 always takes entry 0).
 pub fn load_scene_page(b: &mut Cps2Bus, page: usize) {
-    let n = if page == 1 { 0 } else { rd8(b, crate::mem::A5 + STAGE_VAR) as u16 };
+    let n = if page == 1 { 0 } else { crate::ram::SCENE.get(b) as u16 };
     load_palette_page(b, page, n);
 }
 
@@ -273,17 +280,21 @@ pub fn page_leftovers(b: &mut Cps2Bus, page: usize) -> [u32; 4] {
     [l[2], l[3], l[4], l[5]]
 }
 
-/// 0x1a296: all the palettes of the current scene (pages 0 to 3), sets the word `0x91d7fe` to zero;
-/// for scenes 0x2f and 0x42 page 0 is loaded into scroll layer 1 and the four
-/// fade sources (`A5 + 0x492`) are initialised.
-const FADE_SOURCES: u32 = 0x492;
-const CLEARED_WORD: u32 = 0x91d7fe;
+/// 0x1a296: all the palettes of the current scene (pages 0 to 3), sets the last colour of the palette RAM to zero;
+/// for scenes 0x2f and 0x42 page 0 is loaded into scroll layer 1 and the four fade sources (`SOURCES`) are
+/// initialised.
+const CLEARED_WORD: Vram = gfx::palette(5, 0x1ff);
 
-/// Fade sources of scenes 0x2f and 0x42: (layer 1, work buffer, two palettes in ROM).
+/// Address of palette `n` of the library.
+const fn library(n: u32) -> u32 {
+    Palettes::ROM + 32 * n
+}
+
+/// Fade sources of scenes 0x2f and 0x42: (layer 1, work buffer, two palettes of the library).
 fn special_sources(stage: u8) -> Option<[u32; 4]> {
     match stage {
-        0x2f => Some([hw::SCROLL1, 0xff1190, 0x275360, 0x285680]),
-        0x42 => Some([hw::SCROLL1, 0xff1190, 0x277780, 0x287ae0]),
+        0x2f => Some([hw::SCROLL1, flash::BACKUP, library(0x111b), library(0x19b4)]),
+        0x42 => Some([hw::SCROLL1, flash::BACKUP, library(0x123c), library(0x1a57)]),
         _ => None,
     }
 }
@@ -291,31 +302,29 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
 /// 0x1a296: all the palettes of the current scene. Returns the D0 that the original leaves: the first long of the
 /// last palette of page 3 (the configuration menu rereads it).
 pub fn load_all_palettes(b: &mut Cps2Bus) -> u32 {
-    let a5 = crate::mem::A5;
-    let stage = rd8(b, a5 + STAGE_VAR);
+    let stage = crate::ram::SCENE.get(b);
     let special = special_sources(stage);
     let dst = if special.is_some() { hw::SCROLL1 } else { PALETTES };
-    load_stage_palettes(b, a5, stage as u32, dst);
+    load_stage_palettes(b, stage as u32, dst);
     for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
         load_page(b, k, d0);
     }
-    wr16(b, CLEARED_WORD, 0);
+    CLEARED_WORD.set(b, 0);
     if let Some(sources) = special {
         for (k, source) in sources.into_iter().enumerate() {
-            wr32(b, a5 + FADE_SOURCES + 4 * k as u32, source);
+            SOURCES[k].set(b, source);
         }
     }
-    rd32(b, PALETTES + 3 * PAGE_SIZE + (PAGE_PALETTES - 1) * PALETTE_BYTES)
+    Vram(PALETTES + 3 * PAGE_SIZE + (PAGE_PALETTES - 1) * PALETTE_BYTES).long(b)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Per-component fades (V3): each colour approaches a target by one step per component
 // ---------------------------------------------------------------------------------------------
 
-/// Fade sources (`A5 + 0x492`, 4 long words: a full palette of 512 colours per page
-/// for 0x1cd7c, one colour (word) per page for 0x1cdd6).
-pub(crate) const SOURCES: u32 = 0x492;
-const PAGES_FLAG: u32 = 0x48e;
+/// Fade sources (4 long words, the same places as `PAGE_POINTERS`: a full palette of 512 colours per page for
+/// 0x1cd7c, one colour (word) per page for 0x1cdd6).
+pub(crate) const SOURCES: [Long; 4] = PAGE_POINTERS;
 
 /// Advances each RGB component (nibbles 0 to 2) of `color` by one step towards `target`. The
 /// brightness (nibble 3) is preserved.
@@ -352,13 +361,13 @@ fn colors_of(b: &mut Cps2Bus, page: u32, f: impl Fn(&mut Cps2Bus, u32, u32) -> u
 
 fn rewrite(b: &mut Cps2Bus, page: u32, results: &[u16]) {
     for (i, color) in results.iter().enumerate() {
-        wr16(b, page + 2 * i as u32, *color);
+        set_color(b, page + 2 * i as u32, *color);
     }
 }
 
 /// 0x1cfc8: approaches the 512 colours of page A0 to the target colours at A1.
 fn approach_page_results(b: &mut Cps2Bus, page: u32, target: u32) -> Vec<u16> {
-    colors_of(b, page, |b, page, i| approach(rd16(b, page + 2 * i), rd16(b, target + 2 * i)))
+    colors_of(b, page, |b, page, i| approach(color(b, page + 2 * i), color(b, target + 2 * i)))
 }
 
 pub(crate) fn approach_page(b: &mut Cps2Bus, page: u32, target: u32) {
@@ -368,7 +377,7 @@ pub(crate) fn approach_page(b: &mut Cps2Bus, page: u32, target: u32) {
 
 /// 0x1d042: approaches the 512 colours of page A0 to the single colour D1.
 fn approach_constant_results(b: &mut Cps2Bus, page: u32, goal: u16) -> Vec<u16> {
-    colors_of(b, page, |b, page, i| approach(rd16(b, page + 2 * i), goal))
+    colors_of(b, page, |b, page, i| approach(color(b, page + 2 * i), goal))
 }
 
 pub(crate) fn approach_constant(b: &mut Cps2Bus, page: u32, goal: u16) {
@@ -378,13 +387,13 @@ pub(crate) fn approach_constant(b: &mut Cps2Bus, page: u32, goal: u16) {
 
 /// 0x1d00e: the 512 colours of page A0 gain one step towards white.
 pub(crate) fn brighten_page(b: &mut Cps2Bus, page: u32) {
-    let results = colors_of(b, page, |b, page, i| brighten(rd16(b, page + 2 * i)));
+    let results = colors_of(b, page, |b, page, i| brighten(color(b, page + 2 * i)));
     rewrite(b, page, &results);
 }
 
-/// Checked pages (A5 + 0x48e) with their GFX RAM address.
-pub(crate) fn flagged_pages(b: &mut Cps2Bus, a5: u32) -> Vec<(usize, u32)> {
-    let flags = rd8(b, a5 + PAGES_FLAG);
+/// Checked pages (`PAGES`) with their GFX RAM address.
+pub(crate) fn flagged_pages(b: &mut Cps2Bus) -> Vec<(usize, u32)> {
+    let flags = PAGES.get(b);
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PALETTES + PAGE_SIZE * k as u32)).collect()
 }
 
@@ -393,24 +402,24 @@ pub(crate) fn flagged_pages(b: &mut Cps2Bus, a5: u32) -> Vec<(usize, u32)> {
 pub enum Target {
     /// White (`0x1cd32`).
     White,
-    /// One colour per page, the word `A5 + 0x492 + 4 k` (`0x1cdd6`).
+    /// One colour per page, the high word of `SOURCES[k]` (`0x1cdd6`).
     Colours,
-    /// A full palette per page, at address `A5 + 0x492 + 4 k` (`0x1cd7c`).
+    /// A full palette per page, at address `SOURCES[k]` (`0x1cd7c`).
     Palettes,
 }
 
-/// One per-component fade step of the checked pages (`A5 + 0x48e`) towards `target`.
+/// One per-component fade step of the checked pages (`PAGES`) towards `target`.
 pub fn component_step(b: &mut Cps2Bus, target: Target) {
-    for (k, page) in flagged_pages(b, crate::mem::A5) {
-        let source = crate::mem::A5 + SOURCES + 4 * k as u32;
+    for (k, page) in flagged_pages(b) {
+        let source = SOURCES[k];
         match target {
             Target::White => brighten_page(b, page),
             Target::Colours => {
-                let goal = rd16(b, source);
+                let goal = Word(source.0).get(b);
                 approach_constant(b, page, goal);
             }
             Target::Palettes => {
-                let target = rd32(b, source);
+                let target = source.get(b);
                 approach_page(b, page, target);
             }
         }
@@ -419,7 +428,7 @@ pub fn component_step(b: &mut Cps2Bus, target: Target) {
 
 /// `0x1cf3c`: the checked pages all white.
 pub fn white_out(b: &mut Cps2Bus) {
-    for (_, page) in flagged_pages(b, crate::mem::A5) {
+    for (_, page) in flagged_pages(b) {
         fill_page(b, page, [u32::MAX; 8]);
     }
 }
@@ -428,7 +437,7 @@ pub fn white_out(b: &mut Cps2Bus) {
 pub(crate) fn fill_page(b: &mut Cps2Bus, page: u32, values: [u32; 8]) {
     for row in 0..32 {
         for (i, value) in values.iter().enumerate() {
-            wr32(b, page + 32 * row + 4 * i as u32, *value);
+            Vram(page + 32 * row + 4 * i as u32).set_long(b, *value);
         }
     }
 }
@@ -442,9 +451,11 @@ pub const WHITE_PAGES: Native =
 
 /// Palettes set aside by the lightning: a page of 0x400 colours and 48 colours of page 0.
 pub(crate) mod flash {
-    pub const PAGE: u32 = 0x91c800;
+    use crate::hw::video::palette;
+
+    pub const PAGE: u32 = palette(2, 0).0;
     pub const PAGE_COLORS: u32 = 0x400;
-    pub const SPARE: u32 = 0x91c3a0;
+    pub const SPARE: u32 = palette(0, 0x1d0).0;
     pub const SPARE_COLORS: u32 = 0x30;
     /// Backup copy (work RAM): the page, then the 48 colours.
     pub const BACKUP: u32 = 0xff1190;
@@ -453,8 +464,8 @@ pub(crate) mod flash {
 
 fn copy_words(b: &mut Cps2Bus, from: u32, to: u32, words: u32) {
     for i in 0..words {
-        let v = rd16(b, from + 2 * i);
-        wr16(b, to + 2 * i, v);
+        let v = color(b, from + 2 * i);
+        set_color(b, to + 2 * i, v);
     }
 }
 
@@ -530,9 +541,9 @@ pub fn flash(b: &mut Cps2Bus, tint: Flash) -> u16 {
     let mut last = 0;
     for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
         for i in 0..colors {
-            last = rd16(b, start + 2 * i);
+            last = color(b, start + 2 * i);
             let tinted = flash_color(flash_level(last), base, mask);
-            wr16(b, start + 2 * i, tinted);
+            set_color(b, start + 2 * i, tinted);
         }
     }
     last
@@ -541,15 +552,15 @@ pub fn flash(b: &mut Cps2Bus, tint: Flash) -> u16 {
 /// Colour of the screen flash (colour 14 of page 1 of the interface, `0x91c41c`): 0x1ac68 sets it to
 /// 0xff00 (`FLASH_COLOR_ON`), 0x1ac86 and 0x35288 to 0xffff (white).
 pub fn set_flash_color(b: &mut Cps2Bus, color: u16) {
-    wr16(b, FLASH_COLOR, color);
+    FLASH_COLOR.set(b, color);
 }
 
-const FLASH_COLOR: u32 = 0x91c41c;
+const FLASH_COLOR: Vram = gfx::palette(1, 14);
 pub const FLASH_COLOR_RED: u16 = 0xff00;
 pub const FLASH_COLOR_WHITE_VALUE: u16 = 0xffff;
 
-/// 0x37882: palette of the character of object `o` (`+3`): 8 longs copied from the plain table 0x390c2 to
-/// page 0, at the same offset (offset table 0x378aa).
+/// 0x37882: palette of the character of object `o` (`+3`): 8 longs copied from the plain palettes (`aura_normal` of
+/// `data/rest.json`) to page 0, at the same offset (`aura_offsets`).
 pub fn character_palette(b: &mut Cps2Bus, o: crate::objects::Obj) {
     let (_, from, to) = character_palette_at(b, o.0);
     copy_palette(b, from, to);
@@ -557,9 +568,10 @@ pub fn character_palette(b: &mut Cps2Bus, o: crate::objects::Obj) {
 
 /// (offset, source, destination) of the palette of the character of object `o`.
 pub(crate) fn character_palette_at(b: &mut Cps2Bus, o: u32) -> (u32, u32, u32) {
-    let character = rd8(b, o + 3) as u32;
-    let offset = crate::mem::prog16(b, 0x378aa + 2 * character) as i16 as i32 as u32;
-    (offset, 0x390c2u32.wrapping_add(offset), 0x91c000u32.wrapping_add(offset))
+    let character = crate::player::Player(o).character(b) as u32;
+    let offset = engine().get("aura_offsets").nth16(b, character) as i16 as i32 as u32;
+    let plain = engine().get("aura_normal").rom;
+    (offset, plain.wrapping_add(offset), PALETTES.wrapping_add(offset))
 }
 
 /// Native routines of this module (the brightness settings are declared in `lib.rs`).

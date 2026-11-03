@@ -11,7 +11,8 @@
 //! `data/engine.json` and of the files whose tables the engine also reads (`enemies.json`: hit points, immunities,
 //! approach points; `scenes.json`: per-scene camera tables, player markers; `rest.json`: aura palettes) by name, and,
 //! by address, those tables plus the scenery maps (`levels.json`), the fixed terrain maps, the scene palette tables,
-//! the palette library and the collision boxes (`sprites/tables.json`). A read outside
+//! the palette library, the collision boxes (`sprites/tables.json`) and the texts (`texts.json`, the dialogs and the
+//! texts of the other files). A read outside
 //! every table is a read of the residue (`Missing`): counted, fatal with `DDSOM_STRICT=1`.
 
 use std::collections::HashMap;
@@ -191,17 +192,17 @@ impl Tables {
 
     /// Byte of the program space at `a` (table read PC-relative).
     pub fn pc_byte(&self, b: &mut Cps2Bus, a: u32) -> u8 {
-        self.runs[1].get(a, 1).map_or_else(|| self.missing(a).prog8(b, a), |v| v as u8)
+        self.runs[1].get(a, 1).map_or_else(|| self.missing(a).pc_byte(b, a), |v| v as u8)
     }
 
     /// Word of the program space at `a`.
     pub fn pc_word(&self, b: &mut Cps2Bus, a: u32) -> u16 {
-        self.runs[1].get(a, 2).map_or_else(|| self.missing(a).prog16(b, a), |v| v as u16)
+        self.runs[1].get(a, 2).map_or_else(|| self.missing(a).pc_word(b, a), |v| v as u16)
     }
 
     /// Long of the program space at `a`.
     pub fn pc_long(&self, b: &mut Cps2Bus, a: u32) -> u32 {
-        self.runs[1].get(a, 4).unwrap_or_else(|| self.missing(a).prog32(b, a))
+        self.runs[1].get(a, 4).unwrap_or_else(|| self.missing(a).pc_long(b, a))
     }
 }
 
@@ -241,6 +242,14 @@ fn engine_zones() -> [Vec<(u32, Vec<u8>)>; 2] {
         zones[t.program as usize].push((t.rom, t.entries.iter().flat_map(|a| a.to_be_bytes()).collect()));
     }
     zones[0].push((ddsom_data::Palettes::ROM, d.palettes.bytes()));
+    for (rom, program, bytes) in d.texts.regions() {
+        zones[program as usize].push((rom, bytes));
+    }
+    for f in [&d.dialogs, &d.scenes, &d.misc, &d.screens, &d.set] {
+        for text in &f.texts {
+            zones[0].push((text.rom, text.bytes()));
+        }
+    }
     for bt in &d.sprite_tables.box_tables {
         zones[0].push((bt.rom, bt.sets.iter().flat_map(|a| a.to_be_bytes()).collect()));
     }

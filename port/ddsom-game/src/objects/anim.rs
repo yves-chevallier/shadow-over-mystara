@@ -199,7 +199,7 @@ pub fn start_by_character(b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u1
     let index = (v << 2) as i16 as i32;
     let set = match data().anims.character_sets(RomAddr(sets.pointers)).and_then(|p| p.get(index / 4)) {
         Some(set) => set.0,
-        None => Missing { table: "character sets", key: sets.pointers }.prog32(b, sets.pointers.wrapping_add(index as u32)),
+        None => Missing { table: "character sets", key: sets.pointers }.pc_long(b, sets.pointers.wrapping_add(index as u32)),
     };
     let script = script_at(b, set, n);
     load_entry(b, obj, script, true)

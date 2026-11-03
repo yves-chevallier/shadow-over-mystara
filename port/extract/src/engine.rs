@@ -155,6 +155,71 @@ fn video(t: &mut Tables) {
     t.data("video/fixed_screens", 0x19a1a, "x16", Some(60));
 }
 
+/// Texts displayed in sprites (`sprites.rs`, three slots of string pointers: bytes, or words for the two-player
+/// cabinet), by ranges of the strings that the game shows.
+fn sprite_texts(t: &mut Tables) {
+    const RANGES: [(u32, u32); 33] = [
+        (0x1d8be, 0x1ddd0),
+        (0x1ef5c, 0x1ef5e),
+        (0x200f6, 0x20522),
+        (0xb2b6a, 0xb2c54),
+        (0xde4e2, 0xde608),
+        (0xdea84, 0xdebf0),
+        (0xdec66, 0xdedee),
+        (0xe01cc, 0xe0256),
+        (0xf8596, 0xf863c),
+        (0xf881c, 0xf8856),
+        (0xf8992, 0xf89ea),
+        (0x185c60, 0x185d0a),
+        (0x185e3c, 0x185ede),
+        (0x186162, 0x186208),
+        (0x1865c8, 0x1869b8),
+        (0x186a32, 0x186b42),
+        (0x186c1e, 0x186cce),
+        (0x186d18, 0x186d6e),
+        (0x187086, 0x187328),
+        (0x18745c, 0x1875ea),
+        (0x18911e, 0x1891be),
+        (0x1892d2, 0x18936a),
+        (0x1895c6, 0x189662),
+        (0x1899e6, 0x189d5e),
+        (0x189dce, 0x189eb6),
+        (0x189f7e, 0x18a01a),
+        (0x18a05a, 0x18a0a6),
+        (0x18a382, 0x18a5f2),
+        (0x18a712, 0x18a882),
+        (0x1b53e2, 0x1b53ee),
+        (0x1b5406, 0x1b540a),
+        (0x1bf146, 0x1bf156),
+        (0x1c3f3a, 0x1c3fe6),
+    ];
+    for (at, end) in RANGES {
+        t.data(&format!("sprites/texts@{at:#x}"), at, "u8", Some((end - at) as usize));
+    }
+}
+
+/// Small creators and routines (`families/small.rs`): roars of boss 15 (counts by rank / 2), the stones' offsets, the
+/// undead counts by rank / 4, the four palettes of 0x101da.
+fn small(t: &mut Tables) {
+    t.prog("small/roar_big", 0xa726c, "u8", Some(16));
+    t.prog("small/roar_small", 0xa72b4, "u8", Some(16));
+    t.prog("small/stone_offsets", 0x537ca, "i16 i16", Some(12));
+    t.prog("small/undead_counts", 0x3baf8, "u8", Some(8));
+    t.data("small/palettes_69", 0x10218, "x16", Some(64));
+}
+
+/// Object creators (`families/creators.rs`): the kinds of weapon that come with a shot (two masks), the SET kind of the
+/// scene objects, the music and exit routines of the scene objects by variant, the argument of SET 0x15 by creator type.
+fn creators(t: &mut Tables) {
+    t.prog("creators/weapon_shots", 0x51c5c, "x32", Some(2));
+    t.prog("creators/scene_sets", 0xc834c, "u8", Some(4));
+    t.prog("creators/music_routines", 0xd978c, "addr", Some(3));
+    t.prog("creators/music_of_variant", 0xd9798, "u8", None);
+    t.prog("creators/exit_routines", 0xd982e, "addr", Some(2));
+    t.prog("creators/exit_of_variant", 0xd9836, "u8", None);
+    t.prog("creators/set_15_args", 0xd697c, "x16", None);
+}
+
 /// All the tables of the engine.
 fn all(t: &mut Tables, rom: &Program) {
     ai(t, rom);
@@ -162,6 +227,9 @@ fn all(t: &mut Tables, rom: &Program) {
     placement(t);
     cameras(t, rom);
     video(t);
+    sprite_texts(t);
+    small(t);
+    creators(t);
 }
 
 /// The engine tables of the program `rom`.

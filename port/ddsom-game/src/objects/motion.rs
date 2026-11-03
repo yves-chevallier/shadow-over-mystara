@@ -175,7 +175,7 @@ pub fn select_speed(b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
     let index = (n << 2) as i16 as i32;
     let table = match data().speeds.array(RomAddr(tables.pointers)).and_then(|p| p.get(index / 4)) {
         Some(t) => t.0,
-        None => Missing { table: "speed array", key: tables.pointers }.prog32(b, tables.pointers.wrapping_add(index as u32)),
+        None => Missing { table: "speed array", key: tables.pointers }.pc_long(b, tables.pointers.wrapping_add(index as u32)),
     };
     select_speed_table(b, obj, table);
 }

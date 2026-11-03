@@ -8,7 +8,7 @@ use m68k::Cpu;
 use crate::palette::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{rd16, rd32, rd8, wr32};
+use crate::mem::{rd16, rd32, wr32};
 use crate::video::hw;
 
 macro_rules! page_native {
@@ -59,10 +59,10 @@ struct StageEnd {
 }
 
 /// Where `load_stage_palettes(b, a5, d0, dst)` ends (read before the load: the lists do not change).
-fn stage_end(b: &mut Cps2Bus, a5: u32, d0: u32, dst: u32) -> StageEnd {
+fn stage_end(b: &mut Cps2Bus, d0: u32, dst: u32) -> StageEnd {
     let (list, count) = (stage_list(d0), stage_count(d0 as u8));
     let listed = (0..count).rev().find(|&i| rd16(b, list + 2 * i) & 0x8000 == 0);
-    let extra = stage_extra(b, a5);
+    let extra = stage_extra(b);
     let end = dst + (count + if extra != 0 { EXTRA_PALETTES } else { 0 }) * PALETTE_BYTES;
     let last = if extra != 0 { Some(end - PALETTE_BYTES) } else { listed.map(|i| dst + i * PALETTE_BYTES) };
     StageEnd { dst: end, list: list + 2 * count, last, extra }
@@ -71,7 +71,7 @@ fn stage_end(b: &mut Cps2Bus, a5: u32, d0: u32, dst: u32) -> StageEnd {
 /// Registers that 0x1a36c leaves: D0 = current scene x 4, D1-D6/A1/A2 = last palette copied
 /// (D1 = 0 if there are no extra palettes), A3, A4, A6, D7 = 0xffff.
 fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
-    let current = rd8(b, c.a[5] + STAGE_VAR) as u32;
+    let current = crate::ram::SCENE.get(b) as u32;
     c.d[0] = (current << 2) & 0xffff;
     if let Some(at) = end.last {
         let l = palette_longs(b, at);
@@ -81,7 +81,7 @@ fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
     }
     if end.extra == 0 {
         c.d[1] = 0;
-        c.a[3] = STAGE_EXTRA;
+        c.a[3] = crate::data::data().scene_palettes.extra.rom;
     } else {
         c.a[3] = end.extra + EXTRA_PALETTES * PALETTE_BYTES;
     }
@@ -94,7 +94,7 @@ fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
 /// 0x1a350 and 0x1a360 read the current scene; 0x1a366 takes D0 as is. 0x1a350 writes into the
 /// scroll layer 1 (scenes 0x2f and 0x42, where page 0 serves as the fade source).
 fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
-    let stage = rd8(b, c.a[5] + STAGE_VAR) as u32;
+    let stage = crate::ram::SCENE.get(b) as u32;
     match entry {
         0x1a350 => (stage, hw::SCROLL1),
         0x1a360 => (stage, PALETTES),
@@ -104,8 +104,8 @@ fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
 
 fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     let (d0, dst) = stage_args(b, c, entry);
-    let end = stage_end(b, c.a[5], d0, dst);
-    load_stage_palettes(b, c.a[5], d0, dst);
+    let end = stage_end(b, d0, dst);
+    load_stage_palettes(b, d0, dst);
     stage_regs(c, b, &end);
     rts(c, b);
 }
@@ -123,7 +123,7 @@ fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_word(&mut c.d[0], shifted);
     if source == 0 {
         c.d[1] = 0;
-        c.a[3] = SETS;
+        c.a[3] = crate::data::data().scene_palettes.sets.rom;
         c.a[4] = PALETTES;
     } else {
         let l = palette_longs(b, PALETTES + (PAGE_PALETTES - 1) * PALETTE_BYTES);
@@ -160,12 +160,12 @@ fn page_regs(c: &mut Cpu, b: &mut Cps2Bus, k: usize, source: u32) {
 /// Effective D0 of a page loader: the caller's for the "D0" entry, otherwise 0 (page 1)
 /// or the current scene.
 fn page_d0(b: &mut Cps2Bus, c: &Cpu, k: usize, entry: u32) -> u32 {
-    if entry == PAGE_TABLES[k].2 {
+    if entry == [0x1a60a, 0x1a67e, 0x1a8b2][k] {
         c.d[0]
     } else if k == 0 {
         0
     } else {
-        rd8(b, c.a[5] + STAGE_VAR) as u32
+        crate::ram::SCENE.get(b) as u32
     }
 }
 
@@ -179,7 +179,7 @@ fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
 /// 0x1a296. Of the registers that the scene loader leaves, the following steps (the three pages) only keep A6 (end
 /// of its list) and the high word of D7 (zero); the flags are those of the final `clr.w`.
 fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
-    let stage = rd8(b, c.a[5] + STAGE_VAR);
+    let stage = crate::ram::SCENE.get(b);
     load_all_palettes(b);
     c.a[6] = stage_list(stage as u32) + 2 * stage_count(stage);
     c.d[7] = 0xffff;
@@ -193,8 +193,8 @@ fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x1cd7c: one fade step of each checked page towards its target palette (`A5 + 0x492 + 4 k`).
 fn fade_to_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
-    for (k, page) in flagged_pages(b, c.a[5]) {
-        let target = rd32(b, c.a[5] + SOURCES + 4 * k as u32);
+    for (k, page) in flagged_pages(b) {
+        let target = SOURCES[k].get(b);
         approach_page(b, page, target);
     }
     rts(c, b);
@@ -202,8 +202,8 @@ fn fade_to_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x1cdd6: one fade step of each checked page towards the colour (word) `A5 + 0x492 + 4 k`.
 fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
-    for (k, page) in flagged_pages(b, c.a[5]) {
-        let goal = rd16(b, c.a[5] + SOURCES + 4 * k as u32);
+    for (k, page) in flagged_pages(b) {
+        let goal = crate::ram::Word(SOURCES[k].0).get(b);
         approach_constant(b, page, goal);
     }
     rts(c, b);
@@ -211,7 +211,7 @@ fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x1cd32: one fade step towards white of each checked page.
 fn fade_to_white(c: &mut Cpu, b: &mut Cps2Bus) {
-    for (_, page) in flagged_pages(b, c.a[5]) {
+    for (_, page) in flagged_pages(b) {
         brighten_page(b, page);
     }
     rts(c, b);

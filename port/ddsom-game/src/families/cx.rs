@@ -8,7 +8,7 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::ram::{Byte, Long, Word};
 use crate::dispatch::{Dispatch, Leftovers};
 use crate::objects::pools;
 use crate::objects::{Current, Obj};
@@ -138,22 +138,22 @@ impl<R> Cx<'_, R> {
     // --- fields of the current object --------------------------------------------------------
 
     pub fn u8(&mut self, off: u32) -> u8 {
-        rd8(self.b, self.o.0 + off)
+        self.o.u8(self.b, off)
     }
     pub fn u16(&mut self, off: u32) -> u16 {
-        rd16(self.b, self.o.0 + off)
+        self.o.u16(self.b, off)
     }
     pub fn u32(&mut self, off: u32) -> u32 {
-        rd32(self.b, self.o.0 + off)
+        self.o.u32(self.b, off)
     }
     pub fn set8(&mut self, off: u32, v: u8) {
-        wr8(self.b, self.o.0 + off, v)
+        self.o.set_u8(self.b, off, v)
     }
     pub fn set16(&mut self, off: u32, v: u16) {
-        wr16(self.b, self.o.0 + off, v)
+        self.o.set_u16(self.b, off, v)
     }
     pub fn set32(&mut self, off: u32, v: u32) {
-        wr32(self.b, self.o.0 + off, v)
+        self.o.set_u32(self.b, off, v)
     }
     /// `add.w #v,(off,A0)`: in-place addition modulo 2^16.
     pub fn add16(&mut self, off: u32, v: u16) {
@@ -181,66 +181,36 @@ impl<R> Cx<'_, R> {
 
     /// Object pointed to by a 16-bit field (`movea.w (off,A0),A1`: sign-extended address).
     pub fn linked(&mut self, off: u32) -> Obj {
-        Obj(self.u16(off) as i16 as i32 as u32 & 0xff_ffff)
+        Obj::from_word(self.u16(off))
     }
+    /// Work RAM at `A5 + off` (the variables that the families still designate by their offset).
     pub fn a5_u8(&mut self, off: u32) -> u8 {
-        rd8(self.b, A5 + off)
+        Byte::a5(off).get(self.b)
     }
     pub fn a5_u16(&mut self, off: u32) -> u16 {
-        rd16(self.b, A5 + off)
+        Word::a5(off).get(self.b)
     }
     pub fn a5_u32(&mut self, off: u32) -> u32 {
-        rd32(self.b, A5 + off)
+        Long::a5(off).get(self.b)
     }
     pub fn set_a5_u8(&mut self, off: u32, v: u8) {
-        wr8(self.b, A5 + off, v)
+        Byte::a5(off).set(self.b, v)
     }
     pub fn set_a5_u16(&mut self, off: u32, v: u16) {
-        wr16(self.b, A5 + off, v)
+        Word::a5(off).set(self.b, v)
     }
     pub fn set_a5_u32(&mut self, off: u32, v: u32) {
-        wr32(self.b, A5 + off, v)
-    }
-    /// Word and long read in data space (ROM tables addressed in absolute).
-    pub fn data16(&mut self, addr: u32) -> u16 {
-        rd16(self.b, addr)
-    }
-    pub fn data32(&mut self, addr: u32) -> u32 {
-        rd32(self.b, addr)
-    }
-    /// Word read in program space (PC-relative addressed table).
-    pub fn rom16(&mut self, addr: u32) -> u16 {
-        self.b.fetch16(addr)
-    }
-    pub fn rom8(&mut self, addr: u32) -> u8 {
-        let w = self.b.fetch16(addr & !1);
-        if addr & 1 == 0 { (w >> 8) as u8 } else { w as u8 }
-    }
-    pub fn data8(&mut self, addr: u32) -> u8 {
-        rd8(self.b, addr)
-    }
-    pub fn rom_i16(&mut self, addr: u32) -> i16 {
-        self.b.fetch16(addr) as i16
+        Long::a5(off).set(self.b, v)
     }
 
-    /// Byte of the work RAM at `A5 + offset` (sign-extended offset).
-    pub fn ram8(&mut self, offset: i32) -> u8 {
-        rd8(self.b, A5.wrapping_add(offset as u32))
-    }
+    /// Word of the work RAM at `A5 + offset` (sign-extended offset).
     pub fn ram16(&mut self, offset: i32) -> u16 {
-        rd16(self.b, A5.wrapping_add(offset as u32))
-    }
-    pub fn set_ram8(&mut self, offset: i32, v: u8) {
-        wr8(self.b, A5.wrapping_add(offset as u32), v)
+        Word(crate::mem::A5.wrapping_add(offset as u32)).get(self.b)
     }
 
-    /// The frame camera: screen (x, y), the alternate camera when `A5+0x36` is set.
+    /// The frame camera: screen (x, y), the alternate camera when it is selected (`ram::camera`).
     pub fn camera(&mut self) -> (u16, u16) {
-        if self.a5_u8(0x36) != 0 {
-            (self.a5_u16(0x556), self.a5_u16(0x55a))
-        } else {
-            (self.a5_u16(0x506), self.a5_u16(0x50a))
-        }
+        crate::ram::camera(self.b)
     }
 
     /// End of the handler: the object is freed (shot destroyed).

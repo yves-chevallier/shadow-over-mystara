@@ -188,6 +188,9 @@ record! {
         flip, set_flip, FLIP: u8 @ 0x2c;
         /// Index into the speed table (`SPEED_TABLE`).
         speed_index, set_speed_index, SPEED_INDEX: u8 @ 0x2d;
+        /// Bit 0: imposed palette (`PALETTE` replaces the palette of the frame's pieces), and that palette.
+        own_palette, set_own_palette, OWN_PALETTE: u8 @ 0x2a;
+        palette, set_palette, PALETTE: u8 @ 0x2b;
         /// Collision box set (one set per object kind: `sprites/tables.json`).
         box_set, set_box_set, BOX_SET: u8 @ 0x2e;
         /// Setting given by the creator of the object (group, rank, number in a series...).
@@ -203,6 +206,11 @@ record! {
         body_box, set_body_box, BODY_BOX: u8 @ 0x38;
         push_box, set_push_box, PUSH_BOX: u8 @ 0x39;
         attack_box, set_attack_box, ATTACK_BOX: u8 @ 0x3a;
+        /// The bytes of `FRAME_DATA_B`: ground mark (`sprites/tables.json`, `marks`), visibility box (`bounds`), then
+        /// the display priority.
+        ground_mark, set_ground_mark, GROUND_MARK: u8 @ 0x3b;
+        bounds, set_bounds, BOUNDS: u8 @ 0x3c;
+        priority, set_priority, PRIORITY: u8 @ 0x3f;
         frame_data_b, set_frame_data_b, FRAME_DATA_B: u32 @ 0x3c;
         /// Two additional longs of data for the long animation entries.
         frame_data_c, set_frame_data_c, FRAME_DATA_C: u32 @ 0x40;
@@ -212,6 +220,17 @@ record! {
         /// Countdown (frames): at zero, `COUNTDOWN_FLAG` is cleared.
         countdown, set_countdown, COUNTDOWN: u8 @ 0x89;
         countdown_flag, set_countdown_flag, COUNTDOWN_FLAG: u8 @ 0x88;
+        /// Word argument given by the creator of the object (object scripts of the SET, creators).
+        arg, set_arg, ARG: u16 @ 0x42;
+        /// Low word of the address of the object that created or owns this one (scene controller, wave, host).
+        owner, set_owner, OWNER: u16 @ 0x46;
+        /// Object this one is tied to (word, RAM address): the owner of a shot or an effect, the window that a window
+        /// effect closes.
+        tied, set_tied, TIED: u16 @ 0x50;
+        /// Objects attached to this one (words; a negative word is the RAM address of the object), drawn in front of
+        /// it or behind it according to their own depth (`sprites`).
+        attached_b, set_attached_b, ATTACHED_B: u16 @ 0x48;
+        attached_a, set_attached_a, ATTACHED_A: u16 @ 0x4a;
         /// Current speed table (ROM address of an array of (vx, vy) 8.8 indexed by `SPEED_INDEX`).
         speed_table, set_speed_table, SPEED_TABLE: u32 @ 0x4c;
     }

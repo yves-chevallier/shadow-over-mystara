@@ -375,7 +375,7 @@ view! {
 
 record! {
     impl WindowEffect {
-        /// The window to close (low word of its address).
-        window, set_window, WINDOW: u16 @ 0x50;
+        /// The window to close (low word of its address): `Obj::TIED`.
+        window, set_window, WINDOW: u16 @ crate::objects::Obj::TIED;
     }
 }

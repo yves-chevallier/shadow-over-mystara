@@ -147,8 +147,10 @@ pub const CAMERA1_X: Word = Word::a5(0x5a6);
 pub const CAMERA1_Y: Word = Word::a5(0x5aa);
 pub const CAMERA2_X: Word = Word::a5(0x5ae);
 pub const CAMERA2_Y: Word = Word::a5(0x5b2);
+/// Number of players of the cabinet (2 or 4: word); with 2, the texts in sprites are words.
+pub const CABINET_PLAYERS: Word = Word::a5(0x72);
 /// Delay before the game over sequence (`aids::game_over`), `A5-0x55c6`.
-pub const GAME_OVER_DELAY: Word = Word(0xffaa3a);
+pub const GAME_OVER_DELAY: Word = Word(0xff2a3a);
 /// Switches word (DSW) read at VBLANK (`FF7FD0`): bit 0x200 no damage display, 0x400 charge gauge
 /// inactive, 0x800 collisions with the terrain.
 pub const DSW: Word = Word::a5(0x7fd0);

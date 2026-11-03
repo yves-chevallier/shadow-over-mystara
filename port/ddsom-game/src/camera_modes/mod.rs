@@ -69,7 +69,7 @@ mod mode {
 const ROW_SCROLL: Vram = crate::hw::video::SCRATCH;
 const ROW_SCROLL_B: Vram = ROW_SCROLL.offset(0x200);
 /// Copy of the video control register (`regs::VIDEO_CONTROL`), bit 0: per-line scroll.
-const VIDEO_CONTROL_COPY: Word = Word::a5(0x12);
+use crate::video::VIDEO_CONTROL as VIDEO_CONTROL_COPY;
 
 // ---------------------------------------------------------------------------------------------
 // Initialisation and update of the cameras

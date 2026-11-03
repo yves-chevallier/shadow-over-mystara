@@ -36,12 +36,13 @@ record! {
         suspend_phase, set_suspend_phase, SUSPEND_PHASE: u8 @ 0x41;
         /// Display attribute byte: bit 0x20 flips the object horizontally (h).
         attr, set_attr, ATTR: u8 @ 0x2c;
-        /// Creation parameter (`+0x2f` of the object scripts; variant of the created controller...).
-        param, set_param, PARAM: u8 @ 0x2f;
-        /// Word parameter of the object scripts (`+0x42`).
-        arg, set_arg, ARG: u16 @ 0x42;
-        /// Owner: low word of the address of the object that created this one (scene controller, wave...).
-        owner, set_owner, OWNER: u16 @ 0x46;
+        /// Creation parameter (`+0x2f` of the object scripts; variant of the created controller...): `Obj::SETTING`.
+        param, set_param, PARAM: u8 @ crate::objects::Obj::SETTING;
+        /// Word parameter of the object scripts: `Obj::ARG`.
+        arg, set_arg, ARG: u16 @ crate::objects::Obj::ARG;
+        /// Owner: low word of the address of the object that created this one (scene controller, wave...):
+        /// `Obj::OWNER`.
+        owner, set_owner, OWNER: u16 @ crate::objects::Obj::OWNER;
     }
 }
 

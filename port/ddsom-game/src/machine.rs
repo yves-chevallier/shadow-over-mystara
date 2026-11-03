@@ -3,8 +3,8 @@
 //! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
 //! `combat::World`...); all of them hold `b: &mut Cps2Bus`. Rather than a base structure that
 //! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
-//! the [`Machine`] trait, which gives them the common services once: the random draw, and reads in the
-//! program space and the data space. The work RAM variables are read through their typed views
+//! the [`Machine`] trait, which gives them the common services once: the random draw. The data of the original are
+//! read through the typed tables (`crate::tables`, `crate::data`). The work RAM variables are read through their typed views
 //! (`ram::SCENE.get(x.bus())`, `Obj`, `Player`). The object engine (animation, movement, lists, screen) is in
 //! [`crate::objects::Current`], for the contexts that process an object.
 //!
@@ -13,7 +13,6 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8};
 use crate::rng;
 
 /// Common access to the machine (see the module header).
@@ -26,28 +25,10 @@ pub trait Machine {
         rng::random(self.bus())
     }
 
-    /// Byte, word and long of the program space (tables read PC-relative in the original: the decrypted
-    /// program).
-    fn prog8(&mut self, a: u32) -> u8 {
-        crate::mem::prog8(self.bus(), a)
-    }
+    /// Word of the program space (a table read PC-relative in the original: the decrypted program). Only the task of
+    /// the game phases still reads its table this way (`tasks::game`, L13).
     fn prog16(&mut self, a: u32) -> u16 {
         self.bus().fetch16(a)
-    }
-    fn prog32(&mut self, a: u32) -> u32 {
-        crate::mem::prog32(self.bus(), a)
-    }
-
-    /// Byte, word and long of the data space (ROM tables reached through an absolute address or a pointer,
-    /// RAM).
-    fn data8(&mut self, a: u32) -> u8 {
-        rd8(self.bus(), a)
-    }
-    fn data16(&mut self, a: u32) -> u16 {
-        rd16(self.bus(), a)
-    }
-    fn data32(&mut self, a: u32) -> u32 {
-        rd32(self.bus(), a)
     }
 }
 

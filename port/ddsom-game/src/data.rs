@@ -56,35 +56,35 @@ impl Missing {
     }
 
     /// Byte of the residue in the program space.
-    pub fn prog8(self, b: &mut Cps2Bus, a: u32) -> u8 {
+    pub fn pc_byte(self, b: &mut Cps2Bus, a: u32) -> u8 {
         note(self, a);
         crate::mem::prog8(b, a)
     }
 
     /// Word of the residue in the program space.
-    pub fn prog16(self, b: &mut Cps2Bus, a: u32) -> u16 {
+    pub fn pc_word(self, b: &mut Cps2Bus, a: u32) -> u16 {
         note(self, a);
         crate::mem::prog16(b, a)
     }
 
     /// Long of the residue in the program space (tables in the code, read PC-relative).
-    pub fn prog32(self, b: &mut Cps2Bus, a: u32) -> u32 {
+    pub fn pc_long(self, b: &mut Cps2Bus, a: u32) -> u32 {
         note(self, a);
         crate::mem::prog32(b, a)
     }
 
     /// Byte of the residue, in program space if `program` (tables read PC-relative), otherwise in data space.
     pub fn byte_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u8 {
-        if program { self.prog8(b, a) } else { self.read8(b, a) }
+        if program { self.pc_byte(b, a) } else { self.read8(b, a) }
     }
 
     /// Word of the residue in the space chosen by `program`.
     pub fn word_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u16 {
-        if program { self.prog16(b, a) } else { self.read16(b, a) }
+        if program { self.pc_word(b, a) } else { self.read16(b, a) }
     }
 
     /// Long of the residue in the space chosen by `program`.
     pub fn long_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u32 {
-        if program { self.prog32(b, a) } else { self.read32(b, a) }
+        if program { self.pc_long(b, a) } else { self.read32(b, a) }
     }
 }
