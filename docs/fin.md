@@ -1193,7 +1193,12 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     images, avec les ROMs et avec `DDSOM_ASSETS`) ; `mame_snapshots` réussi. `bench` bot30k 12 000 images (meilleur de
     3, en alternance avec d1ea264) : sans rendu 19 567 images/s (base 19 408), avec rendu 3 887 (base 3 857), même
     empreinte `a65ecd8aa6e38d4f`.
-  * Validation : VALIDATION_A_COMPLETER.
+  * Validation : 309/309 VALID après (a) (mode par défaut) ; final (2aa6005, code inchangé depuis) : 309/309 VALID en
+    mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1
+    DDSOM_LONG=1` ; résidu identique dans les deux modes (clés de L1 et `damage_crit_row` de L10, aucune du moteur) ;
+    tests `ddsom-assets` (dont `engine_lossless`), `extract` (`to_data` : engine, levels, terrain, palettes de scène,
+    bibliothèque, rest, boxes), `ddsom-data`, `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans
+    `tools`.
 
 ### Série 5 (un agent, transverse)
 
