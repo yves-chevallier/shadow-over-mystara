@@ -184,6 +184,8 @@ record! {
         next, set_next, NEXT: Link @ 0x26;
         /// Class code (= original pool: see `pools::Pool::class`).
         class, set_class, CLASS: u8 @ 0x28;
+        /// Terrain number under the object, set by the collision with the terrain (`terrain::push`).
+        terrain, set_terrain, TERRAIN: u8 @ 0x29;
         /// Orientation: 0 faces right, 0x20 faces left (horizontal mirror of the sprite).
         flip, set_flip, FLIP: u8 @ 0x2c;
         /// Index into the speed table (`SPEED_TABLE`).

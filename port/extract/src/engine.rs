@@ -141,6 +141,10 @@ fn cameras(t: &mut Tables, rom: &Program) {
     // thunderstorm: palette fade steps (source in the palette library, destination), ended by a null source
     let steps = (0..).find(|&k| rom.prog32(0x30816 + 8 * k) == 0).unwrap();
     t.add("camera/palette_steps", 0x30816, true, "addr addr", &["source", "destination"], Some(steps as usize + 1));
+    for k in 0..steps {
+        let source = rom.prog32(0x30816 + 8 * k);
+        t.data(&format!("camera/palette_step@{source:#x}"), source, "x16", Some(24));
+    }
     // camera 2: blocks of layer 3 loaded at the entry of scenes 4/91, 6, 12/101, 18 (block, offset from 0x918000)
     for (at, n) in [(0x321fc, 24), (0x32284, 8), (0x322cc, 8), (0x32314, 8)] {
         t.add(&format!("camera2/blocks@{at:#x}"), at, false, "u16 i16", &["block", "offset"], Some(n));
@@ -151,6 +155,10 @@ fn cameras(t: &mut Tables, rom: &Program) {
 /// program space), the table of fixed screens copied at startup.
 fn video(t: &mut Tables) {
     t.data("video/scroll2_banks", 0x275a, "addr", None);
+    // the grids of blocks of layer 2 that no scene map uses (the backgrounds that the screens load by number), after
+    // the strips of `levels.json`, and the bytes between the last block bank of layer 2 and the strips of layer 3
+    t.data("video/scroll2_grids", 0x20c0a0, "x16", Some((0x211ba0 - 0x20c0a0) / 2));
+    t.data("video/scroll2_tail", 0x2457c0, "x16", Some((0x2459c0 - 0x2457c0) / 2));
     t.prog("video/scroll3_banks", 0x27e6, "addr", None);
     t.data("video/fixed_screens", 0x19a1a, "x16", Some(60));
 }
@@ -198,6 +206,12 @@ fn sprite_texts(t: &mut Tables) {
     }
 }
 
+/// Palettes (`palette.rs`): a page of the scene palettes whose entry is null is copied from address 0 (original glitch:
+/// the reset vectors and the start of the program read as 32 palettes).
+fn palettes(t: &mut Tables) {
+    t.data("palette/from_zero", 0, "x16", Some(0x200));
+}
+
 /// Small creators and routines (`families/small.rs`): roars of boss 15 (counts by rank / 2), the stones' offsets, the
 /// undead counts by rank / 4, the four palettes of 0x101da.
 fn small(t: &mut Tables) {
@@ -220,6 +234,12 @@ fn creators(t: &mut Tables) {
     t.prog("creators/set_15_args", 0xd697c, "x16", None);
 }
 
+/// Rank (`objects/rank.rs`): the rows of settings (16 bytes), chosen by `A5+0x2a`; the last three rows are read in
+/// the code that follows the six rows of the table (original glitch: a row number above 5).
+fn rank(t: &mut Tables) {
+    t.data("rank/presets", 0x1f1d8, "x32*4", Some(9));
+}
+
 /// All the tables of the engine.
 fn all(t: &mut Tables, rom: &Program) {
     ai(t, rom);
@@ -230,6 +250,8 @@ fn all(t: &mut Tables, rom: &Program) {
     sprite_texts(t);
     small(t);
     creators(t);
+    rank(t);
+    palettes(t);
 }
 
 /// The engine tables of the program `rom`.

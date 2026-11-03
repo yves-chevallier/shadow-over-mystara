@@ -21,7 +21,8 @@
 use cps2::Cps2Bus;
 
 use super::{Link, Obj};
-use crate::mem::{rd16, rd32, set_low_word, wr16, A5};
+use crate::mem::{set_low_word, A5};
+use crate::ram::Word;
 use crate::ops::{Alu, Registers, Size};
 
 #[derive(Clone, Copy, Debug)]
@@ -43,13 +44,13 @@ fn is_sentinel_or_none(l: Link) -> bool {
 
 impl SortedList {
     fn head(self, b: &mut Cps2Bus) -> Link {
-        Link(rd16(b, A5 + self.head))
+        Link(Word::a5(self.head).get(b))
     }
     fn set_head(self, b: &mut Cps2Bus, l: Link) {
-        wr16(b, A5 + self.head, l.0)
+        Word::a5(self.head).set(b, l.0)
     }
     fn set_tail(self, b: &mut Cps2Bus, l: Link) {
-        wr16(b, A5 + self.tail, l.0)
+        Word::a5(self.tail).set(b, l.0)
     }
 
     /// Inserts `obj` if it is in no list, otherwise puts it back if the order is broken.
@@ -59,7 +60,7 @@ impl SortedList {
     /// plan-based version (`plan_reinsert`, `apply`) did not guarantee (discrepancy found by `fuzz_couv` on ESHL 44).
     pub fn reinsert(self, b: &mut Cps2Bus, obj: Obj) {
         let a0 = obj.0;
-        let (prev, next) = (rd16(b, a0 + Obj::PREV), rd16(b, a0 + Obj::NEXT));
+        let (prev, next) = (Obj(a0).u16(b, Obj::PREV), Obj(a0).u16(b, Obj::NEXT));
         if prev.wrapping_add(next) == 0 {
             return self.insert_exact(b, obj);
         }
@@ -72,85 +73,85 @@ impl SortedList {
     /// `Reinsert::relocate` without registers.
     fn relocate_exact(self, b: &mut Cps2Bus, obj: Obj, w: Way) -> bool {
         let a0 = obj.0;
-        let link = rd16(b, a0 + w.ahead);
+        let link = Obj(a0).u16(b, w.ahead);
         if (link as i16) >= 0 {
             return false;
         }
         let mut a1 = link as i16 as i32 as u32;
-        let y = rd32(b, a0 + Obj::Y);
-        if w.settled(y, rd32(b, a1.wrapping_add(Obj::Y))) {
+        let y = Obj(a0).u32(b, Obj::Y);
+        if w.settled(y, Obj(a1).u32(b, Obj::Y)) {
             return false;
         }
         let mut d0;
         loop {
-            d0 = rd16(b, a1.wrapping_add(w.ahead));
+            d0 = Obj(a1).u16(b, w.ahead);
             if (d0 as i16) >= 0 {
-                wr16(b, A5 + w.reach, a0 as u16);
+                Word::a5(w.reach).set(b, a0 as u16);
                 break;
             }
             let a2 = d0 as i16 as i32 as u32;
-            if w.settled(y, rd32(b, a2.wrapping_add(Obj::Y))) {
+            if w.settled(y, Obj(a2).u32(b, Obj::Y)) {
                 break;
             }
             a1 = a2;
         }
-        let a3 = rd16(b, a0 + w.ahead) as i16 as i32 as u32;
-        let d2 = rd16(b, a0 + w.behind);
+        let a3 = Obj(a0).u16(b, w.ahead) as i16 as i32 as u32;
+        let d2 = Obj(a0).u16(b, w.behind);
         if (d2 as i16) < 0 {
-            wr16(b, (d2 as i16 as i32 as u32).wrapping_add(w.ahead), a3 as u16);
+            Obj(d2 as i16 as i32 as u32).set_u16(b, w.ahead, a3 as u16);
         }
-        wr16(b, a3.wrapping_add(w.behind), d2);
+        Obj(a3).set_u16(b, w.behind, d2);
         if (d2 as i16) >= 0 {
-            wr16(b, A5 + w.far, a3 as u16);
+            Word::a5(w.far).set(b, a3 as u16);
         }
-        wr16(b, a0 + w.ahead, d0);
+        Obj(a0).set_u16(b, w.ahead, d0);
         if (d0 as i16) < 0 {
-            wr16(b, (d0 as i16 as i32 as u32).wrapping_add(w.behind), a0 as u16);
+            Obj(d0 as i16 as i32 as u32).set_u16(b, w.behind, a0 as u16);
         }
-        wr16(b, a1.wrapping_add(w.ahead), a0 as u16);
-        wr16(b, a0 + w.behind, a1 as u16);
+        Obj(a1).set_u16(b, w.ahead, a0 as u16);
+        Obj(a0).set_u16(b, w.behind, a1 as u16);
         true
     }
 
     /// `Reinsert::insert` without registers (0x1eef2).
     fn insert_exact(self, b: &mut Cps2Bus, obj: Obj) {
         let a0 = obj.0;
-        let y = rd32(b, a0 + Obj::Y);
-        let tail = rd16(b, A5 + self.tail);
+        let y = Obj(a0).u32(b, Obj::Y);
+        let tail = Word::a5(self.tail).get(b);
         if tail == 0 {
-            wr16(b, a0 + Obj::PREV, self.end.0);
-            wr16(b, a0 + Obj::NEXT, self.end.0);
-            wr16(b, A5 + self.head, a0 as u16);
-            wr16(b, A5 + self.tail, a0 as u16);
+            Obj(a0).set_u16(b, Obj::PREV, self.end.0);
+            Obj(a0).set_u16(b, Obj::NEXT, self.end.0);
+            Word::a5(self.head).set(b, a0 as u16);
+            Word::a5(self.tail).set(b, a0 as u16);
             return;
         }
         let mut a1 = tail as i16 as i32 as u32;
-        if y as i32 <= rd32(b, a1.wrapping_add(Obj::Y)) as i32 {
-            wr16(b, a1.wrapping_add(Obj::NEXT), a0 as u16);
-            wr16(b, a0 + Obj::PREV, a1 as u16);
-            wr16(b, a0 + Obj::NEXT, self.end.0);
-            wr16(b, A5 + self.tail, a0 as u16);
+        if y as i32 <= Obj(a1).u32(b, Obj::Y) as i32 {
+            Obj(a1).set_u16(b, Obj::NEXT, a0 as u16);
+            Obj(a0).set_u16(b, Obj::PREV, a1 as u16);
+            Obj(a0).set_u16(b, Obj::NEXT, self.end.0);
+            Word::a5(self.tail).set(b, a0 as u16);
             return;
         }
         loop {
-            let before = rd16(b, a1.wrapping_add(Obj::PREV));
+            let before = Obj(a1).u16(b, Obj::PREV);
             if (before as i16) >= 0 {
-                wr16(b, a1.wrapping_add(Obj::PREV), a0 as u16);
-                wr16(b, a0 + Obj::NEXT, a1 as u16);
-                wr16(b, a0 + Obj::PREV, self.end.0);
-                wr16(b, A5 + self.head, a0 as u16);
+                Obj(a1).set_u16(b, Obj::PREV, a0 as u16);
+                Obj(a0).set_u16(b, Obj::NEXT, a1 as u16);
+                Obj(a0).set_u16(b, Obj::PREV, self.end.0);
+                Word::a5(self.head).set(b, a0 as u16);
                 return;
             }
             a1 = before as i16 as i32 as u32;
-            if y as i32 <= rd32(b, a1.wrapping_add(Obj::Y)) as i32 {
+            if y as i32 <= Obj(a1).u32(b, Obj::Y) as i32 {
                 break;
             }
         }
-        let a2 = rd16(b, a1.wrapping_add(Obj::NEXT)) as i16 as i32 as u32;
-        wr16(b, a1.wrapping_add(Obj::NEXT), a0 as u16);
-        wr16(b, a2.wrapping_add(Obj::PREV), a0 as u16);
-        wr16(b, a0 + Obj::PREV, a1 as u16);
-        wr16(b, a0 + Obj::NEXT, a2 as u16);
+        let a2 = Obj(a1).u16(b, Obj::NEXT) as i16 as i32 as u32;
+        Obj(a1).set_u16(b, Obj::NEXT, a0 as u16);
+        Obj(a2).set_u16(b, Obj::PREV, a0 as u16);
+        Obj(a0).set_u16(b, Obj::PREV, a1 as u16);
+        Obj(a0).set_u16(b, Obj::NEXT, a2 as u16);
     }
 }
 
@@ -306,24 +307,24 @@ impl<R: Alu> Reinsert<'_, R> {
     }
     /// `movea.w (off,Am),An`.
     fn movea_mem(&mut self, n: usize, base: u32, off: u32) -> u32 {
-        let w = rd16(self.b, base.wrapping_add(off));
+        let w = Obj(base).u16(self.b, off);
         self.movea(n, w)
     }
     /// `move.w (off,An),Dn`: low word of Dn and flags.
     fn load(&mut self, d: usize, base: u32, off: u32) -> u16 {
-        let v = rd16(self.b, base.wrapping_add(off));
+        let v = Obj(base).u16(self.b, off);
         set_low_word(&mut self.c.d()[d], v);
         self.c.logic(v as u32, Size::Word);
         v
     }
     /// `move.w src,(off,An)`: writes and sets the flags.
     fn store(&mut self, base: u32, off: u32, v: u16) {
-        wr16(self.b, base.wrapping_add(off), v);
+        Obj(base).set_u16(self.b, off, v);
         self.c.logic(v as u32, Size::Word);
     }
     /// `cmp.l (Y,An),Dn`: flags; returns the depth of the neighbor.
     fn compare_depth(&mut self, d: usize, an: u32) -> u32 {
-        let y = rd32(self.b, an.wrapping_add(Obj::Y));
+        let y = Obj(an).u32(self.b, Obj::Y);
         let dn = self.c.d()[d];
         self.c.cmp(y, dn, Size::Long);
         y
@@ -332,7 +333,7 @@ impl<R: Alu> Reinsert<'_, R> {
     pub(crate) fn run(&mut self) {
         let a0 = self.a0();
         let prev = self.load(0, a0, Obj::PREV);
-        let sum = self.c.add(rd16(self.b, a0 + Obj::NEXT) as u32, prev as u32, Size::Word);
+        let sum = self.c.add(Obj(a0).u16(self.b, Obj::NEXT) as u32, prev as u32, Size::Word);
         set_low_word(&mut self.c.d()[0], sum as u16);
         if sum as u16 == 0 {
             return self.insert();
@@ -352,7 +353,7 @@ impl<R: Alu> Reinsert<'_, R> {
             return false;
         }
         let mut a1 = self.movea(1, link);
-        self.c.d()[1] = rd32(self.b, a0 + Obj::Y);
+        self.c.d()[1] = Obj(a0).u32(self.b, Obj::Y);
         let y1 = self.compare_depth(1, a1);
         if w.settled(self.c.d()[1], y1) {
             return false;
@@ -397,7 +398,7 @@ impl<R: Alu> Reinsert<'_, R> {
     /// The object is in no list: insertion starting from the tail (0x1eef2).
     fn insert(&mut self) {
         let (a0, list) = (self.a0(), self.list);
-        let y = rd32(self.b, a0 + Obj::Y);
+        let y = Obj(a0).u32(self.b, Obj::Y);
         self.c.d()[0] = y;
         let tail = self.load(1, A5, list.tail);
         if tail == 0 {

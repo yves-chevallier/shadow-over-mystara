@@ -8,7 +8,7 @@
 use cps2::Cps2Bus;
 
 use ddsom_data::sprites::Piece;
-use ddsom_data::tables::{Bounds, GroundMark};
+use ddsom_data::tables::GroundMark;
 
 use crate::data::{data, Missing, RomAddr};
 use crate::hw::video::{Vram, OBJECTS};
@@ -108,18 +108,6 @@ fn screen_height(p: &mut Painter, o: Obj) -> u16 {
     h.wrapping_sub(p.cam.y)
 }
 
-/// Visibility box `i` (`sprites/tables.json`: dx, width, dy, height), or the bytes the original reads past the table.
-fn visibility_box(b: &mut Cps2Bus, i: u8) -> [u16; 4] {
-    let t = &data().sprite_tables;
-    match t.bounds.get(i as usize) {
-        Some(&Bounds(dx, w, dy, h)) => [dx as u16, w, dy as u16, h],
-        None => {
-            let at = t.bounds_rom + 8 * i as u32;
-            std::array::from_fn(|k| Missing { table: "visibility box", key: at }.read16(b, at + 2 * k as u32))
-        }
-    }
-}
-
 /// Ground mark `i` (`sprites/tables.json`), or the words the original reads past the table.
 fn ground_mark(b: &mut Cps2Bus, i: u8) -> [u16; 8] {
     let t = &data().sprite_tables;
@@ -211,7 +199,7 @@ fn check_visible(p: &mut Painter, o: Obj) -> bool {
     let kind = category(p.b, o);
     let inside = if kind != 0 {
         let i = o.bounds(p.b);
-        let [dx, width, dy, height] = visibility_box(p.b, i);
+        let [dx, width, dy, height] = crate::objects::cull::visibility_box(p.b, i);
         let dx = screen_x(p, o).wrapping_add(dx);
         let dy = screen_height(p, o).wrapping_add(dy);
         dx <= width && dy <= height

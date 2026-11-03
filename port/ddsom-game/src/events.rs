@@ -19,8 +19,9 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::objects::{Enemy, Obj};
 use crate::ops;
+use crate::ram::{Byte, Long, Word};
 
 pub(crate) const EMPTY: u16 = 0xffff;
 /// The ring indices advance by 2 (bytes) modulo 0x80.
@@ -60,13 +61,13 @@ pub(crate) const fn a5(off: u32) -> u32 {
 /// `n` longs of 0xFFFFFFFF from `start`.
 fn fill(b: &mut Cps2Bus, start: u32, n: u32) {
     for k in 0..n {
-        wr32(b, start + 4 * k, 0xffff_ffff);
+        Long(start + 4 * k).set(b, 0xffff_ffff);
     }
 }
 
 pub(crate) fn clear_ring(b: &mut Cps2Bus, ring: &Ring) {
-    wr8(b, a5(ring.write), 0);
-    wr8(b, a5(ring.write + 1), 0);
+    Byte::a5(ring.write).set(b, 0);
+    Byte::a5(ring.write + 1).set(b, 0);
     fill(b, a5(ring.cases), 32);
 }
 
@@ -82,15 +83,15 @@ pub fn clear_counter(b: &mut Cps2Bus) {
 
 /// 0x19db4: clears the pop-up queue.
 pub fn clear_popups(b: &mut Cps2Bus) {
-    wr8(b, a5(POPUP_WRITE), 0);
-    wr8(b, a5(POPUP_READ), 0);
+    Byte::a5(POPUP_WRITE).set(b, 0);
+    Byte::a5(POPUP_READ).set(b, 0);
     fill(b, a5(POPUP_INPUTS), 64);
 }
 
 /// 0x19e10: clears the current pop-up (4 longs).
 pub fn clear_current_popup(b: &mut Cps2Bus) {
     for k in 0..4 {
-        wr32(b, a5(CURRENT_POPUP) + 4 * k, 0);
+        Long(a5(CURRENT_POPUP) + 4 * k).set(b, 0);
     }
 }
 
@@ -99,18 +100,18 @@ pub fn clear_current_popup(b: &mut Cps2Bus) {
 
 /// Write cell of `ring`: its index and its address.
 pub(crate) fn write_cell(b: &mut Cps2Bus, ring: &Ring) -> (u8, u32) {
-    let index = rd8(b, a5(ring.write));
+    let index = Byte::a5(ring.write).get(b);
     (index, a5(ring.cases).wrapping_add(index as u32))
 }
 
 /// Enqueues `event` in the write cell if it is free; returns true if enqueued.
 pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> bool {
     let (index, case) = write_cell(b, ring);
-    if rd16(b, case) != EMPTY {
+    if Word(case).get(b) != EMPTY {
         return false;
     }
-    wr16(b, case, event);
-    wr8(b, a5(ring.write), index.wrapping_add(2) & MASK);
+    Word(case).set(b, event);
+    Byte::a5(ring.write).set(b, index.wrapping_add(2) & MASK);
     true
 }
 
@@ -126,13 +127,13 @@ pub fn enqueue_counter(b: &mut Cps2Bus, event: u16) -> bool {
 }
 
 /// Score event of object `o`: type `+0x7e`, player `+0x48` bits 8-9.
-pub fn event_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> u16 {
-    let type_ = rd8(b, o.0 + 0x7e) as u16;
-    (rd16(b, o.0 + 0x48) & 0x300).wrapping_add(type_)
+pub fn event_of(b: &mut Cps2Bus, o: Obj) -> u16 {
+    let type_ = Enemy(o).event_kind(b) as u16;
+    (o.u16(b, Enemy::HIT_BY) & 0x300).wrapping_add(type_)
 }
 
 /// 0x19ad6: enqueues the score event of object `o` in the points ring.
-pub fn object_event(b: &mut Cps2Bus, o: crate::objects::Obj) -> bool {
+pub fn object_event(b: &mut Cps2Bus, o: Obj) -> bool {
     let event = event_of(b, o);
     enqueue_points(b, event)
 }
@@ -145,7 +146,7 @@ pub(crate) struct Credit {
     pub(crate) ring: Ring,
     /// Read index (byte).
     pub(crate) read: u32,
-    /// ROM table of BCD values (4 bytes per type).
+    /// ROM table of BCD values (4 bytes per type, in `treasure_bonus` of `data/scenes.json`).
     pub(crate) table: u32,
     /// Offset of the BCD counter in the player record.
     pub(crate) counter: u32,
@@ -177,28 +178,29 @@ pub(crate) fn credited(event: u16) -> (u32, u32) {
 /// Processes the event of cell `index`: empties the cell, adds the BCD value of the type to the player's
 /// counter, caps it, advances the read index.
 fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) {
-    wr16(b, a5(k.ring.cases).wrapping_add(index as u32), EMPTY);
+    Word(a5(k.ring.cases).wrapping_add(index as u32)).set(b, EMPTY);
     let (player, line) = credited(event);
     let (table, counter) = (k.table + line, player + k.counter);
     // abcd -(A3),-(A4) ×4: low-order byte first, chained carry, initial X zero
     let mut carry = false;
     for i in (0..4).rev() {
-        let (sum, x) = ops::abcd(rd8(b, table + i), rd8(b, counter + i), carry);
-        wr8(b, counter + i, sum);
+        let value = crate::tables::engine().byte(b, table + i);
+        let (sum, x) = ops::abcd(value, Byte(counter + i).get(b), carry);
+        Byte(counter + i).set(b, sum);
         carry = x;
     }
     // cmpi.l #cap,(A4) ; blt: replaced by the cap if the value is not lower
-    let capped = rd32(b, counter) as i32 >= k.cap as i32;
+    let capped = Long(counter).get(b) as i32 >= k.cap as i32;
     if capped {
-        wr32(b, counter, k.cap);
+        Long(counter).set(b, k.cap);
     }
-    wr8(b, a5(k.read), index.wrapping_add(2) & MASK);
+    Byte::a5(k.read).set(b, index.wrapping_add(2) & MASK);
 }
 
 /// Event waiting at the read index, if there is one.
 fn pending(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
-    let index = rd8(b, a5(k.read));
-    let event = rd16(b, a5(k.ring.cases).wrapping_add(index as u32));
+    let index = Byte::a5(k.read).get(b);
+    let event = Word(a5(k.ring.cases).wrapping_add(index as u32)).get(b);
     (event != EMPTY).then_some((index, event))
 }
 
@@ -236,33 +238,33 @@ pub struct Popup {
 
 /// Write entry of the pop-up queue: its index and its address.
 pub(crate) fn popup_write_entry(b: &mut Cps2Bus) -> (u8, u32) {
-    let index = rd8(b, a5(POPUP_WRITE));
+    let index = Byte::a5(POPUP_WRITE).get(b);
     (index, a5(POPUP_INPUTS).wrapping_add(index as u32))
 }
 
 /// 0x19dce: enqueues a pop-up in the write cell if it is free and pop-ups are not inhibited;
 /// returns true if enqueued.
 pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
-    if rd8(b, a5(POPUP_INHIBITED)) != 0 {
+    if Byte::a5(POPUP_INHIBITED).is_set(b) {
         return false;
     }
     let (index, case) = popup_write_entry(b);
-    if rd16(b, case) != EMPTY {
+    if Word(case).get(b) != EMPTY {
         return false;
     }
     let header = if p.raw { p.header } else { p.header & 0xff00 | (p.header as u8).wrapping_add(0x20) as u16 };
     for (offset, value) in [(0, header), (2, p.max), (4, p.value), (6, 0x80)] {
-        wr16(b, case + offset, value);
+        Word(case + offset).set(b, value);
     }
     // the index advances by 8 without a mask: it goes around the 32 entries by overflowing its byte
-    wr8(b, a5(POPUP_WRITE), index.wrapping_add(8));
+    Byte::a5(POPUP_WRITE).set(b, index.wrapping_add(8));
     true
 }
 
 /// Are pop-ups inhibited (`A5+0x50`)? 0x19dce then writes nothing and leaves A2 intact; otherwise it leaves
 /// A2 = [`POPUP_INPUTS_ADDR`] (reread by combat: `combat::show_enemy_hp`).
 pub fn popups_inhibited(b: &mut Cps2Bus) -> bool {
-    rd8(b, a5(POPUP_INHIBITED)) != 0
+    Byte::a5(POPUP_INHIBITED).is_set(b)
 }
 
 /// First entry of the pop-up queue (A2 left by 0x19dce).

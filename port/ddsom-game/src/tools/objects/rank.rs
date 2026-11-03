@@ -27,7 +27,7 @@ fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let off = lsl_word(c, row as u16, 4);
     c.d[0] = off as u32;
     load_preset(b, row);
-    c.a[4] = PRESETS + 16 * row as u32 + 16;
+    c.a[4] = crate::tables::engine().get("rank/presets").rom + 16 * row as u32 + 16;
     reset_regs(c, b);
 }
 

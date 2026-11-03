@@ -12,7 +12,8 @@ use cps2::Cps2Bus;
 
 use super::lists;
 use super::Obj;
-use crate::mem::{rd16, wr16, wr32, A5};
+use crate::mem::A5;
+use crate::ram::Word;
 
 /// Queue of collision candidate objects of a category: number of entries, write
 /// pointer (16-bit RAM address) and array of object pointers (offsets from A5).
@@ -24,8 +25,8 @@ pub struct Queue {
 
 impl Queue {
     pub fn reset(&self, b: &mut Cps2Bus) {
-        wr16(b, A5 + self.cursor, (A5 + self.array) as u16);
-        wr16(b, A5 + self.count, 0);
+        Word::a5(self.cursor).set(b, (A5 + self.array) as u16);
+        Word::a5(self.count).set(b, 0);
     }
 }
 
@@ -112,7 +113,7 @@ impl Pool {
     }
 
     pub fn free_count(&self, b: &mut Cps2Bus) -> u16 {
-        rd16(b, A5 + self.free)
+        Word::a5(self.free).get(b)
     }
 
     /// Slots of the pool, in order.
@@ -128,12 +129,12 @@ impl Pool {
         if let Some(q) = self.queue {
             q.reset(b);
         }
-        wr16(b, A5 + self.free, self.slots as u16);
+        Word::a5(self.free).set(b, self.slots as u16);
     }
 
     pub(crate) fn clear_slot(&self, b: &mut Cps2Bus, obj: Obj) {
         for off in (0..self.stride).step_by(4) {
-            wr32(b, obj.at(off), 0);
+            obj.set_u32(b, off, 0);
         }
     }
 
@@ -154,7 +155,7 @@ impl Pool {
             Scan::Found(i) => {
                 let obj = self.slot(i);
                 let left = self.free_count(b);
-                wr16(b, A5 + self.free, left.wrapping_sub(1));
+                Word::a5(self.free).set(b, left.wrapping_sub(1));
                 obj.set_u8(b, Obj::CLASS, self.class);
                 Some(obj)
             }
@@ -168,7 +169,7 @@ impl Pool {
             lists::unlink(b, obj);
         }
         let left = self.free_count(b);
-        wr16(b, A5 + self.free, left.wrapping_add(1));
+        Word::a5(self.free).set(b, left.wrapping_add(1));
         self.clear_slot(b, obj);
     }
 

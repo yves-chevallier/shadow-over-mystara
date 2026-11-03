@@ -293,7 +293,7 @@ const fn library(n: u32) -> u32 {
 /// Fade sources of scenes 0x2f and 0x42: (layer 1, work buffer, two palettes of the library).
 fn special_sources(stage: u8) -> Option<[u32; 4]> {
     match stage {
-        0x2f => Some([hw::SCROLL1, flash::BACKUP, library(0x111b), library(0x19b4)]),
+        0x2f => Some([hw::SCROLL1, flash::BACKUP, library(0x111b), library(0x1934)]),
         0x42 => Some([hw::SCROLL1, flash::BACKUP, library(0x123c), library(0x1a57)]),
         _ => None,
     }

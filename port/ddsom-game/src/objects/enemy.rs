@@ -131,6 +131,9 @@ record! {
         strike_power, set_strike_power, STRIKE_POWER: u8 @ 0x45;
         /// Host of a part of a composite enemy (word, RAM address).
         host, set_host, HOST: u16 @ 0x46;
+        /// Last hit received (word): the player who hit (bits 8-9) and the kind of the hit (h); the score events of
+        /// the object name this player (`events::event_of`).
+        hit_by, set_hit_by, HIT_BY: u16 @ 0x48;
         /// Reaction code stored by the collision (index ×4 of the reaction tables).
         reaction, set_reaction, REACTION: u8 @ 0x49;
         /// Orientation of the attacker at the hit.

@@ -13,19 +13,19 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::set_low_word;
 use crate::objects::Obj;
-use crate::{ops, Native};
 use crate::ops::{Alu, Registers, Size};
+use crate::ram::{Long, Word};
+use crate::{ops, Native};
 
 /// Switch bit (`ram::DSW`): terrain collision active.
 const ENABLED: u16 = 0x800;
-/// Last object tested (A0), its x position and its y position: consulted by other routines.
-const LAST_OBJECT: u32 = 0x64;
-const LAST_X: u32 = 0x60;
-const LAST_Y: u32 = 0x62;
-/// Object byte: terrain number under it.
-const OBJ_TERRAIN: u32 = 0x29;
+/// Last object tested (A0), its x position and its y position (both as a long): consulted by other routines.
+const LAST_OBJECT: Word = Word::a5(0x64);
+const LAST_X: Word = Word::a5(0x60);
+const LAST_Y: Word = Word::a5(0x62);
+const LAST_POSITION: Long = Long::a5(0x60);
 
 /// Fields of a terrain type (16-byte entry, words).
 mod kind {
@@ -43,19 +43,20 @@ mod kind {
     pub const STOP: u32 = 10;
 }
 
-/// The two copies of the routine (`Variant`): only the type table and the subroutine addresses
-/// (visible in A1) change.
+/// The two copies of the routine (`Variant`): only the type table (`terrain.json`, `kinds`) and the subroutine
+/// addresses (visible in A1) change.
 #[derive(Clone, Copy)]
 pub(crate) struct Variant {
     entry: u32,
     /// The second copy sets D5 before knowing whether the object touches the solid obstacle.
     early_flag: bool,
-    types: u32,
+    /// The table of terrain types (index in `terrain.json`, `kinds`).
+    types: usize,
     solid: [u32; 4],
 }
 
-pub(crate) const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
-pub(crate) const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
+pub(crate) const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
+pub(crate) const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 1, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
 
 /// Slope subroutines, common to both copies.
 const SLOPES: [u32; 4] = [0x341a4, 0x341d0, 0x341fe, 0x3422e];
@@ -75,8 +76,10 @@ impl<R: Alu> Push<'_, R> {
     fn set_d(&mut self, n: usize, v: u16) {
         set_low_word(&mut self.c.d()[n], v);
     }
+    /// Word `off` of the terrain type at `a2` (the tables of `terrain.json`, read by address: a terrain number past the
+    /// first table reads the second one, as the original does).
     fn field(&mut self, a2: u32, off: u32) -> u16 {
-        rd16(self.b, a2 + off)
+        crate::tables::engine().word(self.b, a2 + off)
     }
     /// `sub.w src,Dn`: flags of the original; returns the carry.
     fn sub_d(&mut self, n: usize, src: u16) -> bool {
@@ -86,10 +89,10 @@ impl<R: Alu> Push<'_, R> {
     }
     /// `add.w src,(off,A0)` / `sub.w src,(off,A0)`.
     fn add_obj(&mut self, sub: bool, src: u16, off: u32) {
-        let a = self.c.a()[0] + off;
-        let v = rd16(self.b, a) as u32;
+        let o = Obj(self.c.a()[0]);
+        let v = o.u16(self.b, off) as u32;
         let r = if sub { self.c.sub(src as u32, v, Size::Word) } else { self.c.add(src as u32, v, Size::Word) };
-        wr16(self.b, a, r as u16);
+        o.set_u16(self.b, off, r as u16);
     }
     /// `tst.w (off,A2)`: true if zero.
     fn zero(&mut self, a2: u32, off: u32) -> bool {
@@ -110,11 +113,12 @@ impl<R: Alu> Push<'_, R> {
     /// One pass; true to start over.
     fn pass(&mut self) -> bool {
         let a0 = self.c.a()[0];
+        let o = Obj(a0);
         if self.variant.entry == FIRST.entry {
-            wr16(self.b, A5 + LAST_OBJECT, a0 as u16);
-            let (x, y) = (rd16(self.b, a0 + 8), rd16(self.b, a0 + 0x10));
-            wr16(self.b, A5 + LAST_X, x);
-            wr16(self.b, A5 + LAST_Y, y);
+            LAST_OBJECT.set(self.b, a0 as u16);
+            let (x, y) = (o.u16(self.b, Obj::X), o.u16(self.b, Obj::Y));
+            LAST_X.set(self.b, x);
+            LAST_Y.set(self.b, y);
         }
         let enabled = crate::ram::DSW.get(self.b) & ENABLED;
         self.set_d(0, enabled);
@@ -122,13 +126,13 @@ impl<R: Alu> Push<'_, R> {
         if enabled == 0 {
             return false;
         }
-        let (x, y) = (rd16(self.b, a0 + 8), rd16(self.b, a0 + 0x10));
+        let (x, y) = (o.u16(self.b, Obj::X), o.u16(self.b, Obj::Y));
         self.set_d(0, x);
         self.set_d(1, y);
         let t = crate::video::terrain(self.b, x, y);
         crate::video::terrain_regs(self.c, &t);
         let number = self.c.d()[2] as u8;
-        wr8(self.b, a0 + OBJ_TERRAIN, number);
+        o.set_terrain(self.b, number);
         self.c.logic(number as u32, Size::Byte);
         if number == 0 {
             return self.free();
@@ -139,7 +143,8 @@ impl<R: Alu> Push<'_, R> {
         let carry = d2 >> 12 & 1 != 0;
         self.c.logic((d2 << 4) as u32, Size::Word);
         self.c.flags(ops::C | ops::X, if carry { ops::C | ops::X } else { 0 });
-        let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
+        let types = crate::data::data().terrain.kinds[self.variant.types].rom;
+        let a2 = types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a()[2] = a2;
         let category = self.field(a2, kind::CATEGORY);
         self.c.cmp(1, category as u32, Size::Word);
@@ -155,11 +160,11 @@ impl<R: Alu> Push<'_, R> {
 
     /// Nothing to correct: the object is free (0x3402c).
     fn free(&mut self) -> bool {
-        let a0 = self.c.a()[0];
-        wr16(self.b, A5 + LAST_OBJECT, 0);
-        wr32(self.b, A5 + LAST_X, 0);
+        let o = Obj(self.c.a()[0]);
+        LAST_OBJECT.set(self.b, 0);
+        LAST_POSITION.set(self.b, 0);
         self.c.d()[2] = 0;
-        wr8(self.b, a0 + OBJ_TERRAIN, 0);
+        o.set_terrain(self.b, 0);
         self.c.logic(0, Size::Byte);
         false
     }

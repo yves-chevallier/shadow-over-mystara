@@ -15,12 +15,13 @@
 //! | +0x0e | bytes: rank drop when a player is hit, according to `A5+0x35` |
 //! | +0x12 | countdown before the next rise (0xFFFF: stopped) |
 //!
-//! The settings (+0x02..=+0x11) are copied from a 16-byte row of the table 0x1f1d8, chosen
+//! The settings (+0x02..=+0x11) are copied from a 16-byte row of the table `rank/presets` (0x1f1d8), chosen
 //! by the byte `A5+0x2a`.
 
 use cps2::Cps2Bus;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, A5};
+use crate::mem::A5;
+use crate::ram::{Byte, Long, Word};
 use crate::regs;
 
 pub(crate) const BASE: u32 = A5 + 0x7f92;
@@ -37,34 +38,33 @@ pub(crate) const TIMER: u32 = 0x12;
 pub(crate) const GAME_ACTIVE: u32 = 0x30;
 pub(crate) const PLAYERS_MODE: u32 = 0x35;
 pub(crate) const PRESET_ROW: u32 = 0x2a;
-pub(crate) const PRESETS: u32 = 0x1f1d8;
 
 pub(crate) fn get(b: &mut Cps2Bus, off: u32) -> u16 {
-    rd16(b, BASE + off)
+    Word(BASE + off).get(b)
 }
 pub(crate) fn set(b: &mut Cps2Bus, off: u32, v: u16) {
-    wr16(b, BASE + off, v)
+    Word(BASE + off).set(b, v)
 }
 
-/// Copies the settings of row `row` of the table.
+/// Copies the settings of row `row` of the table `rank/presets`.
 pub fn load_preset(b: &mut Cps2Bus, row: u8) {
-    let src = PRESETS + 16 * row as u32;
+    let presets = crate::tables::engine().get("rank/presets");
     for i in 0..4 {
-        let v = rd32(b, src + 4 * i);
-        wr32(b, BASE + MAX + 4 * i, v);
+        let v = presets.at32(b, 16 * row as u32 + 4 * i);
+        Long(BASE + MAX + 4 * i).set(b, v);
     }
 }
 
 /// 0x1f238: the settings of row `A5+0x2a`, then `reset`.
 pub fn load_current_preset(b: &mut Cps2Bus) {
-    let row = rd8(b, A5 + PRESET_ROW);
+    let row = Byte::a5(PRESET_ROW).get(b);
     load_preset(b, row);
     reset(b);
 }
 
 /// Resets the countdown and the rank to their starting value.
 pub fn reset(b: &mut Cps2Bus) {
-    if rd8(b, A5 + GAME_ACTIVE) == 0 {
+    if !Byte::a5(GAME_ACTIVE).is_set(b) {
         set(b, IDLE_DELAY, 0x384);
         set(b, INITIAL, 0xe);
     }
@@ -76,7 +76,7 @@ pub fn reset(b: &mut Cps2Bus) {
 
 /// One step per frame: the rank rises by one notch every `RAMP_DELAY` frames up to the maximum.
 pub fn tick(b: &mut Cps2Bus) {
-    if rd8(b, A5 + GAME_ACTIVE) == 0 || rd8(b, A5 + PLAYERS_MODE) == 0 {
+    if !Byte::a5(GAME_ACTIVE).is_set(b) || !Byte::a5(PLAYERS_MODE).is_set(b) {
         return;
     }
     let timer = get(b, TIMER);
@@ -111,8 +111,8 @@ pub fn raise(b: &mut Cps2Bus) {
 pub fn lower(b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
-    let mode = rd8(b, A5 + PLAYERS_MODE) as u32;
-    let drop = rd8(b, BASE + DROP_TABLE + mode) as u16;
+    let mode = Byte::a5(PLAYERS_MODE).get(b) as u32;
+    let drop = Byte(BASE + DROP_TABLE + mode).get(b) as u16;
     let next = (get(b, CURRENT).wrapping_sub(drop) as i16).max(get(b, MIN) as i16);
     set(b, CURRENT, next as u16 & 0x1f);
 }

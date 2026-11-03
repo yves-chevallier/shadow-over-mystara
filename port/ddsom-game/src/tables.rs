@@ -10,10 +10,10 @@
 //! [`engine`] gathers the data of the engine (AI helpers, cameras, video, palettes, sprites, creators): the tables of
 //! `data/engine.json` and of the files whose tables the engine also reads (`enemies.json`: hit points, immunities,
 //! approach points; `scenes.json`: per-scene camera tables, player markers; `rest.json`: aura palettes) by name, and,
-//! by address, those tables plus the scenery maps (`levels.json`), the fixed terrain maps, the scene palette tables,
-//! the palette library, the collision boxes (`sprites/tables.json`) and the texts (`texts.json`, the dialogs and the
-//! texts of the other files). A read outside
-//! every table is a read of the residue (`Missing`): counted, fatal with `DDSOM_STRICT=1`.
+//! by address, those tables plus the scenery maps (`levels.json`), the fixed terrain maps and terrain types, the scene
+//! palette tables, the palette library, the collision boxes (`sprites/tables.json`) and the texts (`texts.json`, the
+//! dialogs and the texts of the other files). A read outside every table is a read of the residue (`Missing`):
+//! counted, fatal with `DDSOM_STRICT=1`.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -234,6 +234,9 @@ fn engine_zones() -> [Vec<(u32, Vec<u8>)>; 2] {
     zones[0].push(words(s1.blocks_rom, s1.blocks.iter().flatten().copied()));
     for m in &d.terrain.maps {
         zones[0].push(words(m.rom, m.columns.iter().flatten().copied()));
+    }
+    for k in &d.terrain.kinds {
+        zones[0].push(words(k.rom, k.kinds.iter().flat_map(|e| e.words())));
     }
     let p = &d.scene_palettes;
     let stage_words = p.stages.iter().flatten().map(|&v| ddsom_data::ScenePalettes::stage_word(v));

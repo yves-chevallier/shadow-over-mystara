@@ -11,19 +11,33 @@ use cps2::Cps2Bus;
 
 use super::pools::{QUEUE_BOX, QUEUE_ENEMY_BOSS, QUEUE_ESHL, QUEUE_ITEM, QUEUE_PSHL};
 use super::Obj;
-use crate::mem::{rd16, rd8, wr16, A5};
+use ddsom_data::tables::Bounds;
+
+use crate::data::{data, Missing};
+use crate::mem::A5;
+use crate::ram::{camera as camera_position, Word, CAMERA_ALT_ACTIVE};
 use crate::regs;
 
-/// Address of the current camera (x at +8, y at +0xc).
+/// Address of the current camera record (x at +8, y at +0xc).
 pub fn camera(b: &mut Cps2Bus) -> u32 {
-    let alt = rd8(b, A5 + super::ram::USE_ALT_CAMERA) != 0;
-    A5 + if alt { super::ram::ALT_CAMERA } else { super::ram::CAMERA }
+    A5 + if CAMERA_ALT_ACTIVE.is_set(b) { super::ram::ALT_CAMERA } else { super::ram::CAMERA }
 }
 
-/// Visibility boxes by index (`BOUNDS_INDEX`): (dx, width, dy, height), 8 bytes each.
-pub(crate) const BOUNDS_TABLE: u32 = 0x1ca538;
-/// Object byte designating its visibility box (high byte of `FRAME_DATA_B`).
-pub(crate) const BOUNDS_INDEX: u32 = 0x3c;
+/// Object byte designating its visibility box (`Obj::BOUNDS`).
+pub(crate) const BOUNDS_INDEX: u32 = Obj::BOUNDS;
+
+/// Visibility box `i` (`sprites/tables.json`, `bounds`: dx, width, dy, height), or the words the original reads past
+/// the table (residue).
+pub(crate) fn visibility_box(b: &mut Cps2Bus, i: u8) -> [u16; 4] {
+    let t = &data().sprite_tables;
+    match t.bounds.get(i as usize) {
+        Some(&Bounds(dx, w, dy, h)) => [dx as u16, w, dy as u16, h],
+        None => {
+            let at = t.bounds_rom + 8 * i as u32;
+            std::array::from_fn(|k| Missing { table: "visibility box", key: at }.read16(b, at + 2 * k as u32))
+        }
+    }
+}
 
 /// Collision candidate queue for the object class: player shots, enemies and bosses, enemy
 /// shots, crates, pickable items.
@@ -40,21 +54,22 @@ pub(crate) fn queue_of(class: u8) -> Option<&'static super::pools::Queue> {
 
 /// Adds the object to the candidate queue; returns the new write pointer.
 pub fn push_candidate(b: &mut Cps2Bus, obj: Obj, queue: &super::pools::Queue) -> u16 {
-    let n = rd16(b, A5 + queue.count).wrapping_add(1);
-    wr16(b, A5 + queue.count, n);
-    let at = rd16(b, A5 + queue.cursor);
-    wr16(b, at as i16 as i32 as u32, obj.0 as u16);
+    let (count, cursor) = (Word::a5(queue.count), Word::a5(queue.cursor));
+    let n = count.get(b).wrapping_add(1);
+    count.set(b, n);
+    let at = cursor.get(b);
+    Word(at as i16 as i32 as u32 & 0xff_ffff).set(b, obj.0 as u16);
     let next = at.wrapping_add(2);
-    wr16(b, A5 + queue.cursor, next);
+    cursor.set(b, next);
     next
 }
 
-/// Screen abscissa (before margin) and screen height of the object.
-fn screen_x(b: &mut Cps2Bus, obj: Obj, cam: u32) -> u16 {
-    obj.u16(b, Obj::X).wrapping_sub(rd16(b, cam + 8))
+/// Screen abscissa (before margin) and screen height of the object, from the camera position `cam`.
+fn screen_x(b: &mut Cps2Bus, obj: Obj, cam: (u16, u16)) -> u16 {
+    obj.u16(b, Obj::X).wrapping_sub(cam.0)
 }
-fn screen_height(b: &mut Cps2Bus, obj: Obj, cam: u32) -> u16 {
-    obj.u16(b, Obj::Z).wrapping_add(obj.u16(b, Obj::Y)).wrapping_sub(rd16(b, cam + 0xc))
+fn screen_height(b: &mut Cps2Bus, obj: Obj, cam: (u16, u16)) -> u16 {
+    obj.u16(b, Obj::Z).wrapping_add(obj.u16(b, Obj::Y)).wrapping_sub(cam.1)
 }
 
 // ---- 16-bit operations on D0-D2 with the 68000 flags ----
@@ -63,7 +78,7 @@ fn screen_height(b: &mut Cps2Bus, obj: Obj, cam: u32) -> u16 {
 
 /// An object off screen (margin 0x40) and active goes to state 6 (disappearance).
 pub fn despawn_if_offscreen(b: &mut Cps2Bus, obj: Obj) {
-    let cam = camera(b);
+    let cam = camera_position(b);
     let x_out = screen_x(b, obj, cam).wrapping_add(0x40) >= 0x200;
     let y_out = screen_height(b, obj, cam).wrapping_add(0x40) > 0x180;
     if (x_out || y_out) && obj.is_active(b) {
@@ -85,25 +100,25 @@ pub const ARENA_MARGIN: u16 = 0x3e;
 /// plus the margin must stay below 0x180 + 2 × margin; in depth (`Obj::Y` alone, without altitude), with the
 /// fixed margin `ARENA_MARGIN`, below 0x100 + 2 × 0x3e. Unsigned 16-bit comparisons, like the original.
 pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
-    let cam = camera(b);
+    let cam = camera_position(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
     if x >= 0x180u16.wrapping_add(margin.wrapping_add(margin)) {
         return false;
     }
-    let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
+    let y = obj.u16(b, Obj::Y).wrapping_sub(cam.1).wrapping_add(ARENA_MARGIN);
     y < 0x100 + 2 * ARENA_MARGIN
 }
 
 /// The `bhi` following 0x1e92: true if the last compared value strictly exceeds its bound (the abscissa, when it
 /// leaves the area in width; otherwise the depth). False inside the area, and also exactly on the edge in width.
 pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
-    let cam = camera(b);
+    let cam = camera_position(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
     let edge_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
     if x >= edge_x {
         return x > edge_x;
     }
-    let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
+    let y = obj.u16(b, Obj::Y).wrapping_sub(cam.1).wrapping_add(ARENA_MARGIN);
     y > 0x100 + 2 * ARENA_MARGIN
 }
 
@@ -112,15 +127,16 @@ pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
 /// Visibility of an object: scenery (class 0) within the screen with a margin of 0x60 pixels, the others
 /// within their visibility box.
 pub fn is_visible(b: &mut Cps2Bus, obj: Obj) -> bool {
-    let cam = camera(b);
+    let cam = camera_position(b);
     let class = obj.u8(b, Obj::CLASS);
     if class == 0 {
         screen_x(b, obj, cam).wrapping_add(0x60) <= 0x240 && screen_height(b, obj, cam).wrapping_add(0xc0) <= 0x1c0
     } else {
-        let t = BOUNDS_TABLE + 8 * obj.u8(b, BOUNDS_INDEX) as u32;
-        let dx = screen_x(b, obj, cam).wrapping_add(rd16(b, t));
-        let dy = screen_height(b, obj, cam).wrapping_add(rd16(b, t + 4));
-        dx <= rd16(b, t + 2) && dy <= rd16(b, t + 6)
+        let i = obj.bounds(b);
+        let [dx, width, dy, height] = visibility_box(b, i);
+        let dx = screen_x(b, obj, cam).wrapping_add(dx);
+        let dy = screen_height(b, obj, cam).wrapping_add(dy);
+        dx <= width && dy <= height
     }
 }
 
