@@ -65,8 +65,8 @@ fn load_palette<R: Bench>(x: &mut Cx<'_, R>, from: &Table, to: u32) {
 }
 
 /// Launches task `program` (0x9b6) with parameter D0.w = `param`.
-fn new_task<R: Bench>(x: &mut Cx<'_, R>, program: u32, param: u16) {
-    crate::kernel::create_task(x.b, param as u32, program);
+fn new_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::tasks::Task, param: u16) {
+    crate::kernel::create_task(x.b, param as u32, task);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -428,7 +428,7 @@ fn timer_out<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 mod passage {
     pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x196a28);
-    pub const FADE_PROGRAM: crate::data::RomAddr = crate::data::RomAddr(0x1ced4);
+    pub const FADE_PROGRAM: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::FromWhite);
 }
 
 fn passage<R: Bench>(x: &mut Cx<'_, R>) {
@@ -486,7 +486,7 @@ fn passage_open<R: Bench>(x: &mut Cx<'_, R>) {
     vars::FADE_SOURCES.set(x.b, 0xff1190);
     vars::BLOCK_SOURCE_1.set(x.b, 0x266fe0);
     vars::BLOCK_SOURCE_2.set(x.b, 0x27cec0);
-    new_task(x, passage::FADE_PROGRAM.0, 0x10);
+    new_task(x, passage::FADE_PROGRAM, 0x10);
     x.add8(fields::SUB_STATE, 1);
 }
 
@@ -520,7 +520,7 @@ mod launcher {
     /// Palette save (0x91c000, 33 × 32 bytes) for the fade.
     pub const PALETTE_RAM: u32 = 0x91c000;
     pub const PALETTE_COPY: u32 = 0xff1190;
-    pub const FADE_PROGRAM: crate::data::RomAddr = crate::data::RomAddr(0x1ccf8);
+    pub const FADE_PROGRAM: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::ToWhite);
 }
 
 fn launcher<R: Bench>(x: &mut Cx<'_, R>) {
@@ -577,7 +577,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     vars::FADE_STEP.set(x.b, 1);
     vars::FADE_DELAY.set(x.b, 1);
     vars::FADE_PAGES.set(x.b, 13);
-    new_task(x, launcher::FADE_PROGRAM.0, 0x10);
+    new_task(x, launcher::FADE_PROGRAM, 0x10);
     crate::ram::CAMERA_X.set(x.b, 0xc78);
     // sparks (type 56): seventeen in principle (`dbf D6`), but the allocation uses D6 to walk the pool.
     // Original glitch: the loop counts in D6 (`dbf`), which the allocation rewrites (rank of the slot found
@@ -767,12 +767,12 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xa8594 "effct_opening" opening,
-    0xb2f40 "effct_silhouette_reflection" mirrored,
-    0xb66f8 "effct_traversee" crossing,
-    0xb68f4 "effct_passage" passage,
-    0xb6a74 "effct_launcher" launcher,
-    0xb7f28 "effct_sign_start" start_sign,
-    0xb896e "effct_sound_fade" sound_fade,
-    0xba0b0 "effct_passant" walker,
+    EFFCT_OPENING 0xa8594 "effct_opening" opening,
+    EFFCT_SILHOUETTE_REFLECTION 0xb2f40 "effct_silhouette_reflection" mirrored,
+    EFFCT_TRAVERSEE 0xb66f8 "effct_traversee" crossing,
+    EFFCT_PASSAGE 0xb68f4 "effct_passage" passage,
+    EFFCT_LAUNCHER 0xb6a74 "effct_launcher" launcher,
+    EFFCT_SIGN_START 0xb7f28 "effct_sign_start" start_sign,
+    EFFCT_SOUND_FADE 0xb896e "effct_sound_fade" sound_fade,
+    EFFCT_PASSANT 0xba0b0 "effct_passant" walker,
 }

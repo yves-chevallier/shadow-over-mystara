@@ -8,7 +8,8 @@ use m68k::Cpu;
 use crate::families::creators::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{prog32, prog8, rd8, wr8, A5};
+use crate::mem::{prog8, rd8, wr8, A5};
+use crate::tools::prog32;
 use crate::objects::Obj;
 use crate::objects::pools;
 

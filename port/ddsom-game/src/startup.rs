@@ -62,7 +62,7 @@ pub fn execute(b: &mut Cps2Bus, point: Point) -> Option<Point> {
 
 /// Original subroutines.
 mod ext {
-    pub const STARTUP_TASK: u32 = 0x11b16;
+    pub const STARTUP_TASK: crate::tasks::Task = crate::tasks::Task::Startup;
 }
 
 /// I/O registers.

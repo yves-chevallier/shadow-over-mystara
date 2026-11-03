@@ -502,6 +502,6 @@ fn group<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x9aeaa "boss_22" run,
-    0x7c5a8 "boss_2" run,
+    BOSS_22 0x9aeaa "boss_22" run,
+    BOSS_2 0x7c5a8 "boss_2" run,
 }

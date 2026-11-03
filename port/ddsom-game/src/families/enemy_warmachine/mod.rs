@@ -255,7 +255,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x77d12 "enemy_27" run,
+    ENEMY_27 0x77d12 "enemy_27" run,
     // get up after a common reaction (table 0x3e000 of `reactions.rs`)
-    0x78c3c "enemy_27_getup" hit::recover,
+    ENEMY_27_GETUP 0x78c3c "enemy_27_getup" hit::recover,
 }

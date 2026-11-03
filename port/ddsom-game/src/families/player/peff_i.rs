@@ -575,7 +575,7 @@ mod target {
 }
 
 handlers! {
-    0x4e79c "peff_30" storm::run,
-    0x4ec82 "peff_31" whirl::run,
-    0x4f026 "peff_32" target::run,
+    PEFF_30 0x4e79c "peff_30" storm::run,
+    PEFF_31 0x4ec82 "peff_31" whirl::run,
+    PEFF_32 0x4f026 "peff_32" target::run,
 }

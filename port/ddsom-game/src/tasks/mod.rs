@@ -63,9 +63,9 @@ pub fn wait_then_return(x: &mut Ctx, frames: u8) -> Flow {
     wait(x, frames, next)
 }
 
-/// `jmp 0xae4`: the current task restarts from zero at `entry` (A0 of the original).
-pub fn restart(x: &mut Ctx, entry: u32) -> Flow {
-    crate::kernel::restart(x.b, entry);
+/// `jmp 0xae4`: the current task restarts from zero as `task` (its entry in A0 of the original).
+pub fn restart(x: &mut Ctx, task: Task) -> Flow {
+    crate::kernel::restart(x.b, task);
     Flow::Yield
 }
 
@@ -235,23 +235,58 @@ pub(crate) fn forget_cession() {
     CEDED.with(|c| c.set(false));
 }
 
-/// First stage of a new Rust task, from its entry (otherwise the native placed at the entry).
-pub fn entry(entry: u32) -> Option<Step> {
-    [
-        Step::from(freeze::Step::Entry),
-        game::Step::Entry.into(),
-        prompt::Step::Entry.into(),
-        fixed_screen::Step::Entry.into(),
-        service::Step::Entry.into(),
-        crate::hud::Step::Entry.into(),
-        crate::credits_task::Step::Entry.into(),
-        crate::scene::shop::Step::Portraits.into(),
-        crate::modes::boot::Step::Entry.into(),
-        crate::modes::Step::Entry.into(),
-    ]
-    .into_iter()
-    .find(|e| e.address() == entry)
-    .or_else(|| fading::task_from_entry(entry).map(Step::Fading))
+/// A task of the game, as created by `0x9b6` (`kernel::create_task`) or restarted by `0xae4` (`kernel::restart`): the
+/// original designates it by its entry address, which the reference's task table (FF0064) keeps until the task runs
+/// ([`Task::address`], compared by `table::gaps`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Task {
+    /// `0x11b16` (slot 0): initialization, warnings, creation of the credits and the freeze (`modes/boot.rs`),
+    /// then the mode machine (`modes/`), in which it continues without changing entry.
+    Startup,
+    /// `0x133fe` (slot 0): the mode machine relaunched after a game (`modes/gameover.rs`).
+    Modes,
+    /// `0x1c45a` (slot 0): the game ([`game`]).
+    Game,
+    /// `0x29162` (slot 0): TEST menu ([`service`]).
+    Service,
+    /// `0x14ba`... `0x1cf12` (slot 1): a palette fade ([`fading`]).
+    Fading(fading::Fade),
+    /// `0x13c0a` (slot 2): credits and starts (`credits_task.rs`).
+    Credits,
+    /// `0x150ac` (slot 3): player interface (`hud/`).
+    Interface,
+    /// `0xf7dfe` (slot 12): shop portraits (`scene/shop.rs`).
+    Portraits,
+    /// `0xe03fe` (slot 13): blinking "INSERT COIN" ([`prompt`]).
+    Prompt,
+    /// `0xee080` (slot 14): busy wait and fast forward ([`freeze`]).
+    Freeze,
+    /// `0x1835e` (slot 15): attract score table ([`fixed_screen`]).
+    Scores,
+}
+
+impl Task {
+    /// The first stage of the task.
+    pub fn first_step(self) -> Step {
+        match self {
+            Task::Startup => crate::modes::boot::Step::Entry.into(),
+            Task::Modes => crate::modes::Step::Entry.into(),
+            Task::Game => game::Step::Entry.into(),
+            Task::Service => service::Step::Entry.into(),
+            Task::Fading(fade) => fade.first_step().into(),
+            Task::Credits => crate::credits_task::Step::Entry.into(),
+            Task::Interface => crate::hud::Step::Entry.into(),
+            Task::Portraits => crate::scene::shop::Step::Portraits.into(),
+            Task::Prompt => prompt::Step::Entry.into(),
+            Task::Freeze => freeze::Step::Entry.into(),
+            Task::Scores => fixed_screen::Step::Entry.into(),
+        }
+    }
+
+    /// The entry address of the original (that of its first stage).
+    pub fn address(self) -> u32 {
+        self.first_step().address()
+    }
 }
 
 /// Natives of the Rust tasks.

@@ -174,7 +174,7 @@ pub(super) fn s0e_wait_timer(x: &mut Ctx) -> Flow {
     next_step(x);
     fade_settings(x, 3, FADE_ALL);
     fading::STEP.set(x.b, 1);
-    fade_task(x, crate::scene::fading::DESCENT.0);
+    fade_task(x, crate::scene::fading::DESCENT);
     s0e_wait_fade(x)
 }
 pub(super) fn s0e_wait_fade(x: &mut Ctx) -> Flow {
@@ -257,7 +257,7 @@ pub(super) fn s1a_wait_signal(x: &mut Ctx) -> Flow {
     fading::STEP.set(x.b, 1);
     fading::DELAY.set(x.b, 4);
     fading::PAGES.set(x.b, FADE_ALL);
-    fade_task(x, crate::scene::fading::TO_WHITE.0);
+    fade_task(x, crate::scene::fading::TO_WHITE);
     s1a_wait_fade(x)
 }
 pub(super) fn s1a_wait_fade(x: &mut Ctx) -> Flow {
@@ -365,7 +365,7 @@ pub(super) fn s1e_fade(x: &mut Ctx) -> Flow {
     }
     fading::STEP.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
-    fade_task(x, crate::scene::fading::DESCENT_STEP.0);
+    fade_task(x, crate::scene::fading::DESCENT_STEP);
     s1e_loop(x)
 }
 pub(super) fn s1e_loop(x: &mut Ctx) -> Flow {
@@ -388,7 +388,7 @@ pub(super) fn s22_object(x: &mut Ctx) -> Flow {
     }
     fading::STEP.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
-    fade_task(x, crate::scene::fading::RISE_STEP.0);
+    fade_task(x, crate::scene::fading::RISE_STEP);
     s22_wait(x)
 }
 pub(super) fn s22_wait(x: &mut Ctx) -> Flow {
@@ -417,7 +417,7 @@ pub(super) fn s28_fade(x: &mut Ctx) -> Flow {
     next_step(x);
     fading::STEP.set(x.b, 1);
     fade_settings(x, 3, 13);
-    fade_task(x, crate::scene::fading::DESCENT.0);
+    fade_task(x, crate::scene::fading::DESCENT);
     s28_loop(x)
 }
 pub(super) fn s28_loop(x: &mut Ctx) -> Flow {
@@ -460,7 +460,7 @@ pub(super) fn s2c_wait(x: &mut Ctx) -> Flow {
     next_step(x);
     fade_settings(x, 3, 13);
     fading::STEP.set(x.b, 1);
-    fade_task(x, crate::scene::fading::DESCENT.0);
+    fade_task(x, crate::scene::fading::DESCENT);
     s2c_loop(x)
 }
 pub(super) fn s2c_loop(x: &mut Ctx) -> Flow {

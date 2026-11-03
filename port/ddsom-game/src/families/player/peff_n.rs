@@ -535,5 +535,5 @@ mod guardian {
 }
 
 handlers! {
-    0x50348 "peff_41" guardian::run,
+    PEFF_41 0x50348 "peff_41" guardian::run,
 }

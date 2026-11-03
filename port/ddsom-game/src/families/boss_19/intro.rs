@@ -12,6 +12,7 @@ use super::fight;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
+use crate::tasks::fading::Fade;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
@@ -136,8 +137,8 @@ fn green_land<R: Bench>(x: &mut Cx<'_, R>) {
 // --- type 19, variant 0 ------------------------------------------------------------------------------
 
 /// Starts the fade task `list` (0x9b6 with A0 = the entry, slot 0x10; `tasks/fading.rs`).
-fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
-    crate::kernel::create_task(x.b, 0x10, list);
+fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: Fade) {
+    crate::kernel::create_task(x.b, 0x10, crate::tasks::Task::Fading(list));
 }
 
 fn announce<R: Bench>(x: &mut Cx<'_, R>) {
@@ -149,7 +150,7 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     var::FADE_STEPS.set(x.b, 9);
     x.set8(Boss19::BUBBLES, 4);
     x.set8(Boss19::BUBBLE_TICK, 0);
-    open_list(x, 0x14de);
+    open_list(x, Fade::DescentSteps);
     lib::sound(x, crate::sound::CMD_311_411_B);
 }
 
@@ -187,7 +188,7 @@ fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
     var::FADE_PAGES.set(x.b, 0xe);
     var::FADE_STEPS.set(x.b, 9);
     x.set16(Boss19::BUBBLES, 0);
-    open_list(x, 0x14c8);
+    open_list(x, Fade::RiseSteps);
 }
 
 /// Entry position to the right of the camera, at depth `dy` below its top edge.

@@ -19,7 +19,7 @@ use crate::objects::Obj;
 /// Sequence 0 (the most common): players leave, fade.
 pub(super) fn seq0_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fading::DESCENT.0);
+    ex.fade(2, fading::DESCENT);
     var::INPUT_LOCK.set(ex.x.b, 0);
     crate::inputs::clear_inputs(ex.x.b);
     ex.x.world();
@@ -28,7 +28,7 @@ pub(super) fn seq0_start(ex: &mut Ex) {
 /// Sequence 6: like `seq0_start`, with sound command 0xe0a82(4).
 pub(super) fn seq6_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fading::DESCENT.0);
+    ex.fade(2, fading::DESCENT);
     var::INPUT_LOCK.set(ex.x.b, 0);
     crate::inputs::clear_inputs(ex.x.b);
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
@@ -45,7 +45,7 @@ pub(super) fn seq20_walk(ex: &mut Ex) {
 pub(super) fn fade_out_world(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
-        ex.fade(2, fading::DESCENT.0);
+        ex.fade(2, fading::DESCENT);
     }
     ex.x.world();
 }
@@ -74,7 +74,7 @@ pub(super) fn seq29_walk(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.start_walk_out(false);
-        ex.fade(2, fading::DESCENT.0);
+        ex.fade(2, fading::DESCENT);
     }
     run_update(ex, Update::Full);
 }
@@ -103,7 +103,7 @@ pub(super) fn seq33_walk(ex: &mut Ex) {
         PAUSE.set(ex.x.b, 0);
         var::INPUT_LOCK.set(ex.x.b, 0);
         crate::inputs::clear_inputs(ex.x.b);
-        ex.fade(2, fading::DESCENT.0);
+        ex.fade(2, fading::DESCENT);
         ex.release_players(false);
     }
     ex.x.world();
@@ -242,7 +242,7 @@ pub(super) fn walk_with_effect(ex: &mut Ex) {
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
     effect.set_u32(ex.x.b, EFFECT_SPEED, 0x2_0000);
-    ex.fade(1, fading::DESCENT.0);
+    ex.fade(1, fading::DESCENT);
 }
 
 /// Sequence 10: players receive their rank then 0xd5f12.
@@ -297,7 +297,7 @@ pub(super) fn seq15_clear(ex: &mut Ex) {
 /// Sequence 15: fade, fade script, event 0xdc5fe(3).
 pub(super) fn seq15_fade(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fading::RISE.0);
+    ex.fade(2, fading::RISE);
     ex.clear_text();
     crate::families::creators::scene_object(ex.x.b, 3);
 }
@@ -331,7 +331,7 @@ pub(super) fn seq21_route(ex: &mut Ex) {
         let index = m.u8(ex.x.b, ANSWER) as u32;
         let scene = NEXT_SCENES.pc_byte(ex.x.b, index);
         ex.set_b8(blk::NEXT_SCENE, scene);
-        ex.fade(1, fading::DESCENT.0);
+        ex.fade(1, fading::DESCENT);
     }
 }
 
@@ -342,7 +342,7 @@ pub(super) fn seq23_walk(ex: &mut Ex) {
     }
     ex.next();
     ex.start_walk_out(false);
-    ex.fade(2, fading::DESCENT.0);
+    ex.fade(2, fading::DESCENT);
 }
 
 /// Sequence 25: depending on the route (`A5+0x5c`), jumps to state 20 (bonus screen) or fades.
@@ -353,7 +353,7 @@ pub(super) fn seq25_route(ex: &mut Ex) {
     }
     ex.next();
     ex.set_b16(blk::TIMER, 128);
-    ex.fade(2, fading::RISE.0);
+    ex.fade(2, fading::RISE);
     ex.clear_text();
 }
 
@@ -436,7 +436,7 @@ pub(super) fn seq35_walk(ex: &mut Ex) {
 pub(super) fn seq35_fade(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 64);
-    ex.fade(2, fading::RISE.0);
+    ex.fade(2, fading::RISE);
     ex.clear_text();
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
 }

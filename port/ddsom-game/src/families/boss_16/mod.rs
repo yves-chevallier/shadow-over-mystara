@@ -360,5 +360,5 @@ fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x9325e "boss_16" run,
+    BOSS_16 0x9325e "boss_16" run,
 }

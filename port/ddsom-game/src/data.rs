@@ -70,7 +70,7 @@ impl Missing {
     /// Long of the residue in the program space (tables in the code, read PC-relative).
     pub fn pc_long(self, b: &mut Cps2Bus, a: u32) -> u32 {
         note(self, a);
-        crate::mem::prog32(b, a)
+        (crate::mem::prog16(b, a) as u32) << 16 | crate::mem::prog16(b, a + 2) as u32
     }
 
     /// Byte of the residue, in program space if `program` (tables read PC-relative), otherwise in data space.

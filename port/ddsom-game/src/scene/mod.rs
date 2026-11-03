@@ -77,6 +77,8 @@ pub const fn scratch(offset16: u16) -> u32 {
 /// delay between two steps; and the entries of these tasks, which the screens create in slot 0x10.
 pub mod fading {
     use crate::ram::{Word, Byte};
+    use crate::tasks::fading::Fade;
+    use crate::tasks::Task;
 
     /// Pages concerned (bit k: page k).
     pub const PAGES: Byte = Byte::a5(0x48e);
@@ -87,16 +89,16 @@ pub mod fading {
 
     /// Tasks: full rise and descent, descent and rise by the state's number of steps, fade to white,
     /// per-component fade from white to the palettes.
-    pub const RISE: crate::data::RomAddr = crate::data::RomAddr(0x14ba);
-    pub const DESCENT: crate::data::RomAddr = crate::data::RomAddr(0x14d0);
-    pub const DESCENT_STEP: crate::data::RomAddr = crate::data::RomAddr(0x14de);
-    pub const RISE_STEP: crate::data::RomAddr = crate::data::RomAddr(0x14c8);
-    pub const TO_WHITE: crate::data::RomAddr = crate::data::RomAddr(0x1ccf8);
-    pub const FROM_WHITE: crate::data::RomAddr = crate::data::RomAddr(0x1ced4);
+    pub const RISE: Task = Task::Fading(Fade::Rise);
+    pub const DESCENT: Task = Task::Fading(Fade::Descent);
+    pub const DESCENT_STEP: Task = Task::Fading(Fade::DescentSteps);
+    pub const RISE_STEP: Task = Task::Fading(Fade::RiseSteps);
+    pub const TO_WHITE: Task = Task::Fading(Fade::ToWhite);
+    pub const FROM_WHITE: Task = Task::Fading(Fade::FromWhite);
 
-    /// Creates the fade task `entry` in slot 0x10 (`jsr 0x9b6`).
-    pub fn launch(b: &mut cps2::Cps2Bus, entry: impl Into<u32>) {
-        crate::kernel::create_task(b, 0x10, entry.into());
+    /// Creates the fade task `task` in slot 0x10 (`jsr 0x9b6`).
+    pub fn launch(b: &mut cps2::Cps2Bus, task: Task) {
+        crate::kernel::create_task(b, 0x10, task);
     }
 }
 
@@ -211,17 +213,17 @@ impl<'a> Ctx<'a> {
         fading::DELAY.set(self.b, 2);
         fading::PAGES.set(self.b, 15);
         crate::palette::no_brightness(self.b);
-        self.start_fade_task(crate::scene::fading::RISE.0);
+        self.start_fade_task(crate::scene::fading::RISE);
     }
     /// Variant: fade one level per step (`A5+0x48f` = 1), without going through black.
     pub fn fade_in_stepped(&mut self) {
         fading::DELAY.set(self.b, 2);
         fading::PAGES.set(self.b, 15);
         fading::STEP.set(self.b, 1);
-        self.start_fade_task(crate::scene::fading::FROM_WHITE.0);
+        self.start_fade_task(crate::scene::fading::FROM_WHITE);
     }
-    fn start_fade_task(&mut self, entry: u32) {
-        crate::kernel::create_task(self.b, 0x10, entry);
+    fn start_fade_task(&mut self, task: crate::tasks::Task) {
+        crate::kernel::create_task(self.b, 0x10, task);
     }
 
     /// Creates an active object (allocator `alloc`), of type `kind`; the original writes without testing the carry.

@@ -330,6 +330,6 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     (r, mask)
 }
 
-/// Native of the handler.
-pub const NATIVES: &[crate::Native] =
-    &[crate::families::cx::handler_without(0x7f41a, "boss_3", |b, a| run(&mut crate::families::cx::Gx::dispatch(b, a)))];
+crate::families::cx::handlers! {
+    BOSS_3 0x7f41a "boss_3" run,
+}

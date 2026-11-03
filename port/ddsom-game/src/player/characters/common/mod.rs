@@ -84,8 +84,8 @@ pub mod rom {
     /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
     pub const SCREEN_TASK_SLOT: u32 = 0x10;
     /// Programs of the spell's screen tasks: darken and restore.
-    pub const DIM_TASK: crate::data::RomAddr = crate::data::RomAddr(0x153e);
-    pub const UNDIM_TASK: crate::data::RomAddr = crate::data::RomAddr(0x1536);
+    pub const DIM_TASK: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::PartialDescent);
+    pub const UNDIM_TASK: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::PartialRise);
 }
 
 /// ROM tables (PC-relative in the original).
@@ -337,7 +337,7 @@ pub fn freeze_others(g: &mut Ctx, p: Player) {
 
 /// Darkens or restores the screen: starts the screen task `program` (0x153e / 0x1536) after the
 /// fade 0x1686. `mode`: 1 darken, 2 restore.
-fn screen_task(g: &mut Ctx, mode: u16, program: u32, fade: bool) {
+fn screen_task(g: &mut Ctx, mode: u16, program: crate::tasks::Task, fade: bool) {
     ram::FADE_DELAY.set(g.b, mode);
     ram::FADE_PAGES.set(g.b, 0xd);
     ram::FADE_STEPS.set(g.b, 5);
@@ -351,7 +351,7 @@ fn screen_task(g: &mut Ctx, mode: u16, program: u32, fade: bool) {
 /// 0x3f926: the spell begins, the screen darkens.
 pub fn dim_screen(g: &mut Ctx, _p: Player) {
     cov!();
-    screen_task(g, 1, rom::DIM_TASK.0, true);
+    screen_task(g, 1, rom::DIM_TASK, true);
 }
 
 /// 0x3f954: the spell is over, the screen is restored.
@@ -363,7 +363,7 @@ pub fn undim_screen(g: &mut Ctx, p: Player) {
 /// Restores the screen with mode `mode`: the magic-user's code (0x48772) passes 1 instead of 2.
 pub fn undim_screen_mode(g: &mut Ctx, _p: Player, mode: u16) {
     cov!();
-    screen_task(g, mode, rom::UNDIM_TASK.0, false);
+    screen_task(g, mode, rom::UNDIM_TASK, false);
 }
 
 /// Start of a spell (next action step): game pause (`A5+0x3d`), spell indicator (`A5+0x4a`),

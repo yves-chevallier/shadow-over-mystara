@@ -103,13 +103,13 @@ pub mod ball71;
 pub mod splinter72;
 
 handlers! {
-    0xa6efa "eshl_64" flame64::run,
-    0xa72c4 "eshl_65" rocks65::run,
-    0xa75c6 "eshl_66" shard66::run,
-    0xa78c2 "eshl_67" barrel67::run,
-    0xa7b76 "eshl_68" stone68::run,
-    0xa7e30 "eshl_69" bouncer69::run,
-    0xa801a "eshl_70" gate70::run,
-    0xa81ca "eshl_71" ball71::run,
-    0xa838e "eshl_72" splinter72::run,
+    ESHL_64 0xa6efa "eshl_64" flame64::run,
+    ESHL_65 0xa72c4 "eshl_65" rocks65::run,
+    ESHL_66 0xa75c6 "eshl_66" shard66::run,
+    ESHL_67 0xa78c2 "eshl_67" barrel67::run,
+    ESHL_68 0xa7b76 "eshl_68" stone68::run,
+    ESHL_69 0xa7e30 "eshl_69" bouncer69::run,
+    ESHL_70 0xa801a "eshl_70" gate70::run,
+    ESHL_71 0xa81ca "eshl_71" ball71::run,
+    ESHL_72 0xa838e "eshl_72" splinter72::run,
 }

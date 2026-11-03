@@ -151,7 +151,7 @@ crate::steps! {
             Obj(BLOCK).set_u16(x.b, f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
             // `jmp 0x9b6`: the fade task, then the return
-            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE.0);
+            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE);
             Flow::Done
         },
         S10Retry = 0xfbbae => |x| {
@@ -189,7 +189,7 @@ crate::steps! {
             for (k, source) in CREDITS_FADE.into_iter().enumerate() {
                 sv::fade_source(k as u32).set(x.b, source);
             }
-            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::FROM_WHITE.0);
+            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::FROM_WHITE);
             crate::sound::play_global(x.b, crate::sound::CMD_33);
             fading::STEP.set(x.b, 1);
             s1c_wait_fade(x)
@@ -266,7 +266,7 @@ crate::steps! {
             var::VIDEO.set(x.b, 0x12ce);
             render(x);
             fade_settings(x, 3, 13);
-            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE.0);
+            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE);
             Flow::Done
         },
         S2cLoop = 0xfc14c => |x| {
@@ -370,7 +370,7 @@ crate::steps! {
             var::VIDEO.set(x.b, 0x12ce);
             Obj(BLOCK).set_u16(x.b, f::TIMER, 240);
             fade_settings(x, 3, FADE_ALL);
-            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE.0);
+            crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE);
             Flow::Done
         },
         S32Faded = 0xfc450 => |x| {
@@ -519,8 +519,8 @@ fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
 }
 
 /// Creates the entry fade task `entry` (slot 0x10).
-fn fade_task(x: &mut Ctx, entry: u32) {
-    crate::kernel::create_task(x.b, 0x10, entry);
+fn fade_task(x: &mut Ctx, task: crate::tasks::Task) {
+    crate::kernel::create_task(x.b, 0x10, task);
 }
 
 /// Two tile blocks of the grid `grid` one after the other from `destination`.

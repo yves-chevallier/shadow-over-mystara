@@ -878,5 +878,5 @@ fn walker_run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb1a98 "effct_countdown" countdown_screen,
+    EFFCT_COUNTDOWN 0xb1a98 "effct_countdown" countdown_screen,
 }

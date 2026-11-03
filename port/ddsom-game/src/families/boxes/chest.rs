@@ -645,5 +645,5 @@ fn dropped_broken<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xd99fa "box_crate" run,
+    BOX_CRATE 0xd99fa "box_crate" run,
 }

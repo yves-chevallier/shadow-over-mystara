@@ -697,5 +697,5 @@ fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x6681c "enemy_10" run,
+    ENEMY_10 0x6681c "enemy_10" run,
 }

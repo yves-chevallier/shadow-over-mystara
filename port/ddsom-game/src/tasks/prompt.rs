@@ -14,9 +14,8 @@ use crate::Native;
 
 /// Displayed text (long).
 const SHOWN: u32 = A5 - 0x5ac2;
-/// Slot of the task, and its entry.
+/// Slot of the task.
 const SLOT: u32 = 0xd0;
-const ENTRY: u32 = Step::Entry.address();
 
 mod var {
     pub const FREE_PLAY: u32 = 0x25;
@@ -103,7 +102,7 @@ pub fn stop(b: &mut cps2::Cps2Bus) {
 
 /// `0xe03e4`: launches the task; registers kept.
 pub fn launch(b: &mut cps2::Cps2Bus) {
-    crate::kernel::create_task(b, SLOT, ENTRY);
+    crate::kernel::create_task(b, SLOT, super::Task::Prompt);
 }
 
 pub const STOP: Native = Native {

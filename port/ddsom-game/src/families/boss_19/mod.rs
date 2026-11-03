@@ -346,5 +346,5 @@ fn hover<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8fae4 "boss_19" run,
+    BOSS_19 0x8fae4 "boss_19" run,
 }

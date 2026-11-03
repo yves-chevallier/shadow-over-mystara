@@ -272,5 +272,5 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x61364 "enemy_6" run,
+    ENEMY_6 0x61364 "enemy_6" run,
 }

@@ -262,7 +262,7 @@ const CLEARED_B: u32 = 0xff_19f0; // A5 - 0x6610
 
 /// Players' interface task created at the end of the phase.
 const PLAYER_UI_SLOT: u32 = 0x30;
-const PLAYER_UI_TASK: u32 = 0x150ac;
+const PLAYER_UI_TASK: crate::tasks::Task = crate::tasks::Task::Interface;
 
 /// `A5` bytes reset to zero on exit: flag and score.
 const EXIT_CLEARED_BYTES: [u32; 2] = [0x37, 0x5d];

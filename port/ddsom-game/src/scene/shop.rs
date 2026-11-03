@@ -156,7 +156,7 @@ crate::steps! {
             let scene = x.v8(0x34) as u32;
             let shop = rom::SHOP_OF_SCENE.byte(x.b, scene);
             set_b8(x, f::SHOP, shop);
-            crate::kernel::create_task(x.b, 192, PORTRAITS_TASK.0);
+            crate::kernel::create_task(x.b, 192, crate::tasks::Task::Portraits);
             x.set_v8(0x4e, (scene == 5) as u8);
             if b8(x, f::REOPENED) == 0 {
                 set_b8(x, f::RETURN_SCENE, scene as u8);
@@ -269,7 +269,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     crate::video::turn_layers_on(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    crate::kernel::create_task(x.b, 16, crate::scene::fading::RISE.0);
+    crate::kernel::create_task(x.b, 16, crate::scene::fading::RISE);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {

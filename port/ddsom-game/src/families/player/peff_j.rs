@@ -330,11 +330,11 @@ mod timer {
 }
 
 handlers! {
-    0x4fc1a "peff_35" leap::run,
-    0x4fd4a "peff_36" swap::run,
-    0x4fe38 "peff_37" dash::run,
-    0x4ff1e "peff_38" chip::run,
-    0x4ffd0 "peff_39" chunk::run,
-    0x51ad6 "peff_46" rain::run,
-    0x51bcc "peff_47" timer::run,
+    PEFF_35 0x4fc1a "peff_35" leap::run,
+    PEFF_36 0x4fd4a "peff_36" swap::run,
+    PEFF_37 0x4fe38 "peff_37" dash::run,
+    PEFF_38 0x4ff1e "peff_38" chip::run,
+    PEFF_39 0x4ffd0 "peff_39" chunk::run,
+    PEFF_46 0x51ad6 "peff_46" rain::run,
+    PEFF_47 0x51bcc "peff_47" timer::run,
 }

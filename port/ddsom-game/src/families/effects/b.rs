@@ -448,9 +448,9 @@ fn blinking<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb841c "effct_detecteur" pickup_detector,
-    0xb84c6 "effct_victory" victory_screen,
-    0xb85fa "effct_bubble_creator" bubble,
-    0xb871a "effct_button" menu_button,
-    0xb8df2 "effct_blink" blinking,
+    EFFCT_DETECTEUR 0xb841c "effct_detecteur" pickup_detector,
+    EFFCT_VICTORY 0xb84c6 "effct_victory" victory_screen,
+    EFFCT_BUBBLE_CREATOR 0xb85fa "effct_bubble_creator" bubble,
+    EFFCT_BUTTON 0xb871a "effct_button" menu_button,
+    EFFCT_BLINK 0xb8df2 "effct_blink" blinking,
 }

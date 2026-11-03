@@ -89,7 +89,7 @@ pub mod key {
 }
 
 /// Entry of the startup task, which the menu task becomes again on leaving.
-const BOOT_TASK: crate::data::RomAddr = crate::data::RomAddr(0x11b16);
+const BOOT_TASK: crate::tasks::Task = crate::tasks::Task::Startup;
 
 /// Menu texts (descriptors in ROM).
 mod text {
@@ -364,7 +364,7 @@ fn exit(x: &mut Ctx) -> Flow {
         x.set_v32(off, 0);
     }
     var::ACTIVE.set(x.b, 0);
-    crate::tasks::restart(x, BOOT_TASK.0)
+    crate::tasks::restart(x, BOOT_TASK)
 }
 
 /// `0x29a48`: held 1P start and fire 1: return to the menu.

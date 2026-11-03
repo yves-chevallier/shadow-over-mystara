@@ -203,25 +203,18 @@ mod dialogue;
 /// releases the cursors (state 6 in the object) then itself in states 4 and 6.
 mod name_entry;
 
-/// Declares a handler native: address, name, function.
-macro_rules! entry {
-    ($entry:literal $name:literal, $f:path) => {
-        super::cx::handlers!(@one $entry $name $f)
-    };
+crate::families::cx::handlers! {
+    SET_COMMON_CC25A 0xcc25a "set_common_cc25a" scene_spawner::run,
+    SET_0 0xba310 "set_0" palette_script::run,
+    SET_1 0xbc518 "set_1" wave_leader::run,
+    SET_4 0xc935a "set_4" tile_anim::run4,
+    SET_5 0xc9780 "set_5" name_entry::run,
+    SET_6 0xcafec "set_6" tile_anim::run6,
+    SET_7 0xcb29c "set_7" exit_gate::run,
+    SET_9 0xcc2c8 "set_9" inert::run,
+    SET_10 0xcc3c2 "set_10" dialogue::run,
+    SET_11 0xcdcaa "set_11" level_end::run,
+    SET_12 0xcdd70 "set_12" fade_white::run,
+    SET_13 0xcdef6 "set_13" palette_anim::run,
+    SET_14 0xcdf86 "set_14" scene_trigger::run,
 }
-
-pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_common_cc25a", scene_spawner::run),
-    entry!(0xba310 "set_0", palette_script::run),
-    entry!(0xbc518 "set_1", wave_leader::run),
-    entry!(0xc935a "set_4", tile_anim::run4),
-    entry!(0xc9780 "set_5", name_entry::run),
-    entry!(0xcafec "set_6", tile_anim::run6),
-    entry!(0xcb29c "set_7", exit_gate::run),
-    entry!(0xcc2c8 "set_9", inert::run),
-    entry!(0xcc3c2 "set_10", dialogue::run),
-    entry!(0xcdcaa "set_11", level_end::run),
-    entry!(0xcdd70 "set_12", fade_white::run),
-    entry!(0xcdef6 "set_13", palette_anim::run),
-    entry!(0xcdf86 "set_14", scene_trigger::run),
-];

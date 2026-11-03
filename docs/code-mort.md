@@ -568,3 +568,46 @@ Clés du résidu restantes (toutes antérieures à L12, comptées par `validate`
 
 Ces lectures sont des glitches d'origine qu'aucune table ne décrit (adresses arbitraires) : elles restent comptées
 par le résidu (fatales avec `DDSOM_STRICT=1`), lues sur le bus en mode ROM et dans `reste.json` sans ROM.
+
+## Lot L13 (aiguillage sans adresses ; wt-l13-aiguillage)
+
+Les dix tables d'aiguillage (`dispatch.rs`) sont des tableaux Rust `[Handler; N]` indexés par `Obj::KIND`, construits
+à la compilation d'après les tables de l'original (relevées dans `prog_dec.bin`). Deux sortes de cas nommés :
+
+### Entrées des tables sans gestionnaire Rust (`Handler::Dead`, `unreachable!`)
+
+* **ENEMY 17** (0x39a78 + 17 × 4 = 0x39abc → 0x39aec) : l'entrée pointe sur la boucle d'aiguillage des BOSS
+  ([atlas.md](atlas.md) : « type d'index 17 = doublon « Wyvern » → entrée nulle »). Un ennemi de type 17 ferait
+  rejouer à l'original toute la boucle des boss (qui pose elle-même A0) au milieu de celle des ennemis. Aucun créateur
+  ni script ne pose le type 17 dans le pool ENEMY (déjà sans native avant L13 : le jeu sans 68000 s'y serait arrêté).
+  Nature : emplacement vide de la table (un type d'ennemi retiré), comblé par une adresse quelconque.
+* **EFFCT 2** (0xaa71a), **71** (0xb841a, un `rts`) et **78** (0xb8a1e) : types morts déjà recensés dans
+  [familles.md](familles.md) (aucune création possible : le seul créateur du type 2, 0x17626, suit un `bra` et n'est
+  référencé par rien ; aucun appel de `0x2318` ni script de scène ne crée les types 71 et 78). Laissés en 68000,
+  jamais réécrits ; leur entrée devient `Handler::Dead`.
+
+### Types au-delà des tables (`Class::handler`, `unreachable!`)
+
+L'original lit `movea.l (table,PC,D0.w)` avec D0 = `(type << 2) as u16`, sans borne : un type au-delà de la table lit
+la suite du code comme une adresse. Les tables étant rangées les unes derrière les autres (avec les boucles entre
+elles), un type hors table lirait souvent la table d'une autre classe et lancerait le gestionnaire d'une autre famille
+sur l'objet. Relevé (premier type hors table, et types dont la lecture tombe sur un gestionnaire Rust) :
+
+| Classe | Types | Hors table | Lecture tombant sur un gestionnaire |
+|---|---:|---|---|
+| PSHL | 25 | 0x3996c (code de la boucle PEFF) | 92-120 : ENEMY ; 246-255 : EFFCT |
+| PEFF | 48 | 0x39a52 (boucle ENEMY) | 96-118 : BOSS ; 129-201 : ESHL |
+| ENEMY | 29 | 0x39aec (boucle BOSS) | 154-245 : EFFCT |
+| BOSS | 23 | 0x39b6e (2 octets de bourrage, puis boucle ESHL) | 33-105 : ESHL ; 217-220 : BOX |
+| ESHL | 73 | 0x39cba (boucle EFFCT) | 184-187 : BOX ; 241-250 : ITEM |
+| EFFCT | 92 | 0x39e50 (boucle BOX) | 115-148 : SET ; 178-193 : SOBJ ; 195 : EFFCT 68 |
+| BOX | 4 | 0x39e86 (boucle SET) | 57-66 : ITEM |
+| SET | 34 | 0x39f34 (boucle ITEM) | 63-78 : SOBJ ; 80 : EFFCT 68 |
+| ITEM | 10 | 0x39f82 (boucle SOBJ) | aucun |
+| SOBJ | 16 | 0x39fe8 : 16 → 0x39ff0 (parade du joueur, code de P4), 17 → 0xb7f28 (EFFCT 68) | 17 : EFFCT 68 |
+
+Aucun créateur ne pose un type hors de sa table (les types sont des constantes des créateurs ou des octets de
+tables de scène bornés ; 309 scénarios sans passage). Avant L13, le jeu lisait l'adresse dans l'image ROM puis
+cherchait une native par adresse : un type hors table aurait lancé le gestionnaire d'une autre classe, ou arrêté le
+jeu. Nature : absence de borne de l'original, sans usage ; remplacé par `unreachable!` (message : boucle, type,
+table).

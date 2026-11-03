@@ -17,9 +17,8 @@ use crate::Native;
 
 /// Tasks created at the end of startup: credits and freeze.
 mod task {
-    use crate::data::RomAddr;
-    pub const CREDITS: RomAddr = RomAddr(0x13c0a);
-    pub const FREEZE: RomAddr = RomAddr(0xee080);
+    pub const CREDITS: crate::tasks::Task = crate::tasks::Task::Credits;
+    pub const FREEZE: crate::tasks::Task = crate::tasks::Task::Freeze;
 }
 
 /// Starting palette: eight longs from the ROM copied into the palette table.
@@ -107,8 +106,8 @@ crate::steps! {
             if !crate::config::initialize(x.b) {
                 return Flow::Yield;
             }
-            crate::kernel::create_task(x.b, SLOT_CREDITS, task::CREDITS.0);
-            crate::kernel::create_task(x.b, SLOT_FREEZE, task::FREEZE.0);
+            crate::kernel::create_task(x.b, SLOT_CREDITS, task::CREDITS);
+            crate::kernel::create_task(x.b, SLOT_FREEZE, task::FREEZE);
             // the task continues in the mode machine loop (`jmp 0x133fe`)
             crate::modes::start(x)
         },

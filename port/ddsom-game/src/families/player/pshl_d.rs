@@ -631,10 +631,10 @@ mod spark {
 }
 
 handlers! {
-    0x53e94 "pshl_19" chain::run,
-    0x542ee "pshl_20" wall::run,
-    0x54450 "pshl_21" knife::run,
-    0x54560 "pshl_22" fireball::run,
-    0x5471a "pshl_23" bolt::run,
-    0x548a0 "pshl_24" spark::run,
+    PSHL_19 0x53e94 "pshl_19" chain::run,
+    PSHL_20 0x542ee "pshl_20" wall::run,
+    PSHL_21 0x54450 "pshl_21" knife::run,
+    PSHL_22 0x54560 "pshl_22" fireball::run,
+    PSHL_23 0x5471a "pshl_23" bolt::run,
+    PSHL_24 0x548a0 "pshl_24" spark::run,
 }

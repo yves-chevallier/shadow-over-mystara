@@ -99,8 +99,8 @@ fn unlink_and_clear_lists(x: &mut Ctx) {
 }
 
 /// Creates the fade task `entry` (slot 0x10), A0 preserved.
-fn start_fade_task(x: &mut Ctx, entry: u32) {
-    crate::kernel::create_task(x.b, 0x10, entry);
+fn start_fade_task(x: &mut Ctx, task: crate::tasks::Task) {
+    crate::kernel::create_task(x.b, 0x10, task);
 }
 
 /// Common fade settings (delay, pages).
@@ -228,7 +228,7 @@ crate::steps! {
         },
         T12Fade = 0xfa620 => |x| {
             fade_setup(x, 3, FADE_PAGES_ALL);
-            start_fade_task(x, crate::scene::fading::RISE.0);
+            start_fade_task(x, crate::scene::fading::RISE);
             x.next_step();
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
@@ -437,7 +437,7 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fading::DESCENT.0);
+    start_fade_task(x, crate::scene::fading::DESCENT);
     Flow::Done
 }
 
@@ -654,7 +654,7 @@ fn leave_screen(x: &mut Ctx, loop_resume: Step) -> Flow {
     fading::STEP.set(x.b, 1);
     fading::DELAY.set(x.b, 4);
     fading::PAGES.set(x.b, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fading::DESCENT.0);
+    start_fade_task(x, crate::scene::fading::DESCENT);
     x.wait(1, loop_resume)
 }
 

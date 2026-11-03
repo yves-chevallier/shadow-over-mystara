@@ -202,8 +202,8 @@ fn mirror<R: Bench>(x: &mut Cx<'_, R>, dy: u32) {
 }
 
 handlers! {
-    0x77736 "enemy_26" dark_warrior_double::run,
-    0x75f42 "enemy_22" chimera::run,
-    0x76592 "enemy_23" spectre::run,
-    0x76afc "enemy_24" manticore::run,
+    ENEMY_26 0x77736 "enemy_26" dark_warrior_double::run,
+    ENEMY_22 0x75f42 "enemy_22" chimera::run,
+    ENEMY_23 0x76592 "enemy_23" spectre::run,
+    ENEMY_24 0x76afc "enemy_24" manticore::run,
 }

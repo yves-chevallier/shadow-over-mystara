@@ -6,7 +6,6 @@
 use super::{mode, Flow, Sequence};
 use crate::scene::fading;
 use crate::video::{load_grid, clear_layer, Layer, Grid};
-use crate::data::RomAddr;
 use crate::screens::tables::Rom;
 use crate::scene::Ctx;
 use crate::Native;
@@ -29,7 +28,7 @@ const LAYER_BITS: u16 = 0xe;
 /// Byte at FF0F53, set by the fixed-screen task when the screen is ready.
 const SCREEN_READY: Byte = Byte(0xff_0f53);
 /// Fixed-screen task (object executor) and its slot.
-const FIXED_SCREEN_TASK: RomAddr = RomAddr(0x1835e);
+const FIXED_SCREEN_TASK: crate::tasks::Task = crate::tasks::Task::Scores;
 const FIXED_SCREEN_SLOT: u32 = 0xf0;
 /// Palette of the text screens and its two tile blocks ("copyright" screen).
 const TEXT_PALETTE: u16 = 0x53;
@@ -54,7 +53,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
         mode::STEP.set(x.b, 2);
         mode::BOOTED.set(x.b, 1);
         crate::families::small::reset_fixed_screen(x.b);
-        crate::kernel::create_task(x.b, FIXED_SCREEN_SLOT, FIXED_SCREEN_TASK.0);
+        crate::kernel::create_task(x.b, FIXED_SCREEN_SLOT, FIXED_SCREEN_TASK);
         return Flow::Done;
     }
     if SCREEN_READY.get(x.b) == 0 {

@@ -198,5 +198,5 @@ fn active_1<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xda7f2 "box_pushes" run,
+    BOX_PUSHES 0xda7f2 "box_pushes" run,
 }

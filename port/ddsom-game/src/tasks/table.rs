@@ -3,8 +3,8 @@
 //! 16 slots, numbered by their offset in the original table divided by 16 (`kill(0x30)`: slot 3).
 //! The scheduler examines them from 0 to 15 (in the original, D0 then counts down from 15 to 0). Each slot carries
 //! the original's state and wait count, the 68000 stack given to the task and what is needed to resume it:
-//! its entry as long as it has not run (its entry stage: `tasks::entry`), then the Rust stage where it will resume
-//! (what it re-reads on resuming is in the fields of the stage, no longer in saved registers), and its
+//! its entry as long as it has not run (the [`Task`], which starts at its first stage), then the Rust stage where it
+//! will resume (what it re-reads on resuming is in the fields of the stage, no longer in saved registers), and its
 //! calls in progress ([`Frame`]). The table also keeps where the processor is (`kernel::Point`).
 //!
 //! The table lives in the bus (`Cps2Bus::ext`): the game machine no longer writes FF0052-FF01A5 (scheduler
@@ -20,7 +20,7 @@
 
 use cps2::Cps2Bus;
 
-use super::Step;
+use super::{Step, Task};
 
 /// Number of slots.
 pub const SLOTS: usize = 16;
@@ -79,62 +79,11 @@ impl State {
     }
 }
 
-/// The game's tasks, recognized by their entry. All are in Rust (natives at their entry and at their resume
-/// addresses) except the screen `0x19068`, never reached by the scenarios.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Task {
-    /// `0x11b16` (slot 0): initialization, warnings, creation of the credits and the freeze (`modes/boot.rs`),
-    /// then the mode machine (`modes/`), in which it continues without changing entry.
-    Startup,
-    /// `0x133fe` (slot 0): the mode machine relaunched after a game (`modes/gameover.rs`).
-    Modes,
-    /// `0x1c45a` (slot 0): the game (`tasks/game.rs`).
-    Game,
-    /// `0x29162` (slot 0): TEST menu (`tasks/service.rs`).
-    Service,
-    /// `0x14ba`... `0x1ced4` (slot 1): palette fades (`tasks/fading.rs`).
-    Fading,
-    /// `0x13c0a` (slot 2): credits and starts (`credits_task.rs`).
-    Credits,
-    /// `0x150ac` (slot 3): player interface (`hud/`).
-    Interface,
-    /// `0xf7dfe` (slot 12): shop portraits (`scene/shop.rs`).
-    Portraits,
-    /// `0xe03fe` (slot 13): blinking "INSERT COIN" (`tasks/prompt.rs`).
-    Prompt,
-    /// `0xee080` (slot 14): busy wait and fast forward (`tasks/freeze.rs`).
-    Freeze,
-    /// `0x1835e` (slot 15): attract score table (`tasks/fixed_screen.rs`).
-    Scores,
-    /// Other entry: original code (the screen `0x19068`, slot 15).
-    #[default]
-    Original,
-}
-
-impl Task {
-    pub fn from_entry(entry: u32) -> Task {
-        match entry {
-            0x11b16 => Task::Startup,
-            0x133fe => Task::Modes,
-            0x1c45a => Task::Game,
-            0x29162 => Task::Service,
-            0x14ba | 0x14c8 | 0x14d0 | 0x14de | 0x1536 | 0x153e | 0x1ccf8 | 0x1ce64 | 0x1ced4 | 0x1cf12 => Task::Fading,
-            0x13c0a => Task::Credits,
-            0x150ac => Task::Interface,
-            0xf7dfe => Task::Portraits,
-            0xe03fe => Task::Prompt,
-            0xee080 => Task::Freeze,
-            0x1835e => Task::Scores,
-            _ => Task::Original,
-        }
-    }
-}
-
 /// Where to resume a task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resume {
-    /// Not launched yet: its entry (its Rust stage: `tasks::entry`).
-    Entry(u32),
+    /// Not launched yet: the task, which starts at its first stage (`Task::first_step`).
+    Entry(Task),
     /// Has ceded control; will resume at this Rust stage. The original saves its 15 registers and its SR at the
     /// cession and
     /// restores them; the probe `DDSOM_POISON=resume` (`diag::probe_launch`, all registers and flags inverted on
@@ -142,6 +91,10 @@ pub enum Resume {
     /// re-read them (see `tasks::resume_step`). The restored SR is always that of user mode, interrupts
     /// allowed: no task cedes while masking them (`kernel::cede`).
     Step(Step),
+    /// Tools: a slot of a table rebuilt from the reference's FF0064 table (`fuzz_couv`) whose entry or PC is not
+    /// the entry of a task of the game.
+    #[cfg(feature = "tools")]
+    Address(u32),
 }
 
 /// What follows a call in progress, or a cession: a native at its address, or a Rust stage.
@@ -169,8 +122,8 @@ impl From<Step> for Next {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Slot {
-    /// The task occupying the slot (from its last entry).
-    pub task: Task,
+    /// The task occupying the slot (from its last entry; none before the first).
+    pub task: Option<Task>,
     pub state: State,
     /// Remaining wait frames (kept as is by the states that do not use it, like the original).
     pub count: u8,
@@ -184,11 +137,12 @@ pub struct Slot {
 impl Default for Slot {
     fn default() -> Self {
         Slot {
-            task: Task::Original,
+            task: None,
             state: State::Free,
             count: 0,
             stack: 0,
-            resume: Resume::Entry(0),
+            // a free slot: never resumed (`kernel::launch` and `gaps` skip it)
+            resume: Resume::Entry(Task::Startup),
             frames: Frames::default(),
         }
     }
@@ -325,13 +279,12 @@ pub enum Return {
 
 impl Table {
     /// Trap 0: task `k` (re)starts from `entry` with a new stack; that of a task already there is returned.
-    pub fn create(&mut self, k: usize, entry: u32) {
+    pub fn create(&mut self, k: usize, task: Task) {
         if self.slots[k].state != State::Free {
             self.give_back_stack(k);
         }
         let stack = self.stacks.pop().expect("no free stack left for a task");
-        let task = Task::from_entry(entry);
-        self.slots[k] = Slot { task, state: State::Fresh, stack, resume: Resume::Entry(entry), ..Slot::default() };
+        self.slots[k] = Slot { task: Some(task), state: State::Fresh, stack, resume: Resume::Entry(task), ..Slot::default() };
     }
 
     /// Trap 1 (the task ends) and trap 2 on a live task.
@@ -366,13 +319,13 @@ impl Table {
         e.count = count;
     }
 
-    /// Trap 7: the current task restarts from `entry` (same stack).
-    pub fn restart(&mut self, entry: u32) {
+    /// Trap 7: the current task restarts from the entry of `task` (same stack).
+    pub fn restart(&mut self, task: Task) {
         let e = &mut self.slots[self.current];
-        e.task = Task::from_entry(entry);
+        e.task = Some(task);
         e.state = State::Fresh;
         e.count = 0;
-        e.resume = Resume::Entry(entry);
+        e.resume = Resume::Entry(task);
         e.frames = Frames::default();
     }
 
@@ -659,7 +612,9 @@ pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
         gap("stack", e.stack, long(r + field::STACK));
         let in_progress = e.state == State::InProgress || state == State::InProgress.byte();
         match e.resume {
-            Resume::Entry(entry) => gap("entry", entry, long(r + field::PC)),
+            Resume::Entry(task) => gap("entry", task.address(), long(r + field::PC)),
+            #[cfg(feature = "tools")]
+            Resume::Address(address) => gap("entry", address, long(r + field::PC)),
             // the stack of a running task has changed since its cession
             Resume::Step(step) if all && !in_progress => {
                 let usp = long(r + field::USP);
@@ -687,10 +642,10 @@ mod tests {
     #[test]
     fn creation_and_death_return_stacks_in_order() {
         let mut t = Table { stacks: vec![3, 2, 1], ..Table::default() };
-        t.create(0, 0x100);
-        t.create(3, 0x200);
+        t.create(0, Task::Game);
+        t.create(3, Task::Interface);
         assert_eq!((t.slots[0].stack, t.slots[3].stack), (1, 2));
-        t.create(0, 0x300);
+        t.create(0, Task::Service);
         assert_eq!(t.slots[0].stack, 1, "the returned stack is reused immediately");
         t.kill(3);
         t.kill(3);

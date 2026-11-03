@@ -34,6 +34,7 @@ pub(crate) mod palette;
 pub(crate) mod placement;
 pub(crate) mod player;
 pub(crate) mod popups;
+pub(crate) mod registry;
 pub(crate) mod rng;
 pub(crate) mod scene;
 pub(crate) mod scroll;
@@ -51,7 +52,15 @@ use std::sync::{Mutex, OnceLock};
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::{lookup, mem, no68k, regs, tasks, Body, Native};
+pub use registry::{all_natives, game_natives, is_native};
+use registry::lookup;
+
+use crate::{mem, no68k, regs, tasks, Body, Native};
+
+/// Long of the program space (see `mem::prog16`): tables that the natives for the original code read in the ROM.
+pub(crate) fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
+    (mem::prog16(b, a) as u32) << 16 | mem::prog16(b, a + 2) as u32
+}
 
 /// Duration of a native run by the processor (68000 cycles), the same for all.
 pub(crate) const NATIVE_DURATION: u64 = 100;
@@ -92,7 +101,7 @@ impl Native {
 }
 
 /// The natives for the original code (arguments and results in its registers), at the original addresses: the tools
-/// only (`crate::all_natives` adds them to those of the game).
+/// only ([`all_natives`] adds them to those of the game).
 pub(crate) fn natives() -> impl Iterator<Item = &'static Native> {
     use crate::tools;
     static LIST: OnceLock<Vec<&'static Native>> = OnceLock::new();
@@ -396,7 +405,8 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     if no68k::active() {
         // the game: the native runs immediately; its `rts` returns to an expected call of the task (no PC, no 68000
         // stack)
-        let n = no68k::native(b, addr);
+        let n = lookup(addr).unwrap_or_else(|| panic!("call of {addr:06x} ({site}): no native"));
+        no68k::note(b, n);
         let frame = tasks::table::open_call(b);
         execute(n, c, b, 0);
         if tasks::has_ceded() || !tasks::table::call_returned(b, frame) {

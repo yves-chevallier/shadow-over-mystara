@@ -1,4 +1,5 @@
 use super::*;
+use crate::tasks::fading::Fade;
 
 // ---------------------------------------------------------------------------------------------
 // Types 82 and 83: spark placed on an object; rain of sparks
@@ -239,8 +240,8 @@ pub(super) fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 /// Launches script task `entry` (0x9b6, `trap #0`), A0 kept.
-pub(super) fn start_script<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
-    crate::kernel::create_task(x.b, 0x10, entry);
+pub(super) fn start_script<R: Bench>(x: &mut Cx<'_, R>, fade: Fade) {
+    crate::kernel::create_task(x.b, 0x10, crate::tasks::Task::Fading(fade));
 }
 
 pub(super) fn finale_trigger<R: Bench>(x: &mut Cx<'_, R>) {
@@ -277,7 +278,7 @@ pub(super) fn finale_step<R: Bench>(x: &mut Cx<'_, R>) {
             vars::FADE_DELAY.set(x.b, 1);
             vars::FADE_PAGES.set(x.b, 8);
             vars::BLOCK_SOURCE_2_WORD.set(x.b, 0xf20);
-            start_script(x, 0x1ce64);
+            start_script(x, Fade::ToColours);
         }
         8 => {
             if vars::FADE_STEP.get(x.b) != 0 {
@@ -291,7 +292,7 @@ pub(super) fn finale_step<R: Bench>(x: &mut Cx<'_, R>) {
             vars::FADE_STEP.set(x.b, 1);
             crate::families::scenery::restore_palette_page(x);
             vars::BLOCK_SOURCE_2.set(x.b, 0xff1190);
-            start_script(x, 0x1cf12);
+            start_script(x, Fade::ToPalettes);
             finale_end(x);
         }
         12 => finale_end(x),

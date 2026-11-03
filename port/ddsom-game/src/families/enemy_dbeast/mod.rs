@@ -347,5 +347,5 @@ fn held<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x71e44 "enemy_19" run,
+    ENEMY_19 0x71e44 "enemy_19" run,
 }

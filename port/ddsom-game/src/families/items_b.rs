@@ -351,5 +351,5 @@ fn drop_old<R: Bench>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
 }
 
 handlers! {
-    0xdb0c2 "item_piece" run,
+    ITEM_PIECE 0xdb0c2 "item_piece" run,
 }

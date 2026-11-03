@@ -316,6 +316,6 @@ mod shadow {
 }
 
 handlers! {
-    0x52b94 "pshl_7" ground::run,
-    0x52e42 "pshl_8" shadow::run,
+    PSHL_7 0x52b94 "pshl_7" ground::run,
+    PSHL_8 0x52e42 "pshl_8" shadow::run,
 }

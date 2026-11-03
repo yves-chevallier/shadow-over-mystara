@@ -200,7 +200,7 @@ fn start(x: &mut Ctx) -> Flow {
     // 0xf68c8: the fade task (A0 kept)
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 13);
-    crate::kernel::create_task(x.b, 16, fading::DESCENT_STEP.0);
+    crate::kernel::create_task(x.b, 16, fading::DESCENT_STEP);
     x.push_return(Step::AfterFade);
     x.wait(1, Step::FadeWait)
 }

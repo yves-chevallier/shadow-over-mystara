@@ -225,21 +225,21 @@ pub mod stage_title;
 pub mod target;
 
 handlers! {
-    0xdd61e "sobj_00" scenery::run,
-    0xddc28 "sobj_01" fixture::run,
-    0xdddb2 "sobj_02" flasher::run,
-    0xdde18 "sobj_03" tag::run,
-    0xdde8c "sobj_05" ghost::run,
-    0xddec4 "sobj_06" scene::run,
-    0xdf4d4 "sobj_07" hint::run,
-    0xdf6b0 "sobj_08" marker::run,
-    0xdf774 "sobj_09" frame::run,
-    0xdf8ae "sobj_10" arrow::run,
-    0xdfa68 "sobj_11" badge::run,
-    0xdfca0 "sobj_12" hud_dot::run,
-    0xdfd44 "sobj_13" panel::run,
-    0xdfe3c "sobj_14" stage_title::run,
-    0xe0258 "sobj_15" target::run,
+    SOBJ_00 0xdd61e "sobj_00" scenery::run,
+    SOBJ_01 0xddc28 "sobj_01" fixture::run,
+    SOBJ_02 0xdddb2 "sobj_02" flasher::run,
+    SOBJ_03 0xdde18 "sobj_03" tag::run,
+    SOBJ_05 0xdde8c "sobj_05" ghost::run,
+    SOBJ_06 0xddec4 "sobj_06" scene::run,
+    SOBJ_07 0xdf4d4 "sobj_07" hint::run,
+    SOBJ_08 0xdf6b0 "sobj_08" marker::run,
+    SOBJ_09 0xdf774 "sobj_09" frame::run,
+    SOBJ_10 0xdf8ae "sobj_10" arrow::run,
+    SOBJ_11 0xdfa68 "sobj_11" badge::run,
+    SOBJ_12 0xdfca0 "sobj_12" hud_dot::run,
+    SOBJ_13 0xdfd44 "sobj_13" panel::run,
+    SOBJ_14 0xdfe3c "sobj_14" stage_title::run,
+    SOBJ_15 0xe0258 "sobj_15" target::run,
 }
 
 view! {

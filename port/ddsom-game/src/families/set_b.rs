@@ -90,13 +90,13 @@ fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
 }
 
 /// Fade-to-black task (steps of state `A5+0x48f`).
-const FADE_TO_BLACK_TASK: u32 = 0x14de;
+const FADE_TO_BLACK_TASK: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::DescentSteps);
 /// Slot of the fade task (offset in the task table).
 const FADE_TASK_SLOT: u32 = 0x10;
 
 /// Creates the fade task `entry` (0x9b6, D0 = 0x10, A0 = the entry).
-fn start_fade_task<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
-    crate::kernel::create_task(x.b, FADE_TASK_SLOT, entry);
+fn start_fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::tasks::Task) {
+    crate::kernel::create_task(x.b, FADE_TASK_SLOT, task);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -427,21 +427,21 @@ mod test_selector;
 mod dialog;
 
 handlers! {
-    0xd4110 "set_16" bumper::run,
-    0xd7056 "set_24" dialog::run,
-    0xd9424 "set_30" game_over::run,
-    0xd9492 "set_31" level_clock::run,
-    0xd96d0 "set_32" test_selector::run,
-    0xd8458 "set_27" door_a::run,
-    0xd8ce4 "set_28" zone_end::run,
-    0xd8dce "set_29" door_b::run,
-    0xd801e "set_25" rearguard::run,
-    0xd810a "set_26" idle_hunter::run,
-    0xd69c2 "set_22" rank_adjust::run,
-    0xd6c5c "set_23" exit_gate::run,
-    0xd5f5a "set_20" life_bar::run,
-    0xd6372 "set_21" continue_countdown::run,
-    0xd466a "set_17" boss_intro::run,
-    0xd49a2 "set_19" wave_spawner::run,
-    0xd4950 "set_18" scroll_to::run,
+    SET_16 0xd4110 "set_16" bumper::run,
+    SET_24 0xd7056 "set_24" dialog::run,
+    SET_30 0xd9424 "set_30" game_over::run,
+    SET_31 0xd9492 "set_31" level_clock::run,
+    SET_32 0xd96d0 "set_32" test_selector::run,
+    SET_27 0xd8458 "set_27" door_a::run,
+    SET_28 0xd8ce4 "set_28" zone_end::run,
+    SET_29 0xd8dce "set_29" door_b::run,
+    SET_25 0xd801e "set_25" rearguard::run,
+    SET_26 0xd810a "set_26" idle_hunter::run,
+    SET_22 0xd69c2 "set_22" rank_adjust::run,
+    SET_23 0xd6c5c "set_23" exit_gate::run,
+    SET_20 0xd5f5a "set_20" life_bar::run,
+    SET_21 0xd6372 "set_21" continue_countdown::run,
+    SET_17 0xd466a "set_17" boss_intro::run,
+    SET_19 0xd49a2 "set_19" wave_spawner::run,
+    SET_18 0xd4950 "set_18" scroll_to::run,
 }

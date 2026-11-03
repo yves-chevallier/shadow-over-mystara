@@ -141,11 +141,11 @@ impl<'a> Ex<'a> {
         left == 0
     }
 
-    /// Starts the fade task `entry` (delay `delay`).
-    fn fade(&mut self, delay: u16, entry: u32) {
+    /// Starts the fade task `task` (delay `delay`).
+    fn fade(&mut self, delay: u16, task: crate::tasks::Task) {
         fading::DELAY.set(self.x.b, delay);
         fading::PAGES.set(self.x.b, 15);
-        crate::kernel::create_task(self.x.b, 0x10, entry);
+        crate::kernel::create_task(self.x.b, 0x10, task);
     }
 
     /// Opens message `n` (0xc8312); its (16-bit) address goes to `+0x12`. Original glitch: the failure is not
@@ -545,7 +545,7 @@ fn run_state(ex: &mut Ex, state: St) {
         St::FadeScript { timer } => {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
-            ex.fade(2, fading::RISE.0);
+            ex.fade(2, fading::RISE);
             ex.clear_text();
         }
         St::PlayersThen { state, timer } => {

@@ -381,5 +381,5 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8f59c "boss_13" run,
+    BOSS_13 0x8f59c "boss_13" run,
 }

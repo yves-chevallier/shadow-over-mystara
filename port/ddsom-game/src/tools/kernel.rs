@@ -8,6 +8,7 @@ use crate::kernel::*;
 use crate::tools::frames::*;
 use crate::Native;
 use crate::tasks::table::{slot, table};
+use crate::tasks::Task;
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $body:expr) => {
@@ -35,9 +36,46 @@ fn envelope(c: &mut Cpu, b: &mut Cps2Bus, frames: Option<u8>) {
     }
 }
 
+/// The task of the game whose entry is `entry` (A0 of the original code that calls the wrappers), if any.
+pub fn task_at(entry: u32) -> Option<Task> {
+    use crate::tasks::fading::Fade;
+    let fades = [
+        Fade::Rise,
+        Fade::RiseSteps,
+        Fade::Descent,
+        Fade::DescentSteps,
+        Fade::PartialRise,
+        Fade::PartialDescent,
+        Fade::ToWhite,
+        Fade::ToColours,
+        Fade::FromWhite,
+        Fade::ToPalettes,
+    ];
+    [
+        Task::Startup,
+        Task::Modes,
+        Task::Game,
+        Task::Service,
+        Task::Credits,
+        Task::Interface,
+        Task::Portraits,
+        Task::Prompt,
+        Task::Freeze,
+        Task::Scores,
+    ]
+    .into_iter()
+    .chain(fades.map(Task::Fading))
+    .find(|t| t.address() == entry)
+}
+
+/// [`task_at`], for a task that the original code creates or restarts: it must be one of the game.
+fn task_of_game(entry: u32) -> Task {
+    task_at(entry).unwrap_or_else(|| panic!("entry {entry:06x}: not a task of the game"))
+}
+
 /// 0x9b6: creates task D0 (offset), entry A0.
 fn create(c: &mut Cpu, b: &mut Cps2Bus) {
-    create_task(b, c.d[0], c.a[0]);
+    create_task(b, c.d[0], task_of_game(c.a[0]));
     rts(c, b);
 }
 
@@ -73,7 +111,7 @@ native!(WAIT, 0xa40, |c, b| envelope(c, b, Some(c.d[0] as u8)));
 native!(CEDE, 0xa86, |c, b| envelope(c, b, None));
 native!(SUSPEND_TASK, 0xaac, suspend);
 native!(WAKE_TASK, 0xac8, wake);
-native!(RESTART_TASK, 0xae4, |c, b| restart(b, c.a[0]));
+native!(RESTART_TASK, 0xae4, |c, b| restart(b, task_of_game(c.a[0])));
 native!(MASK, 0xaf6, mask);
 native!(WAIT_ONE_FRAME, 0xb64, |c, b| envelope(c, b, Some(1)));
 

@@ -102,11 +102,6 @@ pub fn prog16(b: &mut Cps2Bus, a: u32) -> u16 {
     b.fetch16(a)
 }
 
-/// Long of the program space (see `prog16`).
-pub fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
-    (prog16(b, a) as u32) << 16 | prog16(b, a + 2) as u32
-}
-
 /// Byte of the program space (see `prog16`).
 pub fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
     let word = b.fetch16(a & !1);

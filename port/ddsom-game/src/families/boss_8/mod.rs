@@ -259,5 +259,5 @@ fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x87fc0 "boss_8" run,
+    BOSS_8 0x87fc0 "boss_8" run,
 }

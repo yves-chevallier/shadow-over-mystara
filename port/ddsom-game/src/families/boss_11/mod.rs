@@ -402,5 +402,5 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8d59e "boss_11" run,
+    BOSS_11 0x8d59e "boss_11" run,
 }

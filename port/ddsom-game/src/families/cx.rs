@@ -118,7 +118,7 @@ impl<R: Bench> Cx<'_, R> {
     }
 
     /// 0x33fe4: collision with the terrain (`terrain::push`); returns the original's Z flag. Original glitch: the
-    /// terrain lookup leaves D2 and D3, and a hit D5 = 1 (`Leftovers`).
+    /// terrain test leaves D2 and D3, and a hit D5 = 1 (`Leftovers`).
     pub fn push_terrain(&mut self) -> bool {
         let (mut d2, mut d3, mut d5) = (*self.c.d2(), *self.c.d3(), *self.c.d5());
         let z = crate::terrain::push_leftovers(self.b, self.o, &mut d2, &mut d3, &mut d5);
@@ -215,18 +215,17 @@ impl<R> Cx<'_, R> {
     }
 }
 
-/// Declares the `NATIVES` table of a type file: `address "name" path::to::handler` (on a generic `Cx`, called as a
-/// handler without registers: what the dispatch loop passes, `Gx`).
+/// Declares the handlers of a type file: `NAME address "name" path::to::handler` (on a generic `Cx`, called as a
+/// handler without registers: what the dispatch loop passes, `Gx`). Each becomes a constant `NAME`, which the dispatch
+/// tables (`dispatch`) hold; `NATIVES` lists them for the tools.
 macro_rules! handlers {
-    ($( $entry:literal $name:literal $f:path ),* $(,)?) => {
-        pub const NATIVES: &[$crate::Native] = &[ $(
-            $crate::families::cx::handlers!(@one $entry $name $f),
-        )* ];
-    };
-    (@one $entry:literal $name:literal $f:path) => {
-        $crate::families::cx::handler_without($entry, $name, |b, a| {
-            $f(&mut $crate::families::cx::Gx::dispatch(b, a));
-        })
+    ($( $const:ident $entry:literal $name:literal $f:path ),* $(,)?) => {
+        $(
+            pub const $const: $crate::Native = $crate::families::cx::handler_without($entry, $name, |b, a| {
+                $f(&mut $crate::families::cx::Gx::dispatch(b, a));
+            });
+        )*
+        pub const NATIVES: &[$crate::Native] = &[ $( $const ),* ];
     };
 }
 pub(crate) use handlers;

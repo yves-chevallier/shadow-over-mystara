@@ -745,5 +745,5 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8ca4a "boss_10" run,
+    BOSS_10 0x8ca4a "boss_10" run,
 }

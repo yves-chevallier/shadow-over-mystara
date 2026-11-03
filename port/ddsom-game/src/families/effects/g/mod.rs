@@ -59,10 +59,10 @@ fn set_hidden<R: Bench>(x: &mut Cx<'_, R>, on: bool) {
 }
 
 handlers! {
-    0xb8ef6 "effct_firework" fireworks,
-    0xb59ea "effct_machine_volante" flyer,
-    0xb5454 "effct_armure" armour,
-    0xb4bec "effct_rain_debris" debris_rain,
-    0xb7866 "effct_enemy_piece" chunk,
-    0xb96dc "effct_shard_thrown" shard,
+    EFFCT_FIREWORK 0xb8ef6 "effct_firework" fireworks,
+    EFFCT_MACHINE_VOLANTE 0xb59ea "effct_machine_volante" flyer,
+    EFFCT_ARMURE 0xb5454 "effct_armure" armour,
+    EFFCT_RAIN_DEBRIS 0xb4bec "effct_rain_debris" debris_rain,
+    EFFCT_ENEMY_PIECE 0xb7866 "effct_enemy_piece" chunk,
+    EFFCT_SHARD_THROWN 0xb96dc "effct_shard_thrown" shard,
 }

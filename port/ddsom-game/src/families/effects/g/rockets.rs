@@ -10,8 +10,8 @@ pub(super) mod fireworks {
     pub const GO: u8 = 0x12;
     pub const BACK: u8 = 0xc;
     /// Fade tasks (programs of `0x9b6`): toward black, then back.
-    pub const FADE_OUT: crate::data::RomAddr = crate::data::RomAddr(0x1ccf8);
-    pub const FADE_IN: crate::data::RomAddr = crate::data::RomAddr(0x1ced4);
+    pub const FADE_OUT: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::ToWhite);
+    pub const FADE_IN: crate::tasks::Task = crate::tasks::Task::Fading(crate::tasks::fading::Fade::FromWhite);
     pub const TIMER: u32 = 0x58;
     pub const DELAY: u32 = 0x5a;
     pub const HOST: u32 = 0x56;
@@ -160,8 +160,8 @@ pub(super) fn copy_block<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
 }
 
 /// Launches fade task `program` (`0x9b6`, D0.w = 0x10), A0 kept.
-pub(super) fn fade_task<R: Bench>(x: &mut Cx<'_, R>, program: u32) {
-    crate::kernel::create_task(x.b, 0x10, program);
+pub(super) fn fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::tasks::Task) {
+    crate::kernel::create_task(x.b, 0x10, task);
 }
 
 pub(super) fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -305,7 +305,7 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             vars::FADE_DELAY.set(x.b, 3);
             vars::FADE_PAGES.set(x.b, 0xf);
             vars::FADE_STEP.set(x.b, 1);
-            fade_task(x, fireworks::FADE_OUT.0);
+            fade_task(x, fireworks::FADE_OUT);
         }
         2 => {
             x.move_xz();
@@ -400,7 +400,7 @@ pub(super) fn fireworks_fade_back<R: Bench>(x: &mut Cx<'_, R>) {
     for (k, v) in [0x910000u32, 0x25c0c0, 0x910400, 0x910800].into_iter().enumerate() {
         crate::ram::Long(vars::FADE_SOURCES.0 + 4 * k as u32).set(x.b, v);
     }
-    fade_task(x, fireworks::FADE_IN.0);
+    fade_task(x, fireworks::FADE_IN);
 }
 
 /// `0xb95e8`: a rocket (type 50): variant, delay until the next one and place read for shot `TIMER`.

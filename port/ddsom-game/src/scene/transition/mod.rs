@@ -214,12 +214,12 @@ fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow
 }
 
 /// Fade with given delay and pages, without waiting for its end: fade task `task` (0xfa1fa, 0xfa214).
-fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: u32) {
+fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: crate::tasks::Task) {
     fading::DELAY.set(x.b, delay);
     fading::PAGES.set(x.b, pages);
     start_task(x, task);
 }
-fn start_task(x: &mut Ctx, task: u32) {
+fn start_task(x: &mut Ctx, task: crate::tasks::Task) {
     crate::kernel::create_task(x.b, 0x10, task);
 }
 

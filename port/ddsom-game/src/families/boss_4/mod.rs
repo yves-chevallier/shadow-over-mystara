@@ -267,7 +267,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x81b3a "boss_4" run,
+    BOSS_4 0x81b3a "boss_4" run,
     // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
-    0x82ea0 "boss_4_getup" hit::resume,
+    BOSS_4_GETUP 0x82ea0 "boss_4_getup" hit::resume,
 }

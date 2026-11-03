@@ -31,8 +31,9 @@ fn main() {
     println!("jeu (table Rust, courante {}) :", table.current);
     for (k, e) in table.slots.iter().enumerate() {
         let resume = match e.resume {
-            Resume::Entry(pc) => format!("entry {pc:x}"),
+            Resume::Entry(task) => format!("entry {task:?} ({:x})", task.address()),
             Resume::Step(step) => format!("step {step:?} ({:x})", step.address()),
+            Resume::Address(pc) => format!("address {pc:x}"),
         };
         println!("  task {k:2}: {:?} {:?} {} stack {:x} {resume}", e.task, e.state, e.count, e.stack);
     }

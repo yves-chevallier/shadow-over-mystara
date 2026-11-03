@@ -17,7 +17,7 @@ use crate::scene::Ctx;
 use crate::Native;
 
 /// Mode machine loop, which the task becomes.
-const MODE_LOOP: crate::data::RomAddr = crate::data::RomAddr(0x133fe);
+const MODE_LOOP: crate::tasks::Task = crate::tasks::Task::Modes;
 
 /// Player interface task (slot 0x30).
 const PLAYER_UI_SLOT: u16 = 0x30;
@@ -48,7 +48,7 @@ crate::steps! {
             reset_modes(x);
             mode::BOOTED.set(x.b, 1);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-            crate::tasks::restart(x, MODE_LOOP.0)
+            crate::tasks::restart(x, MODE_LOOP)
         },
     }
 }

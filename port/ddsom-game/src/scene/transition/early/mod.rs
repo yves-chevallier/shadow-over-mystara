@@ -107,7 +107,7 @@ crate::steps! {
             VARS_BLOCK.set16(x.b, var::TIMER, 120);
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::no_brightness(x.b);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
             Flow::Done
         },
         S4TextGone = 0xf890e => |x| hide_layers(x, At(Step::S4Hidden.into())),
@@ -178,7 +178,7 @@ crate::steps! {
             show_layers(x, At(Step::S4SceneryShown.into()))
         },
         S4SceneryShown = 0xf8c2c => |x| {
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE.0);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::RISE);
             s4_fading_in(x)
         },
         S4FadingIn = 0xf8c44 => |x| yield_frames(x, 1, At(Step::S4FadingInNext.into())),
@@ -266,7 +266,7 @@ crate::steps! {
             fading::PAGES.set(x.b, SCENE_PAGES);
             fading::DELAY.set(x.b, 4);
             fading::STEP.set(x.b, 1);
-            start_task(x, crate::scene::fading::RISE.0);
+            start_task(x, crate::scene::fading::RISE);
             Flow::Done
         },
         S13OutFaded = 0xf90cc => |x| yield_frames(x, 30, At(Step::S13OutScenery.into())),
@@ -460,7 +460,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             next(x);
-            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
+            fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
             Flow::Done
         }
         4 => {
@@ -498,7 +498,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             sound(x, 0);
-            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT.0);
+            fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT);
             s4_fading_out(x)
         }
         _ => Flow::Done,

@@ -64,23 +64,77 @@ pub enum Step {
     Component { fading: Component, saved: Leftovers },
 }
 
-/// The fade tasks, by entry.
-const TASKS: [(u32, Step); 10] = [
-    (0x14ba, Step::BrightnessTask { fading: task(RISES, false), step: Some(STEP_FULL) }),
-    (0x14c8, Step::BrightnessTask { fading: task(RISES, false), step: None }),
-    (0x14d0, Step::BrightnessTask { fading: task(DESCEND, false), step: Some(STEP_FULL) }),
-    (0x14de, Step::BrightnessTask { fading: task(DESCEND, false), step: None }),
-    (0x1536, Step::BrightnessTask { fading: task(RISES, true), step: None }),
-    (0x153e, Step::BrightnessTask { fading: task(DESCEND, true), step: None }),
-    (0x1ccf8, Step::ComponentTask { fading: COMPONENTS[3].1, whiten: false }),
-    (0x1ce64, Step::ComponentTask { fading: COMPONENTS[4].1, whiten: false }),
-    (0x1ced4, Step::ComponentTask { fading: COMPONENTS[5].1, whiten: true }),
-    (0x1cf12, Step::ComponentTask { fading: COMPONENTS[5].1, whiten: false }),
+/// The fade tasks (created by `0x9b6` in slot 1), by entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fade {
+    /// `0x14ba`: full rise of the brightness (16 steps).
+    Rise,
+    /// `0x14c8`: rise by the number of steps of the state.
+    RiseSteps,
+    /// `0x14d0`: full descent of the brightness (16 steps).
+    Descent,
+    /// `0x14de`: descent by the number of steps of the state.
+    DescentSteps,
+    /// `0x1536`: rise of the end of page 0 only.
+    PartialRise,
+    /// `0x153e`: descent of the end of page 0 only.
+    PartialDescent,
+    /// `0x1ccf8`: per component, toward white.
+    ToWhite,
+    /// `0x1ce64`: per component, toward the colours.
+    ToColours,
+    /// `0x1ced4`: whitens the pages, then per component toward the palettes.
+    FromWhite,
+    /// `0x1cf12`: per component toward the palettes, without whitening first.
+    ToPalettes,
+}
+
+/// The fade tasks.
+const FADES: [Fade; 10] = [
+    Fade::Rise,
+    Fade::RiseSteps,
+    Fade::Descent,
+    Fade::DescentSteps,
+    Fade::PartialRise,
+    Fade::PartialDescent,
+    Fade::ToWhite,
+    Fade::ToColours,
+    Fade::FromWhite,
+    Fade::ToPalettes,
 ];
 
-/// First stage of the fade task that starts at `entry`.
-pub fn task_from_entry(entry: u32) -> Option<Step> {
-    TASKS.into_iter().find(|&(e, _)| e == entry).map(|(_, step)| step)
+impl Fade {
+    /// The first stage of the task.
+    pub const fn first_step(self) -> Step {
+        match self {
+            Fade::Rise => Step::BrightnessTask { fading: task(RISES, false), step: Some(STEP_FULL) },
+            Fade::RiseSteps => Step::BrightnessTask { fading: task(RISES, false), step: None },
+            Fade::Descent => Step::BrightnessTask { fading: task(DESCEND, false), step: Some(STEP_FULL) },
+            Fade::DescentSteps => Step::BrightnessTask { fading: task(DESCEND, false), step: None },
+            Fade::PartialRise => Step::BrightnessTask { fading: task(RISES, true), step: None },
+            Fade::PartialDescent => Step::BrightnessTask { fading: task(DESCEND, true), step: None },
+            Fade::ToWhite => Step::ComponentTask { fading: COMPONENTS[3].1, whiten: false },
+            Fade::ToColours => Step::ComponentTask { fading: COMPONENTS[4].1, whiten: false },
+            Fade::FromWhite => Step::ComponentTask { fading: COMPONENTS[5].1, whiten: true },
+            Fade::ToPalettes => Step::ComponentTask { fading: COMPONENTS[5].1, whiten: false },
+        }
+    }
+
+    /// The entry address of the original.
+    pub const fn address(self) -> u32 {
+        match self {
+            Fade::Rise => 0x14ba,
+            Fade::RiseSteps => 0x14c8,
+            Fade::Descent => 0x14d0,
+            Fade::DescentSteps => 0x14de,
+            Fade::PartialRise => 0x1536,
+            Fade::PartialDescent => 0x153e,
+            Fade::ToWhite => 0x1ccf8,
+            Fade::ToColours => 0x1ce64,
+            Fade::FromWhite => 0x1ced4,
+            Fade::ToPalettes => 0x1cf12,
+        }
+    }
 }
 
 impl Step {
@@ -88,7 +142,7 @@ impl Step {
     pub fn address(self) -> u32 {
         match self {
             Step::BrightnessTask { .. } | Step::ComponentTask { .. } => {
-                TASKS.into_iter().find(|&(_, e)| e == self).expect("fade task").0
+                FADES.into_iter().find(|f| f.first_step() == self).expect("fade task").address()
             }
             Step::Brightness { fading, .. } => fading.resume(),
             Step::Component { fading, .. } => fading.resume,

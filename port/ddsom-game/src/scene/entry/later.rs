@@ -83,7 +83,7 @@ pub(super) fn scene_38(x: &mut Ctx) {
             fading::DELAY.set(x.b, 2);
             fading::PAGES.set(x.b, 15);
             crate::palette::no_brightness(x.b);
-            crate::kernel::create_task(x.b, 0x10, fading::RISE.0);
+            crate::kernel::create_task(x.b, 0x10, fading::RISE);
         }
         2 => {
             if x.tick(TIMER) {

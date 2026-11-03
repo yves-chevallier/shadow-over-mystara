@@ -87,9 +87,8 @@ mod var {
 }
 
 mod ext {
-    use crate::data::RomAddr;
     /// Player interface task.
-    pub const PLAYER_UI: RomAddr = RomAddr(0x150ac);
+    pub const PLAYER_UI: crate::tasks::Task = crate::tasks::Task::Interface;
 }
 
 /// ROM tables (data, or addresses read by the original code relative to the PC).
@@ -322,7 +321,7 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
     Obj(mode::BASE).set_u32(x.b, f::SCRIPT, a1);
     clear::STARTED.set(x.b, 0);
     var::SCREEN_WAIT.set(x.b, 3);
-    crate::kernel::create_task(x.b, 0x30, ext::PLAYER_UI.0);
+    crate::kernel::create_task(x.b, 0x30, ext::PLAYER_UI);
     Flow::Done
 }
 
@@ -558,7 +557,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                 } else {
                     fading::DELAY.set(x.b, 2);
                     fading::PAGES.set(x.b, 15);
-                    crate::kernel::create_task(x.b, 0x10, crate::scene::fading::DESCENT.0);
+                    crate::kernel::create_task(x.b, 0x10, crate::scene::fading::DESCENT);
                     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 0 });
                 }
             }

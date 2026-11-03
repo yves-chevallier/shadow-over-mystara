@@ -558,7 +558,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8a75c "boss_9" run,
+    BOSS_9 0x8a75c "boss_9" run,
 }
 
 use super::cx::handlers;

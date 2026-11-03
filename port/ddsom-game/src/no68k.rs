@@ -6,8 +6,8 @@
 //! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
 //! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
 //! stage (`tasks::execute`). A native always runs in full, even when
-//! it would overflow onto the next interrupt: none is replaced by its original. An address without a native
-//! stops the game dead with a diagnostic ([`STOP`]) instead of running original code.
+//! it would overflow onto the next interrupt: none is replaced by its original. An impossible point stops the game
+//! dead with a diagnostic ([`STOP`]).
 //!
 //! ## The frame
 //!
@@ -269,12 +269,9 @@ fn frame_done(b: &Cps2Bus, point: Point) -> bool {
     })
 }
 
-/// The native at address `address` (call by address, handler of a ROM table), or a game stop if there is
-/// none. It is noted for diagnosing a stop (`DDSOM_SANS_TRACE=frame`: each native of the frame).
-pub(crate) fn native(b: &mut Cps2Bus, address: u32) -> &'static Native {
-    let Some(n) = crate::lookup(address) else {
-        stop(b, format!("no native at {address:06x}"));
-    };
+/// Notes the native about to run (handler of a dispatch table), for diagnosing a stop (`DDSOM_SANS_TRACE=frame`:
+/// each native of the frame).
+pub(crate) fn note(b: &Cps2Bus, n: &'static Native) {
     LAST.with(|d| {
         let mut d = d.borrow_mut();
         if d.len() == 8 {
@@ -283,9 +280,8 @@ pub(crate) fn native(b: &mut Cps2Bus, address: u32) -> &'static Native {
         d.push_back(n);
     });
     if trace(b) {
-        eprintln!("{}:{} {:06x} {} mask={}", b.frame, b.scanline, address, n.name, crate::kernel::interrupt_mask(b));
+        eprintln!("{}:{} {:06x} {} mask={}", b.frame, b.scanline, n.entry, n.name, crate::kernel::interrupt_mask(b));
     }
-    n
 }
 
 /// Diagnostics: `DDSOM_SANS_TRACE=n` prints each native run during frame n.

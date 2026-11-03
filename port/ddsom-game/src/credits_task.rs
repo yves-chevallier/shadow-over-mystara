@@ -24,7 +24,6 @@ use crate::credits_screen::{self, FIRST_COIN_SLOT};
 use crate::scene::fading;
 use crate::modes::{Flow, Sequence};
 use crate::credits::CoinSlot;
-use crate::data::RomAddr;
 use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::regs;
 use crate::player::Player;
@@ -42,9 +41,9 @@ mod sound {
     pub const START: crate::sound::Sound = crate::sound::CMD_4C;
 }
 
-/// Entry of the game task, and of the players' interface task.
-const GAME_TASK: RomAddr = RomAddr(0x1c45a);
-const UI_TASK: RomAddr = RomAddr(0x29162);
+/// The game task, and the TEST menu task (which the end of the teardown starts in slot 0).
+const GAME_TASK: crate::tasks::Task = crate::tasks::Task::Game;
+const SERVICE_TASK: crate::tasks::Task = crate::tasks::Task::Service;
 /// Texts displayed by the credits screen (addresses of pointers or strings in ROM).
 const TEXT_CREDITS: Rom = Rom::at(0x14ea2);
 const TEXT_TABLE: Rom = Rom::at(0x15060);
@@ -228,7 +227,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     crate::palette::load_all_palettes(x.b);
     crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-    crate::kernel::create_task(x.b, 0, UI_TASK.0);
+    crate::kernel::create_task(x.b, 0, SERVICE_TASK);
     tasks::finish(x)
 }
 
@@ -473,7 +472,7 @@ fn after_fade_clear(x: &mut Ctx) -> Flow {
 /// `jmp 0x9b6` with A0 = game task, D0 = slot 0: the game task is created, and we return to the
 /// caller of `0x13c2c`.
 fn create_game_task(x: &mut Ctx) -> Flow {
-    crate::kernel::create_task(x.b, 0, GAME_TASK.0);
+    crate::kernel::create_task(x.b, 0, GAME_TASK);
     Flow::Done
 }
 

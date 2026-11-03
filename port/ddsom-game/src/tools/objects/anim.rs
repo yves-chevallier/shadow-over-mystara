@@ -9,7 +9,7 @@ use crate::objects::anim::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::mem::prog32;
+use crate::tools::prog32;
 use crate::objects::Obj;
 use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
 

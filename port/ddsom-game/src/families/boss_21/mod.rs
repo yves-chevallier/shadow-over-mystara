@@ -240,7 +240,7 @@ fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x9947a "boss_21" run,
+    BOSS_21 0x9947a "boss_21" run,
     // getting up after a common reaction (table 0x3e000 of `reactions.rs`)
-    0x9a6d4 "boss_21_getup" hit::recovered,
+    BOSS_21_GETUP 0x9a6d4 "boss_21_getup" hit::recovered,
 }

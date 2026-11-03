@@ -55,7 +55,7 @@ fn scene_running<X: Current>(x: &mut X, suspended: impl FnOnce(&mut X)) -> bool 
 }
 
 handlers! {
-    0xabeea "effct_attack" attack_fx,
-    0xad63e "effct_radeau" raft,
-    0xad866 "effct_passage" gate,
+    EFFCT_ATTACK 0xabeea "effct_attack" attack_fx,
+    EFFCT_RADEAU 0xad63e "effct_radeau" raft,
+    EFFCT_PASSAGE 0xad866 "effct_passage" gate,
 }

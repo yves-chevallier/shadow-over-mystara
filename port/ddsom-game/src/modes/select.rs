@@ -279,7 +279,7 @@ crate::steps! {
             for (k, source) in FADE_SOURCES.into_iter().enumerate() {
                 Long(var::FADE_SOURCES.0 + 4 * k as u32).set(x.b, source.addr());
             }
-            create_task(x, crate::scene::fading::FROM_WHITE.0, 0x10);
+            create_task(x, crate::scene::fading::FROM_WHITE, 0x10);
             fading::STEP.set(x.b, 1);
             two_blocks(x, Grid::Layer2, 0x203, LAYER2_BLOCKS);
             two_blocks(x, Grid::Layer3, 0xfc, LAYER3_BLOCKS);
@@ -346,7 +346,7 @@ crate::steps! {
         StepEFade = 0x1d4e0 => |x| {
             fading::DELAY.set(x.b, 3);
             fading::PAGES.set(x.b, 0xf);
-            create_task(x, crate::scene::fading::RISE.0, 0x10);
+            create_task(x, crate::scene::fading::RISE, 0x10);
             Flow::Done
         },
     }
@@ -373,8 +373,8 @@ fn clear_layers(x: &mut Ctx) {
 }
 
 /// Creates the entry task `entry` in slot `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
-fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
-    crate::kernel::create_task(x.b, slot as u32, entry);
+fn create_task(x: &mut Ctx, task: crate::tasks::Task, slot: u16) {
+    crate::kernel::create_task(x.b, slot as u32, task);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -734,7 +734,7 @@ fn step_a(x: &mut Ctx) -> Flow {
     fading::DELAY.set(x.b, 3);
     fading::PAGES.set(x.b, 0xf);
     fading::STEP.set(x.b, 7);
-    create_task(x, crate::scene::fading::DESCENT_STEP.0, 0x10);
+    create_task(x, crate::scene::fading::DESCENT_STEP, 0x10);
     Flow::Done
 }
 

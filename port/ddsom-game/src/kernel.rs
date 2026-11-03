@@ -44,6 +44,7 @@ use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd8, wr8};
 use crate::tasks::table::{slot, table, State, Resume, Next, SLOTS};
+use crate::tasks::Task;
 
 /// RAM addresses.
 mod ram {
@@ -108,8 +109,10 @@ impl Point {
             Point::NextTask => 0x952,
             Point::Return => 0x984,
             Point::Task => crate::tasks::table::read(b).map_or(0, |t| match t.slots[t.current].resume {
-                Resume::Entry(entry) => entry,
+                Resume::Entry(task) => task.address(),
                 Resume::Step(step) => step.address(),
+                #[cfg(feature = "tools")]
+                Resume::Address(address) => address,
             }),
             Point::StepKept { .. } => crate::GAME_STEP,
             Point::Blocked(address) => address,
@@ -208,9 +211,9 @@ fn launch(b: &mut Cps2Bus, k: usize) -> Point {
     t.interrupt_mask = 0;
     let e = &mut t.slots[k];
     let step = match (e.state, e.resume) {
-        (State::Fresh, Resume::Entry(entry)) => {
+        (State::Fresh, Resume::Entry(task)) => {
             e.state = State::InProgress;
-            crate::tasks::entry(entry).unwrap_or_else(|| panic!("task {k}: entry {entry:x} without a Rust step"))
+            task.first_step()
         }
         (State::Ready | State::InProgress, Resume::Step(step)) => {
             e.state = State::InProgress;
@@ -306,16 +309,16 @@ pub fn finish(b: &mut Cps2Bus) {
     to_scheduler(b);
 }
 
-/// 0xae4 (and `trap #7`, 0xae6): the current task restarts from scratch at `entry`, same stack.
-pub fn restart(b: &mut Cps2Bus, entry: u32) {
-    table(b).restart(entry);
+/// 0xae4 (and `trap #7`, 0xae6): the current task restarts from scratch as `task`, same stack.
+pub fn restart(b: &mut Cps2Bus, task: Task) {
+    table(b).restart(task);
     to_scheduler(b);
 }
 
-/// Creates the task of offset `offset` in the table (`0x10 k`), which will start at `entry` (wrapper `0x9b6`: no
-/// register or flag changes). A task already there gives back its stack.
-pub fn create_task(b: &mut Cps2Bus, offset: u32, entry: u32) {
-    table(b).create(slot(offset), entry);
+/// Creates the task of offset `offset` in the table (`0x10 k`), which will start at the entry of `task` (wrapper
+/// `0x9b6`: no register or flag changes). A task already there gives back its stack.
+pub fn create_task(b: &mut Cps2Bus, offset: u32, task: Task) {
+    table(b).create(slot(offset), task);
 }
 
 /// Kills the task of offset `offset` (wrapper `0xa14`: no register or flag changes).

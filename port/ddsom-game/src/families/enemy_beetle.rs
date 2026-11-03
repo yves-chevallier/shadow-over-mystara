@@ -789,5 +789,5 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x65ae8 "enemy_9" run,
+    ENEMY_9 0x65ae8 "enemy_9" run,
 }

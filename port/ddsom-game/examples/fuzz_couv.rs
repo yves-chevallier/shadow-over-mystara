@@ -629,18 +629,19 @@ fn describe(muts: &[Mutation]) -> String {
 /// reference machine has no Rust table): states, counts, stacks, entries, free stacks.
 fn table_from_original(b: &mut Cps2Bus) {
     use ddsom_game::mem::{rd32, rd8};
-    use ddsom_game::tasks::table::{self, Slot, State, Resume, Task};
+    use ddsom_game::tasks::table::{self, Slot, State, Resume};
+    use ddsom_game::tools::kernel::task_at;
     let mut t = table::Table::default();
     for (k, e) in t.slots.iter_mut().enumerate() {
         let r = table::record(k);
         let Some(state) = State::from_byte(rd8(b, r)) else { continue };
         let entry = rd32(b, r + 4);
         *e = Slot {
-            task: Task::from_entry(entry),
+            task: task_at(entry),
             state,
             count: rd8(b, r + 1),
             stack: rd32(b, r + 0xc),
-            resume: Resume::Entry(entry),
+            resume: task_at(entry).map_or(Resume::Address(entry), Resume::Entry),
             ..Slot::default()
         };
     }

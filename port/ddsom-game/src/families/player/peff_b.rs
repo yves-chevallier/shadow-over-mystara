@@ -402,7 +402,7 @@ mod witch {
 }
 
 handlers! {
-    0x4b93c "peff_11" hail::run,
-    0x4d08c "peff_20" witch::run,
-    0x4f14c "peff_33" spark::run,
+    PEFF_11 0x4b93c "peff_11" hail::run,
+    PEFF_20 0x4d08c "peff_20" witch::run,
+    PEFF_33 0x4f14c "peff_33" spark::run,
 }

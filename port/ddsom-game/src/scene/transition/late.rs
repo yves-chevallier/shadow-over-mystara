@@ -145,7 +145,7 @@ crate::steps! {
         S32Shown = 0xf9a4a => |x| {
             crate::families::small::background_1_on(x.b);
             next(x);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
             Flow::Done
         },
         /// Original glitch: the resume does not reload D0: the original then reopens message 1 (D0 of the wait).
@@ -246,7 +246,7 @@ crate::steps! {
             yield_frames(x, 1, At(Step::S46Shown.into()))
         },
         S46Shown = 0xf9f0c => |x| {
-            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE.0);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
             Flow::Done
         },
         S46Gone = 0xf9f96 => |x| {
@@ -414,7 +414,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if message_done(x) {
                 sound(x, 0);
                 next(x);
-                fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT.0);
+                fade_task(x, 3, SCENE_PAGES, crate::scene::fading::DESCENT);
             }
             Flow::Done
         }
@@ -523,7 +523,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
         8 => {
             if message_done(x) {
                 next(x);
-                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT.0);
+                fade_task(x, 4, SCENE_PAGES, crate::scene::fading::DESCENT);
             }
             Flow::Done
         }
@@ -600,7 +600,7 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
             }
             next(x);
             fading::STEP.set(x.b, 1);
-            fade_task(x, 4, ALL_PAGES, crate::scene::fading::DESCENT.0);
+            fade_task(x, 4, ALL_PAGES, crate::scene::fading::DESCENT);
             Flow::Done
         }
         4 => {

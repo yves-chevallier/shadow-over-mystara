@@ -80,10 +80,12 @@ const SERVICE_COUNT: u32 = 0xff_19f0;
 const FREE_STEPS: u32 = 0xff_19f1;
 const STEPPED: u32 = 0xff_19f2;
 
-/// Frames between two services, steps chained without cession after a cession, phase table.
+/// Frames between two services, steps chained without cession after a cession.
 const SERVICE_PERIOD: u8 = 60;
 const MAX_FREE_STEPS: i8 = 3;
-const PHASES: u32 = 0x1c502;
+/// The handler of phase 8 in the phase table (`0x1c502 + 8`): the original jumps through A0, which the scene entry
+/// rereads.
+const PHASE_8_HANDLER: u32 = 0x20c38;
 
 /// Addresses of the original.
 mod at {
@@ -169,8 +171,7 @@ fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
         4 => crate::modes::select::phase_4(x),
         8 => {
             // A0 = the handler (table 0x1c502), reread by the scene entry (original glitch)
-            let handler = (x.prog16(PHASES + 8) as u32) << 16 | x.prog16(PHASES + 10) as u32;
-            crate::scene::entry::phase_8(x.b, handler);
+            crate::scene::entry::phase_8(x.b, PHASE_8_HANDLER);
             Flow::Done
         }
         12 => crate::game::phase12(x.b),
