@@ -6,12 +6,15 @@
 //! purse `+0x112..+0x117` (long `+0x114` compared with the prices), six inventory slots `+0x140` (0x56: empty) and
 //! their quantities `+0x148`, shop dialogue state `+0x167`.
 
+use super::vars;
+use crate::families::player::records::Shot;
+use crate::player::Player;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
-use super::pshell::*;
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::Current;
+use crate::player::tables::{player_data, Aligned};
 
 /// Merchant message to display (word, A5 - 0x554e) and the two shop sounds (D0 unused: the message is read from RAM).
 const MESSAGE: u32 = A5 - 0x554e;
@@ -77,14 +80,8 @@ mod item {
     const PURCHASE_INDEX: u32 = 0x58;
     const ITEM: u32 = 0x59;
     const OWN_MESSAGE: u32 = 0x5a;
-    /// Sales zone (four words, program space) and per-variant tables.
-    const ZONE_SIZES: u32 = 0x50cf0;
-    const MESSAGES: u32 = 0x50c78;
-    const PRICES: u32 = 0x50c90;
-    const ANIMATIONS: u32 = 0x50cc0;
-    const PURCHASES: u32 = 0x50cd8;
-    const ANIMS: u32 = 0x1980e4;
-    const ANIMS_ALT: u32 = 0x1980fc;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1980e4);
+    const ANIMS_ALT: crate::data::RomAddr = crate::data::RomAddr(0x1980fc);
     /// Variants 0 and 7: offered only if the shop has them (bytes in A5).
     const OFFER_0: u32 = A5 - 0x553f;
     const OFFER_7: u32 = A5 - 0x5540;
@@ -102,19 +99,19 @@ mod item {
 
     fn parent_ready<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let parent = x.linked(PARENT);
-        parent.u8(x.b, 0x6) == 2
+        parent.u8(x.b, Shot::STEP) == 2
     }
 
     fn follow_scroll<R: Bench>(x: &mut Cx<'_, R>) {
-        let d = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
-        x.add32(0x8, d);
+        let d = vars::CAM_X_LONG.get(x.b).wrapping_sub(vars::PREV_CAM_X.get(x.b));
+        x.add32(Obj::X, d);
     }
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         if !parent_ready(x) {
             return x.free_peff();
         }
-        let variant = x.u8(0x3);
+        let variant = x.u8(Obj::VARIANT);
         let offered = match variant {
             0 => rd8(x.b, OFFER_0) != 0,
             7 => rd8(x.b, OFFER_7) != 0,
@@ -123,24 +120,24 @@ mod item {
         if !offered {
             return follow_scroll(x);
         }
-        x.add8(0x4, 2);
+        x.add8(Obj::STATE, 2);
         for (k, off) in [ZONE, ZONE + 2, DEPTH, DEPTH + 2].into_iter().enumerate() {
-            let v = x.rom16(ZONE_SIZES + 2 * k as u32);
+            let v = player_data().item_zone_sizes.word_at(x.b, 2 * k as u32);
             x.set16(off, v);
         }
         if x.u8(STOCK) != 0 {
-            let v = x.u8(STOCK).wrapping_add(x.a5_u8(0x35));
+            let v = x.u8(STOCK).wrapping_add(vars::PLAYERS_ALIVE.get(x.b));
             x.set8(STOCK, v);
         }
         let v = variant as u32;
-        let price = x.rom32(PRICES + 4 * v);
+        let price = player_data().item_prices.long_at(x.b, 4 * v);
         x.set32(PRICE, price);
-        let message = x.rom16(MESSAGES + 2 * v);
+        let message = player_data().item_messages.word_at(x.b, 2 * v);
         x.set16(OWN_MESSAGE, message);
-        let purchase = x.data16(PURCHASES + 2 * v);
+        let purchase = player_data().item_purchases.word_at(x.b, 2 * v);
         x.set16(PURCHASE_INDEX, purchase);
-        let anim = x.data16(ANIMATIONS + 2 * v);
-        let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ANIMS_ALT } else { ANIMS };
+        let anim = player_data().item_animations.word_at(x.b, 2 * v);
+        let set = if vars::ALT_PALETTE.get(x.b) != 0 { ANIMS_ALT.0 } else { ANIMS.0 };
         x.anim_start(set, anim);
         x.reinsert();
     }
@@ -176,15 +173,15 @@ mod item {
 
     /// Is the customer in the sales zone?
     fn in_zone<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) -> bool {
-        let dx = x.u16(0x8).wrapping_sub(customer.u16(x.b, 0x8)).wrapping_add(x.u16(ZONE));
+        let dx = x.u16(Obj::X).wrapping_sub(customer.u16(x.b, Obj::X)).wrapping_add(x.u16(ZONE));
         if dx > x.u16(ZONE + 2) {
             return false;
         }
         let dz = x
-            .u16(0xc)
-            .wrapping_add(x.u16(0x10))
-            .wrapping_sub(customer.u16(x.b, 0xc))
-            .wrapping_sub(customer.u16(x.b, 0x10))
+            .u16(Obj::Z)
+            .wrapping_add(x.u16(Obj::Y))
+            .wrapping_sub(customer.u16(x.b, Obj::Z))
+            .wrapping_sub(customer.u16(x.b, Obj::Y))
             .wrapping_add(x.u16(DEPTH));
         dz <= x.u16(DEPTH + 2)
     }
@@ -193,7 +190,7 @@ mod item {
     /// already equipped; 0x84: not for this character) or sold.
     fn sell<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) {
         customer.set_u8(x.b, c::READY, 0xff);
-        let variant = x.u8(0x3);
+        let variant = x.u8(Obj::VARIANT);
         let player = player_of(x, customer);
         let state = player.u8(x.b, p::STATE_10D);
         let character = player.u8(x.b, p::CHARACTER);
@@ -325,8 +322,8 @@ mod talk {
     /// Next command: `+5`, `+6`, word; position advanced.
     fn fetch<R: Bench>(x: &mut Cx<'_, R>, s: &mut Script) -> u8 {
         let (op, param) = (rd8(x.b, s.pos), rd8(x.b, s.pos + 1));
-        x.set8(0x5, op);
-        x.set8(0x6, param);
+        x.set8(Shot::SUB_STATE, op);
+        x.set8(Shot::STEP, param);
         s.word = rd16(x.b, s.pos + 2);
         s.pos += 4;
         op
@@ -346,8 +343,8 @@ mod talk {
     /// The customer enters the menu (player state 2, substate 5): sound, menu open.
     fn open_menu<R: Bench>(x: &mut Cx<'_, R>, s: &mut Script, player: Obj) {
         crate::sound::play(x.b, SOUND_OK, x.o);
-        player.set_u8(x.b, 0x162, 2);
-        player.set_u8(x.b, 0x16b, 5);
+        player.set_u8(x.b, Player::SPEED_CLASS, 2);
+        player.set_u8(x.b, Player::SHOP_VISIT, 5);
         player.set_u8(x.b, p::SHOP, IDLE);
         wr8(x.b, MENU_FLAG, 1);
         skip(s);
@@ -372,7 +369,7 @@ mod talk {
                 }
                 STOP => return,
                 SAY_NEXT_UNLESS => {
-                    if x.a5_u8(0x5e) != 0 {
+                    if vars::SECOND_PASS.get(x.b) != 0 {
                         skip(s);
                     }
                     fetch(x, s);
@@ -380,7 +377,7 @@ mod talk {
                     continue;
                 }
                 OPEN_MENU => {
-                    let waiting = x.u8(0x6) != 0;
+                    let waiting = x.u8(Shot::STEP) != 0;
                     if waiting {
                         save(x, s);
                     }
@@ -418,8 +415,8 @@ mod talk {
                         // (extents of 0x51306 / 0x51376 all below 0x100)
                         if character < 8 {
                             player.set_u8(x.b, p::SHOP, IDLE);
-                            player.set_u8(x.b, 0x164, 4);
-                            player.set_u8(x.b, 0x10e, 0x2c);
+                            player.set_u8(x.b, Player::WORN_4, 4);
+                            player.set_u8(x.b, Player::WEAPON_B, 0x2c);
                             wr8(x.b, LEARNED_FLAG, 1);
                             crate::sound::play(x.b, SOUND_OK, x.o);
                         } else {

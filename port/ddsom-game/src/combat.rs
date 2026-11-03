@@ -9,12 +9,15 @@
 //! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
+use crate::families::enemy_common::records::Enemy;
+use crate::player::Player;
 use cps2::Cps2Bus;
 
 use crate::dispatch::Leftovers;
-use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
+use crate::player::tables::{byte, long};
 
 /// Call counters of the rewritten routines (validation coverage).
 pub(crate) mod cov {
@@ -164,6 +167,19 @@ mod f {
     pub const HITS_LANDED: u32 = 0x190;
     pub const DYING: u32 = 0x196;
     pub const DAMAGE_CAP: u32 = 0x16e;
+    /// Crate: non-zero, it cannot be pushed (h).
+    pub const CRATE_FIXED: u32 = 0x65;
+    /// Crate: held by a player.
+    pub const CRATE_HELD: u32 = 0x66;
+    /// Crate: player that last touched, pushed or grabbed it (word).
+    pub const CRATE_TOUCHER: u32 = 0x6c;
+    /// Crate: pushed by a player.
+    pub const CRATE_PUSHED: u32 = 0x6e;
+    /// Crate: hit by a player or a shot (h).
+    pub const CRATE_HIT: u32 = 0x71;
+    /// Enemy: element it is weak to, and the weakness bonus (h).
+    pub const WEAKNESS: u32 = 0x9e;
+    pub const WEAK_ELEMENT: u32 = 0x9f;
 }
 
 /// Program ROM tables.
@@ -178,12 +194,6 @@ mod rom {
     pub const BODY: u32 = 0x11bffa;
     pub const PUSH: u32 = 0x11c11a;
     pub const ATTACK: u32 = 0x11c23a;
-    /// Reaction of the players to hits and enemy shots: by attack identifier, 4 bytes
-    /// (action on the ground, action in the air, power, power at difficulty > 5).
-    pub const ENEMY_ATTACK_REACTIONS: u32 = 0x1067a4;
-    pub const ENEMY_SHOT_REACTIONS: u32 = 0x106912;
-    /// Guard by enemy shot type (bytes): 1 parryable with certain equipment, 2 magic.
-    pub const SHOT_GUARD: u32 = 0x27690;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -294,7 +304,7 @@ impl HitBox {
 /// Box `index` of the object's box set, in the pointer table `table`.
 fn hitbox(w: &mut World, table: u32, o: Obj, index: u8) -> HitBox {
     let set = o.u8(w.b, f::BOX_SET) as u32;
-    let base = rd32(w.b, table + 4 * set);
+    let base = long(w.b, table + 4 * set);
     HitBox(base + 8 * index as u32)
 }
 
@@ -359,8 +369,8 @@ impl Pair {
     /// Gap of the centres on an axis: (box offset + position) of `a` minus that of `b`.
     /// `flip`: the offsets follow the object's orientation (X axis).
     fn probe(&self, w: &mut World, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
-        let mut ao = rd8(w.b, self.abox.0 + off) as i8 as i16 as u16;
-        let mut bo = rd8(w.b, self.bbox.0 + off) as i8 as i16 as u16;
+        let mut ao = byte(w.b, self.abox.0 + off) as i8 as i16 as u16;
+        let mut bo = byte(w.b, self.bbox.0 + off) as i8 as i16 as u16;
         if flip {
             if self.a.u8(w.b, f::FLIP) != 0 {
                 ao = ao.wrapping_neg();
@@ -618,7 +628,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         e.set_u32(w.b, f::STATE, state::BLOCKED);
         p.set_u8(w.b, f::HITSTOP, 8);
         w.set_bit(p, f::HIT_MARK, 6);
-        if p.u8(w.b, 0x47) == 0x60 {
+        if p.u8(w.b, Player::BLOW_ID) == 0x60 {
             p.set_u32(w.b, f::STATE, state::ATTACKING);
             p.set_u8(w.b, f::SUBACTION, 0x12);
         }
@@ -627,10 +637,10 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     }
     count_combo(w, p, e);
     let mut dmg = player_damage(w, p, e);
-    if p.u8(w.b, f::WEAPON_10D) == 0xb && e.u8(w.b, 0x82) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xb && e.u8(w.b, Enemy::WEAK_TO_B) != 0 {
         dmg = dmg.wrapping_add(dmg >> 1);
     }
-    if p.u8(w.b, f::WEAPON_10D) == 0xc && e.u8(w.b, 0x83) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xc && e.u8(w.b, Enemy::WEAK_TO_C) != 0 {
         dmg = 0x200;
     }
     if p.u8(w.b, f::GEAR_184) != 0 {
@@ -656,8 +666,8 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         ram::KILL_FLAG.set(w.b, v);
         p.set_u8(w.b, f::KILLS_FLAG, 1);
     }
-    if p.u8(w.b, 0x18f) != 0 {
-        let add = p.u8(w.b, 0x18e) as u16;
+    if p.u8(w.b, Player::MOVE_STATE) != 0 {
+        let add = p.u8(w.b, Player::MOVE_KIND) as u16;
         w.add16(p, f::HITS_LANDED, add);
     }
     show_enemy_hp(w, p, e);

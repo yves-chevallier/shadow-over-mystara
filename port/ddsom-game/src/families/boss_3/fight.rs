@@ -2,6 +2,7 @@
 //! player carried off (12), counterattack (14).
 
 use crate::families::cx::Bench;
+use crate::player::Player;
 use super::*;
 use crate::objects::Current;
 
@@ -551,7 +552,7 @@ pub(super) fn carrying<R: Bench>(x: &mut Cx<'_, R>) {
             return None;
         }
         let p = load_target(x);
-        (p.u8(x.b, Enemy::ACTIVE) != 0 && Prey(p).held(x.b) != 0).then_some(p)
+        (p.u8(x.b, Enemy::ACTIVE) != 0 && p.u8(x.b, Player::HELD) != 0).then_some(p)
     }
     if held(x).is_none() {
         return x.set32(f::STATE, 0x0202_0c00);
@@ -603,7 +604,7 @@ pub(super) fn carrying<R: Bench>(x: &mut Cx<'_, R>) {
                 return lib::hold_seized(x);
             }
             let p = load_target(x);
-            Prey(p).set_released(x.b, 0x10);
+            p.set_u8(x.b, Player::TIMER_6F, 0x10);
             lib::release_player(x, p);
             x.set32(f::STATE, 0x0202_0c00);
         }

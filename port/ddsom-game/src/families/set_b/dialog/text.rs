@@ -5,7 +5,6 @@ use crate::objects::Obj;
 use crate::player::Player;
 use crate::families::set::fields::SetObj;
 use crate::families::set_b::fields::{DialogObj, WindowEffect};
-use crate::families::set::fields::PlayerFields;
 
 // --- token output ----------------------------------------------------------------------
 
@@ -419,7 +418,7 @@ fn equipped_item<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
     };
     let mut candidates = vec![(a, owner.u8(x.b, Player::WEAPON_A)), (b, owner.u8(x.b, Player::WEAPON_B))];
     for i in 0..6 {
-        candidates.push((c, owner.u8(x.b, PlayerFields::ITEMS + i)));
+        candidates.push((c, owner.u8(x.b, Player::INVENTORY + i)));
     }
     for (list, value) in candidates {
         let mut index = None;

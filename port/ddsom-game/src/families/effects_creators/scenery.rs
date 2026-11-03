@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -259,7 +260,7 @@ pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     for k in 0..4u16 {
         let p = crate::ram::PLAYERS.nth(k as u32);
         r.a(2, p.0);
-        if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, PlayerView::LIFE) != 0 {
+        if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, Player::HP) != 0 {
             r.d(5, 3);
             last = Some(repeats(r, b, 5, 3, |r, b, n| {
                 let o = spawn(r, b, kind::PILLAR)?;

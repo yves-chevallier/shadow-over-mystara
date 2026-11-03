@@ -13,6 +13,7 @@
 //! - 77: sound fade (two volumes that rise in steps, then stop);
 //! - 89: character who enters from the left, waits for a signal from the scene and leaves on the right.
 
+use crate::player::Player;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32};
@@ -40,7 +41,7 @@ const FOCUS: u32 = 0x46;
 fn living_players<R: Bench>(x: &mut Cx<'_, R>) -> Vec<Obj> {
     (0..4)
         .map(|k| crate::ram::PLAYERS.nth(k))
-        .filter(|p| p.u8(x.b, PlayerView::ACTIVE) != 0 && p.u16(x.b, PlayerView::LIFE) != 0)
+        .filter(|p| p.u8(x.b, Player::ACTIVE) != 0 && p.u16(x.b, Player::HP) != 0)
         .collect()
 }
 
@@ -551,7 +552,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     partner.set_u16(x.b, fields::STATE, 0x400);
     for k in 0..4 {
         let p = crate::ram::PLAYERS.nth(k);
-        if p.u8(x.b, PlayerView::ACTIVE) == 0 || p.u16(x.b, PlayerView::LIFE) == 0 {
+        if p.u8(x.b, Player::ACTIVE) == 0 || p.u16(x.b, Player::HP) == 0 {
             continue;
         }
         let px = p.u16(x.b, Obj::X).wrapping_add(0x310);
@@ -627,7 +628,7 @@ fn start_sign<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(fields::STATE, 0x602);
                 vars::SLOW_MODE.set(x.b, 0);
                 for p in living_players(x) {
-                    if p.u8(x.b, PlayerView::STEP) <= 10 {
+                    if p.u8(x.b, Player::ACTION) <= 10 {
                         p.set_u32(x.b, fields::STATE, 0x0200_2c00);
                     }
                 }

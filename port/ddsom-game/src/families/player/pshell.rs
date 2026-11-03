@@ -10,20 +10,17 @@ use crate::objects::Current;
 use crate::families::cx::{Bench, Cx};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::player::tables::{pc16};
 
-/// Fields specific to player objects.
+/// Fields specific to player objects (aliases of [`Shot`](super::records::Shot)).
 pub mod f {
-    /// Orientation inherited from the player (non-zero: looks right).
-    pub const FLIP: u32 = 0x2c;
-    /// Collision box set.
-    pub const BOX_SET: u32 = 0x2e;
-    /// Identifier (`+0x45`) and power (`+0x46`) of the attack.
-    pub const POWER: u32 = 0x45;
-    pub const POWER2: u32 = 0x46;
-    /// Owning player (16-bit RAM address).
-    pub const OWNER: u32 = 0x50;
-    /// Flags set by the collision engine.
-    pub const HIT_FLAGS: u32 = 0x57;
+    use super::super::records::Shot;
+    pub const FLIP: u32 = Shot::FLIP;
+    pub const BOX_SET: u32 = Shot::BOX_SET;
+    pub const POWER: u32 = Shot::ATTACK_ID;
+    pub const POWER2: u32 = Shot::ATTACK_POWER;
+    pub const OWNER: u32 = Shot::OWNER;
+    pub const HIT_FLAGS: u32 = Shot::HIT_FLAGS;
 }
 
 /// Main states (`+4`).
@@ -34,26 +31,6 @@ pub mod st {
 /// Value of an address register loaded by `movea.w`: the address word, sign-extended.
 pub fn ext(o: Obj) -> u32 {
     o.0 as u16 as i16 as i32 as u32
-}
-
-/// Offsets of the work RAM (A5).
-pub mod a5 {
-    /// Secondary camera.
-    pub const CAM2_X: u32 = 0x556;
-    pub const CAM2_Y: u32 = 0x55a;
-    /// Main camera.
-    pub const CAM_X: u32 = 0x506;
-    pub const CAM_Y: u32 = 0x50a;
-    /// Non-zero: the reference camera is the secondary one.
-    pub const USE_CAM2: u32 = 0x36;
-    /// Non-zero: alternate-palette version (`tst.w (0x70,A5)`).
-    pub const ALT_PALETTE: u32 = 0x70;
-    /// Frame counter of the game.
-    pub const FRAME: u32 = 0x6f;
-    /// Free slots of the PEFF pool.
-    pub const PEFF_FREE: u32 = 0x7e60;
-    /// Game paused (non-zero byte).
-    pub const PAUSED: u32 = 0x42;
 }
 
 impl<R: Bench> Cx<'_, R> {
@@ -81,7 +58,7 @@ impl<R: Bench> Cx<'_, R> {
 
     /// State `+4` of the handler (`jmp (table,PC,D0.w)` of the original; `_table`: its jump table).
     pub fn state(&mut self, _table: u32) -> u8 {
-        self.u8(0x4)
+        self.u8(Obj::STATE)
     }
 
     /// Releases the shot.
@@ -102,11 +79,6 @@ impl<R: Bench> Cx<'_, R> {
         }
     }
 
-    /// Long from the program ROM (tables read relative to the PC).
-    pub fn rom32(&mut self, addr: u32) -> u32 {
-        (self.rom16(addr) as u32) << 16 | self.rom16(addr + 2) as u32
-    }
-
     /// Starts script `n` of animation set `set` (`anim_start_indexed`).
     pub fn anim(&mut self, set: u32, n: u32) {
         self.anim_start(set, n as u16);
@@ -125,8 +97,8 @@ pub fn follow_owner<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
 /// Offset (X, Z) read from a table of ROM words (PC-relative read), row `row`.
 /// Original glitch: D2 keeps the Z offset (leftover re-read by other handlers, `dispatch::Leftovers`).
 pub fn offset<R: Bench>(x: &mut Cx<'_, R>, table: u32, row: u32) -> (u16, u16) {
-    let dx = x.rom16(table + row);
-    let dz = x.rom16(table + row + 2);
+    let dx = pc16(x.b, table + row);
+    let dz = pc16(x.b, table + row + 2);
     *x.c.d2() = dz as u32;
     (dx, dz)
 }

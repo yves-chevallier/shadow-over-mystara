@@ -17,6 +17,7 @@ pub mod music;
 pub mod objects;
 pub mod natives;
 pub mod palettes;
+pub mod player_tables;
 pub mod players;
 pub mod rest;
 #[cfg(feature = "full")]
@@ -53,6 +54,10 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let enemies = data::build(rom, regions, &specs, Vec::new());
     let (regions, specs, texts) = dialogs::specs(rom);
     let dialogs = data::build(rom, regions, &specs, texts);
+    let (regions, specs) = players::specs(rom);
+    let players = data::build(rom, regions, &specs, Vec::new());
+    let (regions, specs) = combat::combat();
+    let combat = data::build(rom, regions, &specs, Vec::new());
     Ok(GameData {
         frames,
         anims,
@@ -63,5 +68,8 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
         sprite_tables: tables::sprite_tables(rom)?,
         set: set::set(rom),
         dialogs,
+        player_tables: player_tables::player_tables(rom),
+        players,
+        combat,
     })
 }

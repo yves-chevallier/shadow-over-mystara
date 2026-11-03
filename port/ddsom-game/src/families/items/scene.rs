@@ -1,7 +1,8 @@
+use crate::player::Player;
 use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
-use crate::families::shell::records::{Base, PlayerView, SetView};
+use crate::families::shell::records::{Base, SetView};
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
@@ -152,7 +153,7 @@ pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             let owner = pointer(ctx, o, OWNER_2);
             let variant = o.u8(ctx.b, Obj::VARIANT);
             if !(variant != 2) {
-                let reserve = owner.u8(ctx.b, PlayerView::RESERVE);
+                let reserve = owner.u8(ctx.b, Player::RESERVE);
                 if !(reserve == 0) {
                     o.set_u8(ctx.b, Obj::VARIANT, 0);
                 }
@@ -165,7 +166,7 @@ pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 2) {
         let owner = pointer(ctx, o, OWNER_2);
-        let reserve = owner.u8(ctx.b, PlayerView::RESERVE);
+        let reserve = owner.u8(ctx.b, Player::RESERVE);
         if !(reserve == 0) {
             o.set_u16(ctx.b, COUNTDOWN_TIMER, 1);
         }

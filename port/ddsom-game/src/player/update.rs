@@ -10,12 +10,13 @@
 //! | 4 | on the ground / ejected (`+5` must be 0) |
 //! | 6 | removed: save of the player, clearing of the record and its sub-objects |
 
+use crate::objects::Obj;
 use super::init::{clear_overlays_of, clear_player, UNLOCKED_FLAGS};
 use super::states::sub;
 use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
 use crate::mem::{wr32, wr8};
 use crate::objects::lists;
-use crate::machine::Machine;
+use crate::player::tables::{player_data, Aligned};
 
 /// One frame of all the active players.
 pub fn update_all(g: &mut Ctx) {
@@ -73,7 +74,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         if timer <= 1 {
             p.set_u8(g, Player::RECOIL, 0);
         }
-        if p.u8(g, 0x16a) != 0 {
+        if p.u8(g, Player::SPELL_FROZEN) != 0 {
             return end_of_frame(g, p);
         }
         if ram::PAUSE.get(g.b) == 0 && p.u8(g, Player::POWER_10F) == 0 {
@@ -97,8 +98,8 @@ fn update_playing(g: &mut Ctx, p: Player) {
         {
             return end_of_frame(g, p);
         }
-        let parity = p.u8(g, 0x1e3).wrapping_add(1) & 1;
-        p.set_u8(g, 0x1e3, parity);
+        let parity = p.u8(g, Player::DOUBLE_PARITY).wrapping_add(1) & 1;
+        p.set_u8(g, Player::DOUBLE_PARITY, parity);
         if parity != 0 {
             return end_of_frame(g, p);
         }
@@ -148,7 +149,7 @@ fn end_of_frame(g: &mut Ctx, p: Player) {
 fn finish(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SCENE.get(g.b) == 0x29
-        && p.u16(g, 0xc) == 0
+        && p.u16(g, Obj::Z) == 0
         && (ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 0xf) == 0
     {
         crate::families::effects_creators::for_players::wisp(&mut g.leftovers, g.b, p.obj());
@@ -164,7 +165,7 @@ fn remove(g: &mut Ctx, p: Player) {
     let k = p.u8(g, Player::INDEX) as u32 & 3;
     record_high_score(g, p);
     let saved = UNLOCKED_FLAGS + 0x70 + 0x10 * k;
-    let (a, b, c) = (p.u32(g, 0x118), p.u32(g, 0x11c), p.u32(g, Player::SCORE_BCD));
+    let (a, b, c) = (p.u32(g, Player::NAME_HEAD), p.u32(g, Player::NAME_TAIL), p.u32(g, Player::SCORE_BCD));
     wr32(g.b, saved, a);
     wr32(g.b, saved + 4, b);
     wr32(g.b, saved + 8, c);
@@ -187,9 +188,6 @@ mod scores {
     pub const NAME: u32 = 0x2;
     pub const SCORE: u32 = 0x8;
     pub const MAGIC: u32 = 0xd;
-    /// Predefined names (in clear): per character (8 bytes, second series starting at 12 for version
-    /// `A5+0x71`), or designated by a negative first byte.
-    pub const NAMES: u32 = 0x1829e;
 }
 
 /// 0x180c8: the score of the player leaving the game (`+0x110`) takes its place in the table, the worse ones
@@ -202,8 +200,8 @@ fn record_high_score(g: &mut Ctx, p: Player) {
     if score < score_of(g, last) {
         return;
     }
-    let (level, character, magic) = (p.u8(g, 0x10c), p.u8(g, Player::CHARACTER), p.u8(g, 0x193));
-    let (name_a, name_b) = (p.u32(g, 0x118), p.u16(g, 0x11c));
+    let (level, character, magic) = (p.u8(g, Player::LEVEL), p.u8(g, Player::CHARACTER), p.u8(g, Player::MAGIC_USED));
+    let (name_a, name_b) = (p.u32(g, Player::NAME_HEAD), p.u16(g, Player::NAME_TAIL));
     let write = |g: &mut Ctx, at: u32| {
         wr8(g.b, at + scores::LEVEL, level);
         wr8(g.b, at + scores::CHARACTER, character);
@@ -241,7 +239,7 @@ fn record_high_score(g: &mut Ctx, p: Player) {
             _ => None,
         };
         let (a, b) = match preset {
-            Some(off) => (g.data32(scores::NAMES + off), g.data16(scores::NAMES + off + 4)),
+            Some(off) => (player_data().score_names.long_at(g.b, off), player_data().score_names.word_at(g.b, off + 4)),
             None => (name_a, name_b),
         };
         wr32(g.b, from + scores::NAME, a);

@@ -1,10 +1,15 @@
 //! Player effects (PEFF), tenth series: types 35 to 39, 46 and 47 (effects of the leap, the swap, the slide, the
 //! dwarf's attack, shards of the monsters hit, rain of the selection screen). See `docs/families/joueur.md`.
 
+use super::vars;
+use crate::families::player::records::Shot;
+use crate::player::Player;
+use crate::objects::Obj;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Current;
+use crate::player::tables::{player_data, pc16, Aligned};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -15,43 +20,43 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod leap {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc60a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc60a);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fc28) {
             0 => {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
                 let owner = follow_owner(x);
-                x.set16(0x12, 0);
-                x.set16(0x12, 0x8000);
+                x.set16(Shot::Y_FRACTION, 0);
+                x.set16(Shot::Y_FRACTION, 0x8000);
                 let (mut dx, dz) = (-0x62i16 as u16, 0x82u16);
-                if owner.u8(x.b, 0x3) > 2 {
+                if owner.u8(x.b, Player::CHARACTER) > 2 {
                     dx = -0x49i16 as u16;
                 }
-                if x.u8(0x3) != 0 {
+                if x.u8(Obj::VARIANT) != 0 {
                     dx = -0x62i16 as u16;
                 }
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
-                let n = x.u8(0x3) as u32;
-                x.anim(ANIMS, n);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
+                let n = x.u8(Obj::VARIANT) as u32;
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {
                 let owner = x.linked(f::OWNER);
-                if owner.u8(x.b, 0x5) != 0 || owner.u16(x.b, 0x62) == 0 || owner.u8(x.b, 0x6a) != 0x16 {
+                if owner.u8(x.b, Player::SUB) != 0 || owner.u16(x.b, Player::HP) == 0 || owner.u8(x.b, Player::SUBACTION) != 0x16 {
                     return x.free_peff();
                 }
-                if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
+                if vars::PAUSE.get(x.b) == 0 && owner.u8(x.b, Player::HITSTOP) == 0 {
                     x.copy_pos(owner);
-                    x.set16(0x12, 0);
-                    x.set16(0x12, 0x8000);
+                    x.set16(Shot::Y_FRACTION, 0);
+                    x.set16(Shot::Y_FRACTION, 0x8000);
                     let dx = signed(-0x62i16 as u16, x.u8(f::FLIP) != 0);
-                    x.add16(0x8, dx);
-                    x.add16(0xc, 0x82);
+                    x.add16(Obj::X, dx);
+                    x.add16(Obj::Z, 0x82);
                     if x.anim_step() {
-                        x.add8(0x4, 2);
+                        x.add8(Obj::STATE, 2);
                     }
                 }
                 x.reinsert();
@@ -65,7 +70,7 @@ mod leap {
 mod swap {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc6b0;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc6b0);
     const OFFSETS_A: u32 = 0x4fdd4;
     const OFFSETS_B: u32 = 0x4fdec;
     const SFX: crate::sound::Sound = crate::sound::VOICE_BY_D4;
@@ -73,25 +78,25 @@ mod swap {
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fd58) {
             0 => {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
                 let owner = follow_owner(x);
-                x.add16(0x10, 0xffff);
-                let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                let table = if x.u8(0x3) != 0 { OFFSETS_B } else { OFFSETS_A };
-                let dx = x.rom16(table + row);
-                let dz = x.rom16(table + row + 2);
+                x.add16(Obj::Y, 0xffff);
+                let row = ((owner.u8(x.b, Player::CHARACTER) >> 1) as u32) << 2;
+                let table = if x.u8(Obj::VARIANT) != 0 { OFFSETS_B } else { OFFSETS_A };
+                let dx = pc16(x.b, table + row);
+                let dz = pc16(x.b, table + row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
-                x.anim(ANIMS, 0);
-                let voice = owner.u8(x.b, 0x10d) as u32;
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
+                x.anim(ANIMS.0, 0);
+                let voice = owner.u8(x.b, Player::WEAPON_A) as u32;
                 crate::sound::play_with(x.b, SFX, crate::sound::Source { object: Some(x.o), a1: None, d4: Some(voice) });
                 x.reinsert();
             }
             2 => {
                 if x.anim_step() {
-                    x.add8(0x4, 2);
+                    x.add8(Obj::STATE, 2);
                 }
             }
             _ => x.free_peff(),
@@ -104,28 +109,31 @@ mod swap {
 mod dash {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc6f4;
+    /// Strike kind of the player when the effect was created.
+    const SUBACTION: u32 = 0x5c;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc6f4);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fe46) {
             0 => {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
                 pose(x);
-                x.anim(ANIMS, 0);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
                 let owner = x.linked(f::OWNER);
-                if owner.u8(x.b, 0x5) != 0
-                    || owner.u8(x.b, 0x7) != 2
-                    || owner.u16(x.b, 0x62) == 0
-                    || owner.u8(x.b, 0x6a) != x.u8(0x5c)
-                    || owner.u8(x.b, 0x10f) != 0
+                if owner.u8(x.b, Player::SUB) != 0
+                    || owner.u8(x.b, Player::STEP) != 2
+                    || owner.u16(x.b, Player::HP) == 0
+                    || owner.u8(x.b, Player::SUBACTION) != x.u8(SUBACTION)
+                    || owner.u8(x.b, Player::POWER_10F) != 0
                 {
                     return x.free_peff();
                 }
                 pose(x);
-                if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
+                if vars::PAUSE.get(x.b) == 0 && owner.u8(x.b, Player::HITSTOP) == 0 {
                     x.anim_step();
                 }
                 x.reinsert();
@@ -136,11 +144,11 @@ mod dash {
 
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         follow_owner(x);
-        x.set16(0x12, 0);
-        x.set16(0x12, 0x8000);
+        x.set16(Shot::Y_FRACTION, 0);
+        x.set16(Shot::Y_FRACTION, 0x8000);
         let dx = signed(-0x2a_i16 as u16, x.u8(f::FLIP) != 0);
-        x.add16(0x8, dx);
-        x.add16(0xc, 0xc);
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Z, 0xc);
     }
 }
 
@@ -148,35 +156,34 @@ mod dash {
 mod chip {
     use super::*;
 
-    const ANIMS: u32 = 0x1bc77c;
-    const OFFSETS: u32 = 0x4ff9a;
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bc77c);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ff2c) {
             0 => {
-                x.add8(0x4, 2);
-                x.set16(0x14, 0x18);
+                x.add8(Obj::STATE, 2);
+                x.set16(Obj::VX, 0x18);
                 let owner = follow_owner(x);
-                x.set16(0x12, 0);
-                owner.set_u16(x.b, 0x12, 0x8000);
-                let row = ((x.u8(0x3) >> 1) as u32) << 2;
-                let dx = x.rom16(OFFSETS + row);
-                let dz = x.rom16(OFFSETS + row + 2);
+                x.set16(Shot::Y_FRACTION, 0);
+                owner.set_u16(x.b, Player::Y_FRACTION, 0x8000);
+                let row = ((x.u8(Obj::VARIANT) >> 1) as u32) << 2;
+                let dx = player_data().chip_offsets.word_at(x.b, row);
+                let dz = player_data().chip_offsets.word_at(x.b, row + 2);
                 *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
-                x.anim(ANIMS, 0);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
+                x.anim(ANIMS.0, 0);
                 x.reinsert();
             }
             2 => {
                 let owner = x.linked(f::OWNER);
-                if owner.u8(x.b, 0x5) == 0 {
+                if owner.u8(x.b, Player::SUB) == 0 {
                     return x.free_peff();
                 }
-                x.add16(0x14, 0xffff);
-                if x.u16(0x14) == 0 {
-                    x.add8(0x4, 2);
+                x.add16(Obj::VX, 0xffff);
+                if x.u16(Obj::VX) == 0 {
+                    x.add8(Obj::STATE, 2);
                 }
             }
             _ => x.free_peff(),
@@ -189,52 +196,53 @@ mod chip {
 mod chunk {
     use super::*;
 
-    const ANIM_SETS: u32 = 0x396e8;
-    const FRAMES: u32 = 0x11ae86;
+    /// Player whose hand holds the chunk (16-bit pointer) (h).
+    const HOST: u32 = 0x42;
+
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4ffea) {
             0 => {
-                if x.u8(0x3) == 0 {
-                    x.add8(0x4, 2);
-                    x.set16(0x30, 0x14);
+                if x.u8(Obj::VARIANT) == 0 {
+                    x.add8(Obj::STATE, 2);
+                    x.set16(Obj::ANIM_TIMER, 0x14);
                 } else {
-                    let host = x.linked(0x42);
-                    x.add8(0x4, 2);
-                    let class = host.u8(x.b, 0x10e) as u32;
-                    let set = x.data32(ANIM_SETS + 4 * class);
-                    let row = (host.u16(x.b, 0x42) as u32) << 3 & 0xffff;
-                    let d0 = x.data16(FRAMES + row);
-                    let d2 = x.data16(FRAMES + row + 2);
-                    let d3 = x.data16(FRAMES + row + 4);
+                    let host = x.linked(HOST);
+                    x.add8(Obj::STATE, 2);
+                    let class = host.u8(x.b, Player::WEAPON_B) as u32;
+                    let set = player_data().overlay_animations.long_at(x.b, 4 * class);
+                    let row = (host.u16(x.b, HOST) as u32) << 3 & 0xffff;
+                    let d0 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row);
+                    let d2 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row + 2);
+                    let d3 = crate::families::effects::tables::tables().hand_offsets.word_at(x.b, row + 4);
                     *x.c.d2() = d2 as u32;
                     *x.c.d3() = d3 as u32;
                     let dx = signed(d2, host.u8(x.b, f::FLIP) != 0);
-                    x.add16(0x8, dx);
-                    x.add16(0xc, d3);
+                    x.add16(Obj::X, dx);
+                    x.add16(Obj::Z, d3);
                     x.anim_start(set, d0);
-                    x.set16(0x30, 0x14);
+                    x.set16(Obj::ANIM_TIMER, 0x14);
                 }
             }
             2 => {
-                if x.u8(0x5) == 0 {
-                    x.add16(0x30, 0xffff);
-                    if (x.u16(0x30) as i16) <= 0 {
-                        x.add8(0x5, 2);
-                        x.set16(0x30, 0xe);
+                if x.u8(Shot::SUB_STATE) == 0 {
+                    x.add16(Obj::ANIM_TIMER, 0xffff);
+                    if (x.u16(Obj::ANIM_TIMER) as i16) <= 0 {
+                        x.add8(Shot::SUB_STATE, 2);
+                        x.set16(Obj::ANIM_TIMER, 0xe);
                     }
                 } else {
-                    x.add16(0x30, 0xffff);
-                    if (x.u16(0x30) as i16) <= 0 {
+                    x.add16(Obj::ANIM_TIMER, 0xffff);
+                    if (x.u16(Obj::ANIM_TIMER) as i16) <= 0 {
                         return x.free_peff();
                     }
-                    let h = x.u8(0x1) ^ 2;
-                    x.set8(0x1, h);
+                    let h = x.u8(Obj::FLAGS) ^ 2;
+                    x.set8(Obj::FLAGS, h);
                 }
             }
             _ => x.free_peff(),
         }
-        if x.u8(0) != 0 {
+        if x.u8(Obj::ACTIVE) != 0 {
             x.reinsert();
         }
     }
@@ -244,46 +252,49 @@ mod chunk {
 mod rain {
     use super::*;
 
-    const ANIMS: u32 = 0x1be8b8;
-    const OFFSETS: u32 = 0x51b44;
-    const DELAYS: u32 = 0x51ba8;
+    /// Delay before the drop (word).
+    const DELAY: u32 = 0x58;
+    /// Lifetime (word).
+    const TIMER: u32 = 0x5a;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1be8b8);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51ae4) {
             0 => {
-                x.add8(0x4, 2);
-                x.set16(0x5a, 0x70);
-                let (cx, cy) = (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y));
-                x.set16(0x8, cx);
-                x.set16(0x10, cy);
-                let row = (x.u8(0x3) as u32) << 3;
-                let dx = x.rom16(OFFSETS + row);
-                let dz = x.rom16(OFFSETS + row + 2);
-                let delay = x.rom16(OFFSETS + row + 4);
-                x.set16(0xc, dz);
-                x.set16(0x58, delay);
-                x.add16(0x8, dx);
-                x.add16(0x10, 0x100);
-                x.anim(ANIMS, 1);
+                x.add8(Obj::STATE, 2);
+                x.set16(TIMER, 0x70);
+                let (cx, cy) = (vars::CAM_X.get(x.b), vars::CAM_Y.get(x.b));
+                x.set16(Obj::X, cx);
+                x.set16(Obj::Y, cy);
+                let row = (x.u8(Obj::VARIANT) as u32) << 3;
+                let dx = player_data().rain_offsets.word_at(x.b, row);
+                let dz = player_data().rain_offsets.word_at(x.b, row + 2);
+                let delay = player_data().rain_offsets.word_at(x.b, row + 4);
+                x.set16(Obj::Z, dz);
+                x.set16(DELAY, delay);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Y, 0x100);
+                x.anim(ANIMS.0, 1);
             }
             2 => {
-                x.add16(0x5a, 0xffff);
-                if x.u16(0x58) != 0 {
-                    x.add16(0x58, 0xffff);
-                    x.set_bit(0x1, 1, true);
+                x.add16(TIMER, 0xffff);
+                if x.u16(DELAY) != 0 {
+                    x.add16(DELAY, 0xffff);
+                    x.set_bit(Obj::FLAGS, 1, true);
                     return;
                 }
                 if x.anim_step() {
                     let r = x.rand_and(3) * 2;
-                    let d = x.rom16(DELAYS + r);
-                    x.set16(0x58, d);
-                    x.anim(ANIMS, 1);
-                    if (x.u16(0x5a) as i16) < 0 {
-                        x.add8(0x4, 2);
+                    let d = player_data().rain_delays.word_at(x.b, r);
+                    x.set16(DELAY, d);
+                    x.anim(ANIMS.0, 1);
+                    if (x.u16(TIMER) as i16) < 0 {
+                        x.add8(Obj::STATE, 2);
                     }
                 }
-                let h = x.u8(0x1) ^ 2;
-                x.set8(0x1, h);
+                let h = x.u8(Obj::FLAGS) ^ 2;
+                x.set8(Obj::FLAGS, h);
                 x.reinsert();
             }
             _ => x.free_peff(),
@@ -299,17 +310,17 @@ mod timer {
         let state = x.state(0x51bda);
         if state == 0 {
             // initialization chains into state 2
-            x.add8(0x4, 2);
-            x.set16(0x14, 0x15);
+            x.add8(Obj::STATE, 2);
+            x.set16(Obj::VX, 0x15);
         }
         match state {
             0 | 2 => {
-                x.add16(0x14, 0xffff);
-                if (x.u16(0x14) as i16) >= 0 {
+                x.add16(Obj::VX, 0xffff);
+                if (x.u16(Obj::VX) as i16) >= 0 {
                     return;
                 }
-                if x.a5_u16(0x4ba) == 0x100 {
-                    x.set_a5_u16(0x4ba, 0);
+                if vars::SCROLL_Y_PLANE1.get(x.b) == 0x100 {
+                    vars::SCROLL_Y_PLANE1.set(x.b, 0);
                 }
                 x.free_peff();
             }

@@ -17,6 +17,7 @@
 //! Animations: 0x175da6 (body), 0x175dc4 (attacks), 0x175e0c (fall, death).
 
 use crate::families::cx::Bench;
+use crate::player::Player;
 use crate::data::RomAddr;
 use crate::record::record;
 use super::boss_common::*;
@@ -330,8 +331,8 @@ fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Boss5::BITING) == 0 {
         p.set_u32(x.b, f::STATE, 0x0204_3200);
         p.set_u8(x.b, Enemy::ACTIVE, 2);
-        Prey(p).set_holder(x.b, x.o.0 as u16);
-        Prey(p).set_held(x.b, 1);
+        p.set_u16(x.b, Player::HOLDER_ENEMY, x.o.0 as u16);
+        p.set_u8(x.b, Player::HELD, 1);
         x.set8(Boss5::BITING, 1);
         let hp = p.u16(x.b, f::HP);
         p.set_u16(x.b, f::HP, hp.wrapping_sub(0x10));
@@ -364,8 +365,8 @@ fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 4);
     x.set8(Boss5::BITING, 0);
     p.set_u32(x.b, f::STATE, 0x0204_3400);
-    Prey(p).set_held(x.b, 0);
-    Prey(p).set_released(x.b, 0);
+    p.set_u8(x.b, Player::HELD, 0);
+    p.set_u8(x.b, Player::TIMER_6F, 0);
     attack_anim(x, 2);
 }
 
@@ -374,8 +375,8 @@ fn grab_kill<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.linked(f::TARGET);
     p.set_u16(x.b, f::HP, 1);
     p.set_u32(x.b, f::STATE, 0x0204_3400);
-    Prey(p).set_held(x.b, 0);
-    Prey(p).set_released(x.b, 1);
+    p.set_u8(x.b, Player::HELD, 0);
+    p.set_u8(x.b, Player::TIMER_6F, 1);
     x.set8(Boss5::BITING, 0);
     grab_release(x);
 }

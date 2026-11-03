@@ -1,3 +1,4 @@
+use crate::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -156,7 +157,7 @@ pub(super) fn shop_buy<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
 
 /// Is the player's gold sufficient (or free item: `+0x167` = 9)? Otherwise refusal.
 pub(super) fn shop_can_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) -> bool {
-    if player.u8(x.b, PlayerView::FREE_ITEM) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
+    if player.u8(x.b, Player::FREE_ITEM) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
         return true;
     }
     shop_refuse(x, shop::NO_GOLD);
@@ -172,11 +173,11 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
         return;
     }
     let item = x.u16(shop::ITEM) as u8;
-    let slot = match (0..6).find(|&k| player.u8(x.b, PlayerView::INVENTORY + k) == item) {
+    let slot = match (0..6).find(|&k| player.u8(x.b, Player::INVENTORY + k) == item) {
         Some(k) => k,
-        None => match (0..6).find(|&k| player.u8(x.b, PlayerView::INVENTORY + k) == 0x56) {
+        None => match (0..6).find(|&k| player.u8(x.b, Player::INVENTORY + k) == 0x56) {
             Some(k) => {
-                player.set_u8(x.b, PlayerView::QUANTITIES + k, 0);
+                player.set_u8(x.b, Player::QUANTITIES + k, 0);
                 k
             }
             None => {
@@ -185,14 +186,14 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
             }
         },
     };
-    if player.u8(x.b, PlayerView::QUANTITIES + slot) as i8 >= 9 {
+    if player.u8(x.b, Player::QUANTITIES + slot) as i8 >= 9 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
         return crate::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
     let id = x.u8(shop::ITEM + 1);
-    player.set_u8(x.b, PlayerView::INVENTORY + slot, id);
-    let n = player.u8(x.b, PlayerView::QUANTITIES + slot).wrapping_add(1);
-    player.set_u8(x.b, PlayerView::QUANTITIES + slot, n);
+    player.set_u8(x.b, Player::INVENTORY + slot, id);
+    let n = player.u8(x.b, Player::QUANTITIES + slot).wrapping_add(1);
+    player.set_u8(x.b, Player::QUANTITIES + slot, n);
     let collected = x.u8(shop::ITEM) as u32;
     crate::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
     shop_pay(x, player);
@@ -201,13 +202,13 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
 /// `0xafdaa`: the price (six BCD bytes ending at `+0x53`) is subtracted from the player's gold (six bytes
 /// ending at `+0x117`), except for a free item (`+0x167` = 9, reset to 0xff).
 pub(super) fn shop_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
-    if player.u8(x.b, PlayerView::FREE_ITEM) == 9 {
-        player.set_u8(x.b, PlayerView::FREE_ITEM, 0xff);
+    if player.u8(x.b, Player::FREE_ITEM) == 9 {
+        player.set_u8(x.b, Player::FREE_ITEM, 0xff);
     } else {
         let mut borrow = false;
         for k in 1..=6 {
-            let (v, b) = crate::game::sbcd(player.u8(x.b, PlayerView::GOLD_END - k), x.u8(ShopPrice::PRICE_END - k), borrow);
-            player.set_u8(x.b, PlayerView::GOLD_END - k, v);
+            let (v, b) = crate::game::sbcd(player.u8(x.b, Player::GOLD_END - k), x.u8(ShopPrice::PRICE_END - k), borrow);
+            player.set_u8(x.b, Player::GOLD_END - k, v);
             borrow = b;
         }
     }
@@ -222,8 +223,8 @@ pub(super) fn shop_meal<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
         return;
     }
     let player = buyer_player(x, buyer);
-    let full = player.u16(x.b, PlayerView::LIFE_MAX);
-    if full as i16 <= player.u16(x.b, PlayerView::LIFE) as i16 {
+    let full = player.u16(x.b, Player::HP_MAX);
+    if full as i16 <= player.u16(x.b, Player::HP) as i16 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
         return crate::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
@@ -238,10 +239,10 @@ pub(super) fn shop_meal<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
         x.anim_step();
         x.set16(shop::MESSAGE_ID, 0);
     }
-    let life = player.u16(x.b, PlayerView::LIFE).wrapping_add(heal);
-    player.set_u16(x.b, PlayerView::LIFE, life);
+    let life = player.u16(x.b, Player::HP).wrapping_add(heal);
+    player.set_u16(x.b, Player::HP, life);
     if (full as i16) < life as i16 {
-        player.set_u16(x.b, PlayerView::LIFE, full);
+        player.set_u16(x.b, Player::HP, full);
     }
     shop_pay(x, player);
 }
@@ -477,7 +478,7 @@ pub(super) fn purse_give<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, buttons: u32) 
 pub(super) fn purse_draw_gauge<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
     let mut at = x.u32(purse::GAUGE_AT);
     let len = x.u16(purse::GAUGE_LEN);
-    let (mut max, mut cur) = (owner.u16(x.b, PlayerView::LIFE_MAX), owner.u16(x.b, PlayerView::LIFE));
+    let (mut max, mut cur) = (owner.u16(x.b, Player::HP_MAX), owner.u16(x.b, Player::HP));
     if two_players(x) {
         max >>= 1;
         cur >>= 1;

@@ -25,7 +25,7 @@ pub mod rom {
     /// Sound of a used item.
     pub const SOUND_ITEM: crate::sound::Sound = crate::sound::ITEM;
     /// End of the auras after the red magic.
-    pub const SPELL_RESET_AURA: u32 = 0x37882;
+    pub const SPELL_RESET_AURA: crate::data::RomAddr = crate::data::RomAddr(0x37882);
 }
 
 /// Character peculiarities.
@@ -335,7 +335,7 @@ pub const CAST_14: Cast = Cast {
 
 pub const CAST_15: Cast = Cast {
     frames: 0x78,
-    prepare: |g, p| p.set_u8(g, 0x1e9, 2),
+    prepare: |g, p| p.set_u8(g, Player::SPELL_LEVEL, 2),
     fire: |g, p, _| {
         spawn::ice_spell(g, p);
         spawn::ice_crown(g, p);
@@ -355,9 +355,9 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     cov!();
     p.set_u16(g, Player::AURA_TIMER, duration);
     p.set_u8(g, Player::AURA, 1);
-    if p.u8(g, 0x167) == 2 {
+    if p.u8(g, Player::FREE_ITEM) == 2 {
         p.set_u8(g, Player::AURA, 3);
-        p.set_u8(g, 0x167, 0xff);
+        p.set_u8(g, Player::FREE_ITEM, 0xff);
     }
     p.set_u8(g, Player::AURA_B, 0);
     p.set_u8(g, Player::AURA_C, 0);
@@ -392,7 +392,7 @@ pub const CAST_18: Cast = Cast {
 /// Healing potion (no. 19): nearby allies are healed as by the cleric's spell.
 pub const CAST_19: Cast = Cast {
     frames: 0x78,
-    prepare: |g, p| p.set_u8(g, 0x1ed, 0),
+    prepare: |g, p| p.set_u8(g, Player::SPELL_REPEAT, 0),
     after_freeze: common::heal_scan,
     every_frame: common::heal_flicker,
     fire: |g, p, _| {

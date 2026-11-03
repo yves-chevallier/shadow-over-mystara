@@ -1,6 +1,7 @@
 //! Boss 1, active state: arrival (`+5` = 0), combat (2), attacks (4), wait (6 to 10), grab (12).
 
 use crate::families::cx::Bench;
+use crate::player::Player;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
@@ -185,7 +186,7 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
 /// Rest animation: 4, or 5 if the target is on the ground (`+0x66`).
 fn rest_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    let n = if Prey(t).grounded(x.b) != 0 { 5 } else { 4 };
+    let n = if t.u8(x.b, Player::SLOW) != 0 { 5 } else { 4 };
     body(x, n);
 }
 
@@ -703,7 +704,7 @@ const BITE_DELAYS: &str = "boss_1/bite_delays";
 /// 0x7ba50: the grabbed player (`+0x50`) is held (0xfda2) and bitten (4 HP) until released.
 pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    if t.u8(x.b, Enemy::ACTIVE) == 0 || Prey(t).held(x.b) == 0 {
+    if t.u8(x.b, Enemy::ACTIVE) == 0 || t.u8(x.b, Player::HELD) == 0 {
         return stand(x);
     }
     match x.u8(Enemy::SUB_STEP) {
@@ -759,7 +760,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7bb1c: releases the player (0xfd8c) and replays animation 7.
 fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    Prey(t).set_released(x.b, 1);
+    t.set_u8(x.b, Player::TIMER_6F, 1);
     lib::release_player(x, t);
     next7(x);
     attack(x, 7);

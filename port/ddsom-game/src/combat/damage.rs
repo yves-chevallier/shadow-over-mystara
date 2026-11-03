@@ -3,35 +3,24 @@
 //!
 //! The scales are ROM tables (read at run time); only the formulas are here.
 
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::enemy_common::records::Enemy;
 use super::*;
 use crate::objects::pools;
 use crate::machine::Machine;
+use crate::player::tables::{player_data, pc16, byte, Aligned, Read};
 
 /// Scale tables of the program ROM. The tables read by PC-relative addressing in the original
 /// are in the program space (`pc8`/`pc16`), the others as ordinary reads.
 mod table {
-    /// 0x3be4 (PC): random variation added to the damage, signed bytes, 32 per row
-    /// (row = min(base damage - 1, 4)).
-    pub const ROLL: u32 = 0x3be4;
-    /// 0x3c84 (PC): for a critical hit, according to (low HP, 4-bit random): row number of 0x3ca2.
-    pub const CRIT_ROW: u32 = 0x3c84;
-    /// 0x3ca2 (PC): 16-bit masks; the critical hit happens if the drawn bit (4-bit random) is 1.
-    pub const CRIT_MASK: u32 = 0x3ca2;
     /// 0x3d8e (data): per weapon (4 bytes): damage bonus according to the number of players
     /// (2, 3, 4: signed bytes) then cap.
     pub const PARTY_BONUS: u32 = 0x3d8e;
-    /// 0x3e4e and 0x3ef8 (PC): tables of the magician's critical hit (class 4).
-    pub const MAGE_ROW: u32 = 0x3e4e;
-    pub const MAGE_SHIFT: u32 = 0x3ef8;
     /// 0x3fea (PC): pointers to the enemy attack scales by game setting (`A5+0x70`).
     pub const ENEMY_SCALE: u32 = 0x3fea;
-    /// 0x406d (PC): number of 1/32 slices removed according to protection (`+0x108`).
-    pub const PROTECTION: u32 = 0x406d;
     /// 0x40aa and 0x416a (data): at low HP, by (class, HP): 1/32 slices removed.
     pub const LOW_HP_SHIELD: [u32; 2] = [0x40aa, 0x416a];
-    /// 0x3936 / 0x3954 (PC): thief's loot: probability per level, draw masks.
-    pub const LOOT_LEVEL: u32 = 0x3936;
-    pub const LOOT_MASK: u32 = 0x3954;
     /// 0x39d8 (data): possible loot (8 bytes per type: 2 entries of 4 bytes).
     pub const LOOT: u32 = 0x39d8;
 }
@@ -42,7 +31,7 @@ pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
     let line = base.wrapping_sub(1).min(4) as u8;
     let line = (line << 5) as u16;
     let d0 = w.random() & 0x1f;
-    let delta = w.prog8(table::ROLL + (d0 + line) as u32) as i8 as i16 as u16;
+    let delta = player_data().damage_roll.at8(w.b, (d0 + line) as u32) as i8 as i16 as u16;
     base.wrapping_add(delta)
 }
 
@@ -71,13 +60,13 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
     cov::hit("player_damage");
     let kind = p.u8(w.b, f::ATTACK_KIND);
     let mut d5: u16 = match kind {
-        0 => p.u8(w.b, 0x109) as u16,
-        1 => p.u8(w.b, 0x10a) as u16,
+        0 => p.u8(w.b, Player::POWER_A) as u16,
+        1 => p.u8(w.b, Player::POWER_B) as u16,
         2 => 0,
         _ => return show_damage(w, p, 0, DamageDisplay::Dealt),
     };
     if kind != 2 {
-        if p.u8(w.b, 0x79) != 0 {
+        if p.u8(w.b, Player::POWERUP) != 0 {
             let half = (d5 as u8) >> 1;
             d5 = (d5 & 0xff00) | (d5 as u8).wrapping_add(half) as u16;
         }
@@ -88,7 +77,7 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
         d5 = 1;
     }
     d5 = roll_variation(w, d5);
-    d5 = d5.wrapping_add(p.u8(w.b, 0x100) as u16);
+    d5 = d5.wrapping_add(p.u8(w.b, Player::STATS) as u16);
     if (d5 as i16) < 0 {
         d5 = 1;
     }
@@ -99,7 +88,7 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
     if step == 0xc || step == 0x16 {
         d5 = d5.wrapping_add(d5 >> 1);
     } else {
-        p.set_u8(w.b, 0x77, 0);
+        p.set_u8(w.b, Player::MARK, 0);
         if p.u8(w.b, f::VARIANT) >> 1 == 4 {
             if let Some(d0) = mage_critical(w, p, e) {
                 return d0;
@@ -116,21 +105,21 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
 /// 0x3cb6..: critical hit of the classes other than the magician: +5 damage, flag `+0x77`.
 fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
     cov::hit("critical_hit");
-    if (p.u8(w.b, 0x3d) as i8) > 2 {
+    if (p.u8(w.b, Player::BUBBLE_ACTION) as i8) > 2 {
         return d5;
     }
     let mut row: u8 = if (p.u16(w.b, f::HP) as i16) > 16 { 0 } else { 16 };
     row = row.wrapping_add((w.random() & 15) as u8);
-    let row = w.prog8(table::CRIT_ROW + row as u32);
+    let row = player_data().damage_crit_row.at8(w.b, row as u32);
     if row == 0 {
         return d5;
     }
-    let mask = w.prog16(table::CRIT_MASK + row as u32);
+    let mask = player_data().damage_crit_mask.word_at(w.b, row as u32);
     let bit = w.random() & 15;
     if mask >> bit & 1 == 0 {
         return d5;
     }
-    p.set_u8(w.b, 0x77, 1);
+    p.set_u8(w.b, Player::MARK, 1);
     d5.wrapping_add(5)
 }
 
@@ -139,7 +128,7 @@ fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
 /// common computation continues (`None`).
 fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
     cov::hit("mage_critical");
-    if p.u8(w.b, 0x47) != 0x30 {
+    if p.u8(w.b, Player::BLOW_ID) != 0x30 {
         return None;
     }
     let mut row: u8 = if (p.u16(w.b, f::HP) as i16) > 16 { 0 } else { 16 };
@@ -147,17 +136,17 @@ fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
         row = row.wrapping_add(0x20);
     }
     row = row.wrapping_add((w.random() & 15) as u8);
-    let first = w.prog8(table::MAGE_ROW + row as u32) as i8;
+    let first = player_data().damage_mage_row.at8(w.b, row as u32) as i8;
     if first < 0 {
         return Some(show_damage(w, p, 1, DamageDisplay::Dealt));
     }
     let idx = (first as u16).wrapping_add(w.random() & 15);
-    let shift = w.prog8(table::MAGE_SHIFT + idx as u32) as i8;
+    let shift = player_data().damage_mage_shift.at8(w.b, idx as u32) as i8;
     if shift < 0 {
         return Some(show_damage(w, p, 1, DamageDisplay::Dealt));
     }
-    p.set_u8(w.b, 0x77, 1);
-    p.set_u8(w.b, 0x18e, 3);
+    p.set_u8(w.b, Player::MARK, 1);
+    p.set_u8(w.b, Player::MOVE_KIND, 3);
     let d0 = e.u16(w.b, f::HP_MAX).checked_shr(shift as u32 & 63).unwrap_or(0);
     Some(show_damage(w, p, d0, DamageDisplay::Dealt))
 }
@@ -166,18 +155,18 @@ fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
 /// (`+0x107`): +4 if weak, half if resistant.
 fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
     cov::hit("elemental");
-    let element = p.u8(w.b, 0x107);
+    let element = p.u8(w.b, Player::ELEMENT);
     if element == 0 {
         return d5;
     }
-    let weak = e.u8(w.b, 0x9e);
+    let weak = e.u8(w.b, f::WEAKNESS);
     if weak == 0 {
         return d5;
     }
     if element == weak {
         return d5.wrapping_add(4);
     }
-    if element == e.u8(w.b, 0x9f) {
+    if element == e.u8(w.b, f::WEAK_ELEMENT) {
         return d5 >> 1;
     }
     d5
@@ -196,13 +185,13 @@ fn party_bonus(w: &mut World, p: Obj, d5: u16) -> u16 {
         weapon = p.u8(w.b, f::WEAPON_10E);
     }
     let row = table::PARTY_BONUS + (weapon << 2) as u32;
-    let bonus = rd8(w.b, row + alive.wrapping_sub(2) as u32) as i8 as i16 as u16;
-    let floor = rd8(w.b, row + 3) as u16;
+    let bonus = byte(w.b, row + alive.wrapping_sub(2) as u32) as i8 as i16 as u16;
+    let floor = byte(w.b, row + 3) as u16;
     let d5 = d5.wrapping_add(bonus);
     if (d5 as i16) > floor as i16 {
         d5
     } else {
-        rd8(w.b, row + 3) as i8 as i16 as u16
+        byte(w.b, row + 3) as i8 as i16 as u16
     }
 }
 
@@ -260,28 +249,28 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
     let setting = ram::DAMAGE_SETTING.get(w.b);
     let table = {
         let at = table::ENEMY_SCALE + 2 * setting as u32;
-        w.prog16(at) as u32 * 0x10000 + w.prog16(at + 2) as u32
+        pc16(w.b, at) as u32 * 0x10000 + pc16(w.b, at + 2) as u32
     };
     let tick = ram::TICK.get(w.b);
-    let mut d5 = rd8(w.b, table + tick as u32) as i8 as i16 as u16;
+    let mut d5 = byte(w.b, table + tick as u32) as i8 as i16 as u16;
     d5 = d5.wrapping_add(atk.u8(w.b, f::POWER_A) as u16);
     d5 = if (d5 as i16) > 0 { roll_variation(w, d5) } else { 1 };
-    let defense = p.u8(w.b, 0x10b) as u16;
+    let defense = p.u8(w.b, Player::DEFENSE) as u16;
     let (diff, borrow) = d5.overflowing_sub(defense);
     d5 = if !borrow && diff != 0 { diff } else { 1 };
     // reduction by 1/32 slices (n slices => d5 -= d5 * n / 32)
     let slices = if (p.u16(w.b, f::HP) as i16) > 0x20 {
-        let prot = p.u8(w.b, 0x108);
+        let prot = p.u8(w.b, Player::PROTECTION);
         if (prot as i8) >= 9 {
             None
         } else {
-            Some(w.prog8(table::PROTECTION + prot as u32))
+            Some(player_data().damage_protection.at8(w.b, prot as u32))
         }
     } else {
         let class = (p.u8(w.b, f::VARIANT) >> 1) as u16;
         let idx = (class << 5).wrapping_sub(1).wrapping_add(p.u16(w.b, f::HP));
         let t = table::LOW_HP_SHIELD[(ram::DAMAGE_SETTING.get(w.b) == 6) as usize];
-        let n = rd8(w.b, t.wrapping_add(idx as i16 as i32 as u32));
+        let n = byte(w.b, t.wrapping_add(idx as i16 as i32 as u32));
         if n == 0 {
             None
         } else {
@@ -306,18 +295,18 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     if p.u8(w.b, f::VARIANT) >> 1 != 5 {
         return;
     }
-    let loot = e.u8(w.b, 0x81) as u32;
+    let loot = e.u8(w.b, Enemy::LOOT) as u32;
     if loot == 0 {
         return;
     }
     let entry = table::LOOT + (loot << 3) + ((w.random() & 1) as u32) * 4;
-    let weight = rd8(w.b, entry + 2).wrapping_add(rd8(w.b, entry + 3));
-    let level = p.u8(w.b, 0x10c) as u32;
-    let mut chance = w.prog8(table::LOOT_LEVEL + level).wrapping_sub(weight);
+    let weight = byte(w.b, entry + 2).wrapping_add(byte(w.b, entry + 3));
+    let level = p.u8(w.b, Player::LEVEL) as u32;
+    let mut chance = player_data().damage_loot_level.at8(w.b, level).wrapping_sub(weight);
     if (chance as i8) < 0 {
         chance = 0;
     }
-    let mask = (w.prog16(table::LOOT_MASK + 4 * chance as u32) as u32) << 16 | w.prog16(table::LOOT_MASK + 4 * chance as u32 + 2) as u32;
+    let mask = (player_data().damage_loot_mask.word_at(w.b, 4 * chance as u32) as u32) << 16 | player_data().damage_loot_mask.word_at(w.b, 4 * chance as u32 + 2) as u32;
     let bit = w.random() & 0x1f;
     if mask >> bit & 1 == 0 {
         return;
@@ -326,14 +315,14 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     w.a2 = e.0;
     let Some(item) = pools::ITEM.alloc(w.b) else { return };
     item.set_u8(w.b, f::ACTIVE, 1);
-    let (kind, var) = (rd8(w.b, entry), rd8(w.b, entry + 1));
+    let (kind, var) = (byte(w.b, entry), byte(w.b, entry + 1));
     item.set_u8(w.b, f::KIND, kind);
     item.set_u8(w.b, f::VARIANT, var);
     let (x, z, y) = (e.u16(w.b, f::X), e.u16(w.b, f::Z), e.u16(w.b, f::Y));
     item.set_u16(w.b, f::X, x);
     item.set_u16(w.b, f::Z, z.wrapping_add(16));
     item.set_u16(w.b, f::Y, y.wrapping_sub(1));
-    item.set_u16(w.b, 0x18, 0x300);
-    item.set_u16(w.b, 0x1a, 0xffd8);
-    e.set_u8(w.b, 0x81, 0);
+    item.set_u16(w.b, Obj::VZ, 0x300);
+    item.set_u16(w.b, Obj::AZ, 0xffd8);
+    e.set_u8(w.b, Enemy::LOOT, 0);
 }

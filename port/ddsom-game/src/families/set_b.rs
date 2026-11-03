@@ -19,7 +19,6 @@ use crate::families::set::vars;
 pub mod fields;
 use crate::player::Player;
 use crate::families::set_b::fields::DoorObj;
-use crate::families::set::fields::PlayerFields;
 
 /// The four player records: A5+0x5de, 0x200 bytes each.
 const PLAYERS: u32 = crate::ram::PLAYERS.base;
@@ -350,7 +349,7 @@ fn release_players<R: Bench>(x: &mut Cx<'_, R>) {
 /// (`+0x66`, `+0x15c`, `+0x8a`), key `bit` of `input`, state 2 (walking or stopped), on the ground, within 0x10 in X
 /// and 8 in depth (except `+0x1b`).
 fn at_gate<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u32, counter: u32) {
-    let busy = p.u8(x.b, Player::SLOW).wrapping_add(p.u8(x.b, PlayerFields::SPECIAL_ACTIVE)).wrapping_add(p.u8(x.b, Player::SLOW_8A));
+    let busy = p.u8(x.b, Player::SLOW).wrapping_add(p.u8(x.b, Player::SPECIAL_ACTIVE)).wrapping_add(p.u8(x.b, Player::SLOW_8A));
     let bit = x.u8(DoorObj::KEY) as u32 & 31;
     let state = p.u32(x.b, pl::STATE) & 0xffff_ff00;
     let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x10);

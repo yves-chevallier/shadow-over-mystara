@@ -1,7 +1,8 @@
+use crate::player::Player;
 use super::*;
 use crate::data::RomAddr;
 use crate::families::shell::vars;
-use crate::families::shell::records::{Base, PlayerView};
+use crate::families::shell::records::{Base};
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
@@ -16,16 +17,16 @@ pub(super) fn equipment_bonus<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, field::OWNER);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 0x24) {
-        return player.set_u8(ctx.b, PlayerView::GLOW_SHIELD, 0x14);
+        return player.set_u8(ctx.b, Player::GLOW_SHIELD, 0x14);
     }
     if !(variant != 0x25) {
-        return player.set_u8(ctx.b, PlayerView::GLOW_WEAPON, 0x14);
+        return player.set_u8(ctx.b, Player::GLOW_WEAPON, 0x14);
     }
     if !(variant != 0x26) {
-        player.set_u8(ctx.b, PlayerView::GLOW_RING, 0x14);
+        player.set_u8(ctx.b, Player::GLOW_RING, 0x14);
     }
     if !(variant != 0x27) {
-        player.set_u8(ctx.b, PlayerView::GLOW_OTHER, 0x14);
+        player.set_u8(ctx.b, Player::GLOW_OTHER, 0x14);
     }
 }
 

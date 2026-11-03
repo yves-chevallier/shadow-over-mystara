@@ -19,6 +19,7 @@
 //! here (`go`). Animations: 0x172794 (body), 0x1727d4 (attacks), 0x1727e4 (hits received).
 
 use crate::families::cx::Bench;
+use crate::player::Player;
 use crate::data::RomAddr;
 use crate::record::record;
 use super::boss_common::*;
@@ -267,7 +268,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7c2de: first hit (a grabbable target receives hit 4).
 fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    let s = if Prey(t).grounded(x.b) != 0 { 0x0204_0400 } else { 0x0204_0000 };
+    let s = if t.u8(x.b, Player::SLOW) != 0 { 0x0204_0400 } else { 0x0204_0000 };
     x.set8(Boss::HIT_FLAGS, 0);
     state(x, false, s);
 }
@@ -275,7 +276,7 @@ fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7c304: second hit (or hit 6 against a grabbable target).
 fn strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
-    let s = if Prey(t).grounded(x.b) != 0 { 0x0204_0600 } else { 0x0204_0200 };
+    let s = if t.u8(x.b, Player::SLOW) != 0 { 0x0204_0600 } else { 0x0204_0200 };
     x.set8(Boss::HIT_FLAGS, 0);
     state(x, false, s);
 }

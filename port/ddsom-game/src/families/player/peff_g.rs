@@ -1,11 +1,15 @@
 //! Player effects (PEFF), seventh series: types 21 to 23 (hit spark, end-of-prayer smoke, prayer glow). See
 //! `docs/families/joueur.md`.
 
+use crate::families::player::records::Shot;
+use crate::player::Player;
+use crate::objects::Obj;
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
+use crate::player::tables::{player_data, Aligned, Read};
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -16,48 +20,53 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod hit_spark {
     use super::*;
 
-    const ANIMS: u32 = 0x1bb146;
+    /// Gesture of the player when the spark was created.
+    const GESTURE: u32 = 0x5c;
+    /// Blinking phase.
+    const BLINK: u32 = 0x5d;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb146);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        let child = x.u8(0x3) != 0;
-        match x.u8(0x4) {
+        let child = x.u8(Obj::VARIANT) != 0;
+        match x.u8(Obj::STATE) {
             0 => {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
                 let owner = x.linked(f::OWNER);
-                let gesture = owner.u8(x.b, 0x7);
-                x.set8(0x5c, gesture);
+                let gesture = owner.u8(x.b, Player::STEP);
+                x.set8(GESTURE, gesture);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
-                x.add16(0x10, 0xffff);
+                x.add16(Obj::Y, 0xffff);
                 let (mut dx, mut dz) = (0x10u16, 0x22u16);
                 if child {
                     (dx, dz) = (-0x18i16 as u16, 0x36);
                 }
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
-                let n = x.u8(0x3) as u32;
-                x.anim(ANIMS, n);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
+                let n = x.u8(Obj::VARIANT) as u32;
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 if !child => {
                 x.anim_step();
-                x.set_bit(0x1, 1, true);
-                let v = x.u8(0x5d) ^ 1;
-                x.set8(0x5d, v);
+                x.set_bit(Obj::FLAGS, 1, true);
+                let v = x.u8(BLINK) ^ 1;
+                x.set8(BLINK, v);
                 if v == 0 {
-                    x.set_bit(0x1, 1, false);
+                    x.set_bit(Obj::FLAGS, 1, false);
                 }
                 let owner = x.linked(f::OWNER);
-                let gesture = owner.u8(x.b, 0x7);
-                if gesture != x.u8(0x5c) {
-                    x.add8(0x4, 2);
+                let gesture = owner.u8(x.b, Player::STEP);
+                if gesture != x.u8(GESTURE) {
+                    x.add8(Obj::STATE, 2);
                 }
             }
             2 => {
                 if x.anim_step() {
-                    x.add8(0x4, 2);
+                    x.add8(Obj::STATE, 2);
                 }
             }
             _ => x.free_peff(),
@@ -70,14 +79,15 @@ mod hit_spark {
 mod prayer {
     use super::*;
 
-    const ANIMS: u32 = 0x1bb240;
-    const DURATIONS: u32 = 0x4d45e;
-    const ANGLES: u32 = 0x4d5e6;
+    /// Lifetime (word).
+    const TIMER: u32 = 0x5c;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb240);
     const KIND: u8 = 0x16;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        let variant = x.u8(0x3);
-        match x.u8(0x4) {
+        let variant = x.u8(Obj::VARIANT);
+        match x.u8(Obj::STATE) {
             0 => match variant {
                 0 => init_halo(x),
                 1 => init_rays(x),
@@ -86,15 +96,15 @@ mod prayer {
             2 => match variant {
                 0 => {
                     x.anim_step();
-                    x.add16(0x5c, 0xffff);
-                    if x.u16(0x5c) == 0 {
-                        x.add8(0x4, 2);
+                    x.add16(TIMER, 0xffff);
+                    if x.u16(TIMER) == 0 {
+                        x.add8(Obj::STATE, 2);
                     }
                 }
                 1 => rays(x),
                 _ => {
                     if x.anim_step() {
-                        x.add8(0x4, 2);
+                        x.add8(Obj::STATE, 2);
                     }
                 }
             },
@@ -103,98 +113,98 @@ mod prayer {
     }
 
     fn init_halo<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x4, 2);
+        x.add8(Obj::STATE, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
-        x.add16(0x8, 0);
-        x.add16(0xc, 0x37);
-        x.add16(0x10, 0xffff);
-        if owner.u8(x.b, 0x15e) == 0x24 {
-            x.add16(0x10, 2);
+        x.add16(Obj::X, 0);
+        x.add16(Obj::Z, 0x37);
+        x.add16(Obj::Y, 0xffff);
+        if owner.u8(x.b, Player::SPECIAL_KIND) == 0x24 {
+            x.add16(Obj::Y, 2);
         }
-        let class = owner.u8(x.b, 0x10c) as u32;
-        let life = x.rom16(DURATIONS + class * 2);
-        x.set16(0x5c, life);
-        x.anim(ANIMS, 0);
+        let class = owner.u8(x.b, Player::LEVEL) as u32;
+        let life = player_data().prayer_durations.word_at(x.b, class * 2);
+        x.set16(TIMER, life);
+        x.anim(ANIMS.0, 0);
         x.reinsert();
     }
 
     fn init_rays<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x2f) == 0 {
-            x.add8(0x4, 2);
+        if x.u8(Shot::SETTING) == 0 {
+            x.add8(Obj::STATE, 2);
             let owner = x.linked(f::OWNER);
-            let life = owner.u16(x.b, 0x168).wrapping_sub(0x1e);
-            x.set16(0x5c, life);
+            let life = owner.u16(x.b, Player::ACTION_TIMER).wrapping_sub(0x1e);
+            x.set16(TIMER, life);
             return;
         }
-        x.add8(0x4, 2);
-        x.set16(0x5c, 0x28);
+        x.add8(Obj::STATE, 2);
+        x.set16(TIMER, 0x28);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
-        x.add16(0xc, 0x20);
+        x.add16(Obj::Z, 0x20);
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x43);
         x.move_by_table_xy();
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);
-        x.anim(ANIMS, 1);
+        x.anim(ANIMS.0, 1);
         x.reinsert();
     }
 
     fn init_glow<R: Bench>(x: &mut Cx<'_, R>) {
-        x.add8(0x4, 2);
+        x.add8(Obj::STATE, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
-        x.add16(0x8, 0);
-        x.add16(0xc, 0x37);
-        x.add16(0x10, 0xffff);
-        x.anim(ANIMS, 3);
+        x.add16(Obj::X, 0);
+        x.add16(Obj::Z, 0x37);
+        x.add16(Obj::Y, 0xffff);
+        x.anim(ANIMS.0, 3);
         x.reinsert();
     }
 
     fn rays<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x2f) == 0 {
-            x.add16(0x5c, 0xffff);
-            if x.u16(0x5c) == 0 {
-                x.add8(0x4, 2);
+        if x.u8(Shot::SETTING) == 0 {
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
+                x.add8(Obj::STATE, 2);
                 return;
             }
-            if x.u16(0x5c) & 7 == 0 {
+            if x.u16(TIMER) & 7 == 0 {
                 for rank in (0..5u32).rev() {
                     let Some(o) = x.alloc(&pools::PEFF) else { break };
-                    o.set_u8(x.b, 0, 1);
-                    o.set_u8(x.b, 2, KIND);
-                    o.set_u8(x.b, 3, 1);
-                    o.set_u8(x.b, 0x2f, 1);
+                    o.set_u8(x.b, Obj::ACTIVE, 1);
+                    o.set_u8(x.b, Obj::KIND, KIND);
+                    o.set_u8(x.b, Obj::VARIANT, 1);
+                    o.set_u8(x.b, Shot::SETTING, 1);
                     let owner = x.u16(f::OWNER);
                     o.set_u16(x.b, f::OWNER, owner);
-                    let angle = x.rom8(ANGLES + rank);
-                    o.set_u8(x.b, 0x2d, angle);
+                    let angle = player_data().prayer_angles.at8(x.b, rank);
+                    o.set_u8(x.b, Obj::SPEED_INDEX, angle);
                 }
             }
             return;
         }
-        x.set_bit(0x1, 1, true);
-        let d = x.u16(0x5c).wrapping_add(x.counter());
+        x.set_bit(Obj::FLAGS, 1, true);
+        let d = x.u16(TIMER).wrapping_add(x.counter());
         if d & 1 != 0 {
-            x.set_bit(0x1, 1, false);
+            x.set_bit(Obj::FLAGS, 1, false);
         }
-        if x.u8(0x5) == 0 {
-            x.add16(0x5c, 0xffff);
-            if x.u16(0x5c) == 0 {
-                x.add8(0x5, 2);
-                x.anim(ANIMS, 2);
+        if x.u8(Shot::SUB_STATE) == 0 {
+            x.add16(TIMER, 0xffff);
+            if x.u16(TIMER) == 0 {
+                x.add8(Shot::SUB_STATE, 2);
+                x.anim(ANIMS.0, 2);
             }
             x.anim_step();
             x.move_by_table_xy();
             x.reinsert();
         } else {
             if x.anim_step() {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
             }
             x.move_by_table_xy();
             x.reinsert();
@@ -206,30 +216,33 @@ mod prayer {
 mod glow {
     use super::*;
 
-    const ANIMS: u32 = 0x1bb402;
+    /// Gesture of the player when the glow was created.
+    const GESTURE: u32 = 0x5d;
+
+    const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x1bb402);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-        match x.u8(0x4) {
+        match x.u8(Obj::STATE) {
             0 => {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
                 follow_owner(x);
                 let (mut dx, mut dz) = (0x13u16, 0x2du16);
-                if x.u8(0x3) != 0 {
+                if x.u8(Obj::VARIANT) != 0 {
                     (dx, dz) = (-0x69i16 as u16, 0x3a);
                 }
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
-                x.add16(0x8, dx);
-                x.add16(0xc, dz);
-                x.add16(0x10, 0xffff);
-                let n = x.u8(0x3) as u32;
-                x.anim(ANIMS, n);
+                x.add16(Obj::X, dx);
+                x.add16(Obj::Z, dz);
+                x.add16(Obj::Y, 0xffff);
+                let n = x.u8(Obj::VARIANT) as u32;
+                x.anim(ANIMS.0, n);
                 x.reinsert();
             }
             2 => {
                 let owner = x.linked(f::OWNER);
-                let gesture = owner.u8(x.b, 0x7);
-                if gesture != x.u8(0x5d) {
-                    x.add8(0x4, 2);
+                let gesture = owner.u8(x.b, Player::STEP);
+                if gesture != x.u8(GESTURE) {
+                    x.add8(Obj::STATE, 2);
                 }
                 x.anim_step();
             }

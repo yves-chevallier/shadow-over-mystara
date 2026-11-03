@@ -7,7 +7,7 @@
 //! in an arc, like an ITEM 2 thrown by the player (mode `+0x2f` = 1, delay `+0x59`) that falls back and waits to be
 //! picked up again. If already worn, it yields only a score event.
 
-use crate::families::shell::records::PlayerView;
+use crate::player::Player;
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::tables::{tables, Read};
@@ -302,11 +302,11 @@ fn slot_4<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
         let variant = x.u8(f::VARIANT);
         return drop_old(x, player, variant);
     }
-    let old = player.u8(x.b, PlayerView::SLOT_4);
+    let old = player.u8(x.b, Player::WORN_4);
     if old == id {
         return already_worn(x);
     }
-    player.set_u8(x.b, PlayerView::SLOT_4, id);
+    player.set_u8(x.b, Player::WORN_4, id);
     if (old as i8) < 0 {
         return;
     }

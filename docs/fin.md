@@ -910,8 +910,8 @@ libre.
     `+0xa8` ; et le gabarit des boss 0, 1, 4, 6 — et 10, 17, 18, 21 — `ANIM_KIND`/`ANIM_LAST` `+0xa0/+0xa1`,
     `SAVED_STATE`, `TIMER`/`TIMER2`, `PHASE`/`PHASES`, `INVULNERABLE` `+0xad`, `MARK_X` `+0xbc`), `Message` (fin d'un
     message de scène `+0x22`) ; `boss_common::warrior::Warrior` (gabarit des deux guerriers noirs, boss 7 et 8) ; un
-    `record!` par boss dans son `mod.rs` (`Boss0`..`Boss9`) pour le reste ; `Salvo` (tir ESHL 0x2a du boss 6). `Prey`
-    complété (`GROUNDED` `+0x66`, `RELEASED` `+0x6f`, `HOLDER` `+0x186`), champs du maître des doubles par
+    `record!` par boss dans son `mod.rs` (`Boss0`..`Boss9`) pour le reste ; `Salvo` (tir ESHL 0x2a du boss 6). champs du
+    joueur tenu par `player::Player` (`SLOW` `+0x66`, `TIMER_6F` `+0x6f`, `HOLDER_ENEMY` `+0x186`, `HELD`), champs du maître des doubles par
     `enemy_double::Double`, rang des pièces par `enemy_dbeast::DisplacerBeast::PART`. Variables :
     `boss_common::vars` (réexporte `enemy_common::vars` ; `STAGE_CLOCK` `A5+0x38`, `PLAYERS_FROZEN` `A5+0x42`,
     `BOSS_FIGHT` `A5+0x50`, `CAMERA_MODE`, `PREV_CAMERA_X/Y`, `FADE_*`, `SCENE_STEP`, `BODY_OWNER` `A5-0x5fb2`,
@@ -946,7 +946,7 @@ libre.
   * les tables de réactions des boss 10, 11, 16, 17, 19, 21, 22 sont déjà déclarées (`reactions/boss_*`) :
     `reaction_routine(x, REACTIONS)`.
 
-**L10. Joueurs** (grand)
+**L10. Joueurs** (grand) — **fait** (branche `wt-l10-joueurs`, voir « Résultat »)
 * Périmètre : `player/`, `families/player/`, `combat/`, `combat.rs`.
 * (a) `player/hurt.rs` (1 761 lignes), `cinematics.rs` (1 733), `moves.rs` (1 376) et `characters/*.rs` (cinq
   fichiers de plus de 1 100 lignes).
@@ -956,6 +956,63 @@ libre.
 * (c) 2 545 décalages littéraux, dont 2 350 dans `families/player/`. Le `record!` `Player` (0x200 octets) est commun :
   il est déclaré dans `world` par L1, et L10 en est le seul rédacteur pendant la vague.
 * Fin : comme L5, plus `fuzz_player` et `fuzz_player_shots` sans nouvel écart.
+* Résultat :
+  * (a) Découpage (114716e) : `player/hurt.rs` en `hurt/` (`mod`, `throws` : réactions simples, projections,
+    chutes, relevés ; `seizures` : réactions à automate propre, 0x22 à 0x3e), `cinematics.rs` en `cinematics/`
+    (`mod`, `endings` : fins de scène ; `entries`, `entries_late` : entrées en scène), `moves.rs` en `moves/`
+    (`mod`, `climb`, `poses`, `leaps`), `characters/{magic_user,cleric,elf,common}.rs` en dossiers (`spells`,
+    `conjurations`, `turning`, `prayers`, `jumps`, `strikes`). Plus gros fichier de ces découpages 617 lignes ;
+    `examples/names` identique ; `player/cov.rs` suit les nouveaux modules (`pub(super) fn` compris). 308/308
+    VALID (mode par défaut).
+  * (b) Données : **nouveau `data/player_tables.json`** (`ddsom-data/src/player_tables.rs`, `PlayerTables`, macro
+    `tables!` ; `extract/src/player_tables.rs` ; `rebuild::put_named` ; test `player_tables_lossless` ; `to_data`
+    étendu), 311 tables nommées par leur lecteur, et **`data/players.json` et `data/combat.json` branchés** (chargés
+    dans `GameData::players`/`combat`, comme `dialogs` au lot L6). Lecture par `player/tables.rs` : par nom
+    (`player_data().hurt_animations`, `players("hp_by_level")`, `combat("shot_guard")`) ou, quand le code passe
+    l'adresse d'une table (tables de pas des réactions et des cinématiques, tables par personnage, lignes désignées
+    par une autre table), par adresse (`pc8/16/32` en espace programme, `byte/word/long` en espace données) dans
+    les tables des joueurs, de `players.json`, `combat.json`, puis les vitesses et les boîtes de collision de
+    `sprites/tables.json` ; une adresse de RAM passe au bus. Les mots et longs sont lus à l'adresse arrondie au pair
+    comme le bus (`Aligned::word_at`/`long_at`) : sans cela `fuzz_player_shots` trouvait un nouvel écart (PEFF 11,
+    index impair tiré par le fuzz). Les tables de pas sont nommées par leur adresse (`hurt_steps_3a1fc`,
+    `cinematic_24138`) ; les réactions aux coups 0xf1cc4-0x101166 (`stun_chances`, `reaction_rows_*`,
+    `reaction_rows`), les combos (`combo_sequences` 0xf193a, `combo_gates` : immédiats des `move.l` relus comme
+    données), les trajectoires de l'anneau (`ring0_*`, `ring1_*`), les décalages des coquilles et effets
+    (`*_offsets`), les images des armes tenues (`overlay_frames` 0x1147ce-0x11bffa). `hand_offsets` est lu dans
+    `data().effects`. Lectures `rd*` de la ROM de la zone converties (palettes d'aura et de sortie, boîtes,
+    boucliers à faibles PV, butin). Glitchs gardés en données : mot du code relu comme minuterie
+    (`lightning_code_word`), saut hors table de la cinématique 0x24aba (`cinematic_24ad8` étendue à 0x24aea), lecture
+    de `+0x15e` au-delà d'un effet (`FOLLOWING_SPECIAL_KIND`).
+  * (c) Champs : **une seule fiche `Player`** (`player/mod.rs`, `record!`, 0x200 octets, ~110 champs nommés
+    d'après [joueur.md](joueur.md), (h) pour un sens deviné) ; les vues partielles des autres lots y sont
+    fusionnées et retirées : `PlayerView` des effets (L5) et des objets (L7), `PlayerFields` du SET (L6), `Prey`
+    des ennemis (L8b, `Player::HELD`) ; leurs usages remplacés mécaniquement (`Player::HP` pour `LIFE`,
+    `Player::RANK` pour `PHASE`/`ORDER`, `Player::INVULN` pour `RETURN_TIMER`/`DYING`...). Octets de travail de
+    l'action courante (`+0x1e8` et suivants) nommés d'après leur usage le plus courant (`ACTION_COUNT`,
+    `SPELL_LEVEL`, `SPELL_BLINKS`...). Tirs et effets des joueurs : vue `Shot` (`families/player/records.rs` :
+    sous-états, palette, orientation, réglage, attaque, propriétaire, drapeaux de coup), vue `Victim` (champs des
+    ennemis que lisent les sorts : `HIT_BY_KIND`, `DEATH_VALUE`, `BITES`...), champs propres à chaque type en
+    constantes nommées dans son module ; champs posés par les créateurs (`player/spawn.rs`, module `arg`) ; champs
+    des caisses et des faiblesses dans le module `f` de `combat.rs`. Variables A5 dans `families/player/vars.rs`
+    (`crate::ram` sinon), compteurs des pools par `pools::X.free_count`. Jeux d'animation, tables de vitesses et
+    routines d'origine en `RomAddr` (clés).
+  * Mesures (`measure_end.py`, zone `players`) : 57 → 75 fichiers, 29 018 → 29 981 lignes, accesseurs ROM
+    378 → 0, décalages littéraux 2 912 → 0, `A5 + littéral` 67 → 0, constantes d'adresses ROM 388 → 141 (adresses
+    de tables passées aux lecteurs par adresse et routines des aiguillages), `rd*`/`wr*` 383 → 349, fichiers de plus
+    de 1 500 lignes 2 → 0, plus gros fichier 1 759 → 916 lignes (`player/spawn.rs`).
+  * Fuzz (mêmes graines que main, `fuzz_player` fighter, cleric, elf, dwarf, mage, thief, spawn, player_action,
+    300 tours ; `fuzz_player_shots` PSHL et PEFF, 200 tours, bot30k) : sorties identiques à main (écarts déjà
+    connus de main seulement : PEFF 30, PSHL 18).
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; final (840f01c, main 6a340af fusionné, L8b compris) :
+    308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche),
+    `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; résidu sans aucune clé des joueurs dans les deux modes (restent les
+    clés d'images de L1) ; tests `ddsom-assets` (dont `player_tables_lossless`), `extract` (`to_data` : tables des
+    joueurs, `players.json`, `combat.json`), `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans
+    `tools` ; `examples/names` identique après (a). `mame_snapshots` non relancé (rendu non touché).
+  * Pour les lots suivants : la fiche `player::Player` est la seule vue des joueurs (`Player::of(obj)` pour un
+    objet désigné comme joueur) ; ses champs sont à lire par `p.hp(b)` ou `p.u8(b, Player::X)`. `families/player`
+    garde ses constantes de champs par type. Restent dans la zone 141 constantes d'adresses de tables lues par
+    adresse (à passer en `&Table` au lot L12 ou plus tard) et les lectures `rd*` de la RAM.
 
 **L11. Écrans** (moyen)
 * Périmètre : `modes/`, `hud/`, `service/`, `scene/`, `credits*.rs`, `text.rs`, `popups.rs`.
