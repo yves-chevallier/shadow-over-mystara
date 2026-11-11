@@ -15,7 +15,7 @@
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 /// FNV-1a 64 bits.
 struct Fnv(u64);
@@ -94,15 +94,16 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
     writeln!(out, "residue {residue}").unwrap();
 }
 
-/// The lines of a child process playing `scenario` in `mode`.
-fn child(mode: &str, a: &[String], scenario: &str, frames: usize) -> impl Iterator<Item = String> {
+/// A child process playing `scenario` in `mode`, and its lines.
+fn child(mode: &str, a: &[String], scenario: &str, frames: usize) -> (Child, impl Iterator<Item = String>) {
     let exe = std::env::current_exe().expect("executable");
     let mut c = Command::new(exe)
         .args(["--play", mode, &a[1], &a[2], &a[3], scenario, &frames.to_string()])
         .stdout(Stdio::piped())
         .spawn()
         .expect("child process");
-    BufReader::new(c.stdout.take().unwrap()).lines().map_while(Result::ok)
+    let lines = BufReader::new(c.stdout.take().unwrap()).lines().map_while(Result::ok);
+    (c, lines)
 }
 
 fn main() {
@@ -122,7 +123,7 @@ fn main() {
         let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
         let frames: usize = frames.parse().expect("frames");
         let t0 = std::time::Instant::now();
-        let (mut r, mut s) = (child("roms", &a, path, frames), child("assets", &a, path, frames));
+        let ((mut cr, mut r), (mut cs, mut s)) = (child("roms", &a, path, frames), child("assets", &a, path, frames));
         let mut verdict = None;
         let mut residue = (String::new(), String::new());
         for f in 1.. {
@@ -151,6 +152,11 @@ fn main() {
                     break;
                 }
             }
+        }
+        // a child stopped early by a difference is not waited for
+        for c in [&mut cr, &mut cs] {
+            let _ = c.kill();
+            let _ = c.wait();
         }
         let verdict = verdict.unwrap_or(format!("IDENTICAL over {frames} frames"));
         println!("{path} : {verdict}; {} (ROMs), {} (assets) ({:.1?})", residue.0, residue.1, t0.elapsed());

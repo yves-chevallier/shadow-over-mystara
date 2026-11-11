@@ -46,7 +46,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: 0 }
 }
 
-/// End of the scene palette loader 0x1a36c: enough to rebuild the registers of the original.
+/// End of the scene palette loader 0x1a36c: enough to restore the registers of the original.
 struct StageEnd {
     /// Next destination (A4).
     dst: u32,

@@ -1143,6 +1143,13 @@ fn main() {
             println!("    {x}");
         }
     }
+    // reads outside the typed tables by the natives (docs/fin.md, L14: `Residue`)
+    let residue = ddsom_game::data::residue();
+    println!(
+        "residue: {} reads of the program ROM outside the typed tables{}",
+        residue.iter().map(|r| r.1).sum::<u64>(),
+        residue.iter().map(|(m, n)| format!(", {} {:#x} ×{n}", m.table, m.key)).collect::<String>()
+    );
     let trials: u64 = e.targets.values().map(|c| c.summary.tests).sum();
     if trials == 0 {
         println!("FUZZ FAILED: no trial compared with the original");
