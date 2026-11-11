@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::scene::tally` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::tally` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::tally::*;
+use crate::screens::scene::tally::*;
 use crate::Native;
-use crate::scene::Ctx;
-use crate::modes::Flow;
+use crate::screens::scene::Ctx;
+use crate::screens::modes::Flow;
 
 /// Original entry (exit sequences left in 68000).
 pub(crate) const TALLY: Native = Native {

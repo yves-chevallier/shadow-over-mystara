@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::player::init` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::init` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::player::init::*;
+use crate::actors::player::init::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::player::{Ctx, Player};
+use crate::actors::player::{Ctx, Player};
 
 /// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
 /// table, D0 = last weapon number read, doubled if it is in the table).

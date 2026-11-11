@@ -1,9 +1,9 @@
-//! Tools: the natives of `crate::player::moves` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::moves` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::player::moves::*;
-use crate::player::Player;
+use crate::actors::player::moves::*;
+use crate::actors::player::Player;
 
 /// Natives of the characters' actions 0x12 (table `characters::Slot::Action12`): the Rust function receives
 /// the player (A0); the callers read no register.

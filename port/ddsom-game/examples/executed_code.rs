@@ -61,7 +61,7 @@ fn main() {
         m.step_hook = Some(Box::new(move |_: &m68k::Cpu, _: &cps2::Cps2Bus, pc: u32| {
             notes.borrow_mut().insert(pc);
         }));
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
+        let script = ddsom_game::core::scenario::Scenario::load(Path::new(path)).expect("scenario");
         for f in 0..frames {
             script.apply(f, &mut m);
             m.run_frame();

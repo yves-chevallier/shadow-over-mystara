@@ -1,10 +1,10 @@
-//! Tools: the natives of `crate::sprites` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::sprites` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::sprites::*;
+use crate::services::sprites::*;
 use crate::tools::frames::*;
 use crate::Native;
 
@@ -38,7 +38,7 @@ pub(crate) const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
 /// `rts` if `empty`.
 fn return_if(c: &mut Cpu, b: &mut cps2::Cps2Bus, empty: bool) -> bool {
     if empty {
-        c.pc = crate::mem::rd32(b, c.a[7]);
+        c.pc = crate::world::mem::rd32(b, c.a[7]);
         c.a[7] = c.a[7].wrapping_add(4);
     }
     empty

@@ -4,7 +4,7 @@
 
 use crate::world::World;
 
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// A state block, designated by its address.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

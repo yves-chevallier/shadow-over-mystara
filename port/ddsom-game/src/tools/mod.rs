@@ -57,7 +57,7 @@ use m68k::Cpu;
 pub use registry::{all_natives, game_natives, is_native};
 use registry::lookup;
 
-use crate::{mem, no68k, regs, tasks, Body, Native};
+use crate::{world::mem, core::frame, regs, core::tasks, Body, Native};
 
 /// Long of the program space (see `mem::prog16`): tables that the natives for the original code read in the ROM.
 pub(crate) fn prog32(b: &mut World, a: u32) -> u32 {
@@ -92,7 +92,7 @@ impl Native {
                 // called from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5) come from the
                 // registers and the leftovers return there; on the game machine they are also those of the task
                 // table. No table is created on a machine without one (the original's returns stay on its stack).
-                let mut a = crate::dispatch::Dispatch::from_cpu(c);
+                let mut a = crate::core::dispatch::Dispatch::from_cpu(c);
                 if let Some(t) = tasks::table::table_if(b) {
                     t.leftovers = a.leftovers;
                 }
@@ -415,13 +415,13 @@ pub(crate) fn call_in(c: &mut Cpu, b: &mut World, addr: u32) {
 }
 
 fn call_at_site(c: &mut Cpu, b: &mut World, addr: u32, site: &'static std::panic::Location<'static>) {
-    let _site = (TRACE.get().is_some() || no68k::active()).then(|| CallSite::enter(site, addr));
+    let _site = (TRACE.get().is_some() || frame::active()).then(|| CallSite::enter(site, addr));
     let before = (c.d, c.a, c.sr);
-    if no68k::active() {
+    if frame::active() {
         // the game: the native runs immediately; its `rts` returns to an expected call of the task (no PC, no 68000
         // stack)
         let n = lookup(addr).unwrap_or_else(|| panic!("call of {addr:06x} ({site}): no native"));
-        no68k::note(b, n);
+        frame::note(b, n);
         let frame = tasks::table::open_call(b);
         execute(n, c, b, 0);
         if tasks::has_ceded() || !tasks::table::call_returned(b, frame) {
@@ -643,9 +643,9 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
 /// reproduces in a fixed way.
 fn patches() -> Vec<cps2::Patch> {
     let mut v = vec![
-        cps2::Patch { entry: crate::player::scripted::END_BY_SCENE_ENTRY.0, apply: player::scripted::patch_end_by_scene },
-        cps2::Patch { entry: crate::scene::exit::SHARED_NEXT_ENTRY.0, apply: scene::exit::patch_shared_next },
-        cps2::Patch { entry: crate::service::memory::CHECK.0, apply: service::patch_instant_check },
+        cps2::Patch { entry: crate::actors::player::scripted::END_BY_SCENE_ENTRY.0, apply: player::scripted::patch_end_by_scene },
+        cps2::Patch { entry: crate::screens::scene::exit::SHARED_NEXT_ENTRY.0, apply: scene::exit::patch_shared_next },
+        cps2::Patch { entry: crate::screens::service::memory::CHECK.0, apply: service::patch_instant_check },
     ];
     v.extend(sprites::EMPTY_FRAME_PATCHES);
     v
@@ -752,7 +752,7 @@ fn original(n: &Native, c: &Cpu, b: &World) -> Cpu {
 /// address): the copy that runs the original receives a sentinel return address, and starts from the entry of the
 /// native (the bench PC is not maintained without a 68000: `call` does not set it).
 fn stack_for_original(n: &Native, c2: &mut Cpu, b2: &mut Cps2Bus) {
-    if no68k::active() {
+    if frame::active() {
         c2.a[7] = c2.a[7].wrapping_sub(4);
         mem::wr32(b2, c2.a[7], 0x00_fffe);
         c2.pc = n.entry;
@@ -769,7 +769,7 @@ fn checked(n: &Native) -> bool {
 
 fn check(n: &Native, c: &mut Cpu, b: &mut World) {
     // in the game, a native does not set a PC on return
-    let by_frame = no68k::active();
+    let by_frame = frame::active();
     let pre = if std::env::var("DDSOM_TRACE_ORIG").is_ok_and(|v| n.name == v) { Some((c.clone(), b.to_bus())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.to_bus();
@@ -873,9 +873,9 @@ const CHECK_STEPS: u32 = 1_000_000;
 /// the kernel, 0x900-0xb70) or whose Rust version ceded is not compared (`skipped`).
 pub(crate) fn check_handler(
     n: &'static Native,
-    handler: fn(&mut World, &mut crate::dispatch::Dispatch),
+    handler: fn(&mut World, &mut crate::core::dispatch::Dispatch),
     b: &mut World,
-    a: &mut crate::dispatch::Dispatch,
+    a: &mut crate::core::dispatch::Dispatch,
 ) {
     if !CHECK.load(Ordering::Relaxed) || !checked(n) {
         handler(b, a);

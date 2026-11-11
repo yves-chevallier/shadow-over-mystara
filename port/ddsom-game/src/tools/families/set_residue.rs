@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::families::set_residue` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::set_residue` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::set_residue::*;
+use crate::actors::families::set_residue::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// 0xd5f12: clears three columns of the tile buffer (44 rows each) for the scene exit.
 fn erase_columns(c: &mut Cpu, b: &mut World) {

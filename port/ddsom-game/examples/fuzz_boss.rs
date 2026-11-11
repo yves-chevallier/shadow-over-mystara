@@ -10,8 +10,8 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use ddsom_game::objects::pools::{BOSS, ENEMY, POOLS};
+use ddsom_game::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::world::objects::pools::{BOSS, ENEMY, POOLS};
 
 struct Rng(u64);
 
@@ -1010,7 +1010,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x62, [0u16, 1, 10, 40, 100][rng.next() as usize % 5]);
     // links: message (+0x42, +0xb0) to an effect slot; player who hit (+0x54)
     for l in [obj + 0x42, obj + 0xb0] {
-        let m = ddsom_game::objects::pools::EFFCT.slot(rng.next() % 3).0;
+        let m = ddsom_game::world::objects::pools::EFFCT.slot(rng.next() % 3).0;
         wr16(b, l, m as u16);
         wr8(b, m + 0x22, (rng.next() % 2) as u8);
         wr16(b, m + 4, [0x020a, 0x021e, 0x0202, 0][rng.next() as usize % 4]);
@@ -1059,7 +1059,7 @@ fn prep_6(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x46, ENEMY.slot(rng.next() % ENEMY.slots).0 as u16);
     wr8(b, obj + 0x32, (rng.next() % 2) as u8);
     // a linked shot for the attacks that drive it
-    let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
+    let shot = ddsom_game::world::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
     wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
@@ -1202,7 +1202,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 3, 0);
     wr8(b, obj + 7, step_11(rng, s.0, s.1, s.2));
     // rings: ranks 0 to 11 in the first twelve ESHL slots, the others empty
-    let esh = &ddsom_game::objects::pools::ESHL;
+    let esh = &ddsom_game::world::objects::pools::ESHL;
     for i in 0..esh.slots {
         let o = esh.slot(i).0;
         if i < 12 && s.0 != 0 {
@@ -1384,7 +1384,7 @@ fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
         &[0, 4, 0x1c, 0x20, 0x38, 0x44, 0x50, 0x5c, 0x9c, 0xa8]
     };
     wr8(b, obj + 0x49, pick(rng, codes));
-    let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
+    let shot = ddsom_game::world::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
     wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
@@ -1419,7 +1419,7 @@ fn prep_21(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0xaa, (rng.next() % 5) as u8);
     wr8(b, obj + 0xab, 4);
     wr8(b, A5 + 0x2e, pick(rng, &[0, 4]));
-    let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
+    let shot = ddsom_game::world::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
     wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
@@ -1459,7 +1459,7 @@ fn prep_10(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0xaa, (rng.next() % 0x400) as u16);
     wr16(b, obj + 0xac, (rng.next() % 0x200) as u16);
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 0xff]));
-    let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
+    let shot = ddsom_game::world::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xa8, shot as u16);
     wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
@@ -1507,7 +1507,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1598,7 +1598,7 @@ fn main() {
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
-                    ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                     for _ in 0..20_000 {
                         if c2.pc == 0xfffe {
                             break;
@@ -1638,7 +1638,7 @@ fn main() {
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
                         c2.pc = entry;
                         c2.a[7] = cs.a[7].wrapping_sub(4);
-                        ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                         for _ in 0..200_000 {
                             if c2.pc == 0xfffe {
                                 break;

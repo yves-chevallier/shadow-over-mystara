@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 
 use crate::world::World;
 
-use crate::data::{data, Missing, RomAddr};
+use crate::world::data::{data, Missing, RomAddr};
 
 /// Runs of contiguous bytes (start address, bytes) sorted by address.
 type Runs = Vec<(u32, Vec<u8>)>;
@@ -77,7 +77,7 @@ fn missing(a: u32) -> Missing {
 /// Byte of the data space at `a` (ROM table, or RAM).
 pub fn byte(b: &mut World, a: u32) -> u8 {
     if a & 0xff_ffff >= ROM_END {
-        return crate::mem::rd8(b, a);
+        return crate::world::mem::rd8(b, a);
     }
     bytes(false, a, 1).map_or_else(|| missing(a).read8(b, a), |v| v as u8)
 }
@@ -85,7 +85,7 @@ pub fn byte(b: &mut World, a: u32) -> u8 {
 /// Word of the data space at `a`.
 pub fn word(b: &mut World, a: u32) -> u16 {
     if a & 0xff_ffff >= ROM_END {
-        return crate::mem::rd16(b, a);
+        return crate::world::mem::rd16(b, a);
     }
     bytes(false, a, 2).map_or_else(|| missing(a).read16(b, a), |v| v as u16)
 }
@@ -93,7 +93,7 @@ pub fn word(b: &mut World, a: u32) -> u16 {
 /// Long of the data space at `a`.
 pub fn long(b: &mut World, a: u32) -> u32 {
     if a & 0xff_ffff >= ROM_END {
-        return crate::mem::rd32(b, a);
+        return crate::world::mem::rd32(b, a);
     }
     bytes(false, a, 4).unwrap_or_else(|| missing(a).read32(b, a))
 }

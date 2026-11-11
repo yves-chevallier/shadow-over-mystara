@@ -1,0 +1,514 @@
+//! Type 4, Owlbear attacks: substate 4 (0x5e086, ten attacks) and substate 6 (0x5e5d6, leaps).
+//!
+//! Each attack begins with the preparation (`+7 = 0`) and the gaze tracking (`+7 = 2`), then its own steps. The end of
+//! the attack calls `next_move`, which chains a charge or puts the beast back on its feet.
+
+use crate::actors::families::cx::Bench;
+use super::stance::{next_move, pursue_tail, ready, walk_begin};
+use super::*;
+use crate::world::objects::Current;
+use crate::world::objects::Obj;
+
+/// Series of repetitions of an attack, drawn from a table per difficulty level (0x5f5fa).
+const SERIES_TABLE: &str = "owlbear/series";
+/// Long states to resume after a turn-around: attacks (substate 4) or second series (6).
+const RESUME_STRIKES: u32 = 0x0204_0000;
+const RESUME_LEAPS: u32 = 0x0206_0000;
+
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => swipe(x),
+        2 => swipe_walk(x),
+        4 => leap(x),
+        6 => run_leap(x),
+        8 => charge(x),
+        10 => charge_b(x),
+        12 => leap_far(x),
+        14 => leap_high(x),
+        16 => rush(x),
+        18 => rush_b(x),
+        _ => {}
+    }
+}
+
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => {
+            set_state_long(x, ACTIVE_ENGAGE);
+            body(x, 2);
+            speed(x, 0xb);
+            pursue_tail(x);
+        }
+        2 => chain(x, RESUME_LEAPS, |x, n| match n {
+            4 => hop_begin(x),
+            6 => hop_wait(x),
+            8 => hop_land(x),
+            10 => hop_slide(x),
+            12 => hop_end(x),
+            _ => {}
+        }),
+        4 => chain(x, RESUME_LEAPS, |x, n| match n {
+            4 => run_toward_begin(x),
+            6 => run_toward(x),
+            _ => {}
+        }),
+        _ => {}
+    }
+}
+
+// --- common steps ----------------------------------------------------------------------------
+
+/// Preparation (`+7 = 0`), gaze tracking (`+7 = 2`), then `later(step)`.
+fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
+    match x.u8(Enemy::SUB_STEP) {
+        0 => ready(x),
+        2 => track(x, resume),
+        n => later(x, n),
+    }
+}
+
+/// 0x5e0ba / 0x5e624: follows the target with its gaze for `+0x77` frames.
+fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
+    if (n as i8) < 0 {
+        return x.add8(Enemy::SUB_STEP, 2);
+    }
+    x.set32(Owlbear::RESUME_STATE, resume);
+    let sub2 = x.u8(f::SUB2);
+    x.set8(Owlbear::RESUME_STEP, sub2);
+    turn_if_behind(x);
+    step(x);
+}
+
+/// Plays animation `n` of the attacks unless the series of repetitions is over.
+fn strike_play<R: Bench>(x: &mut Cx<'_, R>, want: u8, n: u32) {
+    if !matches!(replay(x, want), Replay::End) {
+        strike(x, n);
+    }
+}
+
+/// A wait before continuing (`+0xa0` frames), then next step.
+fn pause<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Owlbear::TIMER, frames);
+}
+
+/// Waits for the end of the delay while advancing (0x5e17e, 0x5e2ea).
+fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
+    if t != 0 {
+        step(x);
+        move_xy(x);
+    } else {
+        x.add8(Enemy::SUB_STEP, 2);
+    }
+}
+
+/// End of an attack: once the animation is over, the next attack.
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.anim_step() {
+        next_move(x);
+    }
+}
+
+// --- coup de patte (+6 = 0) ----------------------------------------------------------------------
+
+/// Start of a paw strike (0x5e0e0).
+fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Enemy::VULNERABLE, 0);
+    x.set8(Enemy::STRIKE_KIND, 0xe);
+    x.set8(Enemy::STRIKE_POWER, 5);
+    roll_series(x);
+    strike_play(x, 0xa, 0);
+}
+
+/// 0x5f5d8: draws the number of attacks of the series from the difficulty-level table.
+fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
+    let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
+    let r = rand_and(x, 0xf);
+    let n = tables::table(SERIES_TABLE).at8(x.b, level + r);
+    x.set8(Owlbear::SERIES, n);
+}
+
+/// End of a paw strike (0x5e132): next attack, or one more attack as long as the series lasts.
+fn swipe_end<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.anim_step() {
+        let n = x.u8(Owlbear::SERIES).wrapping_sub(1);
+        x.set8(Owlbear::SERIES, n);
+        if n == 0 {
+            return next_move(x);
+        }
+        strike(x, 0);
+    }
+}
+
+fn swipe<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => swipe_begin(x),
+        6 => swipe_end(x),
+        _ => {}
+    });
+}
+
+/// +6 = 2 (0x5e158): advances, then paw strike.
+fn swipe_walk<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => walk_begin(x),
+        6 => pause(x, 0x15),
+        8 => walk_on(x),
+        10 => swipe_begin(x),
+        12 => swipe_end(x),
+        _ => {}
+    });
+}
+
+// --- bonds (+6 = 4, 6, 12, 14) -------------------------------------------------------------------
+
+/// Start of a leap (0x5e1b2 / 0x5e1b8 / 0x5e1bc): X speed `vx` already set by the caller.
+pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(Enemy::SUB_STEP, 2);
+    leap_body(x);
+}
+
+/// Continuation of the start of a leap, the step having already advanced.
+fn leap_body<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set8(Enemy::STRIKE_KIND, 0xf);
+    x.set8(Enemy::STRIKE_POWER, 8);
+    x.set8(Enemy::VULNERABLE, 1);
+    if x.u8(f::FLIP) != 0 {
+        let vx = x.u16(Enemy::VX).wrapping_neg();
+        x.set16(Enemy::VX, vx);
+    }
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x400);
+    x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
+    strike_play(x, 0xc, 1);
+}
+
+fn leap_at<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
+    x.set16(Enemy::VX, vx as u16);
+    leap_begin(x);
+}
+
+/// 0x5e222: waits for the key frame of the jump.
+fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set8(Enemy::VULNERABLE, 0);
+    }
+    step(x);
+}
+
+/// End of a jump with ground impact (0x5e238): dust and recoil.
+fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
+    if !x.move_xz().gt() {
+        lib::sound(x, crate::hw::sound::CMD_326_426_B);
+        lib::sound(x, crate::hw::sound::CMD_329_429);
+        x.set32(Obj::Z, 0);
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set16(Obj::ANIM_TIMER, 1);
+        x.set8(Enemy::VULNERABLE, 1);
+        let v = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
+        x.set16(Enemy::AX, v as u16);
+    }
+    step(x);
+}
+
+/// Landing dust: 0xb10c8 with its four parameters.
+fn dust<R: Bench>(x: &mut Cx<'_, R>, d2: i16) {
+    lib::shock(x, 1, 1, d2 as u16, 0xffff);
+}
+
+/// Recoil slide (0x5e27a): dust every four steps, then stop.
+fn slide<R: Bench>(x: &mut Cx<'_, R>) {
+    let low = var::FRAME_COUNTER.get(x.b) & 3;
+    var::FRAME_COUNTER.set(x.b, low);
+    if low == 0 {
+        dust(x, -0x18);
+    }
+    if x.u8(Enemy::VX) != 0 {
+        x.move_x();
+        return;
+    }
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set32(Enemy::VX_LONG, 0);
+}
+
+/// End of an attack on the ground (0x5e2ae).
+fn leap_end<R: Bench>(x: &mut Cx<'_, R>) {
+    finish(x);
+}
+
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => leap_at(x, -0x200),
+        6 => leap_wait(x),
+        8 => leap_land(x),
+        10 => slide(x),
+        12 => leap_end(x),
+        _ => {}
+    });
+}
+
+/// +6 = 6 (0x5e2be): run-up on foot then leap.
+fn run_leap<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => walk_begin(x),
+        6 => pause(x, 9),
+        8 => walk_on(x),
+        10 => leap_at(x, -0x200),
+        12 => leap_wait(x),
+        14 => leap_land(x),
+        16 => slide(x),
+        18 => leap_end(x),
+        _ => {}
+    });
+}
+
+/// +6 = 12 (0x5e3e8) : grand bond.
+fn leap_far<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => {
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::VX, (-0x400i16) as u16);
+            leap_body(x);
+        }
+        6 => leap_wait(x),
+        8 => leap_land(x),
+        10 => slide(x),
+        12 => leap_end(x),
+        _ => {}
+    });
+}
+
+/// +6 = 14 (0x5e410): high jump, two landings.
+fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => {
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set8(Enemy::STRIKE_KIND, 0x10);
+            x.set8(Enemy::STRIKE_POWER, 0xa);
+            x.set16(Enemy::VX, (-0x400i16) as u16);
+            x.set8(Enemy::VULNERABLE, 1);
+            if x.u8(f::FLIP) != 0 {
+                let vx = x.u16(Enemy::VX).wrapping_neg();
+                x.set16(Enemy::VX, vx);
+            }
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, 0x300);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
+            strike_play(x, 0xe, 3);
+        }
+        6 | 10 => leap_wait(x),
+        8 => {
+            if !x.move_xz().gt() {
+                lib::sound(x, crate::hw::sound::CMD_326_426_B);
+                dust(x, -0x18);
+                x.set32(Obj::Z, 0);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Obj::ANIM_TIMER, 1);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set16(Enemy::VZ, 0x200);
+                x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
+            }
+            step(x);
+        }
+        12 => leap_land(x),
+        14 => slide(x),
+        16 => leap_end(x),
+        _ => {}
+    });
+}
+
+// --- courses (+6 = 8, 10, 16, 18) ------------------------------------------------------------------
+
+/// 0x5e318: takes a run-up running toward the wanted side.
+fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set8(Owlbear::TIMER, 0x42);
+    x.set8(Enemy::VULNERABLE, 1);
+    set_angle(x, 0x18, 8);
+    pose(x, 0x16, SET_BODY.0, 4);
+    speed(x, 8);
+}
+
+/// Back on guard and tests the range of the target (0x5e36a and similar).
+fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
+    set_state_long(x, ACTIVE_ENGAGE);
+    body(x, 2);
+    speed(x, 0xb);
+    super::stance::engage(x);
+}
+
+fn run_wait<R: Bench>(x: &mut Cx<'_, R>) {
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
+    if t == 0 {
+        return back_on_guard(x);
+    }
+    step(x);
+    move_xy(x);
+}
+
+/// +6 = 8 (0x5e304) : course.
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => run_begin(x),
+        6 => run_wait(x),
+        _ => {}
+    });
+}
+
+/// +6 = 10 (0x5e3a0): run then cry.
+fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => run_begin(x),
+        6 => {
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
+            if t == 0 {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(Owlbear::WANT_ANIM, 0x1c);
+                x.set8(Owlbear::CUR_ANIM, 0x1c);
+                return body(x, 0xc);
+            }
+            step(x);
+            move_xy(x);
+        }
+        8 => leap_end(x),
+        _ => {}
+    });
+}
+
+/// +6 = 16 and 18: stop in place then cry.
+fn rush_gen<'a, R: Bench>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) {
+    chain(x, RESUME_STRIKES, |x, n| match n {
+        4 => walk_begin(x),
+        6 => pause(x, 0x1f),
+        8 => {
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
+            if t == 0 {
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set8(Owlbear::TIMER, 0x1e);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Owlbear::WANT_ANIM, 6);
+                x.set8(Owlbear::CUR_ANIM, 6);
+                return body(x, 0);
+            }
+            step(x);
+            move_xy(x);
+        }
+        10 => last(x),
+        _ => {}
+    });
+}
+
+fn rush<R: Bench>(x: &mut Cx<'_, R>) {
+    rush_gen(x, back_on_guard);
+}
+
+fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
+    rush_gen(x, |x| {
+        let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+        x.set8(Owlbear::TIMER, t);
+        if t == 0 {
+            next_move(x);
+        } else {
+            step(x);
+        }
+    });
+}
+
+// --- second series (substate 6) ----------------------------------------------------------------
+
+/// 0x5e64a: small leap forward.
+fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(Enemy::SUB_STEP, 2);
+    let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };
+    x.set16(Enemy::VX, vx as u16);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Owlbear::WANT_ANIM, 0x1a);
+    x.set8(Owlbear::CUR_ANIM, 0x1a);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x200);
+    x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
+    body(x, 0xd);
+}
+
+/// 0x5e690: waits for the key frame of the small leap.
+fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(Enemy::SUB_STEP, 2);
+    }
+    step(x);
+}
+
+/// 0x5e6da: slide after the small leap; it lasts as long as the X speed stays positive.
+fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
+    let low = var::FRAME_COUNTER.get(x.b) & 3;
+    var::FRAME_COUNTER.set(x.b, low);
+    if low == 0 {
+        dust(x, -0x18);
+    }
+    if (x.u8(Enemy::VX) as i8) >= 0 {
+        x.move_x();
+        return;
+    }
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set32(Enemy::VX_LONG, 0);
+}
+
+/// 0x5e6a2: landing of the small leap, always followed by the slide.
+fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
+    x.move_xz();
+    lib::sound(x, crate::hw::sound::CMD_326_426_B);
+    lib::sound(x, crate::hw::sound::CMD_329_429);
+    x.set32(Obj::Z, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set16(Obj::ANIM_TIMER, 1);
+    let v = if x.u8(f::FLIP) != 0 { 0x1c } else { -0x1c };
+    x.set16(Enemy::AX, v as u16);
+    step(x);
+}
+
+/// 0x5e70e: end of the small leap, back on guard.
+fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.anim_step() {
+        set_state_long(x, ACTIVE_ENGAGE);
+        body(x, 2);
+        speed(x, 0xb);
+        pursue_tail(x);
+    }
+}
+
+/// 0x5e750: run toward the side of the target.
+fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(Enemy::SUB_STEP, 2);
+    let right = match target_dx(x) {
+        Some(dx) => dx >= 0,
+        None => false,
+    };
+    x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
+    x.set8(Owlbear::TIMER, 0x42);
+    x.set8(Enemy::VULNERABLE, 1);
+    pose(x, 0x16, SET_BODY.0, 4);
+    speed(x, 8);
+}
+
+/// 0x5e7b4: the run lasts `+0xa0` frames, then back on guard and the pursuit resumes.
+fn run_toward<R: Bench>(x: &mut Cx<'_, R>) {
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
+    if t == 0 {
+        set_state_long(x, ACTIVE_ENGAGE);
+        body(x, 2);
+        speed(x, 0xb);
+        return pursue_tail(x);
+    }
+    step(x);
+    move_xy(x);
+}

@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::modes::gameover` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::modes::gameover` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::modes::gameover::*;
+use crate::screens::modes::gameover::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::modes::Flow;
-use crate::scene::Ctx;
+use crate::screens::modes::Flow;
+use crate::screens::scene::Ctx;
 
 pub(crate) const PHASE_20: Native = Native {
     entry: 0x1c80c,

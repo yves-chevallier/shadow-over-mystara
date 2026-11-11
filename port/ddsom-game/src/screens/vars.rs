@@ -1,10 +1,10 @@
 //! Work RAM variables that several screens share (the others are declared in their module). A variable written with
 //! two widths (a camera position cleared as a long) is declared with its usual width; `Long(v.0)` gives the other.
 
-use crate::ram::{Byte, Long, Word};
+use crate::world::ram::{Byte, Long, Word};
 
 /// Video flags (word; bit 0 of the low byte `+0x13`: row scroll of layer 1) and image of the layer enable register.
-pub use crate::video::VIDEO_CONTROL as VIDEO_FLAGS;
+pub use crate::services::video::VIDEO_CONTROL as VIDEO_FLAGS;
 pub const VIDEO_FLAGS_LOW: Byte = Byte::a5(0x13);
 pub const LAYERS: Word = Word::a5(0x14);
 /// Cabinet type (number of players, h).

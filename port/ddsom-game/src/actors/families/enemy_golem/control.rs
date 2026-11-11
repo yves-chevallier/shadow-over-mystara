@@ -1,0 +1,77 @@
+//! Type 11, substates 0 and 2: the standing Golem, driven by the keys of the fourth player (`A5+3`). `+6` = 0 walk
+//! (d-pad: X, depth), button 4: strike, button 5: jump; `+6` = 2: arc jump.
+
+use crate::actors::families::cx::Bench;
+use super::*;
+use crate::world::objects::Current;
+use crate::world::objects::Obj;
+
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => walk(x),
+        2 => arc(x),
+        _ => {}
+    }
+}
+
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
+    let keys = x.a5_u8(3);
+    let mut moved = false;
+    if keys & 1 != 0 {
+        let at = x.u16(Obj::X).wrapping_add(3);
+        x.set16(Obj::X, at);
+        x.set8(f::FLIP, 0x20);
+        moved = true;
+    }
+    if keys & 2 != 0 {
+        let at = x.u16(Obj::X).wrapping_sub(3);
+        x.set16(Obj::X, at);
+        x.set8(f::FLIP, 0);
+        moved = true;
+    }
+    if keys & 8 != 0 {
+        let at = x.u16(Obj::Y).wrapping_add(3);
+        x.set16(Obj::Y, at);
+        moved = true;
+    }
+    if keys & 4 != 0 {
+        let at = x.u16(Obj::Y).wrapping_sub(3);
+        x.set16(Obj::Y, at);
+        moved = true;
+    }
+    // Original glitch: the buttons are re-read in D0, which the animation step (0x1a56) overwrites with byte `+0x32`
+    // when the current frame ends.
+    let mut buttons = keys;
+    // Original glitch: the "has moved" flag stays in D2 (`Leftovers`).
+    *x.c.d2() = moved as u32;
+    if moved {
+        let (ends, state) = (x.u16(Obj::ANIM_TIMER) == 1, x.u8(Enemy::ANIM_END));
+        x.anim_step();
+        if ends {
+            buttons = state;
+        }
+    }
+    if buttons & 0x10 != 0 {
+        return set_state_long(x, 0x0204_0000);
+    }
+    if buttons & 0x20 != 0 {
+        set_state_long(x, 0x0202_0200);
+    }
+}
+
+/// +6 = 2: arched jump (vertical speed 0x800).
+fn arc<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(f::SUB3) == 0 {
+        x.set32(Obj::VX, 0);
+        x.add8(f::SUB3, 2);
+        x.set16(Obj::VZ, 0x800);
+        x.set16(Obj::AZ, -0x40i16 as u16);
+        return;
+    }
+    x.move_xz();
+    if (x.u16(Obj::Z) as i16) > 0 {
+        return;
+    }
+    x.set32(Obj::Z, 0);
+    set_state_long(x, STANCE);
+}

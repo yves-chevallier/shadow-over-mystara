@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -144,7 +144,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();

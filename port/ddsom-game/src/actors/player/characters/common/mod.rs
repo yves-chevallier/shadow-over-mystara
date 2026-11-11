@@ -1,0 +1,494 @@
+//! Elements common to the code of the six characters (P5).
+//!
+//! Each character (fighter, cleric, elf, dwarf, magic-user, thief) has its own actions: jump,
+//! attack, special attack, action 0x10. They are written on the same model and share a
+//! toolbox that the original program stores at the end of the fighter's code (0x3f036-0x3fbb8):
+//! continuation of a strike, orientation, freezing of the other players, dust, darkening of
+//! the screen during a spell, end of spell. This toolbox is here.
+//!
+//! Vocabulary of the actions:
+//! - the action step (`Player::STEP`, always even) selects the automaton stage;
+//! - the animation script signals an event in `field::EVENT` (1: landed hit, 2: second gesture);
+//!   the action reads it then clears it;
+//! - sounds and effects are created by original routines called through `call`.
+
+use super::super::spawn;
+use super::super::actions::to_stand;
+use super::super::combos::clear_recognizers;
+use super::super::init::init_weapon_stats;
+use super::super::walk::{move_x, move_xz, move_z};
+use super::super::{animation, ram, Ctx, Player};
+use crate::world::mem::{wr16, wr8, A5};
+use crate::world::objects::Obj;
+use crate::actors::player::external as ext;
+use crate::actors::player::tables::{pc16, word};
+
+mod jumps;
+pub use jumps::*;
+mod strikes;
+pub use strikes::*;
+
+/// Bytes of the player record specific to the characters' actions.
+pub mod field {
+    /// Event set by the animation script: 1 landed hit (or throw), 2 second gesture.
+    pub const EVENT: u32 = 0x33;
+    /// Player effect to create at the end of the frame (variant number; 0: nothing).
+    pub const PENDING_EFFECT: u32 = 0x46;
+    /// Movement carried by the current attack (h): 1 the attack box stays active.
+    pub const MOVE_STATE: u32 = 0x18f;
+    /// Kind of the current movement (h): 1 jump or charge, 2 spinning attack.
+    pub const MOVE_KIND: u32 = 0x18e;
+    /// An attack has already been launched during this jump.
+    pub const AIR_ATTACK_DONE: u32 = 0x6b;
+    /// The player changed direction in the air (only once per jump).
+    pub const AIR_STEERED: u32 = 0x73;
+    /// Abscissa at takeoff (word).
+    pub const TAKEOFF_X: u32 = 0x80;
+    /// Strikes that landed during the attack: bit k = the strike of step k.
+    pub const HITS: u32 = 0x70;
+    /// Rank in the strike chain (0, 1, 2...).
+    pub const COMBO_RANK: u32 = 0x72;
+    /// Window (frames) during which the attack button must stay pressed to chain.
+    pub const COMBO_WINDOW: u32 = 0x74;
+    /// The attack button was released during the window.
+    pub const COMBO_RELEASED: u32 = 0x75;
+    /// Counter specific to the action (frames, gesture countdowns).
+    pub const TIMER: u32 = 0x168;
+    /// The other players are frozen by the spell (1); one on the ground or protected is not affected.
+    pub const SPELL_FROZEN: u32 = 0x16a;
+    /// Row chosen in the special attacks / items table (`checks::special_attack`).
+    pub const SPECIAL_KIND: u32 = 0x15e;
+    /// Row of the item in the equipment list currently in use (number 0x56: used up).
+    pub const ITEM: u32 = 0x140;
+    /// Remaining charges of the item currently in use.
+    pub const ITEM_CHARGES: u32 = 0x148;
+    /// New equipment to put on (swap item).
+    pub const ITEM_NEW: u32 = 0x15f;
+    /// The spell is cancelled (by a protection): only the failure spark is played.
+    pub const SPELL_CANCELLED: u32 = 0x189;
+    /// Target object created by the spell (word: address).
+    pub const SPELL_TARGET: u32 = 0x1ea;
+    /// The spell hits an ally in range (1) or only the caster (0): set by `heal_scan` and the blessing.
+    pub const AREA: u32 = 0x1ee;
+}
+
+/// Scene in which the shock effects (0xb10c8) are not created.
+const NO_SHOCK_SCENE: u8 = 41;
+
+/// Original routines called by these tools.
+pub mod rom {
+    /// Sound associated with the spark of `item_spark`.
+    pub const SPARK_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_18C;
+    /// Creation of a player effect (PEFF pool) of the type given by D0, according to the weapon.
+    pub const SPAWN_EFFECT: crate::world::data::RomAddr = crate::world::data::RomAddr(0x4c58e);
+    /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
+    pub const SCREEN_TASK_SLOT: u32 = 0x10;
+    /// Programs of the spell's screen tasks: darken and restore.
+    pub const DIM_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::PartialDescent);
+    pub const UNDIM_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::PartialRise);
+}
+
+/// ROM tables (PC-relative in the original).
+mod tables {
+    /// Running dust: (vx, vy) per class, four bytes.
+    pub const DUST_STAND: u32 = 0x3faac;
+    pub const DUST_RUN: u32 = 0x3fb02;
+    pub const DUST_JUMP: u32 = 0x3fb48;
+    /// Item sparks: rows of 8 bytes (D0, D1, D2, height) indexed by kind.
+    pub const SPARKS: u32 = 0x3fbb8;
+}
+
+/// Advances the action's automaton by one step (`addq.b #2,(7,A0)`).
+pub fn next_step(g: &mut Ctx, p: Player) {
+    let step = p.u8(g, Player::STEP).wrapping_add(2);
+    p.set_u8(g, Player::STEP, step);
+}
+
+/// Waits for the end of the animation then returns to the standing state.
+pub fn wait_then_stand(g: &mut Ctx, p: Player) {
+    cov!();
+    if animation::step(g, p) {
+        to_stand(g, p);
+    }
+}
+
+/// Animation step (0x2d58) with the D0.b that the original leaves, which some routines called afterwards read as a
+/// parameter of the created effect (original glitch; `DDSOM_POISON=anim`: long_3p_mortels, frame 22018): the flags of
+/// the entry left behind when the duration runs out, otherwise `d0`, the value of D0.b before the call, inherited from
+/// the original dispatch (the action step for the table actions, twice the special attack number for the others).
+/// Returns (end of the script, D0.b).
+pub fn step_with_d0(g: &mut Ctx, p: Player, d0: u8) -> (bool, u8) {
+    cov!();
+    let o = p.obj();
+    let entry_ends = o.u16(g.b, Obj::ANIM_TIMER) == 1;
+    let flags = o.u8(g.b, Obj::ANIM_FLAGS);
+    let finished = crate::world::objects::anim::step(g.b, o, true).finished();
+    (finished, if entry_ends { flags } else { d0 })
+}
+
+/// Plays the voice of the held weapon (D4 = `WEAPON_A`).
+pub fn weapon_voice(g: &mut Ctx, p: Player) {
+    cov!();
+    let weapon = p.u8(g, Player::WEAPON_A) as u32;
+    crate::hw::sound::play_with(g.b, crate::hw::sound::WEAPON_VOICE, crate::hw::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+}
+
+/// Plays the voice of the weapon held in the left hand (D4 = `WEAPON_B`, magic-user).
+pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
+    cov!();
+    let weapon = p.u8(g, Player::WEAPON_B) as u32;
+    crate::hw::sound::play_with(g.b, crate::hw::sound::WEAPON_VOICE, crate::hw::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+}
+
+/// Starts animation `n`, then plays the voice of the left-hand weapon (`WEAPON_B`, magic-user).
+pub fn start_with_voice_b(g: &mut Ctx, p: Player, n: u16) {
+    cov!();
+    animation::start_plain(g, p, n);
+    weapon_voice_b(g, p);
+}
+
+/// Starts animation `n` of the table without weapon offset, then plays the weapon voice.
+pub fn start_with_voice(g: &mut Ctx, p: Player, n: u16) {
+    cov!();
+    animation::start_plain(g, p, n);
+    weapon_voice(g, p);
+}
+
+/// The held weapon is one of the two weapons with a particular gesture (numbers 8 and 0x18) (h).
+pub fn holds_special_weapon(g: &mut Ctx, p: Player) -> bool {
+    matches!(p.u8(g, Player::WEAPON_A), 8 | 0x18)
+}
+
+/// The second equipment is of a heavy class (number ≥ 0x28).
+pub fn holds_heavy_second(g: &mut Ctx, p: Player) -> bool {
+    p.u8(g, Player::WEAPON_B) >= 0x28
+}
+
+/// End of the attack: if a single effect request is pending (`field::PENDING_EFFECT`), the matching player
+/// effect is created (0x4c58e).
+pub fn flush_pending_effect(g: &mut Ctx, p: Player) {
+    cov!();
+    let kind = p.u8(g, field::PENDING_EFFECT) as u32;
+    if kind != 0 {
+        p.set_u8(g, field::PENDING_EFFECT, 0);
+        spawn::weapon_trail(g, p, kind as u8);
+    }
+}
+
+/// Jump speed of type `kind` (0..3), read from the table `table`
+/// of the ROM: rows of four words (vx, ax, vz, az); the direction follows the orientation (0x3fb60).
+pub fn launch_jump(g: &mut Ctx, p: Player, table: u32, kind: u8) {
+    cov!();
+    let row = table + 8 * kind as u32;
+    for (i, off) in [0x14, 0x16, 0x18, 0x1a].into_iter().enumerate() {
+        let v = word(g.b, row + 2 * i as u32);
+        p.set_u16(g, off, v);
+    }
+    if p.u8(g, Player::FACING) == 0 {
+        negate_horizontal_speed(g, p);
+    }
+}
+
+/// `neg.l (0x14,A0)`: the long (speed, acceleration) is negated as a block.
+pub fn negate_horizontal_speed(g: &mut Ctx, p: Player) {
+    let v = p.u32(g, Obj::VX).wrapping_neg();
+    p.set_u32(g, Obj::VX, v);
+}
+
+/// The horizontal speed has changed direction relative to the facing (it is negative once oriented
+/// in the facing direction): the momentum is exhausted.
+pub fn momentum_reversed(g: &mut Ctx, p: Player) -> bool {
+    let v = p.u16(g, Obj::VX) as i16;
+    let along = if p.u8(g, Player::FACING) == 0 { v.wrapping_neg() } else { v };
+    along < 0
+}
+
+/// Horizontal drift of a jump (except a jump in place): the character advances in X; if it changed
+/// direction in the air (`AIR_STEERED`), it no longer moves until it has returned to its starting point.
+pub fn drift(g: &mut Ctx, p: Player) {
+    cov!();
+    let jump_kind = p.u8(g, Player::JUMP_KIND);
+    if jump_kind == 0 {
+        return;
+    }
+    if p.u8(g, field::AIR_STEERED) != 0 {
+        // the direction changed in the air: the momentum is resumed until back at the start
+        let travelled = p.u16(g, Obj::X).wrapping_sub(p.u16(g, field::TAKEOFF_X)) as i16;
+        let travelled = if (p.u16(g, Obj::AX) as i16) < 0 { travelled } else { travelled.wrapping_neg() };
+        if travelled < 0 {
+            return;
+        }
+    }
+    move_x(g, p);
+}
+
+/// 0x3e712 / 0x3fe88 / 0x422f8 / 0x45c54: in the air, a direction opposite to the facing turns the
+/// character around and gives a horizontal push of `push` (only once per jump).
+pub fn air_steer(g: &mut Ctx, p: Player, push: i16) {
+    cov!();
+    if p.u8(g, field::AIR_STEERED) != 0 || (p.u16(g, Obj::VZ) as i16) < 0 {
+        return;
+    }
+    let keys = p.u8(g, Player::KEYS_HELD) & 3;
+    if keys == 0 {
+        return;
+    }
+    let (facing, push): (u8, i16) = if keys & 1 != 0 { (0x20, push) } else { (0, -push) };
+    if facing == p.u8(g, Player::FACING) {
+        return;
+    }
+    p.flip(g);
+    p.set_u16(g, Obj::AX, push as u16);
+    p.set_u8(g, field::AIR_STEERED, 1);
+}
+
+/// Button 1 has just been pressed in the air and no strike has yet been given during this jump.
+pub fn air_attack_pressed(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    p.u8(g, field::AIR_ATTACK_DONE) == 0 && p.u8(g, Player::KEYS_NEW) & 0x10 != 0
+}
+
+/// 0x377a6: a cursed weapon that has been used too much (counter `A5+0x56` > 0x7f) falls: the player picks up
+/// weapon 0xd and goes to action 0x26. Called at the end of a jump.
+pub fn curse_check(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u8(g, Player::WEAPON_A) == 0xe && ram::CURSE_COUNT.get(g.b) > 0x7f {
+        p.set_u8(g, Player::WEAPON_A, 0xd);
+        p.set_state(g, 0x0200_2600);
+        wr8(g.b, A5.wrapping_sub(0x5b82), 1);
+    }
+}
+
+/// Aura that decreases with each aerial strike: at zero the aura goes out (0x3e7c6).
+pub fn aura_hit_countdown(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u8(g, Player::AURA) == 0 {
+        return;
+    }
+    let left = (p.u8(g, Player::AURA) - 1) & 3;
+    p.set_u8(g, Player::AURA, left);
+    if left == 0 {
+        p.set_u16(g, Player::AURA_TIMER, 0);
+        let flags = p.u8(g, Player::FLAGS) & !2;
+        p.set_u8(g, Player::FLAGS, flags);
+    }
+}
+
+/// 0x3f036: continuation of a strike. On the ground, a special attack requested with item 0x2d in hand
+/// (key 4) or a turn with button 1 pressed launches the turning attack (`turn_attack`).
+pub fn follow_up(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u16(g, Obj::Z) != 0 {
+        return;
+    }
+    if p.u8(g, Player::KEYS_NEW) & 0x80 != 0 && p.u8(g, Player::SPECIAL_ACTIVE) == 0 && p.u8(g, field::ITEM) == 0x2d
+        && turn_attack(g, p) {
+            return;
+        }
+    let keys = p.u8(g, Player::KEYS_HELD);
+    if keys & 3 == 0 {
+        return;
+    }
+    let wanted = if keys & 1 != 0 { 0x20 } else { 0 };
+    if wanted == p.u8(g, Player::FACING) || keys & 0x10 == 0 {
+        return;
+    }
+    turn_attack(g, p);
+}
+
+/// 0x3f082: turning attack, reserved for equipment of class 0x28..0x30; goes to action
+/// 0x16. Returns true if it starts.
+pub fn turn_attack(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    if holds_special_weapon(g, p) || p.u8(g, Player::WEAPON_B).wrapping_sub(0x28) > 8 {
+        return false;
+    }
+    p.set_state(g, 0x0200_1600);
+    true
+}
+
+/// 0x3f8d2: the orientation follows the held direction.
+pub fn face_held_direction(g: &mut Ctx, p: Player) {
+    cov!();
+    let dirs = p.u8(g, Player::KEYS_HELD) & 3;
+    if dirs == 0 {
+        return;
+    }
+    p.set_u8(g, Player::FACING, 0);
+    if dirs & 2 == 0 {
+        p.set_u8(g, Player::FACING, 0x20);
+    }
+}
+
+/// 0x3f8f0: the spell freezes the other living players (`SPELL_FROZEN`) and makes them visible.
+pub fn freeze_others(g: &mut Ctx, p: Player) {
+    cov!();
+    for q in Player::all() {
+        if q.u8(g, Player::ACTIVE) == 0 || q.u8(g, Player::POWER_10F) != 0 {
+            continue;
+        }
+        if q.u8(g, Player::MAIN) != 4 {
+            let flags = q.u8(g, Player::FLAGS) & !2;
+            q.set_u8(g, Player::FLAGS, flags);
+        }
+        q.set_u8(g, field::SPELL_FROZEN, (q != p) as u8);
+    }
+}
+
+/// Darkens or restores the screen: starts the screen task `program` (0x153e / 0x1536) after the
+/// fade 0x1686. `mode`: 1 darken, 2 restore.
+fn screen_task(g: &mut Ctx, mode: u16, program: crate::core::tasks::Task, fade: bool) {
+    ram::FADE_DELAY.set(g.b, mode);
+    ram::FADE_PAGES.set(g.b, 0xd);
+    ram::FADE_STEPS.set(g.b, 5);
+    if fade {
+        crate::services::palette::full_brightness(g.b);
+    }
+    // 0x9b6 (A0 = program, D0 = slot); the new task reads none of the registers it inherits (`DDSOM_POISON=new`)
+    crate::core::kernel::create_task(g.b, rom::SCREEN_TASK_SLOT, program);
+}
+
+/// 0x3f926: the spell begins, the screen darkens.
+pub fn dim_screen(g: &mut Ctx, _p: Player) {
+    cov!();
+    screen_task(g, 1, rom::DIM_TASK, true);
+}
+
+/// 0x3f954: the spell is over, the screen is restored.
+pub fn undim_screen(g: &mut Ctx, p: Player) {
+    cov!();
+    undim_screen_mode(g, p, 2);
+}
+
+/// Restores the screen with mode `mode`: the magic-user's code (0x48772) passes 1 instead of 2.
+pub fn undim_screen_mode(g: &mut Ctx, _p: Player, mode: u16) {
+    cov!();
+    screen_task(g, mode, rom::UNDIM_TASK, false);
+}
+
+/// Start of a spell (next action step): game pause (`A5+0x3d`), spell indicator (`A5+0x4a`),
+/// action duration (`field::TIMER`) if known from the start.
+pub fn begin_spell(g: &mut Ctx, p: Player, timer: Option<u16>) {
+    cov!();
+    next_step(g, p);
+    ram::PAUSE.set(g.b, 1);
+    ram::SPELL_FLAG.set(g.b, 1);
+    ram::SCROLL1_Y.set(g.b, 0);
+    if let Some(timer) = timer {
+        p.set_u16(g, field::TIMER, timer);
+    }
+}
+
+/// End of spell: lifts the pause and the freezes, restores the screen, return to the standing state.
+pub fn end_spell(g: &mut Ctx, p: Player) {
+    cov!();
+    end_spell_mode(g, p, 2);
+}
+
+/// `end_spell` with the character's screen restoration mode (see `undim_screen_mode`).
+pub fn end_spell_mode(g: &mut Ctx, p: Player, mode: u16) {
+    cov!();
+    clear_spell_state(g);
+    p.set_u8(g, field::SPELL_CANCELLED, 0);
+    undim_screen_mode(g, p, mode);
+    to_stand(g, p);
+}
+
+/// End of spell that does not touch the cancellation flag (the spell was not cancelled).
+pub fn end_spell_keep_cancel(g: &mut Ctx, p: Player) {
+    cov!();
+    end_spell_keep_cancel_mode(g, p, 2);
+}
+
+/// `end_spell_keep_cancel` with the character's screen restoration mode.
+pub fn end_spell_keep_cancel_mode(g: &mut Ctx, p: Player, mode: u16) {
+    cov!();
+    clear_spell_state(g);
+    undim_screen_mode(g, p, mode);
+    to_stand(g, p);
+}
+
+/// Falling back of the spell indicators: indicator and pause, chosen row, freeze of the four players.
+pub fn clear_spell_state(g: &mut Ctx) {
+    cov!();
+    ram::SPELL_FLAG.set(g.b, 0);
+    ram::PAUSE.set(g.b, 0);
+    ram::SPELL_ROW.set(g.b, 0);
+    for k in 0..4 {
+        Player::nth(k).set_u8(g, field::SPELL_FROZEN, 0);
+    }
+}
+
+/// One charge of the item in use is consumed; the last one uses it up (number 0x56).
+pub fn consume_charge(g: &mut Ctx, p: Player) {
+    cov!();
+    let left = p.u8(g, field::ITEM_CHARGES).wrapping_sub(1);
+    p.set_u8(g, field::ITEM_CHARGES, left);
+    if left == 0 {
+        p.set_u8(g, field::ITEM, 0x56);
+    }
+}
+
+/// Dust at the feet: effect 0xb10c8 with speeds read from a two-word-per-class table.
+fn dust(g: &mut Ctx, p: Player, table: u32) {
+    let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
+    let vx = pc16(g.b, table + 4 * class) as u32;
+    let vy = pc16(g.b, table + 2 + 4 * class) as u32;
+    // the speeds stay in D2 and D3 (leftovers of the original)
+    (g.leftovers.d2, g.leftovers.d3) = (vx, vy);
+    g.shock(p, 0, 0x101, vx as u16, vy as u16);
+}
+
+/// 0x3fa7c: dust of braking or walking (one frame out of four).
+pub fn dust_stand(g: &mut Ctx, p: Player) {
+    cov!();
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
+    if phase == 0 {
+        dust(g, p, tables::DUST_STAND);
+    }
+}
+
+/// 0x3fac4: dust of the charge, as long as the horizontal speed exceeds 2 pixels per frame.
+pub fn dust_run(g: &mut Ctx, p: Player) {
+    cov!();
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
+    if phase != 0 {
+        return;
+    }
+    let speed = (p.u16(g, Obj::VX) as i16).unsigned_abs();
+    if speed > 0x200 {
+        dust(g, p, tables::DUST_RUN);
+    }
+}
+
+/// 0x3fb1a: dust of the jump, every other frame (according to the player number).
+pub fn dust_jump(g: &mut Ctx, p: Player) {
+    cov!();
+    let phase = p.u8(g, Player::INDEX).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 1;
+    if phase == 0 {
+        dust(g, p, tables::DUST_JUMP);
+    }
+}
+
+/// 0x3fb8c: spark of the used item: effect 0xb10c8 described by row `kind` of the table
+/// 0x3fbb8, with a sound. No effect if the pool is full.
+pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
+    cov!();
+    let row = tables::SPARKS + 8 * kind as u32;
+    let (d0, d1, d2, height) = (pc16(g.b, row), pc16(g.b, row + 2), pc16(g.b, row + 4), pc16(g.b, row + 6));
+    // the speed and the height stay in D2-D4 (leftovers of the original)
+    crate::world::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+    g.leftovers.d4 = height as u32;
+    g.leftovers.d2 = d2 as u32;
+    match g.shock(p, d0 as u8, d1, d2, 0xffff) {
+        Some(spark) => wr16(g.b, spark.0 + 0x0c, height),
+        // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry clear) the
+        // height is written through the A1 left by the code before the action, and the sound is played. That A1 is
+        // not known here (no scenario plays it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu,
+        // partie 6").
+        None if crate::world::ram::SCENE.get(g.b) == NO_SHOCK_SCENE => {}
+        None => return,
+    }
+    g.sound(rom::SPARK_SOUND, p);
+}
+

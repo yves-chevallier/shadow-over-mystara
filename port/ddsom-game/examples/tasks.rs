@@ -1,6 +1,6 @@
 //! Task table at a given frame, in the original machine (records FF0064) and in the game (Rust
 //! table), then their differences: tasks <roms> <eeprom> <scenario> <frame>
-use ddsom_game::tasks::table::{gaps, record, read, Resume};
+use ddsom_game::core::tasks::table::{gaps, record, read, Resume};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -13,7 +13,7 @@ fn main() {
     let (mut original, game) = (load(), load());
     ddsom_game::install_reference(&mut original);
     let mut game = ddsom_game::install(game);
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     for f in 0..n {
         s.apply(f, &mut original);

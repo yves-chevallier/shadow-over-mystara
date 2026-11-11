@@ -6,7 +6,7 @@ fn main() {
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     ddsom_game::install_reference(&mut m);
     m.set_overclock(16.0);
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     let mut last = (0u16, 0u16, 0u16, 0u16);
     for f in 0..n {

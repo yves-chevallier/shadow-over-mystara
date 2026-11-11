@@ -11,7 +11,7 @@ fn main() {
     m.set_overclock(16.0);
     ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
-    let base = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let base = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let (s0, s1): (u32, u32) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let per: usize = a.get(6).map_or(500, |v| v.parse().unwrap());
     let rd8 = |m: &cps2::Machine, ad: u32| {
@@ -26,13 +26,13 @@ fn main() {
         f += 1;
     }
     let mut scene = s0;
-    ddsom_game::scenario::poke(&mut m, 0xff8034, scene, 1);
+    ddsom_game::core::scenario::poke(&mut m, 0xff8034, scene, 1);
     let mut since = 0;
     let mut seen = std::collections::BTreeSet::new();
     loop {
         base.apply(f, &mut m);
         for k in 0..2 {
-            ddsom_game::scenario::poke(&mut m, 0xff85de + 0x200 * k + 0x62, 0x70, 2);
+            ddsom_game::core::scenario::poke(&mut m, 0xff85de + 0x200 * k + 0x62, 0x70, 2);
         }
         m.run_frame();
         f += 1;
@@ -54,10 +54,10 @@ fn main() {
             if scene > s1 {
                 break;
             }
-            ddsom_game::scenario::poke(&mut m, 0xff8034, scene, 1);
-            ddsom_game::scenario::poke(&mut m, 0xff802c, 8, 1);
-            ddsom_game::scenario::poke(&mut m, 0xff802d, 0, 1);
-            ddsom_game::scenario::poke(&mut m, 0xff802e, 0, 1);
+            ddsom_game::core::scenario::poke(&mut m, 0xff8034, scene, 1);
+            ddsom_game::core::scenario::poke(&mut m, 0xff802c, 8, 1);
+            ddsom_game::core::scenario::poke(&mut m, 0xff802d, 0, 1);
+            ddsom_game::core::scenario::poke(&mut m, 0xff802e, 0, 1);
         }
     }
 }

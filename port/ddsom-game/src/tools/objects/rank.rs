@@ -1,15 +1,15 @@
-//! Tools: the natives of `crate::objects::rank` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::rank` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::objects::rank::*;
+use crate::world::objects::rank::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::mem::{rd8, set_low_byte, set_low_word, A5};
+use crate::world::mem::{rd8, set_low_byte, set_low_word, A5};
 
 /// 0x1f258: `reset`. Leaves A0 = structure.
 fn reset_regs(c: &mut Cpu, b: &mut World) {
@@ -27,7 +27,7 @@ fn load_preset_regs(c: &mut Cpu, b: &mut World) {
     let off = lsl_word(c, row as u16, 4);
     c.d[0] = off as u32;
     load_preset(b, row);
-    c.a[4] = crate::tables::engine().get("rank/presets").rom + 16 * row as u32 + 16;
+    c.a[4] = crate::world::tables::engine().get("rank/presets").rom + 16 * row as u32 + 16;
     reset_regs(c, b);
 }
 

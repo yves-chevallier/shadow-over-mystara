@@ -24,7 +24,7 @@ fn main() {
     // same startup (its duration depends on the frequency), then different frequencies
     let (mut ma, mut mb) = (load(k1), load(k1));
     let k2: f64 = k2.parse().unwrap();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let mut shown = 0;
     let mut freq = std::collections::BTreeMap::<usize, usize>::new();

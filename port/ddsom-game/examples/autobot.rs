@@ -82,13 +82,13 @@ impl Bot {
     fn set(&mut self, name: String, down: bool) {
         let cur = self.held.get(&name).copied().unwrap_or(false);
         if cur != down {
-            ddsom_game::scenario::set_input(&mut self.m, &name, down);
+            ddsom_game::core::scenario::set_input(&mut self.m, &name, down);
             self.out.push((self.f - 1, format!("{name} {}", down as u8)));
             self.held.insert(name, down);
         }
     }
     fn poke(&mut self, addr: u32, val: u32, size: u8) {
-        ddsom_game::scenario::poke(&mut self.m, addr, val, size);
+        ddsom_game::core::scenario::poke(&mut self.m, addr, val, size);
         self.out.push((self.f - 1, format!("poke{} {addr:x} {val}", 8 * size as u32)));
     }
 }
@@ -154,7 +154,7 @@ fn main() {
     m.set_overclock(OVERCLOCK);
     ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
-    let base = ddsom_game::scenario::Scenario::load(Path::new(base_path)).unwrap();
+    let base = ddsom_game::core::scenario::Scenario::load(Path::new(base_path)).unwrap();
     let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default(), spells, spell_period, spell_next: 0, spell_at: [usize::MAX; 4], rod_at: [usize::MAX; 4], rods, doors, wander, wander_keys: [(0, 0, [false; 8], false); 4], voting: false, frail };
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut rnd = move |n: u32| {

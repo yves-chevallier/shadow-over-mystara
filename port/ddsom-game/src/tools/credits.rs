@@ -1,8 +1,8 @@
-//! Tools: the natives of `crate::credits` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::credits` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::credits::*;
+use crate::screens::credits::*;
 use crate::Native;
 
 /// Original subroutine rewritten in the body of the credits task, presented as a native for the differential

@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ddsom_game::mem::{rd16, rd32, rd8};
+use ddsom_game::world::mem::{rd16, rd32, rd8};
 
 const A5: u32 = 0xff8000;
 const ENEMY: (u32, u32, u32) = (A5 + 0x299e, 0xc0, 22);
@@ -316,7 +316,7 @@ fn scan(a: &[String]) {
     let [roms, eeprom, scenario, frames, cache] = &a[..5] else { usage() };
     let label = a.get(5).cloned().unwrap_or_else(|| Path::new(scenario).file_stem().unwrap().to_string_lossy().into());
     let mut m = load_machine(roms, eeprom);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let mut obs = Observer::new(Path::new(cache), &label);
     for f in 0..frames.parse::<usize>().expect("frames") {
         script.apply(f, &mut m);
@@ -343,14 +343,14 @@ fn spawn(a: &[String]) {
         // coin, Start, first character, jump into the scene (like `boss_scan`)
         for (at, input, down) in [(910, "Coin 1", true), (916, "Coin 1", false), (1000, "1 Player Start", true), (1006, "1 Player Start", false), (1440, "P1 Button 1", true), (1446, "P1 Button 1", false)] {
             if f == at + 1 {
-                ddsom_game::scenario::set_input(&mut m, input, down);
+                ddsom_game::core::scenario::set_input(&mut m, input, down);
             }
         }
         if f == 2400 {
-            ddsom_game::scenario::poke(&mut m, 0xff8034, scene, 1);
+            ddsom_game::core::scenario::poke(&mut m, 0xff8034, scene, 1);
         }
         for k in 0..2 {
-            ddsom_game::scenario::poke(&mut m, PLAYER + 0x200 * k + 0x62, 0x70, 2);
+            ddsom_game::core::scenario::poke(&mut m, PLAYER + 0x200 * k + 0x62, 0x70, 2);
         }
         m.run_frame();
         if f == 3000 && !spawned {
@@ -358,18 +358,18 @@ fn spawn(a: &[String]) {
             let slot = (0..n).map(|k| pool + size * k).find(|&o| rd8(b, o) == 0).expect("pool plein");
             let (px, py) = (rd32(b, PLAYER + 8), rd32(b, PLAYER + 0x10));
             for off in 0..size {
-                ddsom_game::mem::wr8(b, slot + off, 0);
+                ddsom_game::world::mem::wr8(b, slot + off, 0);
             }
-            ddsom_game::mem::wr8(b, slot + 0x28, if family == "boss" { 4 } else { 2 });
-            ddsom_game::mem::wr8(b, slot + 2, kind);
-            ddsom_game::mem::wr8(b, slot + 3, variant);
-            ddsom_game::mem::wr32(b, slot + 8, px.wrapping_add(0x60 << 16));
-            ddsom_game::mem::wr32(b, slot + 0x10, py);
+            ddsom_game::world::mem::wr8(b, slot + 0x28, if family == "boss" { 4 } else { 2 });
+            ddsom_game::world::mem::wr8(b, slot + 2, kind);
+            ddsom_game::world::mem::wr8(b, slot + 3, variant);
+            ddsom_game::world::mem::wr32(b, slot + 8, px.wrapping_add(0x60 << 16));
+            ddsom_game::world::mem::wr32(b, slot + 0x10, py);
             if family == "enemy" {
                 let free = rd16(b, A5 + 0x7e62);
-                ddsom_game::mem::wr16(b, A5 + 0x7e62, free.wrapping_sub(1));
+                ddsom_game::world::mem::wr16(b, A5 + 0x7e62, free.wrapping_sub(1));
             }
-            ddsom_game::mem::wr8(b, slot, 1);
+            ddsom_game::world::mem::wr8(b, slot, 1);
             spawned = true;
         }
         if f > 3000 {

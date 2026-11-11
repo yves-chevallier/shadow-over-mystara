@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::rng` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::rng` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::rng::*;
+use crate::world::rng::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 

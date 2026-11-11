@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::families::boss_common` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::boss_common` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::boss_common::*;
+use crate::actors::families::boss_common::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::families::cx::Cx;
+use crate::actors::families::cx::Cx;
 
 /// Native of a boss function called by address (the RTS is added).
 macro_rules! native {

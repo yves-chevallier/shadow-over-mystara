@@ -21,7 +21,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     for f in 0..frames {
         script.apply(f, &mut m);

@@ -4,19 +4,19 @@
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_X, SR_Z};
 
-use crate::ops::Alu;
+use crate::world::ops::Alu;
 
-impl From<crate::ops::Size> for Size {
-    fn from(s: crate::ops::Size) -> Self {
+impl From<crate::world::ops::Size> for Size {
+    fn from(s: crate::world::ops::Size) -> Self {
         match s {
-            crate::ops::Size::Byte => Size::Byte,
-            crate::ops::Size::Word => Size::Word,
-            crate::ops::Size::Long => Size::Long,
+            crate::world::ops::Size::Byte => Size::Byte,
+            crate::world::ops::Size::Word => Size::Word,
+            crate::world::ops::Size::Long => Size::Long,
         }
     }
 }
 
-/// The processor: all the flags of the original (the CCR bits of `crate::ops` are those of the SR).
+/// The processor: all the flags of the original (the CCR bits of `crate::world::ops` are those of the SR).
 impl Alu for Cpu {
     fn data(&self, n: usize) -> u32 {
         self.d[n]
@@ -27,16 +27,16 @@ impl Alu for Cpu {
     fn a(&mut self) -> &mut [u32; 8] {
         &mut self.a
     }
-    fn logic(&mut self, v: u32, size: crate::ops::Size) {
+    fn logic(&mut self, v: u32, size: crate::world::ops::Size) {
         logic(self, v, size.into());
     }
-    fn add(&mut self, src: u32, dst: u32, size: crate::ops::Size) -> u32 {
+    fn add(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) -> u32 {
         add(self, src, dst, size.into())
     }
-    fn sub(&mut self, src: u32, dst: u32, size: crate::ops::Size) -> u32 {
+    fn sub(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) -> u32 {
         sub(self, src, dst, size.into())
     }
-    fn cmp(&mut self, src: u32, dst: u32, size: crate::ops::Size) {
+    fn cmp(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) {
         cmp(self, src, dst, size.into());
     }
     fn flags(&mut self, mask: u16, values: u16) {

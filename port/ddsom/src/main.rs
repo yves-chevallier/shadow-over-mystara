@@ -175,7 +175,7 @@ fn play<B: Board>(
             // without the 68000: stop on an address with no Rust routine (diagnostic already printed by the panic)
             Err(e) if no_68k => {
                 let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                eprintln!("The game without the 68000 stops: {}", m.trim_start_matches(ddsom_game::no68k::STOP));
+                eprintln!("The game without the 68000 stops: {}", m.trim_start_matches(ddsom_game::core::frame::STOP));
                 break;
             }
             Err(e) => std::panic::resume_unwind(e),

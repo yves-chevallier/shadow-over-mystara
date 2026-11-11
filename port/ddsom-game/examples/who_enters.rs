@@ -67,7 +67,7 @@ fn main() {
     m.executor = Some(ddsom_game::run_traced);
     ddsom_game::set_native_hook(hook);
     ddsom_game::set_trace(trace);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse::<usize>().unwrap() {
         FRAME.store(f as u64, Ordering::Relaxed);
         script.apply(f, &mut m);

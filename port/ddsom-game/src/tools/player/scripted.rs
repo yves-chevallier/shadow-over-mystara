@@ -1,9 +1,9 @@
-//! Tools: the patch of `crate::player::scripted` for the reference machine.
+//! Tools: the patch of `crate::actors::player::scripted` for the reference machine.
 
 use m68k::Cpu;
 
-use crate::player::scripted::*;
-use crate::ram;
+use crate::actors::player::scripted::*;
+use crate::world::ram;
 
 /// Same fix in the original code (reference machine of the validation): at the entry of the dispatch.
 pub(crate) fn patch_end_by_scene(c: &mut Cpu, b: &mut cps2::Cps2Bus) -> bool {

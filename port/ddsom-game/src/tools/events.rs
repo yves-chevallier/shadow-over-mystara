@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::events` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::events` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::events::*;
+use crate::world::events::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{rd16, rd8, set_low_byte};
+use crate::world::mem::{rd16, rd8, set_low_byte};
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $name:expr, $run:expr) => {
@@ -81,7 +81,7 @@ fn enqueue_counter_68k(c: &mut Cpu, b: &mut World) {
 
 /// 0x19ad6: D0 = the event, D1.w = the player (bits 8-9).
 fn object_event_68k(c: &mut Cpu, b: &mut World) {
-    let o = crate::objects::Obj(c.a[0]);
+    let o = crate::world::objects::Obj(c.a[0]);
     let type_ = rd8(b, o.0 + 0x7e) as u32;
     c.d[0] = type_;
     let player = rd16(b, o.0 + 0x48) & 0x300;

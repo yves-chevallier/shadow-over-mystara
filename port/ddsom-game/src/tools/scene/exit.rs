@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::scene::exit` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::exit` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::Cpu;
 
-use crate::scene::exit::*;
+use crate::screens::scene::exit::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::{rd8, wr16};
+use crate::world::mem::{rd8, wr16};
 
 pub(crate) const PHASE_16: Native = Native {
     entry: 0xf3142,

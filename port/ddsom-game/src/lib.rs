@@ -12,55 +12,13 @@
 //! machine (original code on the 68000) and the natives at the original addresses whose arguments and results are in
 //! the registers of the original, to compare them with the original code.
 
-pub mod camera_modes;
-pub mod config;
-pub mod credits;
-pub mod startup;
-pub mod diag;
-pub mod dispatch;
-pub mod credits_screen;
-pub mod data;
-pub mod effects_aids;
-pub mod eeprom;
-pub mod events;
-pub mod game;
-pub mod hud;
-pub mod hw;
-pub mod aids;
-pub mod ai;
-pub mod ai_aids;
-pub mod combat;
-pub mod families;
-pub mod inputs;
-pub mod kernel;
-pub mod machine;
-pub mod mem;
-pub mod modes;
-pub mod objects;
-pub mod ops;
-pub mod palette;
-pub mod placement;
-pub mod player;
-pub mod popups;
-pub mod ram;
-pub mod record;
-pub mod rng;
-pub mod no68k;
-pub mod scene;
-pub mod screens;
-pub mod scroll;
-pub mod tables;
-pub mod scenario;
-pub mod sound;
-pub mod terrain;
-pub mod service;
-pub mod sprites;
-pub mod credits_task;
-pub mod tasks;
-pub mod text;
-pub mod video;
-pub mod vblank;
+// The layers, from the bottom (docs/fin.md, section 2): each one calls only those below it.
 pub mod world;
+pub mod hw;
+pub mod services;
+pub mod actors;
+pub mod screens;
+pub mod core;
 
 use crate::world::World;
 
@@ -103,7 +61,7 @@ pub enum Body {
     Memory(fn(&mut World)),
     /// Object handler without registers: it receives what the dispatch loop passes it (the object, the counter,
     /// the leftovers that the handlers pass to each other: `dispatch::Dispatch`); the return is done for it.
-    Handler(fn(&mut World, &mut dispatch::Dispatch)),
+    Handler(fn(&mut World, &mut crate::core::dispatch::Dispatch)),
 }
 
 impl Native {
@@ -173,7 +131,7 @@ pub fn install_no_68k(m: cps2::Machine) -> GameMachine {
     install_data(&m);
     let mut m = m.with_board(World::from_bus);
     cap_steps(&mut m);
-    no68k::install(&mut m);
+    crate::core::frame::install(&mut m);
     m
 }
 
@@ -189,6 +147,6 @@ pub fn install_data(m: &cps2::Machine) {
     }
     #[cfg(not(feature = "tools"))]
     let _ = m;
-    let _ = data::data();
+    let _ = world::data::data();
     assert!(ddsom_data::residue::installed(), "residue not installed: install the game with `extract::install_game`");
 }

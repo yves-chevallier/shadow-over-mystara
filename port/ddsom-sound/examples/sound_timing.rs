@@ -17,7 +17,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_rc::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let marks = Rc::new(RefCell::new(Vec::new()));
     let hook = marks.clone();
     m.sound.pc_hook = Some(Box::new(move |z| match z.pc {

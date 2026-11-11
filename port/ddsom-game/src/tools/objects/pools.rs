@@ -1,16 +1,16 @@
-//! Tools: the natives of `crate::objects::pools` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::pools` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::objects::pools::*;
+use crate::world::objects::pools::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::objects::lists;
-use crate::objects::Obj;
-use crate::mem::{wr16, wr8, A5};
+use crate::world::objects::lists;
+use crate::world::objects::Obj;
+use crate::world::mem::{wr16, wr8, A5};
 
 macro_rules! pool_natives {
     ($pool:ident, $alloc:ident, $alloc_name:expr, $free:ident, $free_name:expr) => {

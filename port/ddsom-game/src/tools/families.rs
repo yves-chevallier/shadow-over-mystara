@@ -1,4 +1,4 @@
-//! Tools: the natives of `crate::families` for the original code.
+//! Tools: the natives of `crate::actors::families` for the original code.
 
 pub(crate) mod boss_3;
 pub(crate) mod boss_common;

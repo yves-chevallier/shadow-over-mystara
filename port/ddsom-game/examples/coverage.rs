@@ -54,7 +54,7 @@ fn main() {
         }
     }
     m.executor = Some(if a.get(5).is_some() { run_original } else { run });
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

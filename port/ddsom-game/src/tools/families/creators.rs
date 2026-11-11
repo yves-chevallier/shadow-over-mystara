@@ -1,17 +1,17 @@
-//! Tools: the natives of `crate::families::creators` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::creators::*;
+use crate::actors::families::creators::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{prog8, rd8, wr8, A5};
+use crate::world::mem::{prog8, rd8, wr8, A5};
 use crate::tools::prog32;
-use crate::objects::Obj;
-use crate::objects::pools;
+use crate::world::objects::Obj;
+use crate::world::objects::pools;
 
 /// Allocates in a pool; `None` (carry set) if the pool is full.
 fn alloc(c: &mut Cpu, b: &mut World, pool: &pools::Pool) -> Option<Obj> {
@@ -152,7 +152,7 @@ fn set_5(c: &mut Cpu, b: &mut World) {
 /// 0xd6182: 44 cells of a tile column (A1, step 0x80) filled with 0x00200000 (empty tile).
 fn blank_column(c: &mut Cpu, b: &mut World) {
     for _ in 0..0x2c {
-        crate::mem::wr32(b, c.a[1], 0x20_0000);
+        crate::world::mem::wr32(b, c.a[1], 0x20_0000);
         c.a[1] = c.a[1].wrapping_add(0x80);
     }
     c.d[0] = 0xffff;
@@ -221,7 +221,7 @@ fn peff_13_x4(c: &mut Cpu, b: &mut World) {
             break;
         }
     }
-    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
+    crate::services::palette::set_flash_color(b, crate::services::palette::FLASH_COLOR_RED);
     rts(c, b);
 }
 
@@ -235,7 +235,7 @@ fn quake_native(c: &mut Cpu, b: &mut World) {
 /// creator through `+0x46`; D0 = 1, otherwise 0 (the allocation is not checked).
 fn enemy_7_pair(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
-    crate::families::small::enemy_pair_kind_via(c, b, me, 7);
+    crate::actors::families::small::enemy_pair_kind_via(c, b, me, 7);
     rts(c, b);
 }
 
@@ -289,7 +289,7 @@ pub const NATIVES: &[Native] = &[
     native(0xce00a, "create_set_15", set_15, CREATED),
     native(0xcc0ca, "scene_repart", |c, b| {
         let o = Obj(c.a[0]);
-        crate::families::scenery::restart_scene(&mut crate::families::cx::Cx { c: &mut *c, b: &mut *b, o });
+        crate::actors::families::scenery::restart_scene(&mut crate::actors::families::cx::Cx { c: &mut *c, b: &mut *b, o });
         rts(c, b)
     }, regs::a(0) | regs::d(7)),
     native(0x4b8d0, "create_effect_b", peff_b, CREATED),

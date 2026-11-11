@@ -9,13 +9,13 @@ use crate::*;
 
 /// The natives of the game that only the original code calls (by address): memory only (`Body::Memory`).
 const MEMORY: &[Native] = &[
-    sprites::RESET_LISTS,
-    sound::SEND_TO_Z80,
-    credits::READ_COIN_SLOTS,
-    config::DEFAULTS,
-    config::VALIDATE,
-    config::VARIABLES,
-    config::INIT,
+    services::sprites::RESET_LISTS,
+    hw::sound::SEND_TO_Z80,
+    screens::credits::READ_COIN_SLOTS,
+    core::config::DEFAULTS,
+    core::config::VALIDATE,
+    core::config::VARIABLES,
+    core::config::INIT,
 ];
 
 /// Index of the native routines by entry address. A binary sieve avoids the search for the vast majority of blocks.
@@ -65,22 +65,22 @@ pub fn game_natives() -> impl Iterator<Item = &'static Native> {
     // one source per line
     std::iter::empty()
         .chain(MEMORY)
-        .chain(objects::NATIVES)
-        .chain(player::NATIVES)
-        .chain(player::init::JOIN)
-        .chain(video::NATIVES)
-        .chain(palette::NATIVES)
-        .chain(scroll::NATIVES)
-        .chain(camera_modes::NATIVES)
-        .chain(terrain::NATIVES)
-        .chain(families::NATIVES)
-        .chain(families::natives())
-        .chain(game::NATIVES)
-        .chain(scene::natives())
-        .chain(modes::natives())
-        .chain(tasks::natives())
-        .chain(aids::NATIVES)
-        .chain(hud::NATIVES)
+        .chain(world::objects::NATIVES)
+        .chain(actors::player::NATIVES)
+        .chain(actors::player::init::JOIN)
+        .chain(services::video::NATIVES)
+        .chain(services::palette::NATIVES)
+        .chain(services::scroll::NATIVES)
+        .chain(services::camera_modes::NATIVES)
+        .chain(world::terrain::NATIVES)
+        .chain(actors::families::NATIVES)
+        .chain(actors::families::natives())
+        .chain(core::game::NATIVES)
+        .chain(screens::scene::natives())
+        .chain(screens::modes::natives())
+        .chain(core::tasks::natives())
+        .chain(services::aids::NATIVES)
+        .chain(screens::hud::NATIVES)
 }
 
 #[cfg(test)]
@@ -98,9 +98,9 @@ mod tests {
     /// Each handler of a dispatch table is a native of the game, at the address that the original table holds.
     #[test]
     fn dispatch_handlers_are_game_natives() {
-        for class in dispatch::CLASSES {
+        for class in core::dispatch::CLASSES {
             for handler in class.handlers {
-                if let dispatch::Handler::Rust { native, .. } = handler {
+                if let core::dispatch::Handler::Rust { native, .. } = handler {
                     assert!(game_natives().any(|n| n.entry == native.entry), "{:06x} ({})", native.entry, native.name);
                 }
             }

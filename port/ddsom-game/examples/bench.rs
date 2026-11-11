@@ -30,7 +30,7 @@ fn main() {
     let mut m = ddsom_game::install_no_68k(m);
     // DDSOM_RENDU=1: the frame is computed at every frame, as in the application
     m.rendering = std::env::var_os("DDSOM_RENDU").is_some();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     for f in 0..frames {
@@ -38,9 +38,9 @@ fn main() {
         m.run_frame();
     }
     let dt = t0.elapsed();
-    let residue: u64 = ddsom_game::data::residue().iter().map(|r| r.1).sum();
+    let residue: u64 = ddsom_game::world::data::residue().iter().map(|r| r.1).sum();
     if residue > 0 {
-        println!("residue: {residue} consultations {:?}", ddsom_game::data::residue());
+        println!("residue: {residue} consultations {:?}", ddsom_game::world::data::residue());
     }
     // FNV-1a of the final state
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;

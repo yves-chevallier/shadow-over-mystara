@@ -16,7 +16,7 @@ fn main() {
     // instruction by instruction (without the recompiled code) so the hook sees every PC
     ddsom_game::install_reference(&mut m);
     m.executor = None;
-    let s = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     let bits = Rc::new(RefCell::new(vec![0u8; 0x100000 / 2 / 8]));
     let b2 = bits.clone();

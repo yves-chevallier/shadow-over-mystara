@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::scene::blackout` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::blackout` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::blackout::*;
+use crate::screens::scene::blackout::*;
 use crate::Native;
-use crate::scene::Ctx;
-use crate::modes::Flow;
+use crate::screens::scene::Ctx;
+use crate::screens::modes::Flow;
 
 pub(crate) const BLACKOUT: Native = Native {
     entry: 0xf7ecc,

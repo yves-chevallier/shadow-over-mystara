@@ -1,10 +1,10 @@
-//! Tools: the natives of `crate::terrain` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::terrain` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::terrain::*;
+use crate::world::terrain::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 

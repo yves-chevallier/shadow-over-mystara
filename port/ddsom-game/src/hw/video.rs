@@ -11,7 +11,7 @@
 
 use crate::world::World;
 
-use crate::mem::{rd16, rd32, wr16, wr32, wr8};
+use crate::world::mem::{rd16, rd32, wr16, wr32, wr8};
 
 /// A word of the graphics RAM, of the object RAM or of the object output control.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

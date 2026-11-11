@@ -1,9 +1,9 @@
-//! Tools: the natives of `crate::player::overlays` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::overlays` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::Cpu;
 
-use crate::player::overlays::*;
+use crate::actors::player::overlays::*;
 use crate::tools::frames::*;
 use crate::Native;
 

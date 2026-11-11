@@ -1,9 +1,9 @@
-//! Tools: the natives of `crate::player::actions` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::actions` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::player::actions::*;
-use crate::player::Player;
+use crate::actors::player::actions::*;
+use crate::actors::player::Player;
 
 /// Address entries of `to_stand` (0x35614, called by `aids.rs`) and `start_stand` (0x35620). The
 /// registers left by the animation (D5, D6, A4) are read by nobody (`DDSOM_POISON=anim`).

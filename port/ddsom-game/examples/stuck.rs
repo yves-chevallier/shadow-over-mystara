@@ -53,7 +53,7 @@ fn stuck<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String], original: bool, 
         ddsom_game::set_count(true);
     }
     m.executor = Some(count);
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     // `two`: a second machine (original code) runs in the same process, as in validate
     let mut other = a.get(6).is_some_and(|s| s == "two").then(|| {

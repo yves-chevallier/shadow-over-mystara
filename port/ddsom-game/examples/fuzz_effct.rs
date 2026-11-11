@@ -22,8 +22,8 @@ use cps2::Cps2Bus;
 use m68k::decode::{Ea, Op};
 use m68k::Cpu;
 
-use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-use ddsom_game::objects::pools::{EFFCT, ENEMY};
+use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::world::objects::pools::{EFFCT, ENEMY};
 
 struct Rng(u64);
 impl Rng {
@@ -408,7 +408,7 @@ fn principal() {
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

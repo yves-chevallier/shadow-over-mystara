@@ -70,7 +70,16 @@ def code_lines(text: str):
         yield line if i < 0 else line[:i]
 
 
+# Layers of ddsom-game since L15 (docs/fin.md, section 2), from the bottom: each one should only call those below.
+LAYERS = ["world", "hw", "services", "actors", "screens", "core"]
+
+
 def zone_of(rel: str) -> str:
+    # since L15 the modules live in their layer (`actors/families/...`): the zones keep their module paths; the
+    # screens' own shared files (`screens/tables.rs`...) stay in the screens zone
+    parts = rel.split("/")
+    if parts[0] in LAYERS and len(parts) > 2 or parts[0] in LAYERS and parts[0] != "screens":
+        rel = "/".join(parts[1:])
     for name, pattern in ZONES:
         if re.search(pattern, rel):
             return name
@@ -130,25 +139,85 @@ def crates(root: Path) -> dict:
 
 
 def module_graph(root: Path):
-    """Edges `crate::x` between the top-level modules of ddsom-game (outside tools/)."""
+    """Edges `crate::x` between the modules of ddsom-game (outside tools/). A module is a top-level module, or, inside
+    a layer directory (`LAYERS`), a module of that layer, named `layer/module` (the layer's own `mod.rs` is
+    `layer/mod`)."""
     src = root / "port/ddsom-game/src"
-    modules = {p.stem for p in src.glob("*.rs")} | {p.name for p in src.iterdir() if p.is_dir()}
-    modules -= {"lib", "tools"}
+
+    def entries(d: Path):
+        return {p.stem for p in d.glob("*.rs")} | {p.name for p in d.iterdir() if p.is_dir()}
+
+    modules = set()
+    for top in entries(src) - {"lib", "tools"}:
+        if top in LAYERS and (src / top).is_dir():
+            modules |= {f"{top}/{m}" for m in entries(src / top)}
+        else:
+            modules.add(top)
+
+    def node_of(rel: str) -> str:
+        parts = rel.removesuffix(".rs").split("/")
+        if parts[0] in LAYERS and len(parts) > 1:
+            return f"{parts[0]}/{parts[1]}"
+        return parts[0]
+
+    def targets(path: str):
+        """Module named by a path after `crate::` (`core::tasks::Step`, `world::World`, `mem`)."""
+        parts = path.split("::")
+        if parts[0] in LAYERS:
+            if len(parts) > 1 and f"{parts[0]}/{parts[1]}" in modules:
+                return f"{parts[0]}/{parts[1]}"
+            return f"{parts[0]}/mod" if f"{parts[0]}/mod" in modules else None
+        return parts[0] if parts[0] in modules else None
+
+    def group_items(body: str, start: int):
+        """Top-level items of the `{...}` group starting at `start` (just after the brace), with their prefix."""
+        depth, i, item, out = 1, start, "", []
+        while depth:
+            ch = body[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            if depth == 1 and ch == ",":
+                out.append(item)
+                item = ""
+            elif depth:
+                item += ch
+            i += 1
+        out.append(item)
+        return out
+
     edges = defaultdict(set)
     for rel, text in game_files(root):
-        top = rel.split("/")[0].removesuffix(".rs")
-        if top == "lib":
+        me = node_of(rel)
+        if me == "lib":
             continue
         body = "\n".join(code_lines(text))
-        for m in re.findall(r"\bcrate::(\w+)", body):
-            if m in modules and m != top:
-                edges[top].add(m)
-        # `use crate::{a, b::c}` groups
-        for group in re.findall(r"\bcrate::\{([^}]*)\}", body):
-            for m in re.findall(r"(?:^|,)\s*(\w+)", group):
-                if m in modules and m != top:
-                    edges[top].add(m)
+        found = []
+        for m in re.finditer(r"(?<![\w$])\$?crate::((?:\w+::)*)(\{|\w+)", body):
+            prefix, last = m.group(1), m.group(2)
+            if last == "{":
+                for item in group_items(body, m.end()):
+                    item = re.sub(r"\s+", "", item)
+                    head = prefix + item
+                    # nested groups: `core::{kernel, tasks}`
+                    if "{" in item:
+                        base = prefix + item.split("{")[0]
+                        for sub in item.split("{", 1)[1].rstrip("}").split(","):
+                            found.append(base + sub)
+                    else:
+                        found.append(head)
+            else:
+                found.append(prefix + last)
+        for path in found:
+            t = targets(path.strip(":"))
+            if t and t != me:
+                edges[me].add(t)
     return sorted(modules), {k: sorted(v) for k, v in edges.items()}
+
+
+def layer_of(module: str):
+    return module.split("/")[0] if module.split("/")[0] in LAYERS else None
 
 
 def strongly_connected(nodes, edges):
@@ -185,6 +254,9 @@ def strongly_connected(nodes, edges):
 def measure(root: Path) -> dict:
     nodes, edges = module_graph(root)
     scc = strongly_connected(nodes, edges)
+    rank = {l: i for i, l in enumerate(LAYERS)}
+    backward = sorted((a, b) for a, bs in edges.items() for b in bs
+                      if layer_of(a) and layer_of(b) and rank[layer_of(b)] > rank[layer_of(a)])
     return {
         "zones": zones(root),
         "crates": crates(root),
@@ -193,6 +265,10 @@ def measure(root: Path) -> dict:
             "edges": sum(len(v) for v in edges.values()),
             "largest_scc": len(scc[0]) if scc else 0,
             "components": [c for c in scc if len(c) > 1],
+            # components that span several layers (the end criterion of L15: none), and the edges from a layer to
+            # one above it
+            "cross_layer": [c for c in scc if len({layer_of(m) for m in c}) > 1],
+            "backward_edges": backward,
             "outside": [c[0] for c in scc if len(c) == 1],
             "adjacency": edges,
         },
@@ -232,6 +308,12 @@ def print_crates(c: dict):
 def print_graph(g: dict, full: bool):
     print(f"\nModules: {g['modules']}, edges: {g['edges']}, largest strongly connected component: {g['largest_scc']}")
     print(f"Outside any cycle: {', '.join(g['outside'])}")
+    cross = g.get("cross_layer", [])
+    print(f"Components across layers: {len(cross)} ({', '.join(str(len(c)) for c in cross) or '-'} modules); "
+          f"edges to a higher layer: {len(g.get('backward_edges', []))}")
+    if full:
+        for a, b in g.get("backward_edges", []):
+            print(f"  backward: {a} -> {b}")
     if full:
         for c in g["components"]:
             print(f"Component ({len(c)}): {', '.join(c)}")

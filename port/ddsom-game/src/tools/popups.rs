@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::popups` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::popups` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::popups::*;
+use crate::screens::popups::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::A5;
+use crate::world::mem::A5;
 
 /// `animate_obj` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
 /// `animate_obj` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).

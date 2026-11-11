@@ -52,7 +52,7 @@ fn cycles<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
             n.borrow_mut().insert(x.entry, x.name);
         }
     });
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     for f in 0..n - 1 {
         s.apply(f, &mut m);

@@ -6,7 +6,7 @@
 //! the largest valid (even) `+7` step for these `+6`.
 
 use super::Rng;
-use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 
 type Bus = cps2::Cps2Bus;
 

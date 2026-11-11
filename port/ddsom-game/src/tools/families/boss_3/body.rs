@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::families::boss_3::body` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::boss_3::body` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::boss_3::body::*;
+use crate::actors::families::boss_3::body::*;
 use crate::tools::frames::*;
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// Adapter for the natives (fuzz against the original): A0 = the boss, A1 = the object; D0 = 1 / 0 and its flags. The
 /// only original caller, 0x81aa4 (`boss_common::push_out_of_boss`), re-reads neither D1 nor A2, which the original

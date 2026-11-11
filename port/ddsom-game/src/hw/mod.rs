@@ -6,3 +6,6 @@
 
 pub mod io;
 pub mod video;
+pub mod eeprom;
+pub mod inputs;
+pub mod sound;

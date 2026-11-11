@@ -27,7 +27,7 @@ fn main() {
     });
     ZONES.with(|z| z.borrow_mut().extend(zones));
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     for f in 0..a[4].parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

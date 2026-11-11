@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
 
 #[path = "fuzz_enemy/lot3.rs"]
 mod lot3;
@@ -488,7 +488,7 @@ fn step_owlbear(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
 /// Fields of the arm (type 25) and its host set to values the original's tables accept:
 /// host state `+0xa2` (0 to 8), valid sub-state `+5` for the chosen path, close positions.
 fn prep_warrior(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
-    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8};
     let host = rd16(b, obj + 0x46) as u32 | 0xff0000;
     let hs = (rng.next() % 9) as u8;
     wr8(b, host + 0xa2, hs);
@@ -524,7 +524,7 @@ fn prep_warrior(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
 
 /// Harpy (type 21) fields set to values its tables accept.
 fn prep_harpy(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
-    use ddsom_game::mem::{wr16, wr32, wr8};
+    use ddsom_game::world::mem::{wr16, wr32, wr8};
     wr8(b, obj + 0x43, (rng.next() % 2) as u8);
     wr8(b, obj + 0x42, [0u8, 4, 2, 6][rng.next() as usize % 4]);
     for off in [0xa0u32, 0xa1, 0xa2, 0xa3, 0xa4, 0x77] {
@@ -545,7 +545,7 @@ fn prep_harpy(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
 
 /// Owlbear fields set to values its tables accept.
 fn prep_owlbear(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
-    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8};
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     if s4 == 2 {
         let step = step_owlbear(rng, s4, s5, s6);
@@ -606,7 +606,7 @@ fn step_dbeast(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
 /// AI fields of an enemy with complex behavior (type 16) set to values its tables accept:
 /// short counters, sub-state to resume, fallback state, reaction to the last hit, target = a player.
 fn prep_enemy_ai(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
-    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8};
     for off in [0x6b, 0x6e, 0x71, 0x77, 0xa2, 0x90] {
         wr8(b, obj + off, (rng.next() % 5) as u8);
     }
@@ -642,7 +642,7 @@ fn prep_enemy_ai(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
 /// Displacer Beast (type 19) fields set to values its tables accept: `+7` step, reaction
 /// code, short counters, current animation, state to resume after a U-turn.
 fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
-    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8};
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     if s4 == 2 {
         let step = step_dbeast(rng, s4, s5, s6);
@@ -688,7 +688,7 @@ fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
 /// Master states of a type 26 enemy (+0xb8 to +0xbb, plus +4/+5 and the reaction code +0x49) that
 /// the original's jump tables cover.
 fn master_state_26(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
-    use ddsom_game::mem::{wr16, wr32, wr8};
+    use ddsom_game::world::mem::{wr16, wr32, wr8};
     let pair = |rng: &mut Rng, n: u32| 2 * (rng.next() % n) as u8;
     let group = pair(rng, 4);
     let (mode, phase, step);
@@ -733,7 +733,7 @@ fn master_state_26(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
 
 /// Master states of a type 24 enemy (bytes +4 to +7) that the original's jump tables cover.
 fn master_state_24(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
-    use ddsom_game::mem::wr8;
+    use ddsom_game::world::mem::wr8;
     let pair = |rng: &mut Rng, n: u32| 2 * (rng.next() % n) as u8;
     let state = pair(rng, 4);
     let (sub, s6, s7);
@@ -790,7 +790,7 @@ fn eshl_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
 /// players, cameras, rank, and for each player its state, life, keys and position
 /// autour de l'objet `obj`.
 fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
-    use ddsom_game::mem::{rd16, wr8};
+    use ddsom_game::world::mem::{rd16, wr8};
     if step != 0 && !rng.next().is_multiple_of(4) {
         return;
     }
@@ -864,12 +864,12 @@ fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
 }
 
 fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, filter: Option<u32>) {
-    use ddsom_game::mem::{rd16, rd8};
-    use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
+    use ddsom_game::world::mem::{rd16, rd8};
+    use ddsom_game::world::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1134,7 +1134,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                 if pool.class == 2 {
                     // free-slot counters of all pools, consistent with their contents (the composite
                     // enemies read them to know whether they can create their parts)
-                    for q in ddsom_game::objects::pools::POOLS {
+                    for q in ddsom_game::world::objects::pools::POOLS {
                         let free = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
                         wr16(&mut b, A5 + q.free, free as u16);
                     }
@@ -1256,7 +1256,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
-                    ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                     for _ in 0..20_000 {
                         if c2.pc == 0xfffe {
                             break;
@@ -1320,7 +1320,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                         let sp = c2.a[7];
                         c2.pc = entry;
                         c2.a[7] = sp.wrapping_sub(4);
-                        ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                         for _ in 0..DDSOM_TRACE_LEN {
                             if c2.pc == 0xfffe {
                                 break;
@@ -1382,7 +1382,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1405,17 +1405,17 @@ fn main() {
             rng_state(c, b, &mut rng);
             let (d0, a0) = (c.d[0], c.a[0]);
             let context = if entry == 0x2d662 {
-                let var = ddsom_game::mem::rd16(b, A5 + 0x70);
-                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, 0xff1d8e + i)).collect();
-                let block: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, c.a[6] + i)).collect();
+                let var = ddsom_game::world::mem::rd16(b, A5 + 0x70);
+                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, 0xff1d8e + i)).collect();
+                let block: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, c.a[6] + i)).collect();
                 format!(" var={var} copy={copy:02x?} defaults={block:02x?}")
             } else if *group == "camera" {
                 let cam = c.a[0];
                 let fields: Vec<String> = [0x08u32, 0x0c, 0x10, 0x14, 0x20, 0x2e, 0x34, 0x40]
                     .iter()
-                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::mem::rd16(b, cam + o)))
+                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::world::mem::rd16(b, cam + o)))
                     .collect();
-                format!(" scene={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
+                format!(" scene={:02x} terrain={} {}", ddsom_game::world::mem::rd8(b, A5 + 0x34), ddsom_game::world::mem::rd8(b, A5 + 0x37), fields.join(" "))
             } else {
                 String::new()
             };
@@ -1443,7 +1443,7 @@ fn main() {
 /// game variables (level, difficulty, frozen scene...), the variant (script) and the player state,
 /// which the generic fuzz does not vary. `start`: initial object state (variant, state).
 fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
-    use ddsom_game::mem::{rd16, rd32, rd8};
+    use ddsom_game::world::mem::{rd16, rd32, rd8};
     wr8(b, A5 + 0x34, if rng.next().is_multiple_of(3) { 4 } else { 1 + (rng.next() % 7) as u8 });
     wr8(b, A5 + 0x35, if rng.next().is_multiple_of(10) { 0 } else { 1 + (rng.next() % 4) as u8 });
     wr8(b, A5 + 0x2c, [0xc, 4, 8, 0, 0x18][rng.next() as usize % 5]);

@@ -16,17 +16,17 @@ thread_local! {
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
-    let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == pc) else {
+    let Some(n) = ddsom_game::actors::families::NATIVES.iter().find(|n| n.entry == pc) else {
         return ddsom_game::run(pc, c, b, dl);
     };
     let obj = c.a[0];
-    let before: Vec<u8> = (0..0x60).map(|i| ddsom_game::mem::rd8(b, obj + i)).collect();
+    let before: Vec<u8> = (0..0x60).map(|i| ddsom_game::world::mem::rd8(b, obj + i)).collect();
     let mut c1 = c.clone();
     let mut b1 = b.clone();
     let (c0, b0) = (c.clone(), b.clone());
     n.execute(&mut c1, &mut b1);
     // original
-    let ret = ddsom_game::mem::rd32(b, c.a[7]);
+    let ret = ddsom_game::world::mem::rd32(b, c.a[7]);
     let sp_after = c.a[7].wrapping_add(4);
     while !(c.pc == ret && c.a[7] == sp_after) {
         if ddsom_rc::run_block(c.pc, c, b, u64::MAX).is_none() {
@@ -41,7 +41,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         diffs.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c.a[0]));
     }
     let sp = c.a[7] & 0xff_ffff;
-    ddsom_game::mem::diff_bus(&b1, b, sp.saturating_sub(0x400)..sp, &mut diffs);
+    ddsom_game::world::mem::diff_bus(&b1, b, sp.saturating_sub(0x400)..sp, &mut diffs);
     CALLS.with(|m| {
         let mut m = m.borrow_mut();
         let e = m.entry(n.name).or_insert((0, 0));
@@ -58,7 +58,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         if std::env::var_os("FAMILLES_TRACE").is_some() {
             // trace of the original, instruction by instruction (pc and cumulative cycles)
             let (mut ct, mut bt) = (c0.clone(), b0.clone());
-            let ret = ddsom_game::mem::rd32(&mut bt, ct.a[7]);
+            let ret = ddsom_game::world::mem::rd32(&mut bt, ct.a[7]);
             let sp_after = ct.a[7].wrapping_add(4);
             let t0 = ct.cycles;
             while !(ct.pc == ret && ct.a[7] == sp_after) {
@@ -92,7 +92,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

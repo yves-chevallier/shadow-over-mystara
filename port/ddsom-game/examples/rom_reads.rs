@@ -76,7 +76,7 @@ fn main() {
         let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
         let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
         let mut m = ddsom_game::install_no_68k(m);
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
+        let script = ddsom_game::core::scenario::Scenario::load(Path::new(path)).expect("scenario");
         cps2::bus::rom_trace::take();
         for f in 0..frames.parse::<usize>().unwrap() {
             script.apply(f, &mut m);

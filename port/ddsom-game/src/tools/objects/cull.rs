@@ -1,16 +1,16 @@
-//! Tools: the natives of `crate::objects::cull` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::cull` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::objects::cull::*;
+use crate::world::objects::cull::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::objects::Obj;
-use crate::mem::{rd16, set_low_byte};
+use crate::world::objects::Obj;
+use crate::world::mem::{rd16, set_low_byte};
 
 fn dw(c: &Cpu, n: usize) -> u16 {
     c.d[n] as u16
@@ -147,7 +147,7 @@ fn on_screen(c: &mut Cpu, b: &mut World, obj: Obj) -> bool {
     c.flags_logic(class as u32, Size::Byte);
     let visible = if class != 0 {
         let index = lsl_word(c, obj.u8(b, Obj::BOUNDS) as u16, 3);
-        let t = crate::data::data().sprite_tables.bounds_rom + index as u32;
+        let t = crate::world::data::data().sprite_tables.bounds_rom + index as u32;
         c.d[0] = index as u32;
         load_screen_x(c, b, 0, obj, cam);
         add_w(c, 0, rd16(b, t));

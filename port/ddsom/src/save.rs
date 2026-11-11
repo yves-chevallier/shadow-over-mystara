@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 use cps2::{Board, Machine};
-use ddsom_game::scenario::{Recorder, Scenario};
+use ddsom_game::core::scenario::{Recorder, Scenario};
 
 pub struct Game {
     eeprom: Vec<u8>,

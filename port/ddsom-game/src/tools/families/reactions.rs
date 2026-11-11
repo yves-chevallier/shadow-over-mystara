@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::families::reactions` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::reactions` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::{rd16, rd32, rd8};
-use crate::objects::anim::load_entry;
-use crate::objects::Obj;
+use crate::world::mem::{rd16, rd32, rd8};
+use crate::world::objects::anim::load_entry;
+use crate::world::objects::Obj;
 
 /// Player reaction animations (longs per character, data).
 const PLAYER_HURT_SETS: u32 = 0x3bb52;

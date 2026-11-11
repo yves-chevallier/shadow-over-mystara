@@ -3,11 +3,11 @@
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::dispatch::{Dispatch, Leftovers};
-use crate::mem::rd32;
-use crate::objects::Obj;
-use crate::tasks::table::{table_if, Next, OutsideFrame, Table};
-use crate::tasks::return_to_caller;
+use crate::core::dispatch::{Dispatch, Leftovers};
+use crate::world::mem::rd32;
+use crate::world::objects::Obj;
+use crate::core::tasks::table::{table_if, Next, OutsideFrame, Table};
+use crate::core::tasks::return_to_caller;
 
 /// Where the original code resumes after a native that returned to it.
 #[derive(Clone, Copy)]
@@ -60,7 +60,7 @@ pub(crate) fn pop_return_68k(c: &mut Cpu, b: &mut World) -> Next {
         Some(Err(frame)) => frame.next,
         Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
         Some(Ok(OutsideFrame::By68000)) | None => {
-            assert!(!crate::no68k::active(), "cession or abandon without a call in progress");
+            assert!(!crate::core::frame::active(), "cession or abandon without a call in progress");
             Next::Address(pop_68000(c, b))
         }
     }
@@ -76,12 +76,12 @@ impl Leftovers {
     /// The code on the processor has finished: its leftovers (D2-D5 of the bench) become those of the game (task
     /// table).
     pub(crate) fn from_bench(c: &Cpu, b: &mut World) {
-        crate::tasks::table::table(b).leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
+        crate::core::tasks::table::table(b).leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
     }
 
     /// The code on the processor resumes: the game's leftovers return to the bench (D2-D5).
     pub(crate) fn to_bench(c: &mut Cpu, b: &mut World) {
-        let r = crate::tasks::table::table(b).leftovers;
+        let r = crate::core::tasks::table::table(b).leftovers;
         (c.d[2], c.d[3], c.d[4], c.d[5]) = (r.d2, r.d3, r.d4, r.d5);
     }
 }

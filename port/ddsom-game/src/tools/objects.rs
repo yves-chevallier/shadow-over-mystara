@@ -1,4 +1,4 @@
-//! Tools: the natives of `crate::objects` for the original code.
+//! Tools: the natives of `crate::world::objects` for the original code.
 
 pub(crate) mod anim;
 pub(crate) mod cull;

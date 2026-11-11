@@ -35,7 +35,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut rom = machine(Path::new(roms), ee.as_deref(), None);
     let mut asset = machine(Path::new(roms), ee.as_deref(), Some(Path::new(assets)));
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let (mut image, mut non_blank, mut audio) = (Vec::new(), 0, 0usize);
     for f in 0..frames {

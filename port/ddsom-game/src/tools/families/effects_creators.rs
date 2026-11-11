@@ -1,19 +1,19 @@
-//! Tools: the natives of `crate::families::effects_creators` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::effects_creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::effects_creators::*;
-use crate::families::effects_creators::leftovers::Regs;
+use crate::actors::families::effects_creators::*;
+use crate::actors::families::effects_creators::leftovers::Regs;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::set_low_word;
-use crate::objects::pools::Pool;
-use crate::objects::Obj;
+use crate::world::mem::set_low_word;
+use crate::world::objects::pools::Pool;
+use crate::world::objects::Obj;
 use crate::regs::d as D;
-use crate::mem::set_low_byte;
+use crate::world::mem::set_low_byte;
 
 /// Declares the natives: `address "name" |c, b, me| body, exits;` (`me` = A0, the creator); each native ends with an
 /// RTS.
@@ -114,8 +114,8 @@ creators! {
     0xabb70 "create_trails" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
     0xa8af8 "create_scenery_list" |c, b, me| { let v = d1b(c); set_list_via(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
-    0xb3e4e "create_cries" |c, b, me| shouts_via(c, b, me, 1, &crate::families::effects::tables::tables().cries_a), CREATED | D(0) | D(1) | regs::a(2);
-    0xb3ec6 "create_cries_b" |c, b, me| shouts_via(c, b, me, 2, &crate::families::effects::tables::tables().cries_b), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3e4e "create_cries" |c, b, me| shouts_via(c, b, me, 1, &crate::actors::families::effects::tables::tables().cries_a), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3ec6 "create_cries_b" |c, b, me| shouts_via(c, b, me, 2, &crate::actors::families::effects::tables::tables().cries_b), CREATED | D(0) | D(1) | regs::a(2);
     0xb4bcc "create_rain_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain_via(c, b, me, v, s) }, CREATED;
     0xb4f1c "create_spells_c" |c, b, me| spell_ring_via(c, b, me, 4), CREATED | D(1);
     0xb53f4 "create_type_46" |c, b, me| type_46_trio(c, b, me), CREATED;
@@ -145,19 +145,19 @@ impl Regs for Cpu {
         let a1 = pool.alloc_unchecked_68k(self, b);
         if self.sr & m68k::SR_C != 0 { Err(a1) } else { Ok(a1) }
     }
-    fn flags(&mut self, v: u32, size: crate::ops::Size) {
+    fn flags(&mut self, v: u32, size: crate::world::ops::Size) {
         self.flags_logic(v, size.into());
     }
-    fn comparison(&mut self, src: u32, dst: u32, size: crate::ops::Size) {
+    fn comparison(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) {
         crate::tools::ops::cmp(self, src, dst, size.into());
     }
     fn x(&mut self, bit: bool) {
         self.sr = if bit { self.sr | m68k::SR_X } else { self.sr & !m68k::SR_X };
     }
-    fn addition(&mut self, src: u32, dst: u32, size: crate::ops::Size) -> u32 {
+    fn addition(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) -> u32 {
         crate::tools::ops::add(self, src, dst, size.into())
     }
-    fn subtract(&mut self, src: u32, dst: u32, size: crate::ops::Size) -> u32 {
+    fn subtract(&mut self, src: u32, dst: u32, size: crate::world::ops::Size) -> u32 {
         crate::tools::ops::sub(self, src, dst, size.into())
     }
     fn d(&mut self, n: usize, v: u32) {

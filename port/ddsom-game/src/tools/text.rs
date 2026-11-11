@@ -1,10 +1,10 @@
-//! Tools: the natives of `crate::text` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::text` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
-use crate::text::*;
+use crate::services::text::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 

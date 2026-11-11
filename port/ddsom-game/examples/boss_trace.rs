@@ -10,7 +10,7 @@ fn main() {
     m.set_overclock(16.0);
     ddsom_rc::install(&mut m);
     m.idle = Some(ddsom_game::idle);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     let rd8 = |m: &cps2::Machine, ad: u32| {
         let o = (ad - 0xff0000) as usize;

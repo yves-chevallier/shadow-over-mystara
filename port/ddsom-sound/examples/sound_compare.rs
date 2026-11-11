@@ -38,7 +38,7 @@ fn main() {
     } else {
         ddsom_rc::install(&mut m);
     }
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     m.sound.trace = Some(Vec::new());
 

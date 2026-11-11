@@ -29,7 +29,7 @@ fn main() {
     // (frame, mailbox flag) after each interrupt: Z80 driver, Rust driver
     type Flags = Vec<(usize, u8)>;
     let mut irq_flags: (Flags, Flags) = Default::default();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
 
     let mut first_ram = None;

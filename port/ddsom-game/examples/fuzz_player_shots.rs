@@ -14,8 +14,8 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-use ddsom_game::objects::pools::{Pool, PEFF, PSHL};
+use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::world::objects::pools::{Pool, PEFF, PSHL};
 
 struct Rng(u64);
 
@@ -147,7 +147,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -247,14 +247,14 @@ fn main() {
                 }
             }
             if pool.class == PSHL.class && kind == 19 {
-                let target = ddsom_game::objects::pools::ENEMY.slot(rng.below(22)).0;
+                let target = ddsom_game::world::objects::pools::ENEMY.slot(rng.below(22)).0;
                 wr8(&mut b, target, 1);
                 wr16(&mut b, target + 0x62, 20);
                 wr16(&mut b, obj.0 + 0x5c, target as u16);
             }
             if pool.class == PEFF.class && kind == 39 {
                 // the monster hit (+0x42) is an enemy
-                let enemy = ddsom_game::objects::pools::ENEMY.slot(rng.below(22)).0;
+                let enemy = ddsom_game::world::objects::pools::ENEMY.slot(rng.below(22)).0;
                 wr8(&mut b, enemy, 1);
                 wr16(&mut b, obj.0 + 0x42, enemy as u16);
             }
@@ -292,7 +292,7 @@ fn main() {
                         }
                     }
                 }
-                for q in ddsom_game::objects::pools::POOLS {
+                for q in ddsom_game::world::objects::pools::POOLS {
                     let free = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
                     wr16(&mut b, A5 + q.free, free as u16);
                 }

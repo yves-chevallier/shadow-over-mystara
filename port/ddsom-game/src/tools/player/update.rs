@@ -1,8 +1,8 @@
-//! Tools: the natives of `crate::player::update` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::update` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::player::update::*;
+use crate::actors::player::update::*;
 use crate::Native;
 
 /// 0x35292: update of the players, for the tools (the game calls `update_all`).

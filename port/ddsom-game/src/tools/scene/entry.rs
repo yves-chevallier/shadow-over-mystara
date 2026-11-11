@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::scene::entry` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::entry` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::entry::*;
+use crate::screens::scene::entry::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::{rd16, rd8, A5};
-use crate::scene::{player, var, PLAYERS, PLAYER_STRIDE};
+use crate::world::mem::{rd16, rd8, A5};
+use crate::screens::scene::{player, var, PLAYERS, PLAYER_STRIDE};
 use m68k::decode::Size;
 
 /// 0x20de6 called by the original code (respawn of a player, `families/creators.rs`): `place_players`, with

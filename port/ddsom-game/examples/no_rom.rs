@@ -48,7 +48,7 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
     };
     let m = cps2::Machine::game(contents, ee.as_deref());
     let mut m = ddsom_game::install_no_68k(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for f in 0..frames {
         script.apply(f, &mut m);
@@ -56,7 +56,7 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
             Ok(image) => image,
             Err(e) => {
                 let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                match msg.strip_prefix(ddsom_game::no68k::STOP) {
+                match msg.strip_prefix(ddsom_game::core::frame::STOP) {
                     Some(stop) => {
                         writeln!(out, "stop {}", stop.chars().take(200).collect::<String>().replace('\n', " ")).unwrap();
                         break;
@@ -90,7 +90,7 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
         let line: Vec<String> = parts.iter().map(|(name, h)| format!("{name}={h:016x}")).collect();
         writeln!(out, "frame {}", line.join(";")).unwrap();
     }
-    let residue: u64 = ddsom_game::data::residue().iter().map(|r| r.1).sum();
+    let residue: u64 = ddsom_game::world::data::residue().iter().map(|r| r.1).sum();
     writeln!(out, "residue {residue}").unwrap();
 }
 

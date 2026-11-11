@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::scene::bonus` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::bonus` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::bonus::*;
+use crate::screens::scene::bonus::*;
 use crate::Native;
-use crate::scene::Ctx;
-use crate::modes::Flow;
+use crate::screens::scene::Ctx;
+use crate::screens::modes::Flow;
 
 /// Original entry (sequences still in 68000).
 pub(crate) const BONUS: Native = Native {

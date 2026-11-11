@@ -1,4 +1,4 @@
-//! Tools: the natives of `crate::scene` for the original code.
+//! Tools: the natives of `crate::screens::scene` for the original code.
 
 pub(crate) mod blackout;
 pub(crate) mod bonus;

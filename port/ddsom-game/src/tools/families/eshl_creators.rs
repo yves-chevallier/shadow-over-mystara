@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::families::eshl_creators` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::eshl_creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::Cpu;
 
-use crate::families::eshl_creators::*;
+use crate::actors::families::eshl_creators::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// Natives of the creators (remaining calls by address): A0 = the creator, parameters in the registers; the function on
 /// the processor, then `rts`.

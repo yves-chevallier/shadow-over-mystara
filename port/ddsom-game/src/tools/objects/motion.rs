@@ -1,15 +1,15 @@
-//! Tools: the natives of `crate::objects::motion` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::motion` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_X, SR_Z};
 
-use crate::objects::motion::*;
+use crate::world::objects::motion::*;
 use crate::tools::prog32;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 macro_rules! motion_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {

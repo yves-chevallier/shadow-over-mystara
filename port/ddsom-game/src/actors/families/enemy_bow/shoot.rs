@@ -1,0 +1,389 @@
+//! Type 3, substates 4 (shots, `+6` = 0 first move chosen from the difficulty row, 2 second move, 4 arrival escape) and
+//! 6 (side steps and jumps).
+
+use crate::actors::families::cx::Bench;
+use super::stance::stance_begin;
+use super::*;
+use crate::world::objects::Current;
+use crate::world::objects::Obj;
+
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
+    if !x.in_arena(8) {
+        // off screen: it comes back through the arrival of variant 2
+        set_state_long(x, 0x0200_0000);
+        return arrival::walk_in(x, 0x20, 0x17);
+    }
+    match x.u8(f::SUB2) {
+        0 => first(x),
+        2 => second(x),
+        4 => {
+            x.set16(Bow::RESUME_STATE, 0x0204);
+            x.set16(Bow::RESUME_SUB2, 0x0202);
+            set_state_long(x, 0x020c_0000);
+            turn_to_resume(x);
+        }
+        _ => {}
+    }
+}
+
+/// 0x5c8aa: the turn-around of substate 12.
+fn turn_to_resume<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::SUB2, 2);
+    mv(x, 3);
+}
+
+// --- premier geste ------------------------------------------------------------------------------------
+
+fn first<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB3) {
+        0 => {
+            let action = rank_byte(x, FIRST_ACTIONS);
+            match action {
+                0 => shoot_or_approach(x),
+                2 => {
+                    x.set8(Bow::SAVED_STEP, 2);
+                    x.set8(Bow::TIMER, 0x20);
+                    x.set8(Obj::SPEED_INDEX, 8);
+                    if x.u8(f::FLIP) == 0 {
+                        x.set8(Obj::SPEED_INDEX, 0x1c);
+                    }
+                    x.set8(f::SUB3, 8);
+                    set_speed(x, 0xd);
+                    mv(x, 2);
+                }
+                4 => {
+                    let d6 = if rand_and(x, 1) != 0 { 3 } else { 2 };
+                    x.set8(Enemy::AI_WANDER, d6 as u8);
+                    set_speed(x, 0x21);
+                    x.set8(f::SUB3, 0xa);
+                    reload_shot(x);
+                }
+                6 => {
+                    set_state_long(x, STANCE);
+                    stance_begin(x);
+                }
+                8 => {
+                    x.set8(Bow::REPEAT, 1);
+                    x.set8(f::SUB3, 4);
+                    mv(x, 1);
+                }
+                _ => {}
+            }
+        }
+        2 => aim_again(x),
+        4 => fire_loop(x),
+        6 => side_walk(x),
+        8 => {
+            let n = x.u8(Bow::TIMER).wrapping_sub(1);
+            x.set8(Bow::TIMER, n);
+            if (n as i8) < 0 {
+                let saved = x.u8(Bow::SAVED_STEP);
+                x.set8(f::SUB3, saved);
+            }
+            x.move_by_table_xy();
+            x.anim_step();
+        }
+        10 => {
+            if x.anim_step() {
+                x.set8(f::SUB3, 6);
+                side_walk(x);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 0x5c37a: on a draw, a shot in place, otherwise closing in (shot type 4).
+fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set8(f::SUB3, 2);
+    if shoot_roll(x) {
+        return aim_again(x);
+    }
+    x.set8(Enemy::AI_POINT_SET, 4);
+    approach_target(x);
+}
+
+/// 0x5c44e: a shot in place: number of shots drawn from the row, then shot animation.
+fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::SUB3, 2);
+    let n = rank_byte(x, SHOT_REPEATS);
+    x.set8(Bow::REPEAT, n);
+    reload_shot(x);
+}
+
+/// 0x5c472: the shot animation (0 or 5 according to profile `+0x2f`).
+fn reload_shot<R: Bench>(x: &mut Cx<'_, R>) {
+    let anim = if x.u8(Enemy::GROUP) != 0 { 5 } else { 0 };
+    shot(x, anim);
+}
+
+/// 0x5c418: faces the living target, or goes to wait if it has fallen.
+fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
+    let target = load_target(x);
+    if target.u8(x.b, Enemy::ACTIVE) == 0 {
+        set_state_long(x, IDLE);
+        return;
+    }
+    set_state_long(x, 0x0202_0200);
+    lib::draw_6b(x);
+    set_speed(x, 0xd);
+    mv(x, 2);
+}
+
+/// +7 = 4: the arrow leaves at the animation key; at the end of the animation, one shot fewer.
+fn fire_loop<R: Bench>(x: &mut Cx<'_, R>) {
+    if !x.anim_step() {
+        if x.u8(f::KEY_FRAME) != 0 {
+            x.set8(f::KEY_FRAME, 0);
+            crate::actors::families::eshl_creators::shot_0(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
+        }
+        return;
+    }
+    let n = x.u8(Bow::REPEAT).wrapping_sub(1);
+    x.set8(Bow::REPEAT, n);
+    if n != 0 {
+        return reload_shot(x);
+    }
+    set_state_long(x, 0x0208_0000);
+}
+
+/// +7 = 6: side step toward the target's depth, then aims again.
+fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set8(Obj::SPEED_INDEX, 0);
+    let target = load_target(x);
+    let mine = x.u16(Obj::Y);
+    if mine >= target.u16(x.b, Obj::Y) {
+        x.add8(Obj::SPEED_INDEX, 0x10);
+    }
+    let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+    x.set8(Enemy::AI_WANDER, n);
+    if (n as i8) >= 0 {
+        x.set8(Bow::TIMER, 0x20);
+        let step = x.u8(f::SUB3);
+        x.set8(Bow::SAVED_STEP, step);
+        x.add8(f::SUB3, 2);
+        let anim = 0x10 + x.u8(Enemy::GROUP) as u32;
+        return mv(x, anim);
+    }
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
+    let want = if (dx as i16) < 0 { 0x20 } else { 0 };
+    if want as u8 != x.u8(f::FLIP) {
+        let state = x.u32(f::STATE);
+        x.set32(Bow::RESUME_STATE, state);
+        x.set8(f::SUB, 0xc);
+        x.set16(f::SUB2, 0);
+        return turn_to_resume(x);
+    }
+    x.set8(f::SUB3, 2);
+    aim_again(x);
+}
+
+// --- second geste (+6 = 2) ----------------------------------------------------------------------------
+
+fn second<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB3) {
+        0 => {
+            let action = rank_byte(x, SECOND_ACTIONS);
+            match action {
+                0 => {
+                    x.set8(f::SUB3, 2);
+                    if shoot_roll(x) {
+                        return start_shot(x);
+                    }
+                    x.set8(Enemy::AI_POINT_SET, 5);
+                    approach_target(x);
+                }
+                2 => {
+                    x.set8(Bow::SAVED_STEP, 2);
+                    dash_start(x);
+                }
+                4 => {
+                    x.set8(Bow::SAVED_STEP, 6);
+                    dash_start(x);
+                }
+                6 => {
+                    x.set8(f::SUB3, 0xa);
+                    x.set16(Obj::AZ, -0x38i16 as u16);
+                    jump_speeds(x);
+                    mv(x, 8);
+                }
+                _ => {}
+            }
+        }
+        2 => start_shot(x),
+        4 => {
+            if x.anim_step() {
+                follow_up(x);
+            }
+        }
+        6 => {
+            set_state_long(x, STANCE);
+            stance_begin(x);
+        }
+        8 => shoot_or_approach(x),
+        10 => {
+            x.move_xz();
+            x.anim_step();
+            if (x.u16(Obj::Z) as i16) >= 0 {
+                return;
+            }
+            x.set16(Obj::Z, 0);
+            x.add8(f::SUB3, 2);
+        }
+        12 => {
+            x.set8(Enemy::AI_POINT_SET, 4);
+            approach_target(x);
+        }
+        14 => {
+            let n = x.u8(Bow::TIMER).wrapping_sub(1);
+            x.set8(Bow::TIMER, n);
+            if (n as i8) < 0 {
+                let saved = x.u8(Bow::SAVED_STEP);
+                x.set8(f::SUB3, saved);
+            }
+            x.move_by_table_xy();
+            x.anim_step();
+        }
+        _ => {}
+    }
+}
+
+/// Speeds of a jump: upward 0x200, forward 0x280 (inverted if the orientation is non-zero).
+fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set16(Obj::VZ, 0x200);
+    x.set16(Obj::VX, 0x280);
+    x.set16(Obj::AX, 0);
+    if x.u8(f::FLIP) != 0 {
+        negate(x, Obj::VX);
+    }
+}
+
+/// 0x5c5f6: sideways run-up (speed 0xb, animation 2) for `0x23` frames.
+fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set8(Bow::TIMER, 0x23);
+    x.set8(Obj::SPEED_INDEX, 8);
+    if x.u8(f::FLIP) != 0 {
+        x.set8(Obj::SPEED_INDEX, 0x1c);
+    }
+    x.set8(f::SUB3, 0xe);
+    set_speed(x, 0xb);
+    mv(x, 2);
+}
+
+/// 0x5c59e: a point-blank shot (arrow of type 0xa, strength 4).
+pub(super) fn start_shot<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::SUB3, 2);
+    x.set8(Enemy::AI_SHOT, 3);
+    x.set8(Enemy::STRIKE_KIND, 0xa);
+    x.set8(Enemy::STRIKE_POWER, 4);
+    x.set32(Enemy::RESUME_STATE, 0x0204_0202);
+    shot(x, 1);
+}
+
+// --- substate 6 --------------------------------------------------------------------------------------
+
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => crouch(x),
+        2 | 8 => sidestep(x),
+        4 | 6 => leap(x),
+        _ => {}
+    }
+}
+
+/// 0x5c6e6…: end of a substate 6 move: standing, and on a draw, waiting.
+fn done_gesture<R: Bench>(x: &mut Cx<'_, R>) {
+    set_state_long(x, STANCE);
+    if lib::maybe_draw_6e(x) {
+        x.set8(f::SUB, 0xa);
+        x.set16(f::SUB2, 0);
+        stance::check_facing(x);
+    }
+}
+
+/// +6 = 0: crouches (animation 1 or 0xb at random).
+fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
+        let anim = if rand_and(x, 1) != 0 { 1 } else { 0xb };
+        return mv(x, anim);
+    }
+    if x.anim_step() {
+        done_gesture(x);
+    }
+}
+
+/// +6 = 2 and 8: side step for `+0x6b` frames.
+fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB3) {
+        0 => {
+            x.add8(f::SUB3, 2);
+            x.set8(Enemy::AI_WANDER, 0xc);
+            x.set8(Obj::SPEED_INDEX, 0);
+            if rand_and(x, 1) != 0 {
+                x.add8(Obj::SPEED_INDEX, 0x10);
+            }
+            set_speed(x, 0xd);
+            mv(x, 2);
+        }
+        2 => {
+            x.move_by_table_xy();
+            x.anim_step();
+            let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+            x.set8(Enemy::AI_WANDER, n);
+            if (n as i8) >= 0 {
+                return;
+            }
+            if x.u8(f::SUB2) == 8 {
+                x.add8(f::SUB3, 2);
+                return;
+            }
+            done_gesture(x);
+        }
+        4 => {
+            x.add8(f::SUB3, 2);
+            shot(x, 0);
+        }
+        6 => {
+            if x.anim_step() {
+                done_gesture(x);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// +6 = 4 and 6: jump with run-up (speed 0x280), landing, then shot (6).
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB3) {
+        0 => {
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::AZ, -0x38i16 as u16);
+            jump_speeds(x);
+            mv(x, 8);
+        }
+        2 => {
+            x.move_xz();
+            x.anim_step();
+            if (x.u32(Obj::Z) as i32) >= 0 {
+                return;
+            }
+            x.set32(Obj::Z, 0);
+            if x.u8(f::SUB2) == 6 {
+                x.add8(f::SUB3, 2);
+                return;
+            }
+            done_gesture(x);
+        }
+        4 => {
+            x.add8(f::SUB3, 2);
+            shot(x, 1);
+        }
+        6 => {
+            if x.anim_step() {
+                done_gesture(x);
+            }
+        }
+        _ => {}
+    }
+}

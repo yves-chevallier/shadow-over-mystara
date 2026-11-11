@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::video` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::video` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::video::*;
+use crate::services::video::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{rd16, set_low_byte, wr16};
+use crate::world::mem::{rd16, set_low_byte, wr16};
 
 /// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
 fn gauge_with_value(c: &mut Cpu, b: &mut World) {

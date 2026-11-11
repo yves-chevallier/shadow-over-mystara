@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::scene::shop` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::shop` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::shop::*;
+use crate::screens::scene::shop::*;
 use crate::Native;
-use crate::scene::Ctx;
-use crate::modes::Flow;
+use crate::screens::scene::Ctx;
+use crate::screens::modes::Flow;
 
 pub(crate) const SHOP: Native = Native {
     entry: 0xf792e,

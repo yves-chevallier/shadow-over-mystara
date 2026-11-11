@@ -1,26 +1,26 @@
-//! Tools: the natives of `crate::placement` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::placement` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::placement::*;
+use crate::world::placement::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{rd16, set_low_word};
-use crate::objects::Obj;
+use crate::world::mem::{rd16, set_low_word};
+use crate::world::objects::Obj;
 
 /// The search of `place_on_free_ground` replayed (it reads the terrain only): the last terrain examined and the
 /// `dbf` counters D5 (shifts in x, from 4) and D6 (shifts in depth, from 9) at its end; a counter whose loop ran out
 /// has a low word of -1.
-fn search_end(b: &mut World, o: Obj) -> (crate::video::Terrain, u32, u32) {
+fn search_end(b: &mut World, o: Obj) -> (crate::services::video::Terrain, u32, u32) {
     let x0 = start_x(b, o);
     let mut last = None;
     for i in 0..5u16 {
         let mut x = if i == 0 { x0 } else { x0.wrapping_add(16) };
         let y0 = start_y(b, o);
         for j in 0..10u16 {
-            let t = crate::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
+            let t = crate::services::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
             if is_free(&t) {
                 return (t, (4 - i) as u32, (9 - j) as u32);
             }
@@ -37,7 +37,7 @@ fn place_on_free_ground_native(c: &mut Cpu, b: &mut World) {
     let o = Obj(c.a[0]);
     let (last, d5, d6) = search_end(b, o);
     place_on_free_ground(b, o);
-    crate::video::terrain_regs(c, &last);
+    crate::services::video::terrain_regs(c, &last);
     c.d[5] = d5;
     c.d[6] = d6;
     set_low_word(&mut c.d[1], rd16(b, o.0 + 0x10));

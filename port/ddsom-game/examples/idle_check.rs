@@ -17,7 +17,7 @@ fn main() {
     ddsom_game::install_reference(&mut mb);
     ma.idle = None;
     mb.idle = Some(ddsom_game::idle);
-    let script = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let script = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     for f in 0..frames {
         script.apply(f, &mut ma);

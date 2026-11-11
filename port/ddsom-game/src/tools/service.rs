@@ -1,9 +1,9 @@
-//! Tools: the natives of `crate::service::memory` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::service::memory` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::Cpu;
 
-use crate::mem::rd32;
+use crate::world::mem::rd32;
 
 /// Patch common to both machines (`lib.rs`, `patches`): the original test (`0x2cf26`, entered by
 /// `bsr`) is run until its return by the interpreter, without advancing the machine's time.

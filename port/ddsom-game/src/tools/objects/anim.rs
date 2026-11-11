@@ -1,17 +1,17 @@
-//! Tools: the natives of `crate::objects::anim` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::anim` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::objects::anim::*;
+use crate::world::objects::anim::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
 use crate::tools::prog32;
-use crate::objects::Obj;
-use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
+use crate::world::objects::Obj;
+use crate::world::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
 
 macro_rules! anim_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {

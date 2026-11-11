@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::player::spawn` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player::spawn` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::player::spawn::*;
+use crate::actors::player::spawn::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::player::{Ctx, Player};
+use crate::actors::player::{Ctx, Player};
 
 /// Declares the native of a creator at its original address; `$body` reads its parameters in `$d` and `$a`.
 macro_rules! creator {

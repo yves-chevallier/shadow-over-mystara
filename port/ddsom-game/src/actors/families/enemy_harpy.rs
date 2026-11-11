@@ -1,0 +1,681 @@
+//! "Harpy" enemy (ENEMY type 21, 0x756c4): flying creature that crosses the screen. See
+//! `docs/families/enemy.md`.
+//!
+//! Ten variants (`+3`): 0 and 1 fly from one edge to the other, 2 to 5 skim the terrain, 6 and 7 turn
+//! around, 8 goes to the foreground, 9 is the model with no movement of its own. Each creature creates at
+//! birth a companion (shadow, ESHL type 0x10) whose link `+0xaa` keeps. Substates in the active state:
+//! 0 flight, 2 attack (`+0x2f` picks the series: 0 projectiles, 1 hits, 2 shot), 4 pause, 6 exit
+//! from the screen, 8 exit through the top.
+
+use crate::actors::families::cx::Bench;
+use crate::world::record::record;
+use crate::world::data::RomAddr;
+use super::cx::{handlers, Cx};
+use super::enemy_common::*;
+use crate::world::objects::Obj;
+use super::effects_creators::leftovers::Pure;
+
+/// Animation sets: flight and attacks.
+const SET_FLY: RomAddr = RomAddr(0x16a10c);
+const SET_ATTACK: RomAddr = RomAddr(0x16a116);
+const SET_HIT: RomAddr = RomAddr(0x16a132);
+/// Rows of eight bytes per variant (orientation, durations, X offset) and Y offsets according to `+0x42`.
+const VARIANT_ROWS: &str = "harpy/variants";
+const OFFSETS_Y: &str = "harpy/depth_offsets";
+/// Hit reaction animation, according to the attack series `+0x2f`.
+const HIT_ANIM: &str = "harpy/hit_anims";
+
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Harpy(pub Obj);
+
+impl Harpy {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl Harpy {
+        param, set_param, PARAM: u8 @ 0x42;
+        kind, set_kind, KIND: u8 @ 0x43;
+        /// Set on the companion when the harpy is hit (h).
+        companion_hit, set_companion_hit, COMPANION_HIT: u8 @ 0x5a;
+        timer_a, set_timer_a, TIMER_A: u8 @ 0xa0;
+        timer_b, set_timer_b, TIMER_B: u8 @ 0xa1;
+        step, set_step, STEP: u8 @ 0xa2;
+        passes, set_passes, PASSES: u8 @ 0xa3;
+        /// Rounds of flight left before a new attack (h).
+        wait_rounds, set_wait_rounds, WAIT_ROUNDS: u8 @ 0xa4;
+        shot_done, set_shot_done, SHOT_DONE: u8 @ 0xa5;
+        shot, set_shot, SHOT: u32 @ 0xa6;
+        companion, set_companion, COMPANION: u16 @ 0xaa;
+        exit_limit, set_exit_limit, EXIT_LIMIT: u16 @ 0xae;
+        turn_z, set_turn_z, TURN_Z: u16 @ 0xb0;
+        resume, set_resume, RESUME: u8 @ 0xb1;
+    }
+}
+
+/// The projectile that a harpy holds until it throws it (object `Harpy::SHOT`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct HarpyShot(pub Obj);
+
+impl HarpyShot {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl HarpyShot {
+        /// Set by the harpy at the key frame of its throw: the projectile leaves (h).
+        release, set_release, RELEASE: u8 @ 0x55;
+    }
+}
+use crate::world::objects::Current;
+
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+    if suspended(x) {
+        return;
+    }
+    match x.u8(f::STATE) {
+        st::INIT => init(x),
+        st::ACTIVE => active(x),
+        st::HIT => hit(x),
+        st::DEAD => dead(x),
+        _ => {}
+    }
+}
+
+// --- aides ------------------------------------------------------------------------------------
+
+fn step<R: Bench>(x: &mut Cx<'_, R>) {
+    x.anim_step();
+}
+
+fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
+    x.set32(f::STATE, v);
+}
+
+/// Re-listing: variant 8 lives in the foreground list.
+fn reinsert<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(Obj::VARIANT) == 8 {
+        x.reinsert_foreground();
+    } else {
+        x.reinsert();
+    }
+}
+
+/// The companion (`+0xaa`) goes to state 6 (release).
+fn release_companion<R: Bench>(x: &mut Cx<'_, R>) {
+    let c = x.linked(Harpy::COMPANION);
+    c.set_u8(x.b, f::STATE, 6);
+}
+
+/// End of the flight: the creature and its companion go to the next state.
+fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::STATE, 4);
+    release_companion(x);
+}
+
+/// Screen exit: like `vanish`, first removing the creature from the scene (0x27ee).
+fn leave<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::STATE, 4);
+    detach_from_host(x);
+    release_companion(x);
+}
+
+fn speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+    x.select_speed(&crate::world::objects::motion::SPEEDS_B, n as u16);
+}
+
+fn move_xz_table<R: Bench>(x: &mut Cx<'_, R>) {
+    x.move_by_table_xz();
+}
+
+/// One turn of the flight angle: every `reload` frames, `+0xa2` is added to the direction. In free flight
+/// (`clamp`, 0x758aa) an angle that became negative is reset to zero.
+fn bank<R: Bench>(x: &mut Cx<'_, R>, reload: u8, clamp: bool) {
+    let t = x.u8(Harpy::TIMER_A).wrapping_sub(1);
+    x.set8(Harpy::TIMER_A, t);
+    if (t as i8) < 0 {
+        x.set8(Harpy::TIMER_A, reload);
+        let mut angle = x.u8(Obj::SPEED_INDEX).wrapping_add(x.u8(Harpy::STEP));
+        if clamp && (angle as i8) < 0 {
+            angle = 0;
+        }
+        x.set8(Obj::SPEED_INDEX, angle);
+    }
+}
+
+// --- state 0: creation --------------------------------------------------------------------------
+
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::STATE, 2);
+    x.set8(Enemy::ACTIVE, 1);
+    x.set8(f::BOX_SET, 0xe);
+    lib::initial_hp(x);
+    let index = lib::set_immunities(x);
+    x.set8(Enemy::AI_68, 4);
+    x.set8(Enemy::AI_69, 4);
+    x.set8(Enemy::AI_BYTE_ROW, 4);
+    x.set8(Enemy::VULNERABLE, 0);
+    // Original glitch: `+0x8e` receives the low byte of D0, the index into the immunity table that 0xfe5a leaves.
+    x.set8(Enemy::AI_ROW_8E, index as u8);
+    x.set8(Enemy::EVENT_LOW, 0);
+    x.set8(Enemy::EVENT_KIND, 0xc);
+    x.set32(Enemy::RESUME_STATE, 0);
+    x.set8(Harpy::PASSES, 2);
+    // variant row: orientation, durations `+0xa0..+0xa3`, X offset
+    let rows = tables::table(VARIANT_ROWS);
+    let row = x.u8(Obj::VARIANT).wrapping_shl(3) as u32;
+    let flip = rows.at16(x.b, row);
+    x.set16(f::FLIP, flip);
+    let timers = rows.at32(x.b, row + 2);
+    x.set32(Harpy::TIMER_A, timers);
+    let dx = rows.at16(x.b, row + 6);
+    x.add16(Obj::X, dx);
+    let mut d4 = x.u16(Obj::Z) as u32;
+    if x.u8(Harpy::KIND) != 0 {
+        d4 = d4 & !0xff | x.u8(Harpy::PARAM) as u32;
+        let off = d4 as u16 as i16 as i32 as u32;
+        let dy = tables::table(OFFSETS_Y).at16(x.b, off);
+        x.add16(Obj::Y, dy);
+        d4 = d4 & !0xffff | tables::table(OFFSETS_Y).at16(x.b, off.wrapping_add(2)) as u32;
+    }
+    let d4 = d4 as u16;
+    let variant = x.u8(Obj::VARIANT);
+    if variant == 8 || (variant as i8) < 2 {
+        x.set16(Harpy::EXIT_LIMIT, 0x100u16.wrapping_add(d4));
+        x.set16(Obj::Z, d4);
+    } else {
+        let limit = if variant & 1 != 0 { -0x100i16 as u16 } else { 0x280 };
+        x.set16(Harpy::EXIT_LIMIT, limit);
+    }
+    let anim = (x.u8(Harpy::KIND).wrapping_add(x.u8(Enemy::GROUP)) as i8) as i16 as u16;
+    x.anim_start(SET_FLY.0, (anim as u32) as u16);
+    speed(x, 0x18);
+    if variant >> 1 == 0 {
+        let vz = x.u16(Enemy::VY);
+        x.set16(Enemy::VZ, vz);
+    }
+    // 0xa036e: companion; on failure, the original still stores the A1 left by the allocation.
+    let companion = match super::small::harpy_companion_via(&mut Pure, x.b, x.o) {
+        Ok((o, hp)) => {
+            // Original glitch: HP/4 stays in D2.
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | hp as u32;
+            o
+        }
+        Err(a1) => {
+            x.add8(f::STATE, 4);
+            a1
+        }
+    };
+    x.set16(Harpy::COMPANION, companion.word());
+    reinsert(x);
+}
+
+// --- state 2: active -----------------------------------------------------------------------------
+
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
+    let freeze = x.u8(f::FREEZE) as i8;
+    if freeze > 0 {
+        x.set8(f::FREEZE, (freeze - 1) as u8);
+    }
+    match x.u8(f::SUB) {
+        0 => fly(x),
+        2 => attack(x),
+        4 => pause(x),
+        6 => exit_flight(x),
+        8 => attack_end(x),
+        _ => {}
+    }
+    reinsert(x);
+}
+
+/// +5 = 0 (0x7594a): flight of the variant.
+fn fly<R: Bench>(x: &mut Cx<'_, R>) {
+    if grabbed(x) {
+        return set_state_long(x, 0x0206_0000);
+    }
+    match x.u8(Obj::VARIANT) {
+        0 | 1 => fly_loop(x, 0xc),
+        2..=5 => fly_loop_b(x),
+        6 | 7 => turn_back(x),
+        8 => fly_front(x),
+        _ => {}
+    }
+}
+
+/// End of a pass: `+0xa1` elapsed, the creature leaves again or attacks (variants 0 and 1).
+fn fly_loop<R: Bench>(x: &mut Cx<'_, R>, reload: u8) {
+    move_xz_table(x);
+    step(x);
+    bank(x, reload, false);
+    let t = x.u8(Harpy::TIMER_B).wrapping_sub(1);
+    x.set8(Harpy::TIMER_B, t);
+    if (t as i8) < 0 {
+        let passes = x.u8(Harpy::PASSES).wrapping_sub(1);
+        x.set8(Harpy::PASSES, passes);
+        if (passes as i8) < 0 {
+            return x.add8(f::SUB, 6);
+        }
+        x.set8(Harpy::TIMER_B, 0x14);
+        x.add8(f::SUB, 2);
+        return x.set8(Harpy::RESUME, 0);
+    }
+    if (x.u16(Obj::Z) as i16) > (x.u16(Harpy::EXIT_LIMIT) as i16) {
+        vanish(x);
+    }
+}
+
+/// Variants 2 to 5 (0x75aec): same flight, slower pass and a pause of 0x30 frames.
+fn fly_loop_b<R: Bench>(x: &mut Cx<'_, R>) {
+    move_xz_table(x);
+    step(x);
+    bank(x, 0x10, false);
+    let t = x.u8(Harpy::TIMER_B).wrapping_sub(1);
+    x.set8(Harpy::TIMER_B, t);
+    if (t as i8) < 0 {
+        let passes = x.u8(Harpy::PASSES).wrapping_sub(1);
+        x.set8(Harpy::PASSES, passes);
+        if (passes as i8) < 0 {
+            return x.add8(f::SUB, 6);
+        }
+        x.set8(Harpy::RESUME, 0);
+        x.set8(Harpy::TIMER_B, 0x30);
+        x.add8(f::SUB, 2);
+    }
+}
+
+/// Variant 8 (0x75aa2): flight in the foreground.
+fn fly_front<R: Bench>(x: &mut Cx<'_, R>) {
+    move_xz_table(x);
+    step(x);
+    bank(x, 0xc, false);
+    let t = x.u8(Harpy::TIMER_B).wrapping_sub(1);
+    x.set8(Harpy::TIMER_B, t);
+    if (t as i8) < 0 {
+        return set_state_long(x, 0x0208_0000);
+    }
+    if (x.u16(Obj::Z) as i16) > (x.u16(Harpy::EXIT_LIMIT) as i16) {
+        vanish(x);
+    }
+}
+
+/// Variants 6 and 7 (0x75980): crosses the screen then turns around.
+fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => {
+            x.move_x();
+            let t = x.u8(Harpy::TIMER_B).wrapping_sub(1);
+            x.set8(Harpy::TIMER_B, t);
+            if (t as i8) < 0 {
+                let z = x.u16(Obj::Z);
+                x.set16(Harpy::TURN_Z, z);
+                x.set8(Obj::SPEED_INDEX, 0);
+                x.set8(Harpy::RESUME, 2);
+                set_state_long(x, 0x0202_0000);
+            }
+        }
+        2 => {
+            move_xz_table(x);
+            step(x);
+            if (x.u16(Obj::Z) as i16) >= 0xf0 {
+                let mut d = -0x30i16;
+                if x.u8(f::FLIP) != 0 {
+                    d = -d;
+                }
+                x.add16(Obj::X, d as u16);
+                x.set8(Obj::SPEED_INDEX, 0x10);
+                x.add8(f::SUB2, 2);
+                let c = x.linked(Harpy::COMPANION);
+                let flip = c.u8(x.b, f::FLIP) ^ 0x20;
+                c.set_u8(x.b, f::FLIP, flip);
+                let own = x.u8(f::FLIP) ^ 0x20;
+                x.set8(f::FLIP, own);
+            }
+        }
+        4 => {
+            move_xz_table(x);
+            step(x);
+            if (x.u16(Harpy::TURN_Z) as i16) > (x.u16(Obj::Z) as i16) {
+                let angle = if x.u8(f::FLIP) == 0 { 8 } else { 0x18 };
+                x.set8(Obj::SPEED_INDEX, angle);
+                let z = x.u16(Harpy::TURN_Z);
+                x.set16(Obj::Z, z);
+                set_state_long(x, 0x0202_0000);
+                x.set8(Harpy::RESUME, 6);
+            }
+        }
+        6 => {
+            set_state_long(x, 0x0206_0000);
+            exit_flight(x);
+        }
+        _ => {}
+    }
+}
+
+/// +5 = 4 (0x75b2e): wait then back to flight.
+fn pause<R: Bench>(x: &mut Cx<'_, R>) {
+    step(x);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
+    if (n as i8) < 0 {
+        x.set8(f::SUB, 0);
+    }
+}
+
+/// +5 = 6 (0x75884): screen exit depending on the variant.
+fn exit_flight<R: Bench>(x: &mut Cx<'_, R>) {
+    move_xz_table(x);
+    step(x);
+    match x.u8(Obj::VARIANT) >> 1 {
+        0 => {
+            bank(x, 0x14, true);
+            if x.u16(Obj::Z) > x.u16(Harpy::EXIT_LIMIT) {
+                leave(x);
+            }
+        }
+        1..=3 => {
+            let mut left = var::SCROLL_X.get(x.b);
+            if x.u8(Harpy::PARAM) == 4 {
+                left = var::CAMERA_ALT_X.get(x.b);
+            }
+            let limit = x.u16(Harpy::EXIT_LIMIT).wrapping_add(left) as i16;
+            let here = x.u16(Obj::X).wrapping_add(left) as i16;
+            let gone = if x.u8(Obj::VARIANT) & 1 == 0 { limit <= here } else { limit >= here };
+            if gone {
+                leave(x);
+            }
+        }
+        _ => {
+            let top = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
+            if top <= x.u16(Obj::Z) {
+                leave(x);
+            }
+        }
+    }
+}
+
+/// +5 = 8 (0x75b40): end of the flight of variant 8.
+fn attack_end<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => attack_start(x),
+        2 => attack_aim(x),
+        4 => attack_wait(x),
+        _ => {}
+    }
+}
+
+// --- substate 2: attack ----------------------------------------------------------------------
+
+fn attack<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(Enemy::GROUP) {
+        0 => attack_shots(x),
+        2 => attack_claws(x),
+        4 => attack_fire(x),
+        _ => {}
+    }
+}
+
+fn attack_shots<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => attack_start(x),
+        2 => attack_aim(x),
+        4 => attack_wait(x),
+        6 => attack_return(x),
+        _ => {}
+    }
+}
+
+/// 0x75b7c: the creature aims at a player and throws a projectile.
+fn attack_start<R: Bench>(x: &mut Cx<'_, R>) {
+    x.add8(f::SUB2, 2);
+    if let Some(target) = lib::pick_target(x) {
+        // 0xa0566 with D5 = 0 (left as a leftover) and A2 = the target
+        *x.c.d5() = 0;
+        if let Some(shot) = super::small::harpy_shot_via(&mut Pure, x.b, x.o, 0, target.0) {
+            x.set32(Harpy::SHOT, shot.0);
+            let n = x.u8(Harpy::KIND) as u32;
+            x.anim_start(SET_ATTACK.0, n as u16);
+            return lib::sound(x, crate::hw::sound::CMD_36C);
+        }
+    }
+    set_state_long(x, 0x0204_0000);
+    x.set8(Enemy::AI_BYTE, 0x1e);
+    let n = x.u8(Harpy::KIND) as u32;
+    x.anim_start(SET_FLY.0, n as u16);
+}
+
+/// 0x75bd0: waits for the end of the firing gesture.
+fn attack_aim<R: Bench>(x: &mut Cx<'_, R>) {
+    step(x);
+    if x.u8(Harpy::SHOT_DONE) != 0 {
+        x.add8(f::SUB2, 2);
+        let n = 2 + x.u8(Harpy::KIND) as u32;
+        x.anim_start(SET_ATTACK.0, n as u16);
+    }
+}
+
+/// 0x75bf4: releases the projectile at the key frame.
+fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.anim_step() {
+        return x.add8(f::SUB2, 2);
+    }
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
+        let shot = Obj(x.u32(Harpy::SHOT) & 0xff_ffff);
+        shot.set_u8(x.b, HarpyShot::RELEASE, 1);
+        x.set8(Harpy::TIMER_A, 0x1e);
+        lib::sound(x, crate::hw::sound::CMD_36D);
+    }
+}
+
+/// 0x75c36: back to flight after the shot.
+fn attack_return<R: Bench>(x: &mut Cx<'_, R>) {
+    let t = x.u8(Harpy::TIMER_A).wrapping_sub(1);
+    x.set8(Harpy::TIMER_A, t);
+    if (t as i8) >= 0 {
+        return;
+    }
+    set_state_long(x, 0x0202_0000);
+    if rand_and(x, 1) != 0 {
+        let n = x.u8(Harpy::WAIT_ROUNDS).wrapping_sub(1);
+        x.set8(Harpy::WAIT_ROUNDS, n);
+        if (n as i8) >= 0 {
+            return;
+        }
+        x.set8(Harpy::WAIT_ROUNDS, 2);
+    }
+    set_state_long(x, 0x0200_0000);
+    let resume = x.u8(Harpy::RESUME);
+    x.set8(f::SUB2, resume);
+}
+
+fn attack_claws<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => {
+            x.add8(f::SUB2, 2);
+            let n = 4 + x.u8(Harpy::KIND) as u32;
+            x.anim_start(SET_ATTACK.0, n as u16);
+        }
+        2 => {
+            if x.anim_step() {
+                x.add8(f::SUB2, 2);
+                let n = 6 + x.u8(Harpy::KIND) as u32;
+                x.anim_start(SET_ATTACK.0, n as u16);
+            }
+        }
+        4 => {
+            if x.anim_step() {
+                x.set8(Harpy::TIMER_A, 0x1e);
+                x.add8(f::SUB2, 2);
+                let n = 2 + x.u8(Harpy::KIND) as u32;
+                x.anim_start(SET_FLY.0, n as u16);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
+                if pick_target(x) {
+                    if let (Some(shot), false) = lib::eshl_12(x) {
+                        x.set32(Harpy::SHOT, shot.0);
+                    }
+                }
+            }
+        }
+        _ => attack_return(x),
+    }
+}
+
+fn attack_fire<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => {
+            x.add8(f::SUB2, 2);
+            x.anim_start(SET_ATTACK.0, 9);
+        }
+        2 => {
+            if x.anim_step() {
+                x.add8(f::SUB2, 2);
+                x.set8(Harpy::TIMER_A, 0x30);
+                x.anim_start(SET_FLY.0, 4);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
+                if let Some(target) = lib::pick_target(x) {
+                    if let Some(shot) = lib::eshl_13(x, target.0) {
+                        x.set32(Harpy::SHOT, shot.0);
+                    }
+                }
+            }
+        }
+        _ => attack_return(x),
+    }
+}
+
+// --- state 4: hit ----------------------------------------------------------------------------
+
+fn hit<R: Bench>(x: &mut Cx<'_, R>) {
+    let freeze = x.u8(f::FREEZE) as i8;
+    if freeze > 0 {
+        x.set8(f::FREEZE, (freeze - 1) as u8);
+    } else {
+        match x.u8(f::SUB) {
+            0 => hit_recoil(x),
+            2 => hit_fall(x),
+            4 => hit_dying(x),
+            _ => {}
+        }
+    }
+    x.reinsert_foreground();
+}
+
+/// Fall animation of the attack series (`+0x2f`).
+fn hit_anim<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
+    let series = x.u8(Enemy::GROUP) as u32;
+    tables::table(HIT_ANIM).at8(x.b, series)
+}
+
+fn hit_recoil<R: Bench>(x: &mut Cx<'_, R>) {
+    match x.u8(f::SUB2) {
+        0 => {
+            x.add8(f::SUB2, 2);
+            let c = x.linked(Harpy::COMPANION);
+            c.set_u8(x.b, Harpy::COMPANION_HIT, 1);
+            x.set8(f::FREEZE, 1);
+            x.anim_start(SET_HIT.0, 0xf);
+        }
+        2 => {
+            if x.anim_step() {
+                x.add8(f::SUB2, 2);
+                x.set16(Enemy::VZ, 0x400);
+                x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
+                let vx = if x.u8(f::FLIP) != 0 { -0x200i16 } else { 0x200 };
+                x.set16(Enemy::VX, vx as u16);
+                x.set16(Enemy::AX, 0);
+                x.anim_start(SET_HIT.0, 0x10);
+            }
+        }
+        4 => {
+            step(x);
+            x.move_xz();
+            let z = x.u16(Obj::Z).wrapping_add(x.u16(Obj::Y));
+            let mut limit = var::SCROLL_Y.get(x.b);
+            if var::CAMERA_SELECT.get(x.b) != 0 {
+                limit = var::CAMERA_ALT_Y.get(x.b);
+            }
+            if (z as i16) <= (limit as i16) {
+                x.add8(f::STATE, 2);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn hit_fall<R: Bench>(x: &mut Cx<'_, R>) {
+    let c = x.linked(Harpy::COMPANION);
+    c.set_u8(x.b, Harpy::COMPANION_HIT, 1);
+    let kind = x.u8(Harpy::KIND) != 0;
+    if kind && x.u8(f::SUB2) != 0 {
+        if x.u8(Enemy::DISPLAY) & 2 == 0 {
+            x.add8(f::STATE, 2);
+        }
+        x.move_z();
+        return step(x);
+    }
+    match x.u8(f::SUB2) {
+        0 => {
+            x.add8(f::SUB2, 2);
+            x.set32(Enemy::HIT_LOCK, 0);
+            let base = hit_anim(x) as u32;
+            x.set8(Harpy::TIMER_A, 0xf);
+            x.set8(Harpy::RESUME, base as u8 + 2);
+            x.set16(Enemy::VZ, (-0x300i16) as u16);
+            let n = base.wrapping_add(x.u8(Harpy::KIND) as u32) & 0xff;
+            x.anim_start(SET_HIT.0, n as u16);
+        }
+        2 => {
+            if (x.u16(Obj::Z) as i16) >= 0 {
+                x.move_z();
+                return step(x);
+            }
+            x.add8(f::SUB2, 2);
+            x.set32(Obj::Z, 0);
+            x.set8(Harpy::TIMER_A, 0x10);
+            let n = x.u8(Harpy::RESUME) as i8 as i16 as u16;
+            x.anim_start(SET_HIT.0, (n as u32) as u16);
+        }
+        _ => {
+            let t = x.u8(Harpy::TIMER_A).wrapping_sub(1);
+            x.set8(Harpy::TIMER_A, t);
+            if (t as i8) < 0 {
+                x.add8(f::STATE, 2);
+            }
+        }
+    }
+}
+
+fn hit_dying<R: Bench>(x: &mut Cx<'_, R>) {
+    if x.u8(f::SUB2) != 0 {
+        if x.anim_step() {
+            set_state_long(x, 0x0200_0000);
+        }
+        return;
+    }
+    x.add8(f::SUB2, 2);
+    if (x.u8(f::HP) as i8) < 0 {
+        set_state_long(x, 0x0400_0000);
+    }
+    x.set32(Enemy::HIT_LOCK, 0);
+    let base = hit_anim(x).wrapping_add(x.u8(Harpy::KIND)).wrapping_sub(2);
+    x.anim_start(SET_HIT.0, (base as u32) as u16);
+}
+
+// --- state 6: release ---------------------------------------------------------------------------
+
+fn dead<R: Bench>(x: &mut Cx<'_, R>) {
+    detach_from_host(x);
+    free(x);
+}
+
+handlers! {
+    ENEMY_21 0x756c4 "enemy_21" run,
+}

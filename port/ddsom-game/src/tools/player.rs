@@ -1,4 +1,4 @@
-//! Tools: the natives of `crate::player` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::player` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 pub(crate) mod actions;
@@ -13,8 +13,8 @@ pub(crate) mod walk;
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::player::*;
-use crate::dispatch::Leftovers;
+use crate::actors::player::*;
+use crate::core::dispatch::Leftovers;
 
 /// Runs the players' code `f` for a caller still on the processor (game loop, natives for the tools): the leftovers
 /// D2-D5 go from the register bench to `Ctx::leftovers` and back; nothing else is read or written there.

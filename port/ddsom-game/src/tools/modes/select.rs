@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::modes::select` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::modes::select` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::modes::select::*;
+use crate::screens::modes::select::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::modes::Flow;
-use crate::scene::Ctx;
+use crate::screens::modes::Flow;
+use crate::screens::scene::Ctx;
 
 pub(crate) const PHASE_4: Native = Native {
     entry: 0x1ca20,

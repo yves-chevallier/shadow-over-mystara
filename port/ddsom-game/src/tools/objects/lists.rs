@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::objects::lists` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::objects::lists` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::objects::lists::*;
+use crate::world::objects::lists::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// `unlink_all` with the original's register: A0 = last object removed (unchanged if the lists are empty).
 #[track_caller]

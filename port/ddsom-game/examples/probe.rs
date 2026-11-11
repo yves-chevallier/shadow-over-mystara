@@ -10,7 +10,7 @@ fn main() {
     ddsom_game::install_reference(&mut m);
     // like validate: overclocked 68000 (DDSOM_OC, default 16; 1 = arcade speed)
     m.set_overclock(std::env::var("DDSOM_OC").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
-    let s = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     let extra: Vec<(u32, u32)> = a[5..]
         .iter()

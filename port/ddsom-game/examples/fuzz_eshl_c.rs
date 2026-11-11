@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -360,12 +360,12 @@ fn table_variants(entry: u32) -> u32 {
 }
 
 fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, filter: Option<u32>) {
-    use ddsom_game::mem::{rd16, rd8};
-    use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
+    use ddsom_game::world::mem::{rd16, rd8};
+    use ddsom_game::world::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -544,7 +544,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
-                    ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                     for _ in 0..20_000 {
                         if c2.pc == 0xfffe {
                             break;
@@ -572,7 +572,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                         let sp = c2.a[7];
                         c2.pc = entry;
                         c2.a[7] = sp.wrapping_sub(4);
-                        ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                         for _ in 0..400 {
                             if c2.pc == 0xfffe {
                                 break;
@@ -625,7 +625,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -648,17 +648,17 @@ fn main() {
             rng_state(c, b, &mut rng);
             let (d0, a0) = (c.d[0], c.a[0]);
             let context = if entry == 0x2d662 {
-                let var = ddsom_game::mem::rd16(b, A5 + 0x70);
-                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, 0xff1d8e + i)).collect();
-                let block: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, c.a[6] + i)).collect();
+                let var = ddsom_game::world::mem::rd16(b, A5 + 0x70);
+                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, 0xff1d8e + i)).collect();
+                let block: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, c.a[6] + i)).collect();
                 format!(" var={var} copy={copy:02x?} defaults={block:02x?}")
             } else if *group == "camera" {
                 let cam = c.a[0];
                 let fields: Vec<String> = [0x08u32, 0x0c, 0x10, 0x14, 0x20, 0x2e, 0x34, 0x40]
                     .iter()
-                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::mem::rd16(b, cam + o)))
+                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::world::mem::rd16(b, cam + o)))
                     .collect();
-                format!(" scene={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
+                format!(" scene={:02x} terrain={} {}", ddsom_game::world::mem::rd8(b, A5 + 0x34), ddsom_game::world::mem::rd8(b, A5 + 0x37), fields.join(" "))
             } else {
                 String::new()
             };

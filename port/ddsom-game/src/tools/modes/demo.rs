@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::modes::demo` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::modes::demo` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::modes::demo::*;
+use crate::screens::modes::demo::*;
 use crate::Native;
-use crate::modes::Flow;
-use crate::scene::Ctx;
+use crate::screens::modes::Flow;
+use crate::screens::scene::Ctx;
 
 pub(crate) const RECORDER_RESET: Native = Native {
     entry: 0xe0538,

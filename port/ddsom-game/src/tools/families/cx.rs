@@ -1,18 +1,18 @@
-//! Tools: the natives of `crate::families::cx` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::cx` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::families::cx::*;
+use crate::actors::families::cx::*;
 use crate::tools::frames::*;
-use crate::mem::A5;
-use crate::objects::Obj;
+use crate::world::mem::A5;
+use crate::world::objects::Obj;
 
 impl Bench for &mut Cpu {
     #[track_caller]
     fn relink(&mut self, b: &mut World, o: Obj, foreground: bool) {
-        let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
+        let list = if foreground { crate::world::objects::lists::FOREGROUND } else { crate::world::objects::lists::ACTORS };
         list.reinsert_68k(self, b, o);
     }
     fn d2(&mut self) -> &mut u32 {

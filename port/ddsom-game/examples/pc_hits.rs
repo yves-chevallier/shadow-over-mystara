@@ -11,7 +11,7 @@ fn main() {
     let m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let mut m = ddsom_game::install(m);
     m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let (from, to): (usize, usize) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let target = u32::from_str_radix(&a[6], 16).unwrap();
     let count = Rc::new(Cell::new(0u32));

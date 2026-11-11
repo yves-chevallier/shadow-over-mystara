@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::scroll` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::scroll` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::scroll::*;
+use crate::services::scroll::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::objects::Obj;
+use crate::world::objects::Obj;
 
 /// `move_object` with the flags of the addition (`add.l`).
 fn move_object_68k(c: &mut Cpu, b: &mut World, field: u32, d: i32) {
@@ -24,7 +24,7 @@ fn parallax_68k(c: &mut Cpu, b: &mut World, f: Parallax) {
 }
 
 fn creep_68k(c: &mut Cpu, b: &mut World, pixels: u16) {
-    let old = crate::mem::rd16(b, c.a[0] + OBJECT_X);
+    let old = crate::world::mem::rd16(b, c.a[0] + OBJECT_X);
     let x = creep(b, Obj(c.a[0]), pixels);
     // add.w (X), then move.w (N, Z, V, C)
     crate::tools::ops::add(c, pixels as u32, old as u32, Size::Word);
@@ -67,7 +67,7 @@ pub(crate) const CREEP_3: Native = Native {
 /// the window `[camera + 0x30, camera + 0x70]` (at most 6 pixels per frame). Transcribed
 /// instruction by instruction: the routines that follow reread D2, D4-D6 and the flags.
 fn follow_players_y(c: &mut Cpu, b: &mut World) {
-    use crate::mem::{rd16, rd8, set_low_word, wr16, A5};
+    use crate::world::mem::{rd16, rd8, set_low_word, wr16, A5};
     use crate::tools::ops::cc;
     c.d[6] = 0; // maximum depth of the players
     c.d[5] = u32::MAX; // minimum
@@ -178,8 +178,8 @@ fn update_cameras_native(c: &mut Cpu, b: &mut World) {
 fn reset_cameras(c: &mut Cpu, b: &mut World) {
     cameras_start(b);
     crate::tools::video::leftovers_clear_layer1_start(c);
-    c.d[0] = 4 * crate::ram::SCENE.get(b) as u32;
-    c.a[1] = crate::tables::engine().get("scroll/starts").rom;
+    c.d[0] = 4 * crate::world::ram::SCENE.get(b) as u32;
+    c.a[1] = crate::world::tables::engine().get("scroll/starts").rom;
     update_cameras_68k(c, b);
     rts(c, b);
 }
@@ -195,9 +195,9 @@ pub(crate) const RESET_CAMERAS: Native = Native {
 /// Native of 0x33b24: D0 = scene, A1 = video control table, A4 = mode table, A0 = camera 2.
 fn return_cameras(c: &mut Cpu, b: &mut World) {
     cameras_return(b);
-    c.d[0] = crate::ram::SCENE.get(b) as u32;
-    c.a[1] = crate::tables::engine().get("camera_output").rom;
-    c.a[4] = crate::tables::engine().get("camera_frozen").rom;
+    c.d[0] = crate::world::ram::SCENE.get(b) as u32;
+    c.a[1] = crate::world::tables::engine().get("camera_output").rom;
+    c.a[4] = crate::world::tables::engine().get("camera_frozen").rom;
     update_cameras_68k(c, b);
     rts(c, b);
 }

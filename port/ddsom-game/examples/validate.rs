@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 
 use cps2::sound::Output;
-use ddsom_game::tasks::table::{gaps, read, kernel_ram};
+use ddsom_game::core::tasks::table::{gaps, read, kernel_ram};
 
 /// 68000 frequency, as a multiple of the arcade's.
 const OVERCLOCK: f64 = 16.0;
@@ -55,7 +55,7 @@ fn ignored(word: usize) -> bool {
 /// voices are now compared.)
 const GHOST_SAVE: std::ops::Range<usize> = 0x297e..0x2a1a;
 
-/// Startup frames (1 to 5): the original code still tests the RAM there (`ddsom_game::startup`). This test is non
+/// Startup frames (1 to 5): the original code still tests the RAM there (`ddsom_game::core::startup`). This test is non
 /// destructive but, at the end of a frame, the word under test may carry a pattern (0x8888, 0x4444...) instead of its
 /// value; the native version has no intermediate state. During these frames, at most one differing word is tolerated,
 /// in work RAM or in GFX RAM; everything else is compared. In practice only frames 1 and 2 (GFX RAM) have one.
@@ -293,7 +293,7 @@ fn main() {
     ddsom_game::set_check(check);
     ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     ddsom_game::set_count(true);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     let mut failure = None;
@@ -313,7 +313,7 @@ fn main() {
         let t = std::time::Instant::now();
         if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ma.run_frame())) {
             // stop of the game without 68000 (address without native...); any other panic runs its course
-            match e.downcast_ref::<String>().and_then(|m| m.strip_prefix(ddsom_game::no68k::STOP)) {
+            match e.downcast_ref::<String>().and_then(|m| m.strip_prefix(ddsom_game::core::frame::STOP)) {
                 Some(m) => {
                     stop = Some(m.to_owned());
                     failure = Some(f + 1);
@@ -422,9 +422,9 @@ fn main() {
             std::process::exit(1);
         }
     }
-    let (is_empty, capped) = ddsom_game::no68k::summary();
+    let (is_empty, capped) = ddsom_game::core::frame::summary();
     println!("without 68000: {is_empty} frames ended on a busy wait, {capped} stopped by the native ceiling");
-    let residue = ddsom_game::data::residue();
+    let residue = ddsom_game::world::data::residue();
     println!(
         "residue: {} reads of the program ROM outside the typed tables{}",
         residue.iter().map(|r| r.1).sum::<u64>(),

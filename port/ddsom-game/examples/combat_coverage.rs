@@ -19,15 +19,15 @@ fn main() {
     let (ma, mut mb) = (load(), load());
     let mut ma = ddsom_game::install(ma);
     ddsom_game::set_check(true);
-    ddsom_game::combat::enable_coverage();
+    ddsom_game::services::combat::enable_coverage();
     ddsom_game::install_reference(&mut mb);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     // Register save areas: task stacks (FF0A00-FF0FFF) and the VBLANK interrupt's software
     // stack (below FF2A1A). A register left free by a native routine is only a copy
     // there; if it were really used, the difference would show up elsewhere.
     // + the kernel RAM, which the game keeps in its task table in Rust.
-    let saved = |a: usize| ddsom_game::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a);
+    let saved = |a: usize| ddsom_game::core::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a);
     let t0 = std::time::Instant::now();
     let mut first = None;
     for f in 0..frames {
@@ -52,7 +52,7 @@ fn main() {
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("--- coverage of the internal routines of combat ---");
-    for (name, n) in ddsom_game::combat::coverage() {
+    for (name, n) in ddsom_game::services::combat::coverage() {
         println!("  {name:34} {n:>9}");
     }
     let errors: u64 = ddsom_game::report().values().map(|s| s.mismatches).sum();

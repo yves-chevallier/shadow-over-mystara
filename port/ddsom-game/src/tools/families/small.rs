@@ -1,16 +1,16 @@
-//! Tools: the natives of `crate::families::small` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::small` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::families::small::*;
+use crate::actors::families::small::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{prog8, rd32, set_low_word, wr32, A5};
-use crate::objects::Obj;
-use crate::objects::pools;
+use crate::world::mem::{prog8, rd32, set_low_word, wr32, A5};
+use crate::world::objects::Obj;
+use crate::world::objects::pools;
 
 /// Allocates in a pool; `None` (carry raised) if the pool is full.
 fn alloc(c: &mut Cpu, b: &mut World, pool: &pools::Pool) -> Option<Obj> {
@@ -206,7 +206,7 @@ pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut World) {
 
 /// Natives of the screen flashes (color 14 of page 1, `palette::set_flash_color`): the flags of the `move.w`.
 fn flash(c: &mut Cpu, b: &mut World, v: u16) {
-    crate::palette::set_flash_color(b, v);
+    crate::services::palette::set_flash_color(b, v);
     moved(c, v as u32, Size::Word);
     rts(c, b);
 }
@@ -278,7 +278,7 @@ fn game_vars_clear(c: &mut Cpu, b: &mut World) {
 fn fixed_screen_reset(c: &mut Cpu, b: &mut World) {
     wr32(b, A5 - 0x70b0, 0);
     crate::tools::objects::lists::unlink_all_68k(c, b);
-    crate::sprites::clear_lists(b);
+    crate::services::sprites::clear_lists(b);
     pools::SET.reset(b);
     pools::EFFCT.reset(b);
     rts(c, b);

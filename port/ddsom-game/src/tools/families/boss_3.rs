@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::families::boss_3` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::families::boss_3` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 pub(crate) mod body;
 
 
-use crate::families::boss_3::*;
-use crate::families::boss_common::*;
+use crate::actors::families::boss_3::*;
+use crate::actors::families::boss_common::*;
 
 /// Natives for the original code: counterattack and body shapes (called by 0x81aa4 of `boss_common`).
 pub(crate) const NATIVES: &[crate::Native] = &[

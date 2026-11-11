@@ -46,7 +46,7 @@ fn main() {
     });
     let mut m = ddsom_game::install_no_68k(m);
     m.rendering = true;
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");
     let frames: usize = a[4].parse().unwrap();
     let mut out: Option<std::io::BufWriter<std::fs::File>> = a.get(5).map(|p| std::io::BufWriter::new(std::fs::File::create(p).unwrap()));
     let mut total = Fnv(0xcbf29ce484222325);

@@ -296,7 +296,7 @@ fn scene(m: &ddsom_game::GameMachine) -> u32 {
 }
 
 fn poke(m: &mut ddsom_game::GameMachine, a: u32, v: u32, size: u8) {
-    ddsom_game::scenario::poke(m, a, v, size);
+    ddsom_game::core::scenario::poke(m, a, v, size);
 }
 
 /// Starts the game: coin, Start, chosen character, `FF8034` forced during the selection (scene 1).
@@ -310,7 +310,7 @@ fn start_up(roms: &Path, eeprom: &Path) -> ddsom_game::GameMachine {
     for f in 0..2400 {
         for &(i, name, low) in &inputs {
             if i == f {
-                ddsom_game::scenario::set_input(&mut m, name, low);
+                ddsom_game::core::scenario::set_input(&mut m, name, low);
             }
         }
         if f == 2399 {

@@ -20,7 +20,7 @@ fn main() {
 fn written<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     let target = u32::from_str_radix(&a[5], 16).unwrap();
     let r: usize = a[6].parse().unwrap();

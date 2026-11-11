@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::kernel` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::core::kernel` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::kernel::*;
+use crate::core::kernel::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::tasks::table::{slot, table};
-use crate::tasks::Task;
+use crate::core::tasks::table::{slot, table};
+use crate::core::tasks::Task;
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $body:expr) => {
@@ -38,7 +38,7 @@ fn envelope(c: &mut Cpu, b: &mut World, frames: Option<u8>) {
 
 /// The task of the game whose entry is `entry` (A0 of the original code that calls the wrappers), if any.
 pub fn task_at(entry: u32) -> Option<Task> {
-    use crate::tasks::fading::Fade;
+    use crate::core::tasks::fading::Fade;
     let fades = [
         Fade::Rise,
         Fade::RiseSteps,

@@ -1,9 +1,9 @@
-//! Tools: the natives of `crate::diag` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::world::diag` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use m68k::Cpu;
 
-use crate::diag::*;
+use crate::world::diag::*;
 use crate::regs;
 
 /// Probe of a call by address (`crate::call`): with the label `call_<address in hex>` (or `call`) in `DDSOM_POISON`, the

@@ -1,0 +1,188 @@
+//! Screen 8. MEMORY CHECK of the TEST menu (`0x2ceb4`): test of each memory, then return to the menu after
+//! one second.
+//!
+//! The test (`0x2cf26`) writes four patterns into every word of the work RAM, the GFX RAM, the two
+//! Object RAM banks and the Z80 shared RAM (rereading immediately, then restoring the word),
+//! tests the EEPROM (`eeprom::tester`) and compares the one-byte-in-0xfff sum of each 512 KB block of the
+//! program with the header table (0xca). Each line displays "TESTING..." then "OK"; an error
+//! displays "NG" and blocks the task.
+//!
+//! **Accepted difference**: the original runs this test with interrupts masked, in one go; it lasts about
+//! twenty frames at ×16 (several seconds on the cabinet), and its duration depends on the 68000 frequency.
+//! It is instantaneous in both validation machines: here in Rust, and in the original code through
+//! the patch [`patch_instant_check`], which runs it without advancing time.
+
+use super::{back_to_menu, f, layers_off, layers_on, next_step, print, MENU_BLOCK};
+use crate::hw::io::Memory;
+use crate::screens::modes::Flow;
+use crate::screens::scene::Ctx;
+
+/// Entry of the test in the original (called by `bsr` from step 2 of the screen).
+pub const CHECK: crate::world::data::RomAddr = crate::world::data::RomAddr(0x2cf26);
+/// Endless loop of the original after an "NG".
+pub const BLOCKED: crate::world::data::RomAddr = crate::world::data::RomAddr(0x2d112);
+
+const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d184);
+const LABELS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d1a8);
+/// 10-character texts (bytes in ROM).
+const TESTING: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d27c);
+const OK: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d286);
+const NG: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d290);
+/// Countdown before returning to the menu (record field).
+const COUNTDOWN: u32 = 0x14;
+const COUNTDOWN_FRAMES: u8 = 0x3c;
+
+/// Patterns written into each word (table addressed PC-relative).
+const PATTERNS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d0ce);
+/// Output that selects the Object RAM bank seen at 0x708000.
+const OBJ_BANK: Memory = Memory(0x8040e1);
+/// Byte of the Z80 shared RAM set before and after its test.
+const Z80_FLAG: Memory = Memory(0x619ffb);
+/// Expected sums of the program blocks (header words).
+const ROM_SUMS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xca);
+/// Size of a block of the program, and distance between two bytes summed.
+const ROM_BLOCK: u32 = 1 << 19;
+const ROM_STRIDE: u32 = (1 << 12) - 1;
+
+/// Cells of each result line.
+mod cell {
+    pub const WORK_RAM: u32 = crate::hw::video::TEXT.at(0xea0).0;
+    pub const CPS_RAM: u32 = crate::hw::video::TEXT.at(0xea8).0;
+    pub const OBJECT_RAM: u32 = crate::hw::video::TEXT.at(0xeb0).0;
+    pub const SOUND_RAM: u32 = crate::hw::video::TEXT.at(0xeb8).0;
+    pub const EEPROM: u32 = crate::hw::video::TEXT.at(0xec0).0;
+    pub const ROM: u32 = crate::hw::video::TEXT.at(0xec8).0;
+}
+
+pub fn memory(x: &mut Ctx) -> Flow {
+    match MENU_BLOCK.get8(x.b, f::STEP) {
+        0 => {
+            next_step(x);
+            layers_off(x);
+            print(x, TITLE.addr());
+            print(x, LABELS.addr());
+            layers_on(x);
+            Flow::Done
+        }
+        2 => {
+            // the original masks interrupts around the test (trap 12): no effect on an instantaneous test
+            if !check(x) {
+                crate::core::kernel::block(x.b, BLOCKED.0);
+                return Flow::Yield;
+            }
+            next_step(x);
+            MENU_BLOCK.set8(x.b, COUNTDOWN, COUNTDOWN_FRAMES);
+            Flow::Done
+        }
+        _ => {
+            let left = MENU_BLOCK.get8(x.b, COUNTDOWN) as i8 as i16 - 1;
+            MENU_BLOCK.set8(x.b, COUNTDOWN, left as u8);
+            if left > 0 { Flow::Done } else { back_to_menu(x) }
+        }
+    }
+}
+
+/// `0x2d12a`: a 10-character text on line `at`.
+fn label(x: &mut Ctx, at: u32, text: u32, attr: u16) {
+    for k in 0..10 {
+        let ch = crate::screens::tables::byte(x.b, text + k) as u16;
+        crate::hw::video::Cell(at + 0x80 * k).put(x.b, ch, attr);
+    }
+}
+
+/// Result of a line: "OK", or "NG" (coloured).
+fn verdict(x: &mut Ctx, at: u32, ok: bool) -> bool {
+    if ok {
+        label(x, at, OK.addr(), 0);
+    } else {
+        label(x, at, NG.addr(), super::HIGHLIGHT);
+    }
+    ok
+}
+
+/// `0x2d096`: each word of `start..end` receives the four patterns, reread immediately (low-order byte
+/// only for the Z80 RAM, `byte`), then its original value.
+fn test_words(x: &mut Ctx, start: u32, end: u32, byte: bool) -> bool {
+    let patterns: [u16; 4] = std::array::from_fn(|k| PATTERNS.pc_word(x.b, 2 * k as u32));
+    for a in (start..end).step_by(2) {
+        let saved = Memory(a).word(x.b);
+        for p in patterns {
+            Memory(a).set_word(x.b, p);
+            let ok = if byte { Memory(a + 1).byte(x.b) == p as u8 } else { Memory(a).word(x.b) == p };
+            if !ok {
+                return false;
+            }
+            Memory(a).set_word(x.b, saved);
+        }
+    }
+    true
+}
+
+/// `bchg #0` of the Object RAM bank output (reread as the original does).
+fn toggle_bank(x: &mut Ctx) {
+    let v = OBJ_BANK.byte(x.b) ^ 1;
+    OBJ_BANK.set_byte(x.b, v);
+}
+
+/// `0x2d0d6`: one-byte-in-0xfff sum of block `k` of the program.
+fn rom_sum(x: &mut Ctx, k: u32) -> u16 {
+    let start = ROM_BLOCK * k;
+    let mut sum = 0u32;
+    let mut a = start;
+    while a < start + ROM_BLOCK {
+        sum = sum.wrapping_add(crate::screens::tables::byte(x.b, a) as u32);
+        a += ROM_STRIDE;
+    }
+    sum as u16
+}
+
+/// A RAM test line: "TESTING...", the test, then "OK" (unless `quiet`) or "NG".
+fn test_line(x: &mut Ctx, at: u32, (start, end): (u32, u32), byte: bool, quiet: bool) -> bool {
+    let ok = test_words(x, start, end, byte);
+    if !ok || !quiet {
+        verdict(x, at, ok);
+    }
+    ok
+}
+
+/// `0x2cf26`: the complete test. False after an "NG" (the original stays blocked).
+fn check(x: &mut Ctx) -> bool {
+    label(x, cell::WORK_RAM, TESTING.addr(), 0);
+    if !test_line(x, cell::WORK_RAM, (0xff_0000, 0x100_0000), false, false) {
+        return false;
+    }
+    label(x, cell::CPS_RAM, TESTING.addr(), 0);
+    if !test_line(x, cell::CPS_RAM, (0x90_0000, 0x93_0000), false, false) {
+        return false;
+    }
+    // Object RAM: the bank seen at 0x708000 (without "OK"), then the other
+    label(x, cell::OBJECT_RAM, TESTING.addr(), 0);
+    if !test_line(x, cell::OBJECT_RAM, (0x70_8000, 0x70_a000), false, true) {
+        return false;
+    }
+    toggle_bank(x);
+    if !test_line(x, cell::OBJECT_RAM, (0x70_8000, 0x70_a000), false, false) {
+        return false;
+    }
+    toggle_bank(x);
+    Z80_FLAG.set_byte(x.b, 0);
+    label(x, cell::SOUND_RAM, TESTING.addr(), 0);
+    if !test_line(x, cell::SOUND_RAM, (0x61_8000, 0x61_a000), true, false) {
+        return false;
+    }
+    Z80_FLAG.set_byte(x.b, 0x88);
+    label(x, cell::EEPROM, TESTING.addr(), 0);
+    let ok = crate::hw::eeprom::tester(x.b);
+    if !verdict(x, cell::EEPROM, ok) {
+        return false;
+    }
+    for k in 0..8 {
+        let at = cell::ROM + 4 * k;
+        label(x, at, TESTING.addr(), 0);
+        let ok = rom_sum(x, k) == ROM_SUMS.word(x.b, 2 * k);
+        if !verdict(x, at, ok) {
+            return false;
+        }
+    }
+    true
+}

@@ -23,7 +23,7 @@ use cps2::Cps2Bus;
 use m68k::Bus;
 use m68k::Cpu;
 
-use ddsom_game::mem::{rd16, rd32, rd8, wr16, wr8};
+use ddsom_game::world::mem::{rd16, rd32, rd8, wr16, wr8};
 
 #[derive(Default)]
 struct Summary {
@@ -299,7 +299,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
         diffs.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c2.a[0]));
     }
     let sp = c2.a[7] & 0xff_ffff;
-    ddsom_game::mem::diff_bus(&b1, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+    ddsom_game::world::mem::diff_bus(&b1, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
     SUMMARY.with(|m| {
         let mut m = m.borrow_mut();
         let summary = m.entry(n.name).or_default();
@@ -333,7 +333,7 @@ fn dump(bytes: &[u8]) -> String {
 
 /// Native routine of a family handler (written on `Ctx` or on `Cx`).
 fn handler(entry: u32) -> Option<&'static ddsom_game::Native> {
-    ddsom_game::families::NATIVES.iter().chain(ddsom_game::families::natives()).find(|n| n.entry == entry)
+    ddsom_game::actors::families::NATIVES.iter().chain(ddsom_game::actors::families::natives()).find(|n| n.entry == entry)
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
@@ -405,7 +405,7 @@ fn main() {
         }
     }
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

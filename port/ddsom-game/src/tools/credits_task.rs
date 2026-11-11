@@ -1,10 +1,10 @@
-//! Tools: the natives of `crate::credits_task` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::credits_task` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::credits_task::*;
-use crate::modes::Flow;
-use crate::scene::Ctx;
+use crate::screens::credits_task::*;
+use crate::screens::modes::Flow;
+use crate::screens::scene::Ctx;
 
 /// Original subroutine rewritten in the body of the task, presented as a native for the differential fuzz
 /// (`examples/fuzz_couv`); the game does not call it by its address. If it cedes control, the trial is discarded

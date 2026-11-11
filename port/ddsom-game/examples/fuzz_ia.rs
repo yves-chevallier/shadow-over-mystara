@@ -11,11 +11,11 @@
 
 use std::path::Path;
 
-use ddsom_game::families::cx::Cx;
-use ddsom_game::families::enemy_lib as lib;
-use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-use ddsom_game::objects::{pools, Obj};
-use ddsom_game::{ai, ai_aids};
+use ddsom_game::actors::families::cx::Cx;
+use ddsom_game::actors::families::enemy_lib as lib;
+use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::world::objects::{pools, Obj};
+use ddsom_game::{services::ai, services::ai_aids};
 
 type Cpu = m68k::Cpu;
 type Bus = cps2::Cps2Bus;
@@ -369,13 +369,13 @@ fn case() -> Vec<Case> {
             read: |c| c.d[3] as u16 as u32,
         },
         Case { entry: 0xe2f6, name: "drop_treasure", inputs: none, core: |c, b, o| { let (d2, d5) = ai_aids::drop_treasure(b, o); d2 as u32 | (d5.unwrap_or(c.d[5]) & 0xffff) << 16 }, read: |c| c.d[2] as u16 as u32 | (c.d[5] & 0xffff) << 16 },
-        Case { entry: 0x57c66, name: "in_right_half", inputs: none, core: |_, b, o| ddsom_game::families::creators::in_right_half(b, o) as u32, read: d0 },
-        Case { entry: 0x5cdc6, name: "chance_10_16", inputs: none, core: |_, b, _| ddsom_game::families::creators::chance_10_16(b) as u32, read: d0 },
-        Case { entry: 0x19eb0, name: "popups_clear_all", inputs: none, core: |_, b, _| { ddsom_game::popups::clear_all(b); 0 }, read: nothing },
-        Case { entry: 0x19e20, name: "popups_animer", inputs: none, core: |_, b, _| { ddsom_game::popups::animate_obj(b); 0 }, read: nothing },
-        Case { entry: 0xd5f30, name: "set_14", inputs: none, core: |_, b, o| { ddsom_game::families::creators::set_14(b, o); 0 }, read: nothing },
-        Case { entry: 0xd6952, name: "set_15_b", inputs: none, core: |_, b, o| { ddsom_game::families::creators::set_15_b(b, o); 0 }, read: nothing },
-        Case { entry: 0xd5ef8, name: "attach_life_bar", inputs: none, core: |_, b, o| { ddsom_game::families::set_residue::attach_life_bar(b, o); 0 }, read: nothing },
+        Case { entry: 0x57c66, name: "in_right_half", inputs: none, core: |_, b, o| ddsom_game::actors::families::creators::in_right_half(b, o) as u32, read: d0 },
+        Case { entry: 0x5cdc6, name: "chance_10_16", inputs: none, core: |_, b, _| ddsom_game::actors::families::creators::chance_10_16(b) as u32, read: d0 },
+        Case { entry: 0x19eb0, name: "popups_clear_all", inputs: none, core: |_, b, _| { ddsom_game::screens::popups::clear_all(b); 0 }, read: nothing },
+        Case { entry: 0x19e20, name: "popups_animer", inputs: none, core: |_, b, _| { ddsom_game::screens::popups::animate_obj(b); 0 }, read: nothing },
+        Case { entry: 0xd5f30, name: "set_14", inputs: none, core: |_, b, o| { ddsom_game::actors::families::creators::set_14(b, o); 0 }, read: nothing },
+        Case { entry: 0xd6952, name: "set_15_b", inputs: none, core: |_, b, o| { ddsom_game::actors::families::creators::set_15_b(b, o); 0 }, read: nothing },
+        Case { entry: 0xd5ef8, name: "attach_life_bar", inputs: none, core: |_, b, o| { ddsom_game::actors::families::set_residue::attach_life_bar(b, o); 0 }, read: nothing },
         Case {
             entry: 0x103ba,
             name: "flash_and_shake",
@@ -417,7 +417,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -459,7 +459,7 @@ fn main() {
                 diffs.push(format!("result {got:x} instead of {expected:x}"));
             }
             let sp = c2.a[7] & 0xff_ffff;
-            ddsom_game::mem::diff_bus(&b, &b2, sp.saturating_sub(0x400)..sp + 4, &mut diffs);
+            ddsom_game::world::mem::diff_bus(&b, &b2, sp.saturating_sub(0x400)..sp + 4, &mut diffs);
             if !diffs.is_empty() {
                 gaps += 1;
                 let msg = format!("A0={:06x} : {}", a0.0, diffs.join(", "));

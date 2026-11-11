@@ -10,7 +10,7 @@ fn main() {
     let m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let mut m = ddsom_game::install(m);
     m.set_overclock(16.0);
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     let hex = |i: usize| a.get(i).map(|v| u32::from_str_radix(v, 16).unwrap());
     let skip = hex(5).unwrap_or(0)..hex(6).unwrap_or(0);

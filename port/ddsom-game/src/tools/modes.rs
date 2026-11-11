@@ -1,4 +1,4 @@
-//! Tools: the natives of `crate::modes` for the original code.
+//! Tools: the natives of `crate::screens::modes` for the original code.
 
 pub(crate) mod demo;
 pub(crate) mod ending;

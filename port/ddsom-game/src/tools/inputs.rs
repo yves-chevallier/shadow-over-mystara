@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::inputs` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::hw::inputs` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
-use crate::inputs::*;
+use crate::hw::inputs::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::mem::{rd8, set_low_byte};
+use crate::world::mem::{rd8, set_low_byte};
 
 fn set_nz_byte(c: &mut Cpu, v: u8) {
     c.flags_logic(v as u32, Size::Byte);

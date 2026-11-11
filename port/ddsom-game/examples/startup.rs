@@ -56,7 +56,7 @@ fn executor(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Optio
 
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    ddsom_game::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a)
+    ddsom_game::core::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a)
 }
 
 fn different(x: &[u16], y: &[u16]) -> usize {

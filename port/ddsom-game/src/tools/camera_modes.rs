@@ -1,13 +1,13 @@
-//! Tools: the natives of `crate::camera_modes` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::camera_modes` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::camera_modes::*;
+use crate::services::camera_modes::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::scroll::{CAMERA_1, CAMERA_2};
+use crate::services::scroll::{CAMERA_1, CAMERA_2};
 
 /// Native: D4 of the copy, A0 = the output camera.
 fn camera1_update(c: &mut Cpu, b: &mut World) {

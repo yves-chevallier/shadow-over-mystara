@@ -17,7 +17,7 @@ fn main() {
 }
 
 fn dump<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
-    let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
+    let s = ddsom_game::core::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let (from, to): (usize, usize) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let addr = u32::from_str_radix(&a[6], 16).unwrap();
     let len: usize = a[7].parse().unwrap();

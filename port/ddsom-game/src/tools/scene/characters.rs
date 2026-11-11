@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::scene::characters` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::screens::scene::characters` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::scene::characters::*;
+use crate::screens::scene::characters::*;
 use crate::Native;
-use crate::scene::Ctx;
-use crate::modes::Flow;
+use crate::screens::scene::Ctx;
+use crate::screens::modes::Flow;
 
 pub(crate) const CHARACTERS: Native = Native {
     entry: 0xf6492,

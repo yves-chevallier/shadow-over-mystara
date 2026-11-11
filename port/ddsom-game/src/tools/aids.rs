@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::aids` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::aids` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::aids::*;
+use crate::services::aids::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::{rd16, rd8};
+use crate::world::mem::{rd16, rd8};
 
 /// D1 that 0x1386 leaves: the smaller of the two differences (its biased coordinate, low word = the absolute
 /// difference).
@@ -91,7 +91,7 @@ pub(crate) const DIRECTION: Native = Native {
 
 /// Native: D0.w = the word `+0x46`, A1 = the player (word sign-extended), flags of the last test.
 fn grabbed_native(c: &mut Cpu, b: &mut World) {
-    if grabbed(b, crate::objects::Obj(c.a[0])) == NameEntry::Frozen {
+    if grabbed(b, crate::world::objects::Obj(c.a[0])) == NameEntry::Frozen {
         crate::tools::ops::logic(c, 1, Size::Byte);
     } else {
         let holder = rd16(b, c.a[0] + 0x46);

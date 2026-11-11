@@ -16,8 +16,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ddsom_game::mem::{rd16, rd8, wr16, wr8, A5};
-use ddsom_game::objects::pools::{ENEMY, EFFCT};
+use ddsom_game::world::mem::{rd16, rd8, wr16, wr8, A5};
+use ddsom_game::world::objects::pools::{ENEMY, EFFCT};
 
 /// Code zone of the EFFCT handlers.
 const ZONE: std::ops::Range<u32> = 0xa8594..0xba310;
@@ -78,7 +78,7 @@ fn principal() {
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     let mut m = ddsom_game::install(m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
+    let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

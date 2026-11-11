@@ -2,7 +2,7 @@
 
 use crate::world::World;
 
-use crate::mem::{rd16, rd8, wr16};
+use crate::world::mem::{rd16, rd8, wr16};
 
 /// An input port (read only): bytes and words of the board's input registers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -52,13 +52,13 @@ impl DevRam {
         rd8(b, self.0)
     }
     pub fn set_byte(self, b: &mut World, v: u8) {
-        crate::mem::wr8(b, self.0, v)
+        crate::world::mem::wr8(b, self.0, v)
     }
     pub fn set_word(self, b: &mut World, v: u16) {
         wr16(b, self.0, v)
     }
     pub fn set_long(self, b: &mut World, v: u32) {
-        crate::mem::wr32(b, self.0, v)
+        crate::world::mem::wr32(b, self.0, v)
     }
 }
 
@@ -72,7 +72,7 @@ impl Memory {
         rd8(b, self.0)
     }
     pub fn set_byte(self, b: &mut World, v: u8) {
-        crate::mem::wr8(b, self.0, v)
+        crate::world::mem::wr8(b, self.0, v)
     }
     pub fn word(self, b: &mut World) -> u16 {
         rd16(b, self.0)
