@@ -337,3 +337,51 @@ fn read_all<M: serde::de::DeserializeOwned>(dir: &Path, original: impl Fn(&M) ->
     }
     all
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn palette(seed: u8) -> Colors {
+        std::array::from_fn(|i| [seed.wrapping_mul(i as u8), i as u8 * 16, 255 - i as u8])
+    }
+
+    #[test]
+    fn an_enlarged_frame_goes_back_to_its_pens() {
+        let mut colors = [palette(3), palette(7)];
+        // pen 4 of slot 0 has the colour of pen 2: the original pens settle it
+        colors[0][4] = colors[0][2];
+        let meta = FrameMeta {
+            frame: 0,
+            scale: 1,
+            size: [3, 2],
+            anchor: [0, 0],
+            slots: colors.iter().enumerate().map(|(i, &colors)| Slot { piece: i as u16, colors }).collect(),
+        };
+        let pens = Image { width: 3, height: 2, pixels: vec![0x02, 0x04, CLEAR, 0x11, 0x1e, 0x00] };
+        let rgba = Image {
+            width: 3,
+            height: 2,
+            pixels: pens.pixels.iter().map(|&v| match v % 16 {
+                15 => [0; 4],
+                p => {
+                    let [r, g, b] = colors[v as usize / 16][p as usize];
+                    [r, g, b, 255]
+                }
+            }).collect(),
+        };
+        let (indexed, k) = index_frame(&upscale(&rgba, 3), &meta, Some(&pens)).unwrap();
+        assert_eq!(k, 3);
+        assert_eq!(indexed.pixels, upscale(&pens, 3).pixels);
+        assert!(index_frame(&upscale(&rgba, 3), &FrameMeta { size: [4, 2], ..meta }, None).is_err());
+    }
+
+    #[test]
+    fn scale2x_rounds_a_diagonal() {
+        let image = Image { width: 2, height: 2, pixels: vec![1, 0, 1, 1] };
+        let big = scale2x(&image);
+        // in the quad of the top right pixel, the corner between its two equal neighbours (left, below) takes their
+        // colour, the others keep its own
+        assert_eq!([big.pixels[2], big.pixels[3], big.pixels[6], big.pixels[7]], [0, 0, 1, 0]);
+    }
+}
