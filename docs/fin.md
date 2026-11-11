@@ -1275,7 +1275,7 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; `DDSOM_CHECK=1` (bot30k) ; tests
     `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans `tools` (et `ddsom`).
 
-**L14. Le jeu sans image ROM** (moyen)
+**L14. Le jeu sans image ROM** (moyen) — **fait** (branche `wt-l14-sans-rom`, voir « Résultat »)
 * Préalable : L1, L5 à L13. `rom_reads` doit compter zéro lecture du bus dans 0-0x3fffff sur les 308 scénarios.
 * Périmètre : `cps2/src/{lib,bus}.rs` (machine du jeu sans `rom`/`rom_dec`, les vecteurs de reset ne sont plus lus),
   `ddsom/src/main.rs`, `ddsom-assets/src/rebuild.rs` (déplacé vers `extract`/tests), `ddsom-game/src/startup.rs`.
@@ -1288,8 +1288,60 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
   * `Cps2Bus` de la machine du jeu n'a plus de ROM ;
   * `no_rom` (ex-`sans_rom`), et 308/308 dans les deux modes ;
   * `Residue` est consulté 0 fois sur les 308 scénarios et sur `fuzz_couv` (C02, C04, C06, C10).
-* Décision laissée à l'utilisateur : retirer `reste.json` des assets une fois `Residue` à zéro, ou le garder comme
-  assurance contre les chemins jamais joués.
+* Décision de l'utilisateur (2026-11-11) : retirer `reste.json` des assets (`extract` ne l'écrit plus, le jeu ne le
+  charge plus) une fois `Residue` à zéro sur les scénarios et sur `fuzz_couv` ; sinon le garder et lister les
+  lectures restantes. Toute lecture restante doit d'abord devenir une donnée typée.
+* Résultat :
+  * machine du jeu sans ROM : `cps2::Machine::game(GameContents, eeprom)` ; `Cps2Bus::rom` est un
+    `Option<Arc<ProgramRom>>` (vue données et vue programme déchiffrée), `None` pour le jeu (une lecture de la ROM y
+    panique avec un message) ; les vecteurs de reset ne sont plus lus (seul `Machine::ddsom`, la machine de
+    référence et des outils, fait `reset`). `cps2::GameContents` porte l'atlas de tuiles, `ddsom_sound::SoundData`,
+    `qsound::DspTables` et la mémoire d'échantillons : plus de région du Z80 ni de programme du DSP
+    (`Sound::with_driver`, `QSound::with_tables`). `cps2::Contents` reste pour la machine de référence ;
+  * chargement : `extract::install_game_assets` (`ddsom --assets`, `validate`/`bench`/`render_check` avec
+    `DDSOM_ASSETS`) installe `GameData::load`, le résidu (paresseux) et rend `ddsom_assets::game_contents` (atlas,
+    `music.json`, `qsound_dsp.json`, banque d'échantillons) ; `extract::install_game` fait de même depuis les ROMs
+    (extraction en mémoire). `ddsom` avec ROMs joue sur la même machine sans ROM ; seul le diagnostic
+    `DDSOM_ORIGINE`/`DDSOM_INTERP` (fonctionnalité `original`) garde une machine avec ROMs ;
+  * `rebuild` passe dans `extract` (`extract::rebuild`, tests sans perte `tests/rebuild.rs`, `tests/roundtrip.rs`,
+    exemple `full_program`) ; `remainder` dans `ddsom-data`. `grep -rn rebuild ddsom/src ddsom-game/src` : vide ;
+  * dernières lectures du jeu par adresse dans la ROM devenues tables typées de `data/engine.json` : réglages
+    (`config/*` : blocs par variante, pièces, crédits, message d'erreur de l'EEPROM), en-tête du programme
+    (`startup/header` : drapeau de débogage 0xc0, région, carte de développement), palette de démarrage, piles des
+    tâches, tables des commandes des sons (`sound/*@<adresse>`, liste versionnée `extract/sound_tables.txt`, test
+    `tables_listed_for_the_extraction`), table de panoramique, textes des réglages de pièces, tuiles du classement,
+    octet du gestionnaire de la pluie d'éclats lu comme donnée ; `mem::prog16`/`prog8` et `Machine::prog16` ne
+    servent plus qu'aux outils ;
+  * résidu et débordements (docs/sans-rom.md « Le résidu et les débordements de l'original ») : `Missing` lit
+    d'abord les 17 débordements nommés de l'original (`data/overreads.json`, liste `extract/overreads.txt`), puis le
+    résidu (`ddsom_data::residue`), seul lecteur de `natives.json` et `reste.json` dans le jeu, chargé à la première
+    consultation. **`Residue` consulté 0 fois sur les 309 scénarios, dans les deux modes.** `fuzz_couv` (C02, C04,
+    C06, C10 : 14 scénarios, 12 000 images, graine 1, 281 337 essais) : **0 depuis les états de base** (appels
+    réels), mais 2 536 lectures avec des perturbations « plausibles » et 983 584 en tout, toutes sur des clés que la
+    perturbation rend incohérentes (adresses de SET, entrées et sauts d'animation surtout) : aucune table typée ne
+    peut les servir. **`reste.json` est donc gardé** (règle de la décision ci-dessus), comme assurance pour les
+    chemins jamais joués ;
+  * `no_rom` (ex-`sans_rom`) : deux processus (données des ROMs, données des assets) comparés par empreinte à chaque
+    image ; `bot_2p`, `boss13_dragon`, `cov_4p_a`, `ending` (12 000), `end_02` (9 000), `cov_service_tests`,
+    `attract` (6 000) : identiques, résidu 0 des deux côtés ;
+  * `render_check` bot30k 12 000 images : identique à main (`09850058246a1e2c`), aussi avec `DDSOM_ASSETS` ;
+  * assets : `extract` écrit `data/overreads.json` ; **réextraire `data`** (un dossier sans ce fichier est refusé ;
+    `play.bat` le teste) ;
+  * performance : les boîtes de collision ne sont plus lues sur le bus mais dans `sprites/tables.json` ; lues
+    octet par octet (`player::tables::byte`, deux recherches par octet), elles coûtaient ~1,5 % sur bot30k. Chaque
+    paire de `combat` copie désormais les six octets de ses deux boîtes une fois (`player::tables::box_bytes`,
+    `Pair::new`) ;
+  * `bench` bot30k, 12 000 images, meilleur de 3 en alternance avec main 538d4ff construit dans le même dossier cible
+    (même empreinte `a65ecd8aa6e38d4f`) : sans rendu 20 168 images/s (main 20 110), avec rendu 3 914 (main 3 881).
+    Avant la copie des boîtes : 19 711 contre 19 783 (−0,4 % à −1,5 % selon les tirages) ;
+  * validation (code de a9b18cb, binaire `validate` c450296a) : **309/309 VALID en mode par défaut et avec
+    `DDSOM_ASSETS`** (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=6`,
+    `residue: 0` dans les 618 journaux ; tests `ddsom-game --lib` (20) et `extract`/`ddsom-assets`/`ddsom-data`/
+    `qsound`/`ddsom-sound` (dont `rebuild` et `roundtrip`, sur les assets réextraits) ; `cargo clippy` sans
+    avertissement, avec et sans `tools` (et `ddsom`).
+  * piège de construction : un chemin `DDSOM_ROMS` écrit autrement (`port/../rom` au lieu de `rom`) relance la
+    génération de `ddsom-rc` ; une fois, sa compilation est restée bloquée plus de deux heures sur une unité
+    (`lto cgu.00`) : l'arrêter et relancer l'a ramenée à 6 minutes.
 
 **L15. RAM du jeu hors du bus, modules en couches** (moyen à grand, en deux commits validés)
 * L15a, `World` :

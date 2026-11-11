@@ -1,35 +1,38 @@
-# Reprise du travail (état au 2026-11-03)
+# Reprise du travail (état au 2026-11-11)
 
 Point de départ pour la prochaine session. L'historique détaillé des lots est dans [refactorisation.md](refactorisation.md), § 5 à 18 et « Avancement ».
 
-## Point d'arrêt du 2026-11-03 (reprise la semaine suivante)
+## Point d'arrêt du 2026-11-11
 
-**main = e489feb** : lots L0 à L13 et L19 fusionnés, **309/309 VALID dans les deux modes** (ROMs et `DDSOM_ASSETS`),
-aucun 68000 ni Z80 dans le jeu, code en anglais, 0 avertissement. Bench bot30k : ~19 600 im/s sans rendu, ~3 900 avec.
-Toutes les familles sont à 0 accesseur ROM et 0 décalage littéral ; détails lot par lot dans [fin.md](fin.md).
-
-**Interrompu : L14 (le jeu sans image ROM)**, branche `wt-l14-sans-rom` (commit 4eebd47, poussé, **non validé, peut ne
-pas compiler**). Contenu : `rebuild` retiré de `ddsom-assets`, `remainder` déplacé dans `ddsom-data`, résidu et
-débordements de l'original nommés (`ddsom-data/src/{residue,overreads}.rs`, `extract/src/overreads.rs`,
-`extract/overreads.txt`), tables du son listées (`extract/sound_tables.txt`), `cps2` bus/lib/sound en chantier.
+**main = 538d4ff** : lots L0 à L13 et L19 fusionnés (309/309 VALID dans les deux modes). **L14 (le jeu sans image
+ROM) est fait** sur la branche `wt-l14-sans-rom` (non fusionnée, voir [fin.md](fin.md) « L14 », « Résultat ») :
+machine du jeu sans ROM (`cps2::Machine::game`, `GameContents` sans région du Z80 ni programme du DSP), `ddsom
+--assets` par `extract::install_game_assets` (`GameData::load`, atlas, banque d'échantillons), `rebuild` dans
+`extract` seul, débordements de l'original nommés (`data/overreads.json` : **réextraire `data`**), `Residue`
+consulté 0 fois sur les 309 scénarios dans les deux modes ; 309/309 VALID dans les deux modes, `render_check`
+identique à main, bench bot30k 20 168 im/s sans rendu (main 20 110), 3 914 avec (main 3 881). Aucun code mort
+nouveau.
 
 **Pour reprendre :**
-1. Recréer le worktree : `git worktree add .claude/worktrees/l14-sans-rom wt-l14-sans-rom` (copier `rom/` et
-   `testdata/`, ignorés par git, sinon `mame_snapshots` se saute). Toujours exporter `DDSOM_ROMS`.
-2. Faire compiler, puis finir L14 selon [fin.md](fin.md) « L14 » : machine du jeu sans ROM, `ddsom --assets` via
-   `GameData::load` + banque d'échantillons + atlas, `cps2::Contents` sans région Z80 ni programme DSP, `Residue`
-   consulté 0 fois sur les 309 scénarios et `fuzz_couv`. Validation complète dans les deux modes, `render_check`,
-   bench pas plus lent.
-3. Puis L15 (World + couches ; `tasks::table` passe par `dyn Any`, coût à supprimer), L16/L17 facultatifs, L18
-   (documentation finale), puis L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD).
+1. Fusionner `wt-l14-sans-rom` dans main (après relecture), réextraire ses assets.
+2. Puis L15 (World + couches ; `tasks::table` passe par `dyn Any`, coût à supprimer), L16/L17 facultatifs, L18
+   (documentation finale), puis L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et le lot `touches.cfg`
+   (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours exporter
+   `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
+   génération de `ddsom-rc`, ~12 min à 40 min).
 
-**Décisions en attente de l'utilisateur :**
-* façade de présentation (L21) : Bevy ou minimal (wgpu / macroquad) ;
-* `reste.json` : le retirer une fois `Residue` à zéro, ou le garder comme assurance (L14 donnera le compte) ;
-* bug de saisie du nom : absent de notre révision (L19) ; option `DDSOM_*` pour reproduire celui des anciennes
-  révisions, ou rien ;
-* `touches.cfg` en anglais avec compatibilité ; écart connu du Z80 en retard (2 scénarios, comparaison du son
-  suspendue) à accepter.
+**Décisions prises le 2026-11-11 :**
+* `reste.json` : le retirer des assets (`extract` ne l'écrit plus, le jeu ne le charge plus) une fois `Residue`
+  consulté 0 fois sur tous les scénarios **et** sur `fuzz_couv` (C02, C04, C06, C10) ; toute lecture restante doit
+  d'abord devenir une donnée typée ; sinon le garder et lister les lectures restantes. **État après L14 : gardé.**
+  0 consultation sur les 309 scénarios et depuis les états de base de `fuzz_couv`, mais 983 584 lectures sur des
+  états perturbés (2 536 avec des perturbations plausibles : clés de SET, entrées et sauts d'animation
+  incohérents), que nulle table typée ne peut servir ([sans-rom.md](sans-rom.md) « Le résidu »). À retirer si
+  l'utilisateur juge que les états perturbés ne comptent pas.
+* façade de présentation (L21) : **minimale, en macroquad** (pas Bevy) ;
+* bug de saisie du nom des anciennes révisions : **non reproduit**, aucune option `DDSOM_*` ;
+* `touches.cfg` : noms en anglais, en acceptant encore les anciens noms français (lot ultérieur, pas L14) ; l'écart
+  connu du Z80 en retard (2 scénarios, comparaison du son suspendue) est **accepté**.
 
 ## Où en est le projet
 
