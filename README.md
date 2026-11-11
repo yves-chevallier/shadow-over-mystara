@@ -1,147 +1,168 @@
-# Rétro-ingénierie de Dungeons & Dragons: Shadow over Mystara (ddsom, CPS2)
+# Dungeons & Dragons: Shadow over Mystara — port Rust
 
-Jeu : `ddsom`, Europe 960619 (driver MAME `src/mame/capcom/cps2.cpp`).
+Le jeu d'arcade de Capcom (CPS2, 1996, révision Europe 960619) réécrit en Rust : il se joue sans émulateur, sans
+code 68000 et sans ROM, à partir de ressources (images PNG, sons WAV, tables JSON) que vous extrayez **de vos
+propres ROMs**. Le jeu se comporte comme l'original, image par image : c'est vérifié en continu contre le code
+d'origine ([docs/moteur.md](docs/moteur.md)).
 
-## Matériel
+Ce dépôt ne contient ni ROM ni rien qui en soit tiré : il faut posséder les ROMs du jeu.
 
-| Élément | Détail |
-|---|---|
-| CPU principal | 68000 @ 16 MHz, opcodes chiffrés (clé `ddsom.key`) |
-| CPU son | Z80 + QSound (`dd2.01`, `dd2.02`, samples `dd2.11m`/`dd2.12m`) |
-| Graphismes | `dd2.13m`..`dd2.20m` (ROM_LOAD64_WORD) |
-| Programme | `dd2e.03e`..`dd2e.10`, ROM_LOAD16_WORD_SWAP, 0x000000-0x3FFFFF |
+## 1. Ce qu'il faut
 
-Carte mémoire 68000 (cps2_map) :
+* **Les ROMs**, au format du jeu `ddsom` de MAME : `ddsom.zip`, et `qsound.zip` (programme de la puce son,
+  `dl-1425.bin`). Fichiers attendus une fois décompressés :
 
-| Adresse | Rôle |
-|---|---|
-| 000000-3FFFFF | ROM programme |
-| 400000-40000B | sortie objets CPS2 |
-| 618000-619FFF | RAM partagée QSound (Z80) |
-| 660000-664001 | RAM additionnelle |
-| 700000 / 708000 | Object RAM (sprites), banque via 8040E0 |
-| 804000/10/20 | entrées IN0/IN1/IN2 (+ EEPROM) |
-| 804040 | EEPROM sortie |
-| 804100-80417F | registres CPS-A / CPS-B |
-| 900000-92FFFF | GFX RAM (tilemaps, palettes) |
-| FF0000-FFFFFF | RAM de travail (A5 = FF8000 en permanence) |
+  | Rôle | Fichiers |
+  |---|---|
+  | programme 68000 (chiffré) et sa clé | `dd2e.03e` `dd2e.04e` `dd2e.05e` `dd2e.06e` `dd2e.07` `dd2e.08` `dd2e.09` `dd2e.10`, `ddsom.key` |
+  | graphismes | `dd2.13m` à `dd2.20m` |
+  | son : programme du Z80, échantillons | `dd2.01` `dd2.02`, `dd2.11m` `dd2.12m` |
+  | puce QSound (`qsound.zip`) | `dl-1425.bin` |
 
-## Chiffrement CPS2 : ce qu'il faut savoir
+* **Rust** : <https://rustup.rs> (Linux, macOS, Windows ; compilé ici avec Rust 1.98 stable).
+* **Sous Linux**, pour compiler : un éditeur de liens, `pkg-config` et `libudev` (manettes) :
 
-- Seuls les accès en **espace programme** sont déchiffrés : les fetchs d'instructions **et les
-  lectures de données en adressage relatif au PC** (`move.w tbl(pc,d0.w),d1`, `movea.l tbl(pc,d1.w),a1`).
-  Les autres lectures de données sont en clair.
-- Pour ddsom, la plage chiffrée est 0x000000-0x0FFFFF. Le reste de la ROM est en clair.
-- Instruction watchdog : `cmpi.l #$19660419,d1`, parsemée partout dans le code.
-- Le vecteur de reset est lu en espace programme (SP=00FF0E66, PC=000350) ; les autres vecteurs en clair.
+      sudo apt install build-essential pkg-config libudev-dev      # Debian, Ubuntu
 
-## Fichiers produits
+  Pour jouer : une session graphique (X11 ou Wayland par XWayland, OpenGL ; WSLg convient) et PulseAudio (ou
+  PipeWire) pour le son. Sans sortie son, le jeu tourne sans son.
 
-| Fichier | Contenu |
-|---|---|
-| `prog_plain.bin` | image programme brute (données correctes, opcodes chiffrés) |
-| `prog_dec.bin` | tout déchiffré (opcodes corrects, données fausses dans le 1er Mo) |
-| `prog_merged.bin` | **image de travail** : déchiffré là où c'est du code/lu via PC, clair ailleurs |
-| `listing.txt` | listing texte exporté de Ghidra |
-| `ghidra_proj/` | projet Ghidra (`ghidraRun`, puis ouvrir `ghidra_proj/ddsom.gpr`) |
+## 2. Préparer les ROMs
 
-Tout se régénère avec `./build.sh`.
+Copier `ddsom.zip` et `qsound.zip` à la racine du dépôt, puis :
 
-## Outils
+    mkdir -p rom
+    unzip -o ddsom.zip -d rom
+    unzip -o qsound.zip -d rom
 
-- `cps2dec/` : déchiffreur CPS2 en Rust (port de `cps2crypt.cpp` de MAME, BSD-3).
-- `tools/build_prog.py` : assemble les ROMs programme. `tools/gen_sboxes.py` : génère les s-boxes Rust.
-- `ghidra_scripts/Cps2Setup.java` : carte mémoire, labels d'E/S, vecteurs, et fusion itérative
-  code déchiffré / données en clair. Résout les idiomes Capcom que Ghidra ne suit pas seul :
-  tables d'offsets et de `bra.w` relatives au PC, tables de pointeurs `movea.l (pc,dn)`,
-  appels sans pile (`lea ret(pc),a6 ; bra f` / `jmp (a6)`), créations de tâches (`lea f,a0 ; trap #0`).
-- `mame/coverage.lua` : couverture réelle (tap sur l'espace opcodes), cumulative entre sessions.
-  `build.sh` l'utilise automatiquement si `mame/coverage.bin` existe. `tools/cov_check.py` compare
-  couverture et image fusionnée (doit afficher 0 mot manqué).
+(`./play.sh` fait ces deux décompressions lui-même s'il manque `rom/ddsom.key` ou `rom/dl-1425.bin`.)
 
-## Lancer le jeu avec couverture
-
-    mame ddsom -rompath /home/ycr/som -autoboot_script /home/ycr/som/mame/coverage.lua
-
-Jouer (Tab = menu MAME), quitter avec Échap, puis `./build.sh` pour réintégrer la couverture.
-Démo seule, sans fenêtre : ajouter `-video none -sound none -nothrottle -seconds_to_run 180`.
-
-## Premières observations
-
-- `reset` (0x350) : init registres CPS, test RAM sans pile (appels via a6), attente du Z80
-  (0x619FFF == 0x77), puis 0x492 : init RAM de travail et création de la tâche 0 (0x11B16).
-- Ordonnanceur coopératif (0x928) : 16 tâches de 16 octets à FF0064 (A5-0x7F9C), état >= 4 = active.
-  `trap #0` crée une tâche (d0 = slot, a0 = entrée), `trap #1` termine la tâche courante.
-- `irq2_vblank` (0x574) : handler VBLANK. IRQ4 (raster) pointe sur un handler vide (0x166).
-
-## Port Rust (`port/`)
-
-Architecture et jalons : [docs/architecture.md](docs/architecture.md).
-Images des créatures (ennemis, boss, personnages) régénérables depuis les ROMs : [docs/creatures.md](docs/creatures.md).
-
-- `cps2-gfx` : chargement des ROMs graphiques et rendu vidéo CPS2 (tilemaps, sprites, priorités,
-  palettes). **Jalon 1 atteint** : identique au pixel près à MAME sur les 11 instantanés de
-  `testdata/vsnap` (`cd port && cargo test --release`).
-- `vrender` : rend un instantané et le compare à la capture MAME.
-- `ddsom-sound` : pilote son (séquenceur, voies, enveloppes) réécrit à partir du programme du Z80, identique
-  écriture par écriture ; format et protocole dans [docs/son.md](docs/son.md). C'est le seul pilote du jeu :
-  le Z80 émulé (fonctionnalité `z80` de `cps2`) ne sert plus qu'à la machine de référence et aux outils.
-
-Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=...` avec
-`mame/session.lua` (voir `mame/vsnap.lua`). Points de fidélité appris en route :
-- la table d'objets affichée est celle verrouillée au vblank précédent ;
-- la palette est copiée au moment de l'écriture du registre CPS-A 0x0a, pas au rendu ;
-- entre sprites, c'est l'entrée d'indice le plus élevé qui reste visible (bit 31 du masque de priorité).
-
-## Jouer au port Rust
-
-    ./play.sh
-
-Sous Linux, la compilation demande `libudev-dev` (manettes, crate gilrs) ; le son passe par PulseAudio.
-
-Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
-= boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
-`Tab` avance rapide, `F11` plein écran, `F6` échelle (multiple entier ou ajustée à la fenêtre),
-`F7` filtre (aucun, lissé, CRT), `F8` pack HD marche/arrêt, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
-La fenêtre se redimensionne librement.
-
-Pack HD (facultatif) : un dossier `hd/` à côté du jeu (ou `DDSOM_HD=<dossier>`) remplace des images de sprites et des
-tuiles de décor par des images agrandies ou retouchées, palettes et effets gardés ; il se fabrique avec l'outil
-`hd-pack` à partir de vos ROMs et ne se partage pas : voir [docs/pack-hd.md](docs/pack-hd.md).
-
-Manettes (Linux, Windows, macOS ; disposition Xbox) : A B X Y = boutons 4 3 1 2, croix ou stick gauche,
-Start = Start, Back = pièce.
-
-Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = keys` ; actions
-`p1.up`, `p1.button1`, `p1.coin`, `p2.start`, `save`, `fullscreen`, `scale`, `filter`… ; touches
-`Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…, boutons `Pad1A`, `Pad1Up`…). Les anciens noms français
-(`j1.haut`, `sauver`, `Pad1Haut`…) sont encore lus, et le fichier est alors réécrit en anglais. Lettres et
-chiffres suivent la disposition du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./play.sh`
-affiche le nom des touches pressées.
-
-`F5` sauvegarde la partie (`sauvegardes/rapide.txt`), `F9` la reprend : le jeu rejoue sans affichage les
-entrées depuis le démarrage (quelques secondes pour une longue partie). Le fichier est un scénario
-rejouable par `validate` (avec `rapide.txt.eeprom`).
-
-Sous Windows, `play.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
-Rust Windows (MSVC) : son par waveOut, manettes comme ci-dessus. Avec un dossier `assets\` à
-la racine (produit par `extract`, voir plus bas), il joue sans aucune ROM ; sinon il prépare `rom\`
-depuis `ddsom.zip` et `qsound.zip`.
-
-Son : le jeu utilise toujours le pilote son Rust (`ddsom-sound`), avec ou sans ROM ; le programme du Z80 ne
-tourne plus que dans la machine de référence des outils (`validate` compare les deux).
-
-Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
-assets` joue sans aucun fichier ROM ni 68000 (routines Rust seules, pilote son Rust) ; voir
-[docs/sans-rom.md](docs/sans-rom.md).
-
-État actuel : la machine (68000 interprété, Z80, QSound HLE, vidéo CPS2) reproduit MAME à l'identique
-sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code 68000 du jeu est recompilé en
-Rust à la compilation (crate `ddsom-rc`, à partir des ROMs locales) ; voir docs/architecture.md.
-
-## Extraire les ressources
+## 3. Extraire les ressources
 
     cargo run --release --manifest-path port/Cargo.toml -p extract -- rom assets
 
-Produit `assets/` (graphismes PNG, palettes, sons WAV ; formats décrits dans `assets/README.md`),
-sans perte : `cargo test --release --manifest-path port/Cargo.toml -p ddsom-assets` le vérifie.
+Le premier lancement compile l'extracteur (quelques minutes), l'extraction elle-même prend une vingtaine de secondes.
+Elle écrit `assets/` : graphismes (`gfx/cells_NN.png`), palettes, sons (`sounds/NNN.wav`), musique, sprites,
+décors, textes et tables de jeu (`data/*.json`), environ 37 Mo ; leur format est décrit dans `assets/README.md` et
+[docs/assets.md](docs/assets.md). L'extraction est sans perte. Une fois `assets/` produit, le jeu n'a plus besoin des
+ROMs.
+
+Après une mise à jour du dépôt qui change le format des ressources, relancer la même commande (elle réécrit
+`assets/`).
+
+## 4. Jouer
+
+Sans ROM, depuis les ressources :
+
+    cargo build --release --manifest-path port/Cargo.toml -p ddsom
+    port/target/release/ddsom --assets assets
+
+Avec les ROMs (les données sont alors extraites en mémoire à chaque lancement) :
+
+    ./play.sh
+
+`play.sh` compile et lance `port/target/release/ddsom rom`. Les deux façons jouent le même jeu.
+
+**Windows** : `play.bat` (double-clic, PowerShell `.\play.bat`, ou depuis un partage `\\wsl.localhost\...`). Il
+demande Rust pour Windows (MSVC) ; s'il n'y a pas encore de dossier `assets\` à jour, il décompresse `ddsom.zip` et
+`qsound.zip` (posés à la racine) dans `rom\` et lance l'extraction une fois, puis compile et joue sans ROM (son par
+waveOut).
+
+Le jeu lit et écrit ses fichiers dans le **dossier courant** : lancez-le depuis la racine du dépôt (`play.sh` et
+`play.bat` le font).
+
+| Fichier | Contenu |
+|---|---|
+| `touches.cfg` | les touches (créé au premier lancement) |
+| `nvram/ddsom.eeprom` | l'EEPROM du jeu (réglages du menu TEST, compteurs), écrite en quittant |
+| `sauvegardes/rapide.txt` (et `.eeprom`) | la sauvegarde rapide |
+| `hd/` | le pack HD, s'il existe (facultatif) |
+
+## 5. Touches
+
+| Action | Joueur 1 | Joueur 2 |
+|---|---|---|
+| Pièce | `5` | `6` |
+| Start | `1` | `2` |
+| Directions | flèches | `R` `F` `D` `G` (haut, bas, gauche, droite) |
+| Bouton 1 (attaque) | `Ctrl` gauche ou `W` | `A` |
+| Bouton 2 (saut) | `Alt` gauche ou `X` | `S` |
+| Bouton 3 (sélection d'objet) | `Espace` ou `C` | `Q` |
+| Bouton 4 (utiliser l'objet) | `Maj` gauche ou `V` | — |
+
+| Touche | Effet |
+|---|---|
+| `F2` | menu TEST de la borne (réglages, enregistrés dans l'EEPROM) ; `9` : service (crédit) |
+| `P` | pause |
+| `Tab` (maintenue) | avance rapide (sans son) |
+| `F5` / `F9` | sauvegarde rapide / reprise |
+| `F6` | échelle : plus grand multiple entier qui tient dans la fenêtre, ou ajustée à la fenêtre |
+| `F7` | filtre : aucun, lissé, CRT (lignes de balayage) |
+| `F8` | pack HD marche / arrêt |
+| `F11` | plein écran |
+| `Échap` | quitter (enregistre l'EEPROM) |
+
+La fenêtre (deux fois la taille de l'image au départ) se redimensionne librement.
+
+Les touches viennent de la disposition du clavier : en AZERTY, `1` à `6` demandent `Maj` ; changez-les dans
+`touches.cfg` si besoin.
+
+### `touches.cfg`
+
+Une ligne par action : `action = touches`, séparées par des espaces (vide : aucune), `#` commente. Actions :
+`p1.up` `p1.down` `p1.left` `p1.right` `p1.button1`..`p1.button4` `p1.start` `p1.coin` (et `p2.*`), `test`,
+`service`, `pause`, `save`, `load`, `fast`, `fullscreen`, `scale`, `filter`, `hd`, `quit`. Touches : `Left` `Right`
+`Up` `Down`, `LeftCtrl` `RightCtrl` `LeftAlt` `LeftShift` `Space` `Enter` `Tab` `Escape`, `A`..`Z`, `Key0`..`Key9`,
+`NumPad0`..`NumPad9`, `F1`..`F12`... Exemple :
+
+    p1.button1 = LeftCtrl W Pad1X
+    p1.coin = Key5 NumPad5 Pad1Back
+
+Pour connaître le nom d'une touche : lancer le jeu avec `DDSOM_TOUCHES=1` (par exemple
+`DDSOM_TOUCHES=1 ./play.sh`), il affiche le nom de chaque touche ou bouton pressé. Un fichier d'une version
+précédente, aux noms français (`j1.haut`, `sauver`, `Pad1Haut`...), est encore lu, puis réécrit avec les noms
+anglais (ses commentaires sont alors perdus).
+
+### Manettes
+
+Deux manettes au plus (Linux, Windows, macOS), dans l'ordre de branchement, disposition Xbox :
+
+| Bouton | Action par défaut |
+|---|---|
+| croix ou stick gauche | directions |
+| `X` (gauche) / `Y` (haut) / `B` (droite) / `A` (bas) | boutons 1 / 2 / 3 / 4 |
+| `Start` / `Back` | Start / pièce |
+
+Dans `touches.cfg` : `Pad1A` `Pad1B` `Pad1X` `Pad1Y` `Pad1LB` `Pad1RB` `Pad1Start` `Pad1Back` `Pad1Up` `Pad1Down`
+`Pad1Left` `Pad1Right`, et `Pad2...` pour la seconde.
+
+## 6. Sauvegardes et EEPROM
+
+* **Sauvegarde rapide** : `F5` écrit `sauvegardes/rapide.txt`, `F9` reprend la partie à cet endroit. Le jeu
+  rejoue sans affichage toutes les entrées depuis le démarrage (quelques secondes pour une longue partie) : la
+  sauvegarde reste valable d'une version à l'autre tant que le jeu se comporte de la même façon.
+* **EEPROM** : comme la borne, le jeu garde ses réglages (difficulté, pièces et crédits... dans le menu TEST, `F2`)
+  et ses compteurs dans `nvram/ddsom.eeprom`, écrit en quittant (`Échap` ou fermeture de la fenêtre). Supprimer ce
+  fichier rend les réglages d'usine.
+
+## 7. Pack HD (facultatif)
+
+Un dossier `hd/` à la racine (ou `DDSOM_HD=<dossier>`) remplace des images de sprites et des tuiles de décor par des
+images agrandies ou retouchées, en gardant palettes, flashs et fondus ; `F8` le coupe. Il se fabrique avec l'outil
+`hd-pack` à partir de vos ROMs : voir [docs/pack-hd.md](docs/pack-hd.md).
+
+## 8. Ce qui n'est jamais versionné
+
+Tout ce qui vient des ROMs (œuvre de Capcom) reste chez vous ; `.gitignore` l'exclut :
+
+* les ROMs (`*.zip`, `rom/`) et les images programme (`prog_*.bin`) ;
+* les ressources extraites (`assets/`), le pack HD et ses exports (`hd/`, `hd-*/`) ;
+* vos fichiers de jeu (`touches.cfg`, `nvram/`, `sauvegardes/`) ;
+* les produits de l'analyse (`listing.txt`, `ghidra_proj/`, `decomp/`, `testdata/`).
+
+## Pour aller plus loin
+
+* [docs/README.md](docs/README.md) : index de la documentation.
+* [docs/moteur.md](docs/moteur.md) : le guide du moteur (couches, boucle d'image, tâches, données, validation).
+* [docs/retro-ingenierie.md](docs/retro-ingenierie.md) : le matériel CPS2, le chiffrement, Ghidra et MAME.
+* [docs/sans-rom.md](docs/sans-rom.md) : comment le jeu se passe des ROMs.
