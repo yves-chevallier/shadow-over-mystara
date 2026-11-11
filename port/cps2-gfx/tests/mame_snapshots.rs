@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use cps2_gfx::{render, rom, VideoState};
+use cps2_gfx::{render, rom, DrawList, VideoState};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -52,7 +52,7 @@ fn render_identical_to_mame() {
             gfxram: &gfxram, cps_a: &cps_a, cps_b: &cps_b, objram: &objram, output: &output,
             palette_ram: pal.as_deref(),
         };
-        let img = render(&v, &atlas);
+        let img = render(&DrawList::from_video(&v), &atlas);
         let reference = read_png(&snaps.join(format!("png/ddsom/{n:04}.png")));
         let diff = img.iter().zip(&reference).filter(|(a, b)| a != b).count();
         assert_eq!(diff, 0, "frame {f}: {diff} pixels differ from MAME");

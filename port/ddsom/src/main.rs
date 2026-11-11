@@ -3,10 +3,12 @@
 //! ddsom [roms_dir] [--assets dir] : extracted ROMs (ddsom.zip + dl-1425.bin from qsound.zip), default
 //! ../rom. With `--assets`, everything comes from the folder produced by `extract` (`--assets` alone, without a
 //! folder, reads `../assets`).
-//! The game runs without the 68000: only the routines rewritten in Rust (`docs/noyau.md`), on a machine without ROM
-//! (`cps2::Machine::game`). It loads the typed game data (`ddsom_data::GameData`), the tile atlas, the data of the
-//! Rust sound driver, the DSP tables and the sample bank: from the assets folder (PNG, WAV, JSON; no ROM file is
-//! opened, docs/sans-rom.md), or extracted in memory from the ROMs.
+//! The game runs without the 68000: only the routines rewritten in Rust (`docs/noyau.md`), on a machine without ROM.
+//! The application talks to it only through `ddsom_game::Game` (one step per frame with the inputs, the frame to draw,
+//! the mixed sound, the EEPROM); the frame is drawn by the CPS2 renderer (`cps2_gfx::render`).
+//! It loads the typed game data (`ddsom_data::GameData`), the tile atlas, the data of the Rust sound driver, the DSP
+//! tables and the sample bank: from the assets folder (PNG, WAV, JSON; no ROM file is opened, docs/sans-rom.md), or
+//! extracted in memory from the ROMs (`extract::install_game*`).
 //! Diagnostics (build with `--features original`): `DDSOM_ORIGINE=1` (original code at arcade speed), `DDSOM_INTERP=1`
 //! (everything interpreted); these modes
 //! read the ROMs.
@@ -26,7 +28,9 @@ mod keys;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use cps2::{Board, Machine};
+use cps2_gfx::TileAtlas;
+use ddsom_game::core::interface::Board;
+use ddsom_game::Game;
 use minifb::{Scale, ScaleMode, Window, WindowOptions};
 
 const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
@@ -79,11 +83,12 @@ fn main() {
             std::process::exit(1);
         }
     };
-    // a fresh machine: at startup, and on each resume from a save (`save.rs`)
+    // a fresh game: at startup, and on each resume from a save (`save.rs`)
     match originals {
         // the game: no ROM, the Rust sound driver
         None => play(
-            |eeprom| ddsom_game::install_no_68k(Machine::game(contents.clone(), eeprom)),
+            |eeprom| Game::new(contents.clone(), eeprom),
+            &contents.graphics,
             &mut keys,
             eeprom.as_deref(),
             &nvram,
@@ -91,14 +96,15 @@ fn main() {
         ),
         Some(c) => play(
             |eeprom| {
-                let mut m = Machine::ddsom(c.clone(), eeprom);
+                let mut m = cps2::Machine::ddsom(c.clone(), eeprom);
                 #[cfg(feature = "original")]
                 if std::env::var_os("DDSOM_ORIGINE").is_some() {
                     ddsom_rc::install(&mut m);
                 }
                 m.sound.use_rust_driver();
-                m
+                Game::on(m)
             },
+            &c.graphics,
             &mut keys,
             eeprom.as_deref(),
             &nvram,
@@ -107,20 +113,22 @@ fn main() {
     }
 }
 
-/// Plays on the machines that `machine` builds (from the starting EEPROM): the game, or the original code.
+/// Plays the games that `new_game` builds (from the starting EEPROM): the game, or the original code. `graphics`: the
+/// tiles that the frames designate.
 fn play<B: Board>(
-    machine: impl Fn(Option<&[u8]>) -> Machine<B>,
+    new_game: impl Fn(Option<&[u8]>) -> Game<B>,
+    graphics: &TileAtlas,
     keys: &mut keys::Keys,
     eeprom: Option<&[u8]>,
     nvram: &Path,
     no_68k: bool,
 ) {
-    let mut m = machine(eeprom);
+    let mut game = new_game(eeprom);
 
     let mut full_screen = false;
     let mut win = window(full_screen);
 
-    let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
+    let audio = audio::Audio::open(ddsom_game::core::interface::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
         eprintln!("Sound unavailable (no audio output): the game runs without sound.");
     }
@@ -128,9 +136,9 @@ fn play<B: Board>(
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
     let mut next = Instant::now();
     let mut paused = false;
-    let mut game = save::Game::new(&m);
-    let saved = |game: &save::Game, file: &Path| match game.saved(file) {
-        Ok(()) => eprintln!("Game saved to {} (frame {}).", file.display(), game.images()),
+    let mut session = save::Session::new(&game);
+    let saved = |session: &save::Session, file: &Path| match session.saved(file) {
+        Ok(()) => eprintln!("Game saved to {} (frame {}).", file.display(), session.images()),
         Err(e) => eprintln!("Cannot save to {}: {e}", file.display()),
     };
     let mut buf = vec![0u32; 384 * 224];
@@ -148,14 +156,14 @@ fn play<B: Board>(
             paused = !paused;
         }
         if t.save {
-            saved(&game, SAVE.as_ref());
+            saved(&session, SAVE.as_ref());
         }
         if t.load {
             let start = Instant::now();
-            match save::Game::load(SAVE.as_ref(), |ee| machine(Some(ee))) {
-                Ok((new, p)) => {
-                    eprintln!("Game resumed at frame {} ({:.1} s).", p.images(), start.elapsed().as_secs_f64());
-                    (m, game) = (new, p);
+            match save::Session::load(SAVE.as_ref(), |ee| new_game(Some(ee))) {
+                Ok((new, s)) => {
+                    eprintln!("Game resumed at frame {} ({:.1} s).", s.images(), start.elapsed().as_secs_f64());
+                    (game, session) = (new, s);
                     next = Instant::now();
                 }
                 Err(e) => eprintln!("Reprise de {} impossible : {e}", SAVE),
@@ -167,25 +175,24 @@ fn play<B: Board>(
             next = Instant::now();
             continue;
         }
-        m.bus.hw_mut().inputs.in0 = t.in0;
-        m.bus.hw_mut().inputs.in2 = t.in2;
-        game.image(&m);
-        let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
-            Ok(img) => img,
+        session.frame(t.inputs);
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| game.step(t.inputs))) {
+            Ok(()) => {}
             // without the 68000: stop on an address with no Rust routine (diagnostic already printed by the panic)
             Err(e) if no_68k => {
                 let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                eprintln!("The game without the 68000 stops: {}", m.trim_start_matches(ddsom_game::core::frame::STOP));
+                eprintln!("The game without the 68000 stops: {}", m.trim_start_matches(ddsom_game::core::interface::STOP));
                 break;
             }
             Err(e) => std::panic::resume_unwind(e),
-        };
+        }
+        let img = cps2_gfx::render(&game.frame(), graphics);
         for (d, p) in buf.iter_mut().zip(&img) {
             *d = (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32;
         }
         win.update_with_buffer(&buf, 384, 224).expect("display");
 
-        let samples: Vec<i16> = m.sound.audio.drain(..).flatten().collect();
+        let samples: Vec<i16> = game.sound().iter().flatten().copied().collect();
         let fast = t.fast;
         if let (Some(a), false) = (&audio, fast) {
             a.push(samples);
@@ -203,12 +210,12 @@ fn play<B: Board>(
     }
 
     if let Some(f) = std::env::var_os("DDSOM_ENREGISTRE") {
-        saved(&game, f.as_ref());
+        saved(&session, f.as_ref());
     }
     if let Some(dir) = nvram.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    if let Err(e) = std::fs::write(nvram, m.bus.hw().eeprom.to_bytes()) {
+    if let Err(e) = std::fs::write(nvram, game.eeprom()) {
         eprintln!("Cannot save the EEPROM: {e}");
     }
 }

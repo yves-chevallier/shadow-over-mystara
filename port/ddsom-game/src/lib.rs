@@ -9,6 +9,9 @@
 //! sound, inputs, EEPROM...), [`actors`] (object families, players, their aids), [`screens`] (modes, scenes,
 //! interface), [`core`] (kernel, tasks, dispatch, frame loop).
 //!
+//! An application uses the game through [`Game`] only (`core::interface`): one step per frame with the inputs, the
+//! frame to draw as a draw list, the mixed sound, the EEPROM.
+//!
 //! A *native routine* is the Rust version of a 68000 routine; its entry address and name are metadata for the tools.
 //! The game calls its routines directly and finds the object handlers in the dispatch tables (`dispatch`, Rust arrays
 //! indexed by the type); it has no registry by address: [`Native`] values are only listed and found by address by the
@@ -27,6 +30,9 @@ pub mod screens;
 pub mod core;
 
 use crate::world::World;
+
+/// The game as a library: [`Game::step`], [`Game::frame`], [`Game::sound`] (docs/fin.md, L20).
+pub use crate::core::interface::{Game, Inputs};
 
 /// The game machine: the CPS2 machine whose board is the game's [`World`] (work RAM and task table out of the bus).
 pub type GameMachine = cps2::Machine<World>;

@@ -8,7 +8,7 @@
 use std::hash::Hasher;
 use std::path::Path;
 
-use cps2_gfx::{render, rom, VideoState};
+use cps2_gfx::{render, rom, DrawList, VideoState};
 
 /// FNV-1a 64 bits, as `render_check`.
 struct Fnv(u64);
@@ -81,7 +81,7 @@ fn main() {
     for _ in 0..repeat {
         for f in &frames {
             let t0 = std::time::Instant::now();
-            let img = render(&f.state(), &atlas);
+            let img = render(&DrawList::from_video(&f.state()), &atlas);
             rendering += t0.elapsed();
             let mut h = Fnv(0xcbf29ce484222325);
             for p in &img {

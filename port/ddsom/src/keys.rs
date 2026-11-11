@@ -67,9 +67,8 @@ pub struct Keys {
 
 /// Keyboard reading for one frame.
 pub struct State {
-    /// CPS2 input ports (active low).
-    pub in0: u16,
-    pub in2: u16,
+    /// The inputs of the game (CPS2 ports, active low).
+    pub inputs: ddsom_game::Inputs,
     /// Pause, save, load, full screen have just been pressed.
     pub pause: bool,
     pub save: bool,
@@ -126,8 +125,7 @@ impl Keys {
             self.before = low.clone();
         }
         let mut e = State {
-            in0: 0xffff,
-            in2: 0xffff,
+            inputs: ddsom_game::Inputs::default(),
             pause: false,
             save: false,
             load: false,
@@ -139,8 +137,8 @@ impl Keys {
         for (port, keys) in &self.actions {
             if keys.iter().any(|k| low.contains(k)) {
                 match *port {
-                    Port::In0(bit) => e.in0 &= !bit,
-                    Port::In2(bit) => e.in2 &= !bit,
+                    Port::In0(bit) => e.inputs.in0 &= !bit,
+                    Port::In2(bit) => e.inputs.in2 &= !bit,
                     Port::Pause => press[0] = true,
                     Port::Save => press[1] = true,
                     Port::Load => press[2] = true,

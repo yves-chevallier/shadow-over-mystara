@@ -191,7 +191,7 @@ fn render(m: &ddsom_game::GameMachine, entries: &[[u16; 4]]) -> Option<Sprite> {
         let mut pal = m.bus.hw.palette.clone();
         pal[0xbff] = bg;
         let v = cps2_gfx::VideoState { gfxram: &[], cps_a: &cps_a, cps_b: &cps_b, objram: &obj, output: &output, palette_ram: Some(&pal) };
-        cps2_gfx::render(&v, &m.gfx)
+        cps2_gfx::render(&cps2_gfx::DrawList::from_video(&v), &m.gfx)
     };
     let (a, b) = (shot(0xff0f), shot(0xf0f0));
     let opaque: Vec<bool> = a.iter().zip(&b).map(|(p, q)| p == q).collect();

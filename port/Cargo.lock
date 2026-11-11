@@ -81,14 +81,12 @@ name = "ddsom"
 version = "0.1.0"
 dependencies = [
  "cps2",
- "ddsom-assets",
- "ddsom-data",
+ "cps2-gfx",
  "ddsom-game",
  "ddsom-rc",
  "extract",
  "libloading",
  "minifb",
- "qsound",
 ]
 
 [[package]]
@@ -127,6 +125,7 @@ dependencies = [
  "extract",
  "m68k",
  "png",
+ "qsound",
 ]
 
 [[package]]

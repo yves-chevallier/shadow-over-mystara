@@ -84,8 +84,16 @@ impl Frames {
 
     /// The frame whose header is at `rom` (the value an object keeps at `+0x34`), in the table or outside.
     pub fn at(&self, rom: RomAddr) -> Option<&Frame> {
-        let extra = || self.extra.binary_search_by_key(&rom.0, |f| f.rom).ok().map(|i| &self.extra[i]);
-        self.by_rom(rom.0).map(|i| &self.frames[i]).or_else(extra)
+        self.find(rom).map(|(_, f)| f)
+    }
+
+    /// The frame whose header is at `rom` and its number (see [`Frames::number`]).
+    pub fn find(&self, rom: RomAddr) -> Option<(u32, &Frame)> {
+        if let Some(i) = self.by_rom(rom.0) {
+            return Some((i as u32, &self.frames[i]));
+        }
+        let i = self.extra.binary_search_by_key(&rom.0, |f| f.rom).ok()?;
+        Some(((self.frames.len() + i) as u32, &self.extra[i]))
     }
 
     /// Frame number `n` (numbers past the table designate the frames outside it).

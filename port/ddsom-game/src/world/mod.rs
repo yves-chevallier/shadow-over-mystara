@@ -35,7 +35,11 @@ use crate::world::tasks::table::Table;
 pub struct Parked {
     pub tasks: Option<Table>,
     pub leftovers: Leftovers,
+    pub sprite_frames: SpriteFrames,
 }
+
+/// Which frames of the frame table each bank of the object RAM shows ([`World::sprite_frames`]).
+pub type SpriteFrames = [Vec<cps2_gfx::draw::SpriteFrame>; 2];
 
 /// Words of the work RAM.
 pub const RAM_WORDS: usize = 0x8000;
@@ -51,6 +55,10 @@ pub struct World {
     pub leftovers: Leftovers,
     /// The hardware: video, sound link, inputs, EEPROM (its `ram` is empty).
     pub hw: Cps2Bus,
+    /// For each bank of the object RAM, the frames of the frame table that the sprite list built there shows
+    /// (`services::sprites::build`). Presentation only (`core::interface::Game::frame`): the game never reads it and
+    /// it is not part of the compared state.
+    pub sprite_frames: SpriteFrames,
 }
 
 /// Index of the RAM word of a work RAM address.
@@ -69,18 +77,18 @@ impl World {
     /// The world of a bus: its RAM and the task table that a tool may have left in it are taken out (no copy).
     pub fn from_bus(mut hw: Cps2Bus) -> World {
         let ram = std::mem::take(&mut hw.ram).into_boxed_slice().try_into().expect("work RAM of 0x8000 words");
-        let Parked { tasks, leftovers } = hw
+        let Parked { tasks, leftovers, sprite_frames } = hw
             .ext
             .take()
             .map_or_else(Parked::default, |e| *e.into_any().downcast::<Parked>().expect("bus extension: parked world"));
-        World { ram, tasks, leftovers, hw }
+        World { ram, tasks, leftovers, hw, sprite_frames }
     }
 
     /// Back to a bus that holds the RAM and the task table.
     pub fn into_bus(self) -> Cps2Bus {
-        let World { ram, tasks, leftovers, mut hw } = self;
+        let World { ram, tasks, leftovers, mut hw, sprite_frames } = self;
         hw.ram = (ram as Box<[u16]>).into_vec();
-        hw.ext = Some(Box::new(Parked { tasks, leftovers }));
+        hw.ext = Some(Box::new(Parked { tasks, leftovers, sprite_frames }));
         hw
     }
 
@@ -123,7 +131,13 @@ impl World {
                 }
             }
         }
-        let empty = World { ram: Box::new([0; RAM_WORDS]), tasks: None, leftovers: Leftovers::default(), hw: Cps2Bus::detached() };
+        let empty = World {
+            ram: Box::new([0; RAM_WORDS]),
+            tasks: None,
+            leftovers: Leftovers::default(),
+            hw: Cps2Bus::detached(),
+            sprite_frames: SpriteFrames::default(),
+        };
         let w = std::mem::replace(self, empty);
         let mut lent = Lent { world: self, bus: Some(w.into_bus()) };
         f(lent.bus.as_mut().expect("lent bus"))

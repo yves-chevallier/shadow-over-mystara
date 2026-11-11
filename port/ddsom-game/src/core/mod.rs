@@ -2,6 +2,7 @@
 
 pub mod frame;
 pub mod game;
+pub mod interface;
 pub mod kernel;
 pub mod scenario;
 pub mod startup;

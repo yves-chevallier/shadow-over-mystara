@@ -152,6 +152,9 @@ pub struct Machine<B: Board = Cps2Bus> {
     /// Object table latched at the last vblank (displayed on the next frame).
     pub obj_buffer: Vec<u16>,
     pub pri_ctrl_buffer: [u16; 6],
+    /// Object table and output registers displayed by the last frame (latched at the vblank before it).
+    shown_objects: Vec<u16>,
+    shown_output: [u16; 6],
     line_cycles: f64,
     /// Absolute CPU cycle at the end of the current line.
     cycle_debt: f64,
@@ -323,6 +326,8 @@ impl Machine {
             frame: 0,
             obj_buffer: vec![0; 0x1000],
             pri_ctrl_buffer: [0; 6],
+            shown_objects: vec![0; 0x1000],
+            shown_output: [0; 6],
             line_cycles: CPU_HZ / LINE_HZ,
             cycle_debt: 0.0,
             z80_debt: 0.0,
@@ -359,6 +364,8 @@ impl<B: Board> Machine<B> {
             frame: self.frame,
             obj_buffer: self.obj_buffer,
             pri_ctrl_buffer: self.pri_ctrl_buffer,
+            shown_objects: self.shown_objects,
+            shown_output: self.shown_output,
             line_cycles: self.line_cycles,
             cycle_debt: self.cycle_debt,
             z80_debt: self.z80_debt,
@@ -448,7 +455,7 @@ impl<B: Board> Machine<B> {
     /// MAME's frame notification falls at the start of each vblank. A frame thus runs
     /// lines 240..261 then 0..239; it ends on the vblank event (screen render,
     /// object table latch, IRQ2), handled at the start of the next frame.
-    /// Returns the 384x224 RGB frame.
+    /// Returns the 384x224 RGB frame (see [`Machine::shown`]).
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
         if let Some(cap) = self.step_cap.as_mut() {
             cap.count = 0;
@@ -465,7 +472,10 @@ impl<B: Board> Machine<B> {
             self.bus.hw_mut().irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
         }
-        let image = if self.rendering { self.render() } else { Vec::new() };
+        // the frame shows the object table latched at the previous vblank, then the next one is latched
+        std::mem::swap(&mut self.shown_objects, &mut self.obj_buffer);
+        self.shown_output = self.pri_ctrl_buffer;
+        let image = if self.rendering { cps2_gfx::render(&cps2_gfx::DrawList::from_video(&self.shown()), &self.gfx) } else { Vec::new() };
         let bank = self.bus.hw_mut().objram_bank as usize & 1;
         self.obj_buffer.copy_from_slice(&self.bus.hw().objram[bank]);
         self.pri_ctrl_buffer = self.bus.hw_mut().output;
@@ -490,16 +500,26 @@ impl<B: Board> Machine<B> {
         b.raster_counter[2] = b.raster_reload[2];
     }
 
+    /// The video state that the last frame displays: the video memory and registers at its end, the object table
+    /// latched at the vblank before it.
+    pub fn shown(&self) -> cps2_gfx::VideoState<'_> {
+        self.video(&self.shown_objects, &self.shown_output)
+    }
+
+    /// The current video state with the object table latched at the last vblank (that the next frame will show).
     pub fn render(&self) -> Vec<[u8; 3]> {
+        cps2_gfx::render(&cps2_gfx::DrawList::from_video(&self.video(&self.obj_buffer, &self.pri_ctrl_buffer)), &self.gfx)
+    }
+
+    fn video<'a>(&'a self, objram: &'a [u16], output: &'a [u16; 6]) -> cps2_gfx::VideoState<'a> {
         let b = self.bus.hw();
-        let v = cps2_gfx::VideoState {
+        cps2_gfx::VideoState {
             gfxram: &b.gfxram,
             cps_a: &b.cps_a,
             cps_b: &b.cps_b,
-            objram: &self.obj_buffer,
-            output: &self.pri_ctrl_buffer,
+            objram,
+            output,
             palette_ram: Some(&b.palette),
-        };
-        cps2_gfx::render(&v, &self.gfx)
+        }
     }
 }

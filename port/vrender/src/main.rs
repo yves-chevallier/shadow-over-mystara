@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use cps2_gfx::{render, rom, VideoState, SCREEN_H, SCREEN_W};
+use cps2_gfx::{render, rom, DrawList, VideoState, SCREEN_H, SCREEN_W};
 
 fn words(path: &Path) -> Vec<u16> {
     std::fs::read(path)
@@ -55,7 +55,7 @@ fn main() {
         gfxram: &gfxram, cps_a: &cps_a, cps_b: &cps_b, objram: &objram, output: &output,
         palette_ram: palette.as_deref(),
     };
-    let img = render(&v, &atlas);
+    let img = render(&DrawList::from_video(&v), &atlas);
 
     let f = std::fs::File::create(&a[3]).expect("output");
     let mut enc = png::Encoder::new(f, SCREEN_W as u32, SCREEN_H as u32);

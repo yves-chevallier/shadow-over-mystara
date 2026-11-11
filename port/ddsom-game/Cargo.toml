@@ -6,6 +6,9 @@ description = "ddsom game logic rewritten in idiomatic Rust (native routines rep
 
 [dependencies]
 cps2 = { path = "../cps2", default-features = false }
+# The frame as drawing commands (`core::interface`), the sample rate of the mixed sound.
+cps2-gfx = { path = "../cps2-gfx" }
+qsound = { path = "../qsound" }
 ddsom-data = { path = "../ddsom-data" }
 # The 68000, the recompiled original code and the emulated Z80: tools only (feature `tools`), never the game.
 m68k = { path = "../m68k", optional = true }
@@ -16,7 +19,6 @@ extract = { path = "../extract", default-features = false, optional = true }
 [dev-dependencies]
 extract = { path = "../extract", default-features = false }
 png = "0.17"
-cps2-gfx = { path = "../cps2-gfx" }
 ddsom-assets = { path = "../ddsom-assets" }
 
 [features]

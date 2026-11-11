@@ -356,7 +356,7 @@ fn enter(m: &mut ddsom_game::GameMachine, n: u32) -> Reading {
     let order = (0..4).map(|i| (command >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
     // target positions of the cameras (records `A5 + 0x4fe` and `A5 + 0x54e`, field `+0x0c`)
     let (y1, y2) = (rw(m, 0xff84fe + 0xc) as i16 as i64, rw(m, 0xff854e + 0xc) as i16 as i64);
-    Reading { pal: cps2_gfx::render::build_palette(&v).to_vec(), order, gap_y: y1 - y2, in_game }
+    Reading { pal: cps2_gfx::render::build_palette(&cps2_gfx::DrawList::from_video(&v)).to_vec(), order, gap_y: y1 - y2, in_game }
 }
 
 /// Scene that naturally follows: phase 16 (scene exit) is forced and the next scene is read.

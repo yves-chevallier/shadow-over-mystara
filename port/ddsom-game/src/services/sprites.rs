@@ -7,6 +7,7 @@
 
 use crate::world::World;
 
+use cps2_gfx::draw::SpriteFrame;
 use ddsom_data::sprites::Piece;
 use ddsom_data::tables::GroundMark;
 
@@ -64,6 +65,8 @@ struct Painter<'a> {
     /// D4 as the original leaves it (attributes of the last piece, colour of the last text...):
     /// the handlers that follow read this leftover (e.g. 0xad7b0, which adds D4 to the position).
     d4: u32,
+    /// Bank of the object RAM written (`World::sprite_frames`).
+    bank: usize,
 }
 
 impl Painter<'_> {
@@ -140,7 +143,10 @@ pub fn build(b: &mut World, d4: u32) -> Option<Leftovers> {
         return None;
     }
     let cam = camera(b);
-    let mut p = Painter { b, at: OBJECTS, cam, d4 };
+    // the object table is written in the bank the hardware does not show (0x708000)
+    let bank = (b.hw.objram_bank ^ 1) as usize & 1;
+    b.sprite_frames[bank].clear();
+    let mut p = Painter { b, at: OBJECTS, cam, d4, bank };
     for budget in [var::BUDGET_INIT, var::BUDGET] {
         budget.set(p.b, 0x36a);
     }
@@ -326,6 +332,8 @@ fn draw_attached(p: &mut Painter, parent: Obj, behind: bool) {
 
 /// Frame of an object: header then pieces.
 struct Frame {
+    /// Number in the frame table (none for a frame read in the residue).
+    number: Option<u32>,
     count: u16,
     second: u16,
     bank: u8,
@@ -371,8 +379,9 @@ impl Frame {
 }
 
 fn frame_at(b: &mut World, f: u32) -> Frame {
-    if let Some(fr) = data().frames.at(RomAddr(f)) {
+    if let Some((number, fr)) = data().frames.find(RomAddr(f)) {
         return Frame {
+            number: Some(number),
             count: fr.cost,
             second: fr.attr,
             bank: fr.bank,
@@ -383,6 +392,7 @@ fn frame_at(b: &mut World, f: u32) -> Frame {
     let missing = Missing { table: "frame", key: f };
     let (count, second, bank_mode) = (missing.read16(b, f), missing.read16(b, f + 2), missing.read16(b, f + 4));
     Frame {
+        number: None,
         count,
         second,
         bank: (bank_mode >> 8) as u8,
@@ -414,8 +424,10 @@ fn with_palette(attr: u16, pal: Option<u8>) -> u16 {
     }
 }
 
-/// Emits the pieces of a frame at position (x, y) (y already flipped for the screen).
+/// Emits the pieces of a frame at position (x, y) (y already flipped for the screen), and notes which frame they show
+/// (`World::sprite_frames`).
 fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style, palette_after_flip: bool) {
+    let first = (p.at.0 - OBJECTS.0) / 8;
     let n = if fr.per_piece { fr.second } else { fr.count };
     let mut common = fr.second;
     if !fr.per_piece {
@@ -453,6 +465,10 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
         }
         let pos = ((px as u32) << 16 | y.wrapping_add(dy) as u32) & 0x3ff_03ff | bits;
         p.sprite((pos >> 16) as u16, pos as u16, code, attr);
+    }
+    if let Some(frame) = fr.number {
+        let shown = SpriteFrame { first: first as u16, count: n, frame, x: x.wrapping_add(0x40), y, flip: st.flip };
+        p.b.sprite_frames[p.bank].push(shown);
     }
 }
 
