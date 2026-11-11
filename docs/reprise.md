@@ -1,6 +1,35 @@
-# Reprise du travail (état au 2026-10-28)
+# Reprise du travail (état au 2026-11-03)
 
 Point de départ pour la prochaine session. L'historique détaillé des lots est dans [refactorisation.md](refactorisation.md), § 5 à 18 et « Avancement ».
+
+## Point d'arrêt du 2026-11-03 (reprise la semaine suivante)
+
+**main = e489feb** : lots L0 à L13 et L19 fusionnés, **309/309 VALID dans les deux modes** (ROMs et `DDSOM_ASSETS`),
+aucun 68000 ni Z80 dans le jeu, code en anglais, 0 avertissement. Bench bot30k : ~19 600 im/s sans rendu, ~3 900 avec.
+Toutes les familles sont à 0 accesseur ROM et 0 décalage littéral ; détails lot par lot dans [fin.md](fin.md).
+
+**Interrompu : L14 (le jeu sans image ROM)**, branche `wt-l14-sans-rom` (commit 4eebd47, poussé, **non validé, peut ne
+pas compiler**). Contenu : `rebuild` retiré de `ddsom-assets`, `remainder` déplacé dans `ddsom-data`, résidu et
+débordements de l'original nommés (`ddsom-data/src/{residue,overreads}.rs`, `extract/src/overreads.rs`,
+`extract/overreads.txt`), tables du son listées (`extract/sound_tables.txt`), `cps2` bus/lib/sound en chantier.
+
+**Pour reprendre :**
+1. Recréer le worktree : `git worktree add .claude/worktrees/l14-sans-rom wt-l14-sans-rom` (copier `rom/` et
+   `testdata/`, ignorés par git, sinon `mame_snapshots` se saute). Toujours exporter `DDSOM_ROMS`.
+2. Faire compiler, puis finir L14 selon [fin.md](fin.md) « L14 » : machine du jeu sans ROM, `ddsom --assets` via
+   `GameData::load` + banque d'échantillons + atlas, `cps2::Contents` sans région Z80 ni programme DSP, `Residue`
+   consulté 0 fois sur les 309 scénarios et `fuzz_couv`. Validation complète dans les deux modes, `render_check`,
+   bench pas plus lent.
+3. Puis L15 (World + couches ; `tasks::table` passe par `dyn Any`, coût à supprimer), L16/L17 facultatifs, L18
+   (documentation finale), puis L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD).
+
+**Décisions en attente de l'utilisateur :**
+* façade de présentation (L21) : Bevy ou minimal (wgpu / macroquad) ;
+* `reste.json` : le retirer une fois `Residue` à zéro, ou le garder comme assurance (L14 donnera le compte) ;
+* bug de saisie du nom : absent de notre révision (L19) ; option `DDSOM_*` pour reproduire celui des anciennes
+  révisions, ou rien ;
+* `touches.cfg` en anglais avec compatibilité ; écart connu du Z80 en retard (2 scénarios, comparaison du son
+  suspendue) à accepter.
 
 ## Où en est le projet
 
