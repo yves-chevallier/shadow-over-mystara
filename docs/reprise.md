@@ -13,9 +13,18 @@ consulté 0 fois sur les 309 scénarios dans les deux modes ; 309/309 VALID dans
 identique à main, bench bot30k 20 168 im/s sans rendu (main 20 110), 3 914 avec (main 3 881). Aucun code mort
 nouveau.
 
+**L15 (2026-11-11, branche `wt-l15-world`, non fusionnée)** : L15a fait (`World` : RAM de travail indexée sans
+décodage d'adresse, table des tâches en champ typé, `Machine<World>`), L15b partiel (modules rangés en six couches
+`hw`, `world`, `services`, `actors`, `screens`, `core` ; `no68k` devient `core::frame` ; `hw` hors de tout cycle ;
+27 arêtes vers une couche plus haute contre 54). Il reste une composante entre couches due aux continuations
+typées des tâches (`tasks::Step`) : **décision à prendre** entre déclarer les étapes dans `world` (voie propre,
+lourde) ou garder ce cycle (voir [fin.md](fin.md) « L15 », « Résultat »). Les chemins ont changé
+(`crate::families` → `crate::actors::families`, `ddsom_game::mem` → `ddsom_game::hw::mem`...) : les branches
+ouvertes avant L15 auront des conflits de chemins (réécriture outillée dans le commit d99e04e).
+
 **Pour reprendre :**
 1. Fusionner `wt-l14-sans-rom` dans main (après relecture), réextraire ses assets.
-2. Puis L15 (World + couches ; `tasks::table` passe par `dyn Any`, coût à supprimer), L16/L17 facultatifs, L18
+2. Fusionner `wt-l15-world` (L15, voir ci-dessus), décider du reste de L15b, puis L16/L17 facultatifs, L18
    (documentation finale), puis L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et le lot `touches.cfg`
    (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours exporter
    `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la

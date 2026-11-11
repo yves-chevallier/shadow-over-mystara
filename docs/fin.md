@@ -1343,7 +1343,8 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     génération de `ddsom-rc` ; une fois, sa compilation est restée bloquée plus de deux heures sur une unité
     (`lto cgu.00`) : l'arrêter et relancer l'a ramenée à 6 minutes.
 
-**L15. RAM du jeu hors du bus, modules en couches** (moyen à grand, en deux commits validés)
+**L15. RAM du jeu hors du bus, modules en couches** (moyen à grand, en deux commits validés) — **L15a fait,
+L15b partiel** (branche `wt-l15-world`, voir « Résultat »)
 * L15a, `World` :
   * la RAM de travail (`[u16; 0x8000]`) et la table des tâches appartiennent au jeu ;
   * `world::ram` y accède sans décodage d'adresse ;
@@ -1357,6 +1358,62 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     l'intérieur d'une couche sont tolérés : `kernel ↔ tasks` dans `core`) ;
   * `bench` sans rendu progresse d'au moins 5 % (bus) ;
   * 308/308 dans les deux modes.
+* Résultat (branche `wt-l15-world`) :
+  * **L15a, `World`** (ac25e07) : `ddsom_game::world::World { ram: Box<[u16; 0x8000]>, tasks: Option<Table>,
+    leftovers, hw: Cps2Bus }`. La RAM de travail est lue et écrite sans décodage d'adresse (`World::read16`... : un
+    test `a >> 16 == 0xff` puis un index), le reste passe au matériel (`hw`, le `Cps2Bus` dont la RAM reste vide sur
+    la machine du jeu). La table des tâches est un champ typé : plus de `Cps2Bus::ext` ni de `dyn Any` dans le jeu.
+    `cps2` gagne le trait `Board` (matériel et RAM d'une machine) et `Machine<B: Board = Cps2Bus>` ; la machine du
+    jeu est `ddsom_game::GameMachine = Machine<World>` (`install_no_68k(m) -> GameMachine`, la RAM du bus y passe
+    sans copie), la référence garde `Cps2Bus`. Toutes les fonctions du jeu prennent `&mut World` (renommage outillé
+    sur 148 fichiers, puis correction des champs matériels guidée par les erreurs du compilateur : `b.hw.gfxram`) ;
+    `combat::World` devient `combat::Combat`. `mem::Memory` (trait des `rd*`/`wr*`) sert au jeu (`World`) et aux
+    outils (`Cps2Bus`). Côté outils, `World::lend` et `World::as_bus` passent la RAM et la table du bus au monde et
+    retour sans copie (le 68000 tourne sur un bus) ; `Native::execute` et `call` restent sur le bus,
+    `execute_on`/`call_in` sur le monde ; `scenario`, `ddsom` et quelques exemples sont génériques sur `Board`.
+    `validate` compare `world.ram`. Validé 309/309 dans les deux modes.
+  * **L15b, couches** (d99e04e, 697f69b) : `src/` n'a plus que `lib.rs`, `tools/` et six couches, du bas vers le
+    haut : `hw` (`mem`, `video`, `io`), `world` (`World`, `ram`, `record`, `objects/`, `data`, `tables`,
+    `screen_tables`, `terrain`, `placement`, `events`, `rng`, `machine`, `ops`, `diag`), `services` (`palette`,
+    `text`, `sprites`, `scroll`, `camera_modes`, `video`, `popups`, `sound`, `inputs`, `eeprom`), `actors`
+    (`families/`, `player/`, `ai`, `ai_aids`, `aids`, `effects_aids`, `combat`), `screens` (`modes/`, `scene/`,
+    `hud/`, `service/`, `credits*`, `block`, `obj`, `vars`), `core` (`kernel`, `tasks/`, `dispatch`, `vblank`,
+    `startup`, `frame` (ex-`no68k`), `game`, `config`, `scenario`). Déplacement par `git mv` et réécriture outillée
+    des chemins (`crate::x`, `$crate::x`, `ddsom_game::x`, groupes `use crate::{...}`). Arêtes à l'envers retirées :
+    `hw` ne dépend plus que de `mem::Memory` (générique, la mise en œuvre pour `World` est dans `world`) ; fiche
+    `Player` dans `world::objects::player` ; terrain sous un point dans `world::terrain` ; `RANK` dans
+    `world::objects::rank` ; `sbcd` dans `world::ops` ; `impl Current for Cx` dans `families::cx` ; `impl Machine for
+    scene::Ctx` dans `scene` ; écran noir en trois images dans `screens::scene::black_screen` ; les registres
+    résiduels (`Leftovers`) sont un champ de `World` (comparé par `frame::Snapshot`, gardé dans l'extension du bus
+    avec la table pour les outils : `world::Parked`) ; `ai`, `ai_aids`, `aids`, `effects_aids`, `combat` passent dans
+    `actors` (ils appellent familles et joueurs) ; `screens::tables` devient `world::screen_tables`.
+  * Mesures (`measure_end.py`, qui compte maintenant les modules par couche `couche/module`, les composantes entre
+    couches et les arêtes vers une couche plus haute) : lignes du jeu hors `tools/` 173 594 (main 173 324) ; main :
+    55 modules de tête, composante de 41 ; branche : 59 modules, composante de 46 **entre couches** (toutes sauf
+    `hw`, désormais hors de tout cycle avec `world/ops`, `world/diag`, `core/scenario`), 27 arêtes vers une couche
+    plus haute (54 juste après le déplacement).
+  * **Critère de fin non atteint** : il reste une composante entre couches. Les 27 arêtes restantes vont presque
+    toutes vers la mécanique des tâches de `core` (`tasks`, `kernel`, `dispatch`) : chaque écran et beaucoup
+    d'acteurs cèdent la main en rangeant une continuation typée (`tasks::Step`, un `enum` qui nomme les étapes de
+    tous les modules) dans la table, que `World` contient. Tant que la table est typée par `Step`, `world → core →
+    (screens, actors) → world` est un cycle. Deux voies, à décider : (1) déclarer les étapes (identifiants et
+    adresses, données pures) dans `world` et associer chaque étape à sa fonction dans `core` (la plus propre, une
+    trentaine d'`enum` à déplacer et l'API de cession — `wait`, `call`, `cede`, `Flow`, `Sequence`, le contexte
+    `scene::Ctx` — à descendre dans `world`) ; (2) effacer le type des continuations (pointeurs de fonction ou objets
+    `dyn`), contraire au but de L15 (plus de `dyn` dans la table). Restent aussi : `actors/families → screens`
+    (Flow, `scene::Ctx`, scripts de scène appelés par les SET), `screens → core/game` (mise à jour du monde
+    appelée par les séquences de scène), `screens/services → core/config` (réglages, blocage sur erreur
+    d'EEPROM), `services/camera_modes → actors/families` (contexte `Cx`, liste de décor).
+  * `bench` bot30k 12 000 images sans rendu, même dossier cible, meilleur de 3 en alternance, même empreinte
+    `a65ecd8aa6e38d4f` : **23 959 images/s contre 20 148 pour main 8f550eb (+18,9 %)**, 41,7 µs par image contre
+    49,6. Le gain vient de L15a (accès à la RAM sans décodage d'adresse, table des tâches sans `dyn Any`) : la
+    branche mesurait déjà 23 877 images/s avant les couches.
+  * `render_check` bot30k 12 000 images : identique à main (`09850058246a1e2c`), aussi avec `DDSOM_ASSETS`.
+  * Validation (L15a au code de ac25e07, L15b au code de 697f69b) : **309/309 VALID en mode par défaut et avec
+    `DDSOM_ASSETS`** (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1`, `residue: 0` dans
+    tous les journaux ; tests `ddsom-game --lib` (20) ; `cargo clippy` sans avertissement, avec et sans `tools` (et
+    `ddsom`, aussi avec `--features original`).
+  * Aucun code mort nouveau.
 
 **L16. État Rust plus projection** (facultatif, petit par bloc). Voir la section 2. Un bloc par commit, avec la
 preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adresse sur les 308 scénarios).
