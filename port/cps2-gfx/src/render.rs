@@ -38,23 +38,30 @@ pub fn build_palette(list: &DrawList) -> Box<[[u8; 3]; COLORS]> {
 #[inline]
 fn tile_row<const T: usize>(layer: &Layer, atlas: &[u8], tx: usize, ty: usize) -> ([u8; T], u16) {
     let tile = layer.tile_of::<T>(tx / T, ty / T);
-    let code = tile.code as usize;
     let mut py = ty % T;
     if tile.flip_y() {
         py = T - 1 - py;
     }
-    // hardware offset of the tile's pixel row (8x8 tiles: the half of the 16-pixel cell row is chosen by the
-    // column); the row is contiguous in the atlas, at twice that offset (`TileAtlas`)
-    let row = match T {
-        8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((tx / T) & 1) * 4,
-        16 => SCROLL_TILE_BASE + code * 128 + py * 8,
-        _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
-    };
-    let mut line = atlas_row::<T>(atlas, 2 * row);
+    let mut line = tile_pens::<T>(atlas, tile.code, tx / T, py);
     if tile.flip_x() {
         line.reverse();
     }
     (line, (tile.palette() + layer.palette_base) * 16)
+}
+
+/// Row `py` of the layer tile `code` of side `T`, unmirrored: its `T` pens (15: transparent). `column`: the tile's
+/// column in the tilemap (8x8 tiles: its parity chooses the half of the 16-pixel cell row). `atlas`: the pens of the
+/// [`TileAtlas`].
+#[inline]
+pub fn tile_pens<const T: usize>(atlas: &[u8], code: u16, column: usize, py: usize) -> [u8; T] {
+    let code = code as usize;
+    // hardware offset of the tile's pixel row; the row is contiguous in the atlas, at twice that offset (`TileAtlas`)
+    let row = match T {
+        8 => SCROLL_TILE_BASE + code * 64 + py * 8 + (column & 1) * 4,
+        16 => SCROLL_TILE_BASE + code * 128 + py * 8,
+        _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
+    };
+    atlas_row::<T>(atlas, 2 * row)
 }
 
 /// Draws onto a screen line (pens, prio) the tiles of side `T` covering tilemap abscissas `tx0..` at tilemap
