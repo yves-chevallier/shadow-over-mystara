@@ -1563,6 +1563,39 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
   historique (refactorisation, guides des lots, sans-rom, atlas, couverture). On n'efface rien.
 * Fin : un lecteur qui n'a que le dépôt et ses ROMs joue en suivant le README, sans autre document ; les liens de
   `docs/` sont vérifiés par un script (`tools/check_links.py`).
+* Résultat (branche `wt-l18-docs`, depuis main 56b84c0, après L20, L21 et L22) — **fait** :
+  * **`README.md`** réécrit pour le joueur : ce qu'il faut (ROMs du jeu `ddsom` de MAME et `qsound.zip`, avec la
+    liste des fichiers ; Rust ; sous Linux `build-essential pkg-config libudev-dev`, vérifié : `libudev-sys` est le
+    seul paquet de construction lié à une bibliothèque du système, X11, OpenGL et PulseAudio sont chargés à
+    l'exécution), préparer `rom/`, extraire (`extract rom assets`), jouer (`ddsom --assets assets`, `play.sh`,
+    `play.bat`), fichiers écrits dans le dossier courant, touches et `touches.cfg` (noms anglais, anciens noms
+    français lus puis réécrits, `DDSOM_TOUCHES=1`), manettes, sauvegarde rapide, EEPROM, échelle, filtres, plein
+    écran, pack HD, ce qui n'est jamais versionné. La partie « rétro-ingénierie » passe dans
+    [retro-ingenierie.md](retro-ingenierie.md) (matériel, chiffrement, Ghidra, MAME, premiers jalons).
+  * **[moteur.md](moteur.md)** : crates, couches, une image du jeu (de `Game::step` à l'aiguillage), tâches et
+    étapes (`world::tasks`, `steps!`), objets et `handlers!`, état (`record!`, `world::ram`), données (`data()`,
+    `engine_table!`, résidu), ajouter une table d'asset, l'interface `Game`/`DrawList` et les façades, valider
+    (`validate`, `validate_all.sh`, `DDSOM_ASSETS`, `render_check`, `bench`, `DDSOM_CHECK`, `fuzz_couv`, `no_rom`,
+    clippy, tests, `measure_end.py`, `check_links.py`).
+  * **[README.md](README.md)** (index de docs/) : guides, référence (données, jeu partie par partie), historique et
+    méthode. Rien n'est effacé ; [reprise.md](reprise.md) donne l'état final et ce qui pourrait suivre.
+  * **`tools/check_links.py`** : liens relatifs de `README.md` et `docs/**/*.md` (cibles et ancres, règle de GitHub ;
+    liens dans le code ignorés) ; les 297 liens vers les images que les outils génèrent dans `assets/` (non
+    versionné : [creatures.md](creatures.md), [niveaux.md](niveaux.md)) sont comptés à part. Résultat : **46 fichiers,
+    0 lien cassé** (aucun n'était cassé avant L18 non plus).
+  * **Essai d'un clone neuf** (`git clone` de la branche, ROMs remises en `ddsom.zip` et `qsound.zip`, sans
+    `DDSOM_ROMS`), README suivi à la lettre : `unzip` dans `rom/` (22 fichiers) ; `extract rom assets` : 12 s avec la
+    compilation, 420 fichiers, 37 Mo ; `cargo build -p ddsom` : 30 s ; `ddsom --assets assets` dans la fenêtre WSLg :
+    `touches.cfg` créé, son ouvert, touches injectées par XTest (`5`, `1`, `F5`, `F9`, `F6`, `F7`, `Échap`) :
+    sauvegarde et reprise à l'image 645, `nvram/ddsom.eeprom` et `sauvegardes/rapide.txt(.eeprom)` écrits ;
+    `DDSOM_IDENTITY=900` : 0 pixel différent ; `./play.sh` (avec ROMs) : compile, joue, quitte par `Échap` ; `git
+    status` propre ensuite (tout ce qui a été produit est ignoré). Seul écart avec le premier jet du README : la durée
+    de l'extraction (une seconde, pas vingt), corrigée.
+  * **Vérification finale du code de main** (L21 et L22 ne l'avaient pas faite ; L18 ne change aucun code du jeu) :
+    **309/309 VALID en mode par défaut et avec `DDSOM_ASSETS`** (assets réextraits), `DDSOM_SCENES=1 DDSOM_COV=1
+    DDSOM_LONG=1 DDSOM_JOBS=6`, `residue: 0` dans les 618 journaux ; `render_check` bot30k 12 000 images
+    `09850058246a1e2c` dans les deux modes ; `cargo clippy -D warnings` propre (sept variantes, section 4) ; tests
+    des crates du jeu ; `bench`, `measure_end.py` : section 4. Puis « Bilan ».
 
 ### Bonus
 
@@ -1829,21 +1862,66 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 
 ## 4. Fin du projet : critères mesurables
 
-| Critère | Aujourd'hui (L20, `wt-l20-coeur` ; L21) | Cible |
-|---|---:|---:|
-| Validation (deux modes, `DDSOM_LONG=1`) | 309/309 | 308/308 (plus les nouveaux scénarios) |
-| Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 0 | 0 |
-| Zones brutes `natives.json` lues par le jeu | 0 (seul le résidu, jamais consulté) | 0 (toutes nommées) |
-| Lectures de `Residue` (308 scénarios) | 0 (309 scénarios) | 0 |
-| Décalages de champs littéraux | 0 | 0 hors des `record!` |
-| `A5 + littéral` | 3 | 0 hors de `world::ram` |
-| Littéraux GFX RAM et registres CPS dans le jeu | ~177 + ~30 (motif approché, hors `hw::video`) | 0 hors de `hw::video` |
-| Sons par adresse | 0 | 0 |
-| Registre de natives dans le jeu | 0 (341 gestionnaires des tables d'aiguillage, données du jeu) | 0 (outils seulement) |
-| Fichiers de plus de 1 500 lignes (hors `tools/`) | 0 | 0 |
-| Plus grande composante fortement connexe des modules | 9 (dans `world`), aucune entre couches | 1 module par couche, plus `core` |
-| `rebuild` dans le jeu | non | non |
-| `bench` bot30k, avec et sans rendu | ~4 050 et ~25 000 images/s | au moins 2 500 et 14 000 images/s |
-| `ddsom` ne parle au jeu que par `Game` | oui (L20) | oui |
-| Image de la façade à l'échelle 1 identique au rendu CPS2 | oui (L21, `DDSOM_IDENTITY`, 0 pixel ; L22 sans `hd/`) | oui |
-| Pack HD « identité » ×2 identique au rendu CPS2 agrandi | oui (L22, `hd-pack check`, 0 pixel) | oui |
+Mesures finales (L18, code de main 56b84c0, inchangé par L18) : validation et `render_check` dans les deux modes
+(assets réextraits), `tools/measure_end.py`, `bench` (meilleur de 3, machine au repos).
+
+| Critère | Aujourd'hui (fin, L18, main 56b84c0) | Cible | Atteint |
+|---|---:|---:|:---:|
+| Validation (deux modes, `DDSOM_LONG=1`) | **309/309** dans les deux modes | 308/308 (plus les nouveaux scénarios) | oui |
+| Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 0 | 0 | oui |
+| Zones brutes `natives.json` lues par le jeu | 0 (seul le résidu, jamais consulté) | 0 (toutes nommées) | oui |
+| Lectures de `Residue` (308 scénarios) | 0 (309 scénarios, deux modes : « residue: 0 » dans les 618 journaux) | 0 | oui |
+| Décalages de champs littéraux | 0 | 0 hors des `record!` | oui |
+| `A5 + littéral` | 3 (2 `engine`, 1 `screens`) | 0 hors de `world::ram` | presque |
+| Littéraux GFX RAM et registres CPS dans le jeu | 0 + 24 (motif `0x90xxxx` / `0x80xxxx` hors `hw/` et `tools/`, commentaires retirés : constantes nommées des ports d'E/S, de l'EEPROM et des registres CPS dans `core/startup`, `core/vblank`, `services/eeprom`, `services/inputs`, `screens/service/memory`, `screens/modes/boot`) | 0 hors de `hw::video` | GFX RAM oui ; ports et registres non |
+| Sons par adresse | 0 | 0 | oui |
+| Registre de natives dans le jeu | 0 (341 gestionnaires des tables d'aiguillage, données du jeu) | 0 (outils seulement) | oui |
+| Fichiers de plus de 1 500 lignes (hors `tools/`) | 0 (plus gros : `actors/player/spawn.rs`, 916) | 0 | oui |
+| Plus grande composante fortement connexe des modules | 9 (dans `world`), aucune entre couches, 0 arête vers une couche plus haute (65 modules) | 1 module par couche, plus `core` | entre couches oui ; dans les couches non (cycles tolérés) |
+| `rebuild` dans le jeu | non | non | oui |
+| `bench` bot30k, avec et sans rendu | 4 067 et 25 255 images/s (empreinte `a65ecd8aa6e38d4f`) | au moins 2 500 et 14 000 images/s | oui |
+| `ddsom` ne parle au jeu que par `Game` | oui (L20) | oui | oui |
+| Image de la façade à l'échelle 1 identique au rendu CPS2 | oui (`DDSOM_IDENTITY=900` : 0 pixel, aussi dans le clone neuf de L18) | oui | oui |
+| Pack HD « identité » ×2 identique au rendu CPS2 agrandi | oui (L22, `hd-pack check`, 0 pixel) | oui | oui |
+| `render_check` bot30k 12 000 images | `09850058246a1e2c` dans les deux modes (122 051 identités, 0 écart) | inchangé | oui |
+| `cargo clippy` | 0 avertissement (`--workspace --all-targets` ; `ddsom-game` avec et sans `tools` ; `ddsom` avec et sans `--features original` ; `ddsom-hd` avec et sans `tool` ; `-D warnings`) | 0 | oui |
+| Un joueur suit le README dans un clone neuf | oui (L18 : construction, extraction, jeu, `play.sh`) | oui | oui |
+| Liens de la documentation | 0 cassé (`tools/check_links.py`, 46 fichiers) | 0 | oui |
+
+Autres mesures de `measure_end.py` : 600 fichiers, 173 531 lignes dans le jeu hors `tools/` (`ddsom-game` :
+180 340 lignes de source dont 6 809 dans `tools/`, 16 916 d'exemples et tests) ; 1 462 `rd*`/`wr*` bruts (accès
+nommés à la RAM et au matériel par constantes) ; 402 constantes d'adresses ROM (clés de tables lues par adresse :
+SET 194, joueurs 141, moteur 52, écrans 15). Tests : `ddsom-game --lib` 19, `ddsom` 3, `ddsom-hd` 2, `extract`,
+`ddsom-data`, `ddsom-sound`, `qsound`, `cps2-gfx` (dont `mame_snapshots`) : tous passent.
+
+## Bilan
+
+**Le but est atteint.** Le jeu se joue en Rust pur, sans 68000 et sans ROM, depuis des assets lisibles (PNG, WAV,
+JSON) que l'utilisateur extrait de ses ROMs ; il se comporte strictement comme l'original, vérifié image par image sur
+309 scénarios dans les deux modes ; le moteur est en six couches sans arête vers le haut, ses données sont typées et
+nommées, et aucun asset dérivé des ROMs n'est versionné. Un nouveau venu joue en suivant le README et trouve le moteur
+expliqué dans [moteur.md](moteur.md).
+
+Critères atteints : tous ceux de la section 4, sauf trois, partiellement :
+
+* `A5 + littéral` : 3 restent (contre 785 au départ) ;
+* registres CPS et ports d'E/S : 24 littéraux, tous des constantes nommées dans les modules qui pilotent ce matériel
+  (démarrage, VBLANK, EEPROM, entrées, test de la RAM), pas dans `hw::video` (les 407 littéraux de la GFX RAM du
+  départ sont à 0) ;
+* composantes fortement connexes : aucune entre couches, mais des cycles restent à l'intérieur de `world` (9
+  modules), `actors`, `core`, `screens`, `services` ; tolérés par le plan (L15).
+
+Restent ouverts, par décision ou faute de matériel :
+
+* **build web** : compile (`wasm32-unknown-unknown`), ne joue pas ; il faudrait une source de fichiers abstraite,
+  un préchargement asynchrone des assets, l'EEPROM et les sauvegardes hors système de fichiers et un greffon WebAudio
+  (« L21 ») — **reporté, à décider** ;
+* **`reste.json` gardé comme assurance** : jamais consulté sur les 309 scénarios, mais lu sur des états perturbés de
+  `fuzz_couv` (« L14 ») ;
+* **crate `ddsom-tools` abandonnée** (environ 230 éléments `pub(crate)` à ouvrir, « L17 ») : les outils restent dans
+  `ddsom-game` derrière la fonctionnalité `tools` ;
+* **jamais testés** : une vraie manette (gilrs ; aucune sous WSL) et la sortie son waveOut sous Windows ;
+* **L16** (état Rust plus projection) : facultatif, non fait ;
+* pack HD : couche 1 et sprites hors table des images non remplaçables ([pack-hd.md](pack-hd.md)).
+
+Suite possible : [reprise.md](reprise.md), « Ce qui pourrait suivre ».

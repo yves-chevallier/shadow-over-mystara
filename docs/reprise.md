@@ -1,8 +1,43 @@
 # Reprise du travail (état au 2026-11-11)
 
-Point de départ pour la prochaine session. L'historique détaillé des lots est dans [refactorisation.md](refactorisation.md), § 5 à 18 et « Avancement ».
+Point de départ pour la prochaine session. L'historique détaillé des lots est dans [refactorisation.md](refactorisation.md), § 5 à 18 et « Avancement », puis dans [fin.md](fin.md) (lots L0 à L22 et « Bilan »).
 
-## Point d'arrêt du 2026-11-11
+## État final du projet (2026-11-11, après L18)
+
+**Le projet a atteint son but** : Shadow over Mystara se joue en Rust pur, sans 68000 et sans ROM, à partir
+d'assets lisibles (PNG, WAV, JSON) extraits des ROMs de l'utilisateur, avec un comportement identique à l'original
+vérifié image par image. main = 56b84c0 contient tous les lots jusqu'à L22 ; L18 (documentation finale, branche
+`wt-l18-docs`, non fusionnée) ajoute :
+
+* le [README](../README.md) pour le joueur (installer, extraire, jouer, touches, manettes, sauvegardes, pack HD, ce
+  qui n'est jamais versionné), suivi à la lettre dans un clone neuf : construction, extraction, jeu dans la fenêtre
+  WSLg, `play.sh` ;
+* [moteur.md](moteur.md), le guide du moteur ; [README.md](README.md), l'index de docs/ ;
+  [retro-ingenierie.md](retro-ingenierie.md), l'ancienne partie « rétro-ingénierie » du README ;
+* `tools/check_links.py` (liens relatifs et ancres de README.md et docs/) ;
+* la vérification finale de main (les deux modes, clippy, tests, `render_check`) et le bilan chiffré :
+  [fin.md](fin.md) « L18 », section 4 et « Bilan ».
+
+**Ce qui pourrait suivre** (rien n'est en cours ; détails dans [fin.md](fin.md) « Bilan ») :
+
+1. Fusionner `wt-l18-docs` dans main (documentation seule, plus `tools/check_links.py`).
+2. Essayer une vraie manette (gilrs, Linux et Windows) et la sortie son waveOut sous Windows : jamais testées
+   (aucune manette ni Windows sous WSL).
+3. Build web (`wasm32-unknown-unknown`) : compile, ne joue pas ; il faudrait une source de fichiers abstraite dans
+   quatre crates, un préchargement asynchrone des assets, l'EEPROM et les sauvegardes hors système de fichiers, et un
+   greffon WebAudio ([fin.md](fin.md) « L21 »). À décider.
+4. `reste.json` : gardé comme assurance (jamais consulté sur les 309 scénarios, mais lu sur des états perturbés de
+   `fuzz_couv`) ; le retirer si l'on juge que ces états ne comptent pas.
+5. L16 (état Rust plus projection, facultatif) ; crate `ddsom-tools` (abandonnée : ne vaudrait que si les natives à
+   registres des outils disparaissent) ; factoriser les exemples de fuzz recopiés (`fuzz.rs`, `fuzz_enemy.rs`,
+   `fuzz_eshl_c.rs`, `fuzz_set_a.rs`).
+6. Pack HD : couche 1 (texte, interface) et sprites hors table des images (ombres) non remplaçables
+   ([pack-hd.md](pack-hd.md) « Ce que le pack remplace, et ses limites »).
+
+Pour travailler sur le moteur : [moteur.md](moteur.md) (couches, tâches, données, validation) ; la méthode des
+agents (plus bas, « Méthode qui marche ») reste valable.
+
+## Point d'arrêt du 2026-11-11 (avant L18)
 
 **main = b402539** (L17 et L20 fusionnés après 6fd951d) : lots L0 à L15, L15c, L17, L19 et L20 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
 et L15 (`World` tient la RAM et la table des tâches, modules en six couches `hw`, `world`, `services`, `actors`,
@@ -85,10 +120,10 @@ image par scène **et par couche** (`levels/NN_scroll2.png`). Pack « identité 
 * `touches.cfg` : noms en anglais, en acceptant encore les anciens noms français (**fait par L21**) ; l'écart
   connu du Z80 en retard (2 scénarios, comparaison du son suspendue) est **accepté**.
 
-## Où en est le projet
+## Où en est le projet (résumé)
 
 * **Le jeu tourne en Rust pur, sans 68000 et sans ROM.** C'est le mode par défaut de `ddsom`, de `validate` et de `tools/validate_all.sh`. Avec `ddsom --assets <dir>`, toutes les données viennent des assets produits par `extract`. Voir [sans-rom.md](sans-rom.md).
-* **Validation de main.** 296 scénarios VALIDE sur 296, en mode par défaut et avec `DDSOM_ASSETS`. Ce total comprend les 272 scénarios habituels et les 24 bots longs de `scenarios/long/` (option `DDSOM_LONG=1`).
+* **Validation de main.** 309 scénarios VALID sur 309, en mode par défaut et avec `DDSOM_ASSETS` (vérification finale de L18, [fin.md](fin.md) « L18 »). Ce total comprend les bots longs de `scenarios/long/` (option `DDSOM_LONG=1`).
 * **Couverture des données.** Sans ROM, elle est complète par construction : `data/reste.json` contient tout ce qui n'est pas du code exécuté (voir [sans-rom.md](sans-rom.md)).
 * **Couverture de la logique.**
   * Fonctions et branches jouées : [couverture-fonctions.md](couverture-fonctions.md) et `coverage-branches.tsv`.
@@ -97,7 +132,7 @@ image par scène **et par couche** (`levels/NN_scroll2.png`). Pack « identité 
   * Sortie du Cpu achevée (parties 1 à 7, étape finale § 20, `wt-sans-cpu`) : le jeu n'a plus de `m68k::Cpu` ; le
     68000 ne sert plus qu'à la machine de référence et aux outils (`ddsom_game::tools`).
 
-## Lots en cours (mise à jour du 2026-11-01)
+## Historique : lots de novembre 2026 (tous fusionnés depuis)
 
 * **L3, son en tableaux indexés** (branche `wt-l3-son`, 2026-11-02) : `ddsom_sound::SoundData` remplace la région
   d'octets du pilote, `music.json` change de format (**réextraire `music`**), `qsound::DspTables` ; validé 308/308
@@ -121,7 +156,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
 * **Partie 5, suite** (branche `wt-familles2`) : toutes les familles d'ennemis et les boss 0, 1, 2/22, 4, 6, 7, 10, 13, 16, 17, 18, 21 sont en gestionnaires `#[without]` (voir la ligne « partie 5 »). Restent les boss 3, 5, 8, 9, 11, 15, 19, puis `player/`, `set_b`, `effects_c`, enfin `regs_generic.py` et `regs_without.py`.
 * Outils de la partie 5 : `tools/regs/` (`readers.py` liste les lecteurs de registres d'entrée, `generic.py`/`clean.py`/`family.sh` rendent une famille générique, `fuzz.sh`/`compare_fuzz.py` comparent fuzz_couv branche/main ; variables `SCRATCH`, `W` et `P` (préfixe des fichiers temporaires)). Exporter `DDSOM_ROMS` pour tout `cargo` (sinon `ddsom_rc` se recompile, ~12 min).
 
-## Après ces lots
+## Historique : la suite décidée après ces lots (faite)
 
 0. **Traduire tout le code en anglais** (règle de l'utilisateur, 2026-11-02 : jamais de français dans le code). Identifiants (renommage outillé, module par module) et commentaires ; comportement inchangé, validation complète comme filet. À lancer quand aucune autre branche n'est ouverte (conflits partout sinon).
    **Fait** (branche `wt-anglais1`, après fusion de main 53f80d6) : tout `port/` (families compris) et `tools/` sont en anglais :

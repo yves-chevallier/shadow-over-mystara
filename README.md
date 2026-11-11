@@ -41,9 +41,9 @@ Copier `ddsom.zip` et `qsound.zip` à la racine du dépôt, puis :
 
     cargo run --release --manifest-path port/Cargo.toml -p extract -- rom assets
 
-Le premier lancement compile l'extracteur (quelques minutes), l'extraction elle-même prend une vingtaine de secondes.
-Elle écrit `assets/` : graphismes (`gfx/cells_NN.png`), palettes, sons (`sounds/NNN.wav`), musique, sprites,
-décors, textes et tables de jeu (`data/*.json`), environ 37 Mo ; leur format est décrit dans `assets/README.md` et
+Le premier lancement compile l'extracteur (de quelques secondes à quelques minutes selon la machine), l'extraction
+elle-même prend environ une seconde. Elle écrit `assets/` : graphismes (`gfx/cells_NN.png`), palettes, sons
+(`sounds/NNN.wav`), musique, sprites, décors, textes et tables de jeu (`data/*.json`), 420 fichiers, 37 Mo ; leur format est décrit dans `assets/README.md` et
 [docs/assets.md](docs/assets.md). L'extraction est sans perte. Une fois `assets/` produit, le jeu n'a plus besoin des
 ROMs.
 
@@ -61,7 +61,8 @@ Avec les ROMs (les données sont alors extraites en mémoire à chaque lancement
 
     ./play.sh
 
-`play.sh` compile et lance `port/target/release/ddsom rom`. Les deux façons jouent le même jeu.
+`play.sh` compile et lance `port/target/release/ddsom rom`. Les deux façons jouent le même jeu. La première
+compilation du jeu prend de quelques dizaines de secondes à quelques minutes.
 
 **Windows** : `play.bat` (double-clic, PowerShell `.\play.bat`, ou depuis un partage `\\wsl.localhost\...`). Il
 demande Rust pour Windows (MSVC) ; s'il n'y a pas encore de dossier `assets\` à jour, il décompresse `ddsom.zip` et
