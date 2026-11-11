@@ -49,6 +49,7 @@ thread_local! {
 
 /// Notes the native about to run (handler of a dispatch table), for diagnosing a stop (`DDSOM_SANS_TRACE=frame`:
 /// each native of the frame).
+#[inline]
 pub(crate) fn note(b: &World, n: &'static Native) {
     LAST.with(|last| {
         let mut l = last.get();

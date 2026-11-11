@@ -94,6 +94,7 @@ pub fn resume_step(step: Step, b: &mut World) {
 /// control (the Rust code following a cession only returns: see [`has_ceded`]). In the tools (natives called by the
 /// original code), a return to the original code: noted, the processor jumps there at the end of the native
 /// (`tools::frames`).
+#[inline]
 pub fn return_to_caller(b: &mut World) {
     if has_ceded() {
         return;
@@ -134,6 +135,7 @@ impl Sequence for Ctx<'_> {
     fn drop_return(&mut self) {
         table::pop_return(self.b);
     }
+    #[inline]
     fn return_to_caller(&mut self) {
         return_to_caller(self.b);
     }

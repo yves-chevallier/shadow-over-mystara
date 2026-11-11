@@ -204,16 +204,19 @@ thread_local! {
 /// is stored in the table (stage and calls in progress), and the Rust code still in progress below the cession (object
 /// dispatch loop, world update, phase...) must return without doing anything. This is what the abandonment by panic
 /// (`Unwound`) of the outdated Rust functions used to do.
+#[inline]
 pub fn has_ceded() -> bool {
     CEDED.with(|c| c.get())
 }
 
 /// The kernel hands control back to the scheduler for the current task.
+#[inline]
 pub(crate) fn note_cession() {
     CEDED.with(|c| c.set(true));
 }
 
 /// A top-level native begins (scheduler, VBLANK, relaunched task): no cession in progress.
+#[inline]
 pub(crate) fn forget_cession() {
     CEDED.with(|c| c.set(false));
 }

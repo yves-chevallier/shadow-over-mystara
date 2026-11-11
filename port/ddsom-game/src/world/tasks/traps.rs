@@ -71,17 +71,20 @@ pub enum Point {
 
 impl Point {
     /// A startup point (before the scheduler takes control).
+    #[inline]
     pub fn startup(self) -> bool {
         matches!(self, Point::Reset | Point::ReleaseZ80 | Point::Handshake | Point::BootInit | Point::Launch)
     }
 
     /// The scheduler between two tasks (where the original idles waiting for a ready task).
+    #[inline]
     pub fn between_two_tasks(self) -> bool {
         matches!(self, Point::Walk | Point::Exam | Point::NextTask)
     }
 }
 
 /// The point the processor is at (before the table is created: power-on).
+#[inline]
 pub fn point(b: &World) -> Point {
     super::table::read(b).map_or(Point::Reset, |t| t.point)
 }
@@ -89,11 +92,13 @@ pub fn point(b: &World) -> Point {
 /// Interrupt mask of the processor (level 0 to 7 of the original's SR): power-on masks everything, `boot_init`
 /// opens, the scheduler masks up to level 6 while it examines a slot, a task runs unmasked (except the TEST menu's
 /// memory test, `trap #12`).
+#[inline]
 pub fn interrupt_mask(b: &World) -> u8 {
     super::table::read(b).map_or(MASK_ALL, |t| t.interrupt_mask)
 }
 
 /// Sets the interrupt mask (`move #…,SR`, `trap #12`).
+#[inline]
 pub fn set_interrupt_mask(b: &mut World, mask: u8) {
     table(b).interrupt_mask = mask;
 }

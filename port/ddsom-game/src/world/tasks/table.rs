@@ -382,6 +382,7 @@ pub(crate) fn table_if(b: &mut World) -> Option<&mut Table> {
 
 /// A Rust step of the current task calls a subroutine that may cede control: when it returns, the
 /// task will continue at `next`. Nothing is pushed on the 68000 stack.
+#[inline]
 pub fn call(b: &mut World, next: impl Into<Next>) {
     table(b).open_frame(next.into(), None);
 }
@@ -395,6 +396,7 @@ pub struct Call(u32);
 /// return of the native hands control back to it ([`returned`]). If the native cedes control before, the task will
 /// resume later at
 /// `next`, the Rust function having abandoned.
+#[inline]
 pub fn call_expected(b: &mut World, next: impl Into<Next>) -> Call {
     let t = table(b);
     t.next_call = t.next_call.wrapping_add(1);
@@ -406,6 +408,7 @@ pub fn call_expected(b: &mut World, next: impl Into<Next>) -> Call {
 /// Has the expected call returned? If not (the task ceded, or a callee popped the call to return higher), the
 /// Rust function that was waiting for it abandons: its frame, if still there, will execute its continuation when the
 /// callee returns.
+#[inline]
 pub fn returned(b: &mut World, call: Call) -> bool {
     let t = table(b);
     if t.returned == Some(call.0) {
@@ -455,6 +458,7 @@ impl Table {
 }
 
 /// Return of a subroutine (`rts`): it goes back to the most recent of the calls in progress ([`Frame`]).
+#[inline]
 pub fn ret(b: &mut World) -> Return {
     table_if(b).map_or(Return::Stack68000, Table::ret)
 }
@@ -493,6 +497,7 @@ pub fn close_calls(b: &mut World, depth: Option<usize>) {
 /// whether it
 /// is expected or not (the Rust function that was waiting for it sees that it did not return). A cession cannot
 /// take place in a call by address.
+#[inline]
 pub fn pop_return(b: &mut World) -> Next {
     match table_if(b).and_then(Table::pop_most_recent) {
         Some(Err(frame)) => frame.next,
