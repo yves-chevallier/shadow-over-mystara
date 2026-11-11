@@ -139,7 +139,7 @@ pub(crate) fn box_bytes(b: &mut Cps2Bus, a: u32) -> [u8; 6] {
         let blocks = &data().sprite_tables.box_blocks;
         if let Some(k) = blocks.partition_point(|k| k.rom <= a).checked_sub(1).map(|i| &blocks[i]) {
             let off = (a - k.rom) as usize;
-            if off % 8 == 0 {
+            if off.is_multiple_of(8) {
                 if let Some(h) = k.boxes.get(off / 8) {
                     let x = h.bytes();
                     return [x[0], x[1], x[2], x[3], x[4], x[5]];
