@@ -97,22 +97,30 @@ Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=..
 
     ./play.sh
 
+Sous Linux, la compilation demande `libudev-dev` (manettes, crate gilrs) ; le son passe par PulseAudio.
+
 Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
-`Tab` avance rapide, `F11` plein écran, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
+`Tab` avance rapide, `F11` plein écran, `F6` échelle (multiple entier ou ajustée à la fenêtre),
+`F7` filtre (aucun, lissé, CRT), `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`). La fenêtre se
+redimensionne librement.
 
-Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = keys`, noms
-minifb : `Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…). Lettres et chiffres suivent la disposition
-du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./play.sh` affiche le nom des
-touches pressées.
+Manettes (Linux, Windows, macOS ; disposition Xbox) : A B X Y = boutons 4 3 1 2, croix ou stick gauche,
+Start = Start, Back = pièce.
+
+Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = keys` ; actions
+`p1.up`, `p1.button1`, `p1.coin`, `p2.start`, `save`, `fullscreen`, `scale`, `filter`… ; touches
+`Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…, boutons `Pad1A`, `Pad1Up`…). Les anciens noms français
+(`j1.haut`, `sauver`, `Pad1Haut`…) sont encore lus, et le fichier est alors réécrit en anglais. Lettres et
+chiffres suivent la disposition du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./play.sh`
+affiche le nom des touches pressées.
 
 `F5` sauvegarde la partie (`sauvegardes/rapide.txt`), `F9` la reprend : le jeu rejoue sans affichage les
 entrées depuis le démarrage (quelques secondes pour une longue partie). Le fichier est un scénario
 rejouable par `validate` (avec `rapide.txt.eeprom`).
 
 Sous Windows, `play.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
-Rust Windows (MSVC) : son par waveOut et manettes Xbox par XInput (`Pad1A`, `Pad1Haut`… dans
-`touches.cfg`, A B X Y = boutons 1 à 4, Start = Start, Back = pièce). Avec un dossier `assets\` à
+Rust Windows (MSVC) : son par waveOut, manettes comme ci-dessus. Avec un dossier `assets\` à
 la racine (produit par `extract`, voir plus bas), il joue sans aucune ROM ; sinon il prépare `rom\`
 depuis `ddsom.zip` et `qsound.zip`.
 

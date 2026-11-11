@@ -41,23 +41,29 @@ impl Gamepads {
 
     /// Names of the buttons held on all gamepads.
     pub fn held(&mut self) -> Vec<String> {
-        let mut names = Vec::new();
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(gilrs) = &mut self.gilrs {
-            use gilrs::Axis;
-            // the events update the state of the gamepads
-            while gilrs.next_event().is_some() {}
-            for (i, (_, pad)) in gilrs.gamepads().take(2).enumerate() {
-                let (x, y) = (pad.value(Axis::LeftStickX), pad.value(Axis::LeftStickY));
-                // the stick, as the four directions of the d-pad (the first four buttons)
-                let stick = [y > DEAD_ZONE, y < -DEAD_ZONE, x < -DEAD_ZONE, x > DEAD_ZONE];
-                for (j, (button, name)) in BUTTONS.iter().enumerate() {
-                    if pad.is_pressed(*button) || stick.get(j).copied().unwrap_or(false) {
-                        names.push(format!("Pad{}{name}", i + 1));
-                    }
-                }
+            return held(gilrs);
+        }
+        Vec::new()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn held(gilrs: &mut gilrs::Gilrs) -> Vec<String> {
+    use gilrs::Axis;
+    // the events update the state of the gamepads
+    while gilrs.next_event().is_some() {}
+    let mut names = Vec::new();
+    for (i, (_, pad)) in gilrs.gamepads().take(2).enumerate() {
+        let (x, y) = (pad.value(Axis::LeftStickX), pad.value(Axis::LeftStickY));
+        // the stick, as the four directions of the d-pad (the first four buttons)
+        let stick = [y > DEAD_ZONE, y < -DEAD_ZONE, x < -DEAD_ZONE, x > DEAD_ZONE];
+        for (j, (button, name)) in BUTTONS.iter().enumerate() {
+            if pad.is_pressed(*button) || stick.get(j).copied().unwrap_or(false) {
+                names.push(format!("Pad{}{name}", i + 1));
             }
         }
-        names
     }
+    names
 }

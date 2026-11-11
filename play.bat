@@ -1,5 +1,5 @@
 @echo off
-rem Launches the playable Rust port on Windows (sound through waveOut, Xbox pads through XInput), without ROM: from assets\.
+rem Launches the playable Rust port on Windows (sound through waveOut, gamepads through gilrs), without ROM: from assets\.
 rem Requirement: Rust for Windows (https://rustup.rs, MSVC). If assets\ is missing, it is produced once by
 rem extract from ddsom.zip and qsound.zip (at the root, as for play.sh); the zips and rom\ are not used afterwards.
 rem An assets\ from an older version (without data\overreads.json) is re-extracted the same way; after another

@@ -4,7 +4,9 @@
 //! so that the latency stays near `TARGET` instead of drifting. The queue starts (and restarts after running dry)
 //! once it holds `TARGET` of sound (the latency, plus about 30 ms in the device).
 //! Devices: PulseAudio under Linux, waveOut under Windows (libraries loaded at run time: no build dependency;
-//! macroquad's own audio only plays whole sounds). Without output, the game runs without sound.
+//! macroquad's own audio only plays whole sounds). Without output, the game runs without sound; none on the web yet
+//! (the queue would need a WebAudio plugin of miniquad).
+#![cfg_attr(not(any(unix, windows)), allow(dead_code))]
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -30,11 +32,17 @@ impl Audio {
     pub fn open() -> Self {
         let queue = Arc::new(Mutex::new(Resampler::new()));
         let output = queue.clone();
+        #[cfg(any(unix, windows))]
         std::thread::spawn(move || {
             if let Err(e) = device::output_thread(OUTPUT_RATE, output) {
                 eprintln!("Sound unavailable ({e}): the game runs without sound.");
             }
         });
+        #[cfg(not(any(unix, windows)))]
+        {
+            drop(output);
+            eprintln!("Sound unavailable on this platform: the game runs without sound.");
+        }
         Audio { queue }
     }
 
@@ -252,16 +260,6 @@ mod device {
             }
         }
         unreachable!("endless cycle")
-    }
-}
-
-/// No sound output on the web (yet) nor elsewhere.
-#[cfg(not(any(unix, windows)))]
-mod device {
-    use super::*;
-
-    pub fn output_thread(_rate: u32, _queue: Arc<Mutex<Resampler>>) -> Result<(), &'static str> {
-        Err("no sound output on this platform")
     }
 }
 
