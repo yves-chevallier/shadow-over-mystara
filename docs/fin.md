@@ -333,7 +333,8 @@ au pixel près, et `validate` compare justement ses entrées. Ce qui change :
   * `Palette::set(page, index, color)`.
 
   Les tampons sous-jacents gardent le format CPS2, puisque c'est ce que `validate` compare.
-* **L'interface du rendu** est `cps2_gfx::render(&VideoState, &TileAtlas) -> Frame`. Le `TileAtlas` est fait des
+* **L'interface du rendu** est `cps2_gfx::render(&DrawList, &TileAtlas)` depuis L20 (le jeu donne `Game::frame()
+  -> DrawList`, voir « L20 ») ; avant, `cps2_gfx::render(&VideoState, &TileAtlas) -> Frame`. Le `TileAtlas` est fait des
   cellules 8 bits décodées depuis les PNG. On cesse de réencoder en plans 4 bits (`rebuild::gfx_region`) pour décoder
   aussitôt à chaque pixel (`pixels8`). C'est plus simple, et c'est le gain de rendu attendu (couches : 35 % du temps).
 
@@ -350,11 +351,14 @@ au pixel près, et `validate` compare justement ses entrées. Ce qui change :
   fiches. Ce n'est pas une image ROM : c'est l'espace d'adresses que les registres QSound désignent.
 * **Mixeur** (`qsound`) : ses trois tables (pan, pas de l'ADPCM, filtres) deviennent des tableaux nommés chargés
   depuis `qsound_dsp.json`. Il ne lit plus aux adresses du programme du DSP.
+* **Sortie** (L20) : le pilote et le mixeur restent dans le cœur ; `Game::sound()` rend les échantillons stéréo
+  mixés de l'image (24 kHz), que la façade joue.
 
 ### Entrées et plateforme
 
 `ddsom` (`main.rs`, `keys.rs`, `gamepad.rs`, `audio.rs`, `save.rs`) reste la seule crate de plateforme. Elle remplit
-`hw::inputs` et lit `Frame` et les échantillons. Son ouverture devient
+`hw::inputs` et lit `Frame` et les échantillons. Depuis L20, elle ne parle au jeu que par `ddsom_game::Game`
+(`step(Inputs)`, `frame() -> DrawList`, `sound()`, `eeprom()`). Son ouverture devient
 `Game::new(GameData::load(assets)?, eeprom)` au lieu de `rebuild::contents` suivi de `Machine::ddsom`.
 
 ## 3. Lots
@@ -1589,11 +1593,96 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
 La logique ne migre pas dans un moteur 2D (Godot, Unity, Bevy) : elle perdrait le comportement identique et le filet de
 validation. Le moteur 2D n'est qu'une façade interchangeable.
 
-**L20. Cœur de jeu en bibliothèque**
+**L20. Cœur de jeu en bibliothèque** — **fait** (branche `wt-l20-coeur`, voir « Résultat »)
 * Après L15. Interface unique : `Game::step(inputs)`, puis `Game::frame() -> DrawList` (sprites avec leur numéro
   d'image de `frames.json`, couches de décor, palettes, effets) et `Game::sound() -> SoundCommands`. Aucune fenêtre,
   aucun matériel dans le cœur ; le modèle CPS2 (`cps2-gfx`) devient une façade de rendu parmi d'autres.
 * Fin : `ddsom` ne parle au jeu que par cette interface ; validation 308/308 inchangée.
+* Résultat (branche `wt-l20-coeur`, depuis main 4aa9a74) :
+  * **L'interface** (`ddsom_game::core::interface`, réexportée `ddsom_game::{Game, Inputs}`) :
+    ```rust
+    impl Game {                                       // le jeu (Game<World>)
+        pub fn new(contents: cps2::GameContents, eeprom: Option<&[u8]>) -> Game;
+    }
+    impl<B: Board> Game<B> {
+        pub fn on(machine: cps2::Machine<B>) -> Self;  // machine déjà construite (code d'origine, outils)
+        pub fn step(&mut self, inputs: Inputs);        // une image
+        pub fn frame(&self) -> DrawList<'_>;           // l'image montrée par le dernier pas
+        pub fn sound(&self) -> &[[i16; 2]];            // le son du dernier pas, mixé, à SAMPLE_RATE (24 kHz)
+        pub fn eeprom(&self) -> Vec<u8>;               // à rendre à Game::new à la session suivante
+        pub fn frame_count(&self) -> u64;
+        pub fn machine(&self) -> &Machine<B>;          // outils seulement (empreintes, pokes des scénarios)
+        pub fn machine_mut(&mut self) -> &mut Machine<B>;
+    }
+    pub use cps2::Inputs;                              // ports IN0, IN1, IN2 (actifs à 0, câblage MAME cps2_4p4b)
+    pub const SAMPLE_RATE: f64;                        // qsound::SAMPLE_RATE
+    pub const STOP: &str;                              // début du message d'un arrêt du jeu (panique)
+    pub trait Board: cps2::Board { fn latched_frames(&self) -> &[SpriteFrame]; } // World, Cps2Bus (aucune image)
+    ```
+    `step` pose les entrées, vide le son de l'image précédente et lance `Machine::run_frame` sans rendu
+    (`rendering = false`) ; le dessin est fait par l'appelant à partir de `frame`. L'état du jeu ne change pas : la
+    RAM, le matériel et la table des tâches sont ceux que `validate` compare ; l'interface ne fait que les lire.
+  * **`DrawList`** (`cps2_gfx::draw`) : une vue sans copie, décodée des registres CPS2, de l'image à dessiner :
+    * `palette: Palette` : 0xc00 couleurs au format CPS2 (`color(i) -> u16`, `rgb(u16) -> [u8; 3]`) ; les sprites
+      prennent les couleurs 0 à 0x1ff, les couches à partir de 0x200 ; fondus et flashs sont des changements de
+      palette (les « effets ») ;
+    * `layers: [Layer; 3]` : couches 1 à 3 (tuiles de 8, 16, 32 pixels, 64 x 64 tuiles), `tile(col, row) -> Tile`
+      (`code`, `attr` : palette, miroirs), `origin(ligne) -> (x, y)` : coordonnées dans la carte du pixel de gauche
+      d'une ligne d'écran (défilement et défilement par ligne de la couche 2 compris), `palette_base` ;
+    * `order: [Option<usize>; 3]` : couches dessinées de l'arrière vers l'avant (couche coupée : `None`) ;
+    * `sprite_masks: [u32; 8]` : masque de chaque priorité de sprite contre les couches ;
+    * `sprites: Sprites` (`len`, `get(i) -> Sprite` : `code`, `palette`, miroirs, `priority`, blocs
+      `columns` x `rows`, `cell(col, row) -> (code, x, y)` à l'écran) ;
+    * `frames: &[SpriteFrame]` et `shown_frames()` : l'**identité des images** pour un pack HD (L22) : pour chaque
+      image de `frames.json` dessinée, la première entrée et le nombre d'entrées de la liste de sprites, le
+      **numéro d'image** (index de la table, puis les images hors table), l'ancre (`position(&list)` à l'écran) et le
+      miroir ; la palette est celle des entrées (`palette(&list)`). Les tuiles des couches sont identifiées par
+      (couche, `code`, palette).
+    `DrawList::from_video(&VideoState)` décode un état vidéo (registres CPS-A/CPS-B, GFX RAM, table d'objets
+    verrouillée, copie de la palette) ; `with_frames` ajoute les identités. Le moteur de rendu CPS2
+    (`cps2_gfx::render(&DrawList, &TileAtlas)`) ne lit plus que la liste : c'est une façade parmi d'autres.
+    `DrawList` vit dans `cps2-gfx` parce que c'est la plus basse crate que voient à la fois le jeu (par `cps2`) et
+    toute façade (qui a besoin de l'atlas de tuiles, `cps2_gfx::TileAtlas`, pour dessiner les codes de tuiles) ; une
+    crate à part n'aurait contenu que ces types.
+  * **Image montrée et identités** : le matériel verrouille la table d'objets à la fin de chaque image et l'image
+    suivante l'affiche. `cps2::Machine` garde donc la table montrée par la dernière image (`shown_objects`,
+    échangée sans copie avec la table verrouillée, `Machine::shown() -> VideoState`) ; `Machine::render` (outils)
+    garde son sens. Les identités suivent la même règle : `services::sprites::build` note, dans le banc de la RAM
+    d'objets qu'il écrit, chaque image tirée de la table (`World::sprite_frames`, deux `Vec<SpriteFrame>`, hors de
+    l'état comparé, jamais lu par le jeu, gardé avec la table des tâches quand les outils prêtent la RAM au bus) ;
+    `Game::step` recopie celles du banc verrouillé et les montre à l'image suivante, comme la table d'objets.
+    `Frames::find` (ddsom-data) rend le numéro avec l'image (mêmes recherches qu'avant).
+  * **Son : échantillons mixés plutôt que `SoundCommands`.** Le pilote (séquenceur) et le mixeur QSound restent
+    dans le cœur : leurs écritures (registres QSound, RAM partagée) font partie de l'état que `validate` compare, et
+    une façade n'a qu'à jouer du PCM stéréo 16 bits à 24 kHz (ou le rééchantillonner). Des commandes de son
+    obligeraient chaque façade à embarquer le pilote, le mixeur et la banque d'échantillons, sans rien gagner.
+  * **Entrées** : `Inputs` est l'image des trois ports (comme l'écrit `scenario`) ; `keys.rs` les remplit.
+    `Scenario` sépare `apply_inputs(f, &mut Inputs)` et `apply_pokes(f, machine)` (`apply` fait les deux, outils) ;
+    `Recorder::record(Inputs)` et `Recorder::resumes(out, image, Inputs)`.
+  * **`ddsom`** : `Game::new` (ou `Game::on` pour le code d'origine, `--features original`), puis à chaque image
+    `step`, `cps2_gfx::render(&game.frame(), &atlas)`, `sound()` ; `eeprom()` à la sortie. Sauvegarde rapide :
+    `save::Session` rejoue les entrées d'un fichier sur un `Game` neuf (les pokes d'un scénario ne sont pas rejoués :
+    l'application n'en écrit jamais). `ddsom` ne dépend plus de `ddsom-assets`, `ddsom-data` ni `qsound` ;
+    `cargo tree -p ddsom -e normal` : ni `m68k`, ni `z80`, ni `ddsom-rc`. Le binaire démarre et joue (fenêtre
+    WSLg, avec ROMs et avec `--assets`, quelques secondes chacun, sans arrêt).
+  * Outils : `bench` et `render_check` passent par `Game` (et le rendu CPS2 de `frame`) ; `render_check` vérifie en
+    plus les identités : bot30k 12 000 images, **122 051 images montrées, 786 886 sprites, 0 écart** (nombre
+    d'entrées et codes des morceaux de `frames.json`). `vrender`, `render_bench`, `creatures`, `level_maps` et le test
+    `mame_snapshots` passent par `DrawList::from_video`.
+  * `render_check` bot30k 12 000 images : identique à main (`09850058246a1e2c`, fichier par image identique), aussi
+    avec `DDSOM_ASSETS`.
+  * `bench` bot30k 12 000 images, même dossier cible, 7 passes alternées avec main 4aa9a74, même empreinte
+    `a65ecd8aa6e38d4f` : médianes **sans rendu 24 962 images/s contre 23 517 (+6 %)**, **avec rendu 4 049 contre
+    4 006 (+1 %)**. Le gain sans rendu vient de `step`, qui vide le son de chaque image (le `bench` de main laissait
+    grossir le vecteur d'échantillons) ; le coût des identités (une poussée par image dessinée) ne se voit pas.
+  * `DDSOM_CHECK=1` bot30k 2 000 images : 21 444 appels comparés, 0 écart, VALID.
+  * `measure_end.py` : 65 modules, aucune composante entre couches, 0 arête vers une couche plus haute.
+  * Validation (code de f29f3e0 ; le mode assets avec en plus le renommage `Game::frames` → `frame_count`, jamais
+    appelé) : **309/309 VALID en mode par défaut et avec `DDSOM_ASSETS`** (assets réextraits par la branche),
+    `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=6`, `residue: 0` dans tous les journaux ; tests
+    `ddsom-game --lib` (19), `cps2-gfx` ; `cargo clippy` sans avertissement (`ddsom-game` avec et sans `tools`,
+    `ddsom` avec et sans `--features original`, `cps2-gfx`).
+  * Aucun code mort nouveau.
 
 **L21. Façade de présentation**
 * **Décidé le 2026-11-11 : façade minimale en macroquad** (pas Bevy).
@@ -1611,7 +1700,7 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 
 ## 4. Fin du projet : critères mesurables
 
-| Critère | Aujourd'hui (L17, `wt-l17-outils`) | Cible |
+| Critère | Aujourd'hui (L20, `wt-l20-coeur`) | Cible |
 |---|---:|---:|
 | Validation (deux modes, `DDSOM_LONG=1`) | 309/309 | 308/308 (plus les nouveaux scénarios) |
 | Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 0 | 0 |
@@ -1625,4 +1714,5 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 | Fichiers de plus de 1 500 lignes (hors `tools/`) | 0 | 0 |
 | Plus grande composante fortement connexe des modules | 9 (dans `world`), aucune entre couches | 1 module par couche, plus `core` |
 | `rebuild` dans le jeu | non | non |
-| `bench` bot30k, avec et sans rendu | ~4 000 et ~23 500 images/s | au moins 2 500 et 14 000 images/s |
+| `bench` bot30k, avec et sans rendu | ~4 050 et ~25 000 images/s | au moins 2 500 et 14 000 images/s |
+| `ddsom` ne parle au jeu que par `Game` | oui (L20) | oui |

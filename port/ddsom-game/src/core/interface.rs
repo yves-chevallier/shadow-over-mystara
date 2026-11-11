@@ -90,8 +90,8 @@ impl<B: Board> Game<B> {
         self.machine.bus.hw().eeprom.to_bytes()
     }
 
-    /// Frames run since the start.
-    pub fn frames(&self) -> u64 {
+    /// Number of frames run since the start.
+    pub fn frame_count(&self) -> u64 {
         self.machine.frame
     }
 

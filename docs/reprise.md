@@ -31,10 +31,21 @@ binaires dans `port/target/release/examples/`). Fait : le registre des natives n
 routine que seul le code d'origine appelle par adresse s'y déclare. `DDSOM_CHECK=1` remarche (la copie qui exécute
 l'original reçoit la ROM de la machine de référence, `set_original_rom`). Détails : [fin.md](fin.md) « L17 ».
 
+**L20 (2026-11-11, branche `wt-l20-coeur`, depuis main 4aa9a74, non fusionnée)** : le cœur de jeu en bibliothèque.
+`ddsom_game::Game` (`core::interface`) : `Game::new(contents, eeprom)`, `step(Inputs)`, `frame() -> DrawList`,
+`sound() -> &[[i16; 2]]` (échantillons mixés, 24 kHz), `eeprom()`. `DrawList` (`cps2_gfx::draw`) est une vue décodée
+de l'image : palette, trois couches (tuiles, défilement, défilement par ligne), ordre des couches, masques des
+sprites, sprites, et l'identité des images de `frames.json` (numéro, ancre, miroir) pour le pack HD ;
+`cps2_gfx::render(&DrawList, &TileAtlas)` est le rendu CPS2. `ddsom` ne parle au jeu que par `Game`.
+`Scenario::apply_inputs`/`apply_pokes`, `Recorder::record`. Détails et mesures : [fin.md](fin.md) « L20 ». Pour L21
+(macroquad) : une façade prend `Game`, dessine `game.frame()` (par `cps2_gfx::render` à l'échelle 1, puis
+filtres) et joue `game.sound()` ; pour L22 : `DrawList::shown_frames()` donne les images à remplacer.
+
 **Pour reprendre :**
 1. Fusionner `wt-l17-outils` (après relecture). Une nouvelle étape qui cède la main se déclare dans
    `world/tasks/stages.rs` (variante, et dans `Step` si c'est un nouveau module) et se code dans son module.
-2. Puis L16 facultatif, L18 (documentation finale), L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et
+2. Puis fusionner `wt-l20-coeur` (L20, après relecture), L16 facultatif, L18 (documentation finale), L21 (façade),
+   L22 (pack HD), et
    le lot `touches.cfg` (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours
    exporter `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
    génération de `ddsom-rc`, ~12 min à 40 min).
