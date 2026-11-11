@@ -23,6 +23,10 @@ touches.cfg
 # Ressources extraites des ROMs (outil extract)
 assets/
 
+# Packs HD et leurs exports (dérivés des graphismes de Capcom, docs/pack-hd.md)
+hd/
+hd-*/
+
 # Pseudo-C décompilé (dérivé des ROMs)
 decomp/
 

@@ -159,6 +159,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ddsom-hd"
+version = "0.1.0"
+dependencies = [
+ "cps2",
+ "cps2-gfx",
+ "ddsom-data",
+ "ddsom-game",
+ "extract",
+ "png",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ddsom-rc"
 version = "0.1.0"
 dependencies = [
