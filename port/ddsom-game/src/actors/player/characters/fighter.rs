@@ -617,7 +617,3 @@ fn swap_equipment(g: &mut Ctx, p: Player) {
     }
 }
 
-action_native!(JUMP, 0x3e578, "fighter_jump", jump);
-action_native!(ATTACK, 0x3e7e4, "fighter_attack", attack);
-action_native!(SPECIAL, 0x3f0ae, "fighter_special", special);
-action_native!(DASH, 0x3f9bc, "fighter_dash", common::dash);

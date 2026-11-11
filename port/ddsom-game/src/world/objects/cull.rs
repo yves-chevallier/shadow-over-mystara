@@ -16,7 +16,6 @@ use ddsom_data::tables::Bounds;
 use crate::world::data::data;
 use crate::hw::mem::A5;
 use crate::world::ram::{camera as camera_position, Word, CAMERA_ALT_ACTIVE};
-use crate::regs;
 
 /// Address of the current camera record (x at +8, y at +0xc).
 pub fn camera(b: &mut World) -> u32 {
@@ -82,11 +81,6 @@ pub fn despawn_if_offscreen(b: &mut World, obj: Obj) {
         obj.set_u8(b, Obj::STATE, 6);
     }
 }
-
-/// Registers left behind by the original routines (see `diag::dead_regs`, label `cull`).
-pub const REGS_DESPAWN: u32 = regs::d(0) | regs::a(1) | regs::CCR;
-pub const REGS_IN_ARENA: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::CCR;
-pub const REGS_VISIBILITY: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::CCR;
 
 // ---- 0x1e92: widened play area ----
 

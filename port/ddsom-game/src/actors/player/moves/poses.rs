@@ -167,23 +167,6 @@ pub fn box_recoil(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Natives of the rare poses, for the differential validation (`fuzz_player player_action`): `actions::act` calls them
-/// directly.
-macro_rules! rare_native {
-    ($name:ident, $entry:expr, $label:expr, $f:path) => {
-        pub const $name: crate::Native = crate::Native {
-            entry: $entry,
-            name: $label,
-            run: crate::Body::Handler(|b, a| super::super::Ctx::on_player(b, a, $f)),
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
-}
-rare_native!(CURSE_DROP, 0x36b88, "player_action_26", curse_drop);
-rare_native!(DUST_PUFFS, 0x36cb8, "player_action_2c", dust_puffs);
-rare_native!(BOX_RECOIL, 0x36f1a, "player_action_30", box_recoil);
-
 // ---- action 0x2a (0x36c12): jump in place with bounce (h) ---------------------------------------
 
 /// 0x36c12: takeoff, landing then walk on the height; the height oscillates by 2 pixels.

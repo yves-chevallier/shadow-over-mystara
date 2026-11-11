@@ -88,23 +88,26 @@ impl Native {
                 f(b);
                 frames::rts(c, b);
             }
-            Body::Handler(f) => {
-                // called from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5) come from the
-                // registers and the leftovers return there; on a machine with a task table (the game's) they are also
-                // those of the world.
-                let mut a = crate::actors::dispatch::Dispatch::from_cpu(c);
-                if b.tasks.is_some() {
-                    b.leftovers = a.leftovers;
-                }
-                f(b, &mut a);
-                if b.tasks.is_some() {
-                    b.leftovers = a.leftovers;
-                }
-                a.give_back(c);
-                frames::rts(c, b);
-            }
+            Body::Handler(f) => run_handler(c, b, f),
+            Body::HandlerIn(f) => run_handler(c, b, |b, a| f(b, a, self.entry)),
         }
     }
+}
+
+/// Runs a handler without registers from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5)
+/// come from the registers and the leftovers return there; on a machine with a task table (the game's) they are also
+/// those of the world.
+fn run_handler(c: &mut Cpu, b: &mut World, f: impl FnOnce(&mut World, &mut crate::actors::dispatch::Dispatch)) {
+    let mut a = crate::actors::dispatch::Dispatch::from_cpu(c);
+    if b.tasks.is_some() {
+        b.leftovers = a.leftovers;
+    }
+    f(b, &mut a);
+    if b.tasks.is_some() {
+        b.leftovers = a.leftovers;
+    }
+    a.give_back(c);
+    frames::rts(c, b);
 }
 
 /// The natives for the original code (arguments and results in its registers), at the original addresses: the tools
@@ -731,9 +734,29 @@ fn adopt_mask() -> u32 {
     })
 }
 
+/// The program ROM that the copies running the original routines get when the checked machine has none (the game
+/// machine of `validate`, without ROM since L14): [`set_original_rom`].
+static ORIGINAL_ROM: OnceLock<std::sync::Arc<cps2::bus::ProgramRom>> = OnceLock::new();
+
+/// Gives the program ROM (that of the reference machine) to the copies that run the original routines (`DDSOM_CHECK`
+/// on a machine without ROM).
+pub fn set_original_rom(rom: std::sync::Arc<cps2::bus::ProgramRom>) {
+    let _ = ORIGINAL_ROM.set(rom);
+}
+
+/// A copy of the world on a bus, to run the original code: with the program ROM of [`set_original_rom`] if the
+/// world's machine has none.
+fn original_copy(b: &World) -> Cps2Bus {
+    let mut bus = b.to_bus();
+    if bus.rom.is_none() {
+        bus.rom = ORIGINAL_ROM.get().cloned();
+    }
+    bus
+}
+
 /// Runs the original routine on a copy of the machine until its return; returns the resulting CPU.
 fn original(n: &Native, c: &Cpu, b: &World) -> Cpu {
-    let (mut c2, mut b2) = (c.clone(), b.to_bus());
+    let (mut c2, mut b2) = (c.clone(), original_copy(b));
     stack_for_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
@@ -772,7 +795,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut World) {
     let by_frame = frame::active();
     let pre = if std::env::var("DDSOM_TRACE_ORIG").is_ok_and(|v| n.name == v) { Some((c.clone(), b.to_bus())) } else { None };
     let mut c2 = c.clone();
-    let mut b2 = b.to_bus();
+    let mut b2 = original_copy(b);
     stack_for_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
@@ -881,7 +904,7 @@ pub(crate) fn check_handler(
         handler(b, a);
         return;
     }
-    let mut b2 = b.to_bus();
+    let mut b2 = original_copy(b);
     let mut c2 = Cpu::new();
     c2.sr = 0x2700;
     c2.a[0] = a.object.0;

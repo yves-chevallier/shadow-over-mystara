@@ -34,7 +34,6 @@ use crate::hw::mem::{rd8, wr16, wr8, A5};
 use crate::world::tasks::Ctx;
 use crate::world::ram::{Byte, Long, Word};
 use crate::world::objects::{pools, Obj};
-use crate::Native;
 
 /// Work RAM variables (offsets from A5) shared by the scene sequences.
 pub mod var {
@@ -326,23 +325,6 @@ impl Ctx<'_> {
             !alive || Obj(p).u8(self.b, player::STATE) == state
         })
     }
-}
-
-/// Native routines of scene flow.
-pub const NATIVES: &[Native] = &[intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
-
-/// Native routines of all the scene modules.
-pub fn natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES
-        .iter()
-        .chain(exit::NATIVES)
-        .chain(tally::NATIVES)
-        .chain(bonus::NATIVES)
-        .chain(characters::NATIVES)
-        .chain(shop::NATIVES)
-        .chain(blackout::NATIVES)
-        .chain(screen::NATIVES)
-        .chain(transition::natives())
 }
 
 impl crate::world::machine::Machine for Ctx<'_> {

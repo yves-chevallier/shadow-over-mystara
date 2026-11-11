@@ -6,7 +6,7 @@
 
 use crate::world::World;
 
-use super::cx::{handler_without, Bench, Cx};
+use super::cx::{Bench, Cx};
 use super::effects_creators::leftovers::{Pure, Regs};
 use crate::hw::video::{palette, regs, Vram};
 use crate::world::objects::pools;
@@ -17,7 +17,6 @@ use crate::world::ram::{Byte, Long};
 use crate::world::record::record;
 use crate::services::scroll::CAMERA_1;
 use crate::world::tables::engine;
-use crate::Native;
 
 /// The fields that these creators set in the objects they create, and read in their creator.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -494,14 +493,3 @@ pub(crate) fn own_reaction<R: Bench>(x: &mut Cx<'_, R>, routine: u32) -> Option<
     Some(())
 }
 
-/// Enemy reactions specific to a type (`own_reaction`), at their original address (the game calls them directly
-/// depuis `enemy_common::react`).
-pub const SHAKES: &[Native] = &[
-    handler_without(0x78ad2, "enemy_shake_a", |b, a| run_shake(b, a, 0x78ad2)),
-    handler_without(0x71680, "enemy_shake_b", |b, a| run_shake(b, a, 0x71680)),
-    handler_without(0x65236, "enemy_shake_c", |b, a| run_shake(b, a, 0x65236)),
-];
-
-fn run_shake(b: &mut World, a: &mut crate::actors::dispatch::Dispatch, routine: u32) {
-    own_reaction(&mut crate::actors::families::cx::Gx::dispatch(b, a), routine);
-}

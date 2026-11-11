@@ -1,6 +1,5 @@
 //! Player shots (PSHL) and effects (PEFF): one handler per type, see `docs/families/joueur.md`.
 
-use crate::Native;
 
 pub mod peff;
 pub mod peff_b;
@@ -28,29 +27,3 @@ pub mod pshell;
 pub mod records;
 pub mod vars;
 
-/// All the native routines of the players' shots and effects.
-pub fn natives() -> impl Iterator<Item = &'static Native> {
-    std::iter::empty()
-        .chain(peff::NATIVES)
-        .chain(peff_b::NATIVES)
-        .chain(peff_shop::NATIVES)
-        .chain(peff_c::NATIVES)
-        .chain(peff_d::NATIVES)
-        .chain(peff_e::NATIVES)
-        .chain(peff_f::NATIVES)
-        .chain(peff_g::NATIVES)
-        .chain(peff_h::NATIVES)
-        .chain(peff_i::NATIVES)
-        .chain(peff_j::NATIVES)
-        .chain(peff_k::NATIVES)
-        .chain(peff_l::NATIVES)
-        .chain(peff_m::NATIVES)
-        .chain(peff_n::NATIVES)
-        .chain(peff_o::NATIVES)
-        .chain(peff_ring::NATIVES)
-        .chain(pshl::NATIVES)
-        .chain(pshl_b::NATIVES)
-        .chain(pshl_c::NATIVES)
-        .chain(pshl_d::NATIVES)
-        .chain(pshl_e::NATIVES)
-}

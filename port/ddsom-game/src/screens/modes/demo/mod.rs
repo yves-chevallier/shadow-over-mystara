@@ -29,7 +29,6 @@ use crate::world::objects::Obj;
 use crate::services::video::{clear_layer, Layer};
 use crate::world::objects::pools;
 use crate::world::tasks::Ctx;
-use crate::Native;
 
 mod presentation;
 mod recorder;
@@ -615,8 +614,3 @@ fn demo_after_world(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-pub const NATIVES: &[Native] = &[
-    
-    
-    RECORDER_STOP,
-];

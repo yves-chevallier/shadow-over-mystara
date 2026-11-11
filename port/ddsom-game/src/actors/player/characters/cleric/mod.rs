@@ -461,8 +461,3 @@ fn turn_undead(g: &mut Ctx, p: Player) {
     }
 }
 
-
-action_native!(JUMP, 0x3fd08, "cleric_jump", jump);
-action_native!(ATTACK, 0x3ff2a, "cleric_attack", attack);
-action_native!(SPECIAL, 0x406d4, "cleric_special", special);
-action_native!(DASH, 0x41f22, "cleric_dash", common::dash);

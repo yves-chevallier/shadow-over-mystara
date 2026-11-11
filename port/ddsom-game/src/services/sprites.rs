@@ -14,7 +14,6 @@ use crate::world::data::{data, Missing, RomAddr};
 use crate::hw::video::{Vram, OBJECTS};
 use crate::world::objects::{Link, Obj};
 use crate::world::ram::{Long, Word};
-use crate::Native;
 
 /// Work RAM variables used by rendering.
 mod var {
@@ -653,10 +652,3 @@ pub fn clear_lists(b: &mut World) {
     }
 }
 
-pub const RESET_LISTS: Native = Native {
-    entry: 0x1de7c,
-    name: "sprites_clear_lists",
-    run: crate::Body::Memory(clear_lists),
-    touches_sound: false,
-    outputs: 0,
-};

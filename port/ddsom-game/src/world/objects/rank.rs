@@ -21,7 +21,6 @@
 use crate::world::World;
 
 use crate::world::ram::{Byte, Long, Word};
-use crate::regs;
 
 /// Rank (dynamic difficulty 0..31): it indexes the decision and HP tables (`actors::ai`).
 pub const RANK: Word = Word::a5(0x7f92);
@@ -121,5 +120,3 @@ pub fn lower(b: &mut World) {
 
 // ---- adaptation to the 68000 registers ----
 
-/// Registers left behind by the original routines (see `diag::dead_regs`, label `rank`).
-pub const REGS_RANK: u32 = regs::d(0) | regs::d(1) | regs::a(0) | regs::a(1) | regs::a(4) | regs::CCR;

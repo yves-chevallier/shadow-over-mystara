@@ -19,7 +19,6 @@ use crate::screens::obj;
 use crate::world::screen_tables as tables;
 use crate::screens::vars as sv;
 use crate::world::tasks::{Flow, Sequence};
-use crate::Native;
 use crate::world::objects::{pools, Obj};
 pub use crate::world::tasks::stages::Shop as Step;
 
@@ -396,6 +395,3 @@ fn portraits(x: &mut Ctx) -> Flow {
     crate::world::tasks::finish(x)
 }
 
-pub const NATIVES: &[Native] = &[
-    
-];

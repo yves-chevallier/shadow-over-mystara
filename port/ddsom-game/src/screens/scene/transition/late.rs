@@ -657,4 +657,3 @@ pub fn finale(x: &mut Ctx) -> Flow {
     }
 }
 
-pub const NATIVES: &[Native] = &[];

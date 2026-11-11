@@ -122,14 +122,6 @@ pub fn stop_recorder(b: &mut World) {
     var::SCRIPT_TAIL.set(b, 0);
 }
 
-pub const RECORDER_STOP: Native = Native {
-    entry: 0xe05d6,
-    name: "demo_recorder_stop",
-    run: crate::Body::Memory(stop_recorder),
-    touches_sound: false,
-    outputs: 0,
-};
-
 /// Recording: the current entry lasts one more frame as long as the inputs do not change (and its duration
 /// fits in 16 bits); otherwise its duration is written and a new entry begins.
 pub(super) fn record_inputs(x: &mut Ctx) {

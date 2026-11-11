@@ -13,6 +13,9 @@ Columns:
   fields         object fields at a literal offset: `x.u8(0x5a)`, `o.set_u16(b, 0x1c, v)`...
   a5             work RAM at a literal offset: `A5 + 0x..`, `a5_u8(0x..)`, `ram8(0x..)`...
   raw            raw bus accesses: rd8/rd16/rd32/wr8/wr16/wr32
+  natives        registry of natives for the tools in the game: lists (`NATIVES`, `natives()`, `JOIN`, `SHAKES`) and
+                 natives of routines that only the original code calls (`Body::Memory`, `Body::Handler(` written by
+                 hand); the handlers of the dispatch tables (`handlers!`, `handler!`) are game data, not counted
   sound          sounds played by the address of their 68000 envelope: `sound::play(b, 0xede08, o)`, or a
                  `u32` constant (`sound::play(x.b, SFX_LAND, x.o)`, `x.sound(rom::INTRO_ACTION, p)`)
   romconst       `u32` constants declared in 0x400-0x3fffff (ROM tables and original routine addresses)
@@ -56,6 +59,7 @@ PATTERNS = {
     "fields": rf"\.{FIELD_METHODS}\((?:[a-z_][\w.]*, *)?{LITERAL}",
     "a5": r"A5 \+ 0x|A5\.wrapping_add\(0x|\b(?:set_)?(?:a5_?u(?:8|16|32)|ram(?:8|16|32))\(0x",
     "raw": r"\b(?:rd|wr)(?:8|16|32)\(",
+    "natives": r"\bconst (?:NATIVES|JOIN|SHAKES): &\[|\bfn natives\(|\bBody::Memory\(|\bBody::Handler\(\|",
 }
 # Sound call sites: `sound::play*(bus, sound, ...)` and the bosses' `x.sound(sound, ...)`.
 SOUND_CALL = re.compile(r"(?<!fn )(?:\bsound::play\w*\([^,()]+|\.sound\(), *([\w:]+)")

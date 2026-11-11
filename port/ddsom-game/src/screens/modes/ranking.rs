@@ -22,7 +22,6 @@ use crate::screens::vars as sv;
 use crate::world::objects::pools;
 use crate::world::tasks::Ctx;
 use crate::services::video::{clear_layer, Layer};
-use crate::Native;
 use crate::world::ram::{Long, Word};
 use crate::world::objects::Obj;
 use crate::screens::obj;
@@ -328,4 +327,3 @@ fn sa_leave(x: &mut Ctx) -> Flow {
     x.subroutine(crate::services::fading::descent, Step::SaFaded)
 }
 
-pub const NATIVES: &[Native] = &[];

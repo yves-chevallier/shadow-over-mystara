@@ -218,7 +218,7 @@ impl<R> Cx<'_, R> {
 
 /// Declares the handlers of a type file: `NAME address "name" path::to::handler` (on a generic `Cx`, called as a
 /// handler without registers: what the dispatch loop passes, `Gx`). Each becomes a constant `NAME`, which the dispatch
-/// tables (`dispatch`) hold; `NATIVES` lists them for the tools.
+/// tables (`dispatch`) hold.
 macro_rules! handlers {
     ($( $const:ident $entry:literal $name:literal $f:path ),* $(,)?) => {
         $(
@@ -226,7 +226,6 @@ macro_rules! handlers {
                 $f(&mut $crate::actors::families::cx::Gx::dispatch(b, a));
             });
         )*
-        pub const NATIVES: &[$crate::Native] = &[ $( $const ),* ];
     };
 }
 pub(crate) use handlers;

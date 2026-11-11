@@ -8,7 +8,7 @@ fn main() {
             ddsom_game::Body::WithCpu(_) => 'P',
             ddsom_game::Body::CpuIn(_) => 'E',
             ddsom_game::Body::Memory(_) => 'M',
-            ddsom_game::Body::Handler(_) => 'G',
+            ddsom_game::Body::Handler(_) | ddsom_game::Body::HandlerIn(_) => 'G',
         };
         let side = if game.contains(&n.entry) { "game" } else { "tools" };
         println!("{:06x} {} {shape} {side}", n.entry, n.name);

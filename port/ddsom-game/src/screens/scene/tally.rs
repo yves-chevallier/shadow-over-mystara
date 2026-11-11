@@ -16,7 +16,6 @@ use crate::world::ram::{Byte, Long};
 use crate::world::tasks::{Flow, Sequence};
 use crate::world::ops::abcd;
 use crate::world::objects::Obj;
-use crate::Native;
 use crate::world::screen_tables as tables;
 use crate::screens::obj;
 pub use crate::world::tasks::stages::Tally as Step;
@@ -582,4 +581,3 @@ fn pay_digit(v: u32) -> (u32, u32) {
     }
 }
 
-pub const NATIVES: &[Native] = &[];

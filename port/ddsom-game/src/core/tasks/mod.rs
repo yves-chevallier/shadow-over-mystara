@@ -15,7 +15,6 @@ pub mod game;
 use crate::world::tasks::table::{self, Next};
 use crate::world::tasks::{has_ceded, stages, Ctx, Flow, Sequence, Step, Task};
 use crate::world::World;
-use crate::Native;
 
 /// The step of each stage, and the address the original resumes at.
 macro_rules! run_steps {
@@ -149,7 +148,3 @@ impl Sequence for Ctx<'_> {
     }
 }
 
-/// Natives of the Rust tasks.
-pub fn natives() -> impl Iterator<Item = &'static Native> {
-    crate::services::fading::NATIVES.iter().chain(crate::screens::prompt::NATIVES)
-}

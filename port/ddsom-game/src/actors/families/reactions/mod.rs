@@ -21,7 +21,6 @@ use super::enemy_common::tables::{self, Table};
 use super::effects::records::Effect;
 use crate::world::objects::Obj;
 use crate::world::objects::player::Player;
-use crate::Native;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
 use crate::world::machine::Machine;
@@ -433,24 +432,9 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
     assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
 }
 
-macro_rules! reaction_routines {
-    ($($entry:expr),* $(,)?) => {
-        /// The common reaction routines, by original address: the reaction tables of the enemies and bosses designate
-        /// them by this address (`enemy_common::react`).
-        const ROUTINES: &[u32] = &[$($entry),*];
-
-        /// Their natives, at their original address (called by `jsr (A1)` from the per-type tables): the tools.
-        pub const NATIVES: &[Native] = &[$(Native {
-            entry: $entry,
-            name: "enemy_reaction",
-            run: crate::Body::Handler(|b, a| run_entry(&mut crate::actors::families::cx::Gx::dispatch(b, a), $entry)),
-            touches_sound: false,
-            outputs: 0,
-        }),*];
-    };
-}
-
-reaction_routines![
+/// The common reaction routines, by original address: the reaction tables of the enemies and bosses designate them by
+/// this address (`enemy_common::react`).
+pub(crate) const ROUTINES: &[u32] = &[
     0x3bb9c, 0x3bc24, 0x3bc82, 0x3bce2, 0x3bd42, 0x3bf56, 0x3bf76, 0x3bfc0, 0x3c01c, 0x3c07a, 0x3c0d4, 0x3c12e,
     0x3c1c2, 0x3c1e2, 0x3c2ee, 0x3c35a, 0x3c4b4, 0x3c570, 0x3c63a, 0x3c70c, 0x3c784, 0x3c828, 0x3c8b8, 0x3c954,
     0x3c9cc, 0x3ca56, 0x3ca76, 0x3cb4c, 0x3ccee, 0x3cd70, 0x3cd90, 0x3cede, 0x3cefe, 0x3cf8e, 0x3cfd0, 0x3cfea,
@@ -475,11 +459,10 @@ mod tests {
 
     /// Each reaction routine with a jump table is a common routine, and vice versa (plus the six without a table).
     #[test]
-    fn routines_and_natives() {
+    fn routines() {
         for &(entry, _) in REACTIONS {
             assert!(ROUTINES.contains(&entry), "{entry:#x}");
         }
         assert_eq!(ROUTINES.len(), REACTIONS.len() + 6);
-        assert_eq!(NATIVES.len(), ROUTINES.len());
     }
 }

@@ -16,7 +16,6 @@ use crate::world::World;
 
 use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::world::objects::Obj;
-use crate::Native;
 
 #[path = "sound_table.rs"]
 pub(crate) mod table;
@@ -600,19 +599,6 @@ pub fn send(b: &mut World) -> Option<u32> {
 fn shown_locks(b: &mut World) -> bool {
     crate::world::tables::engine_table!("startup/header").at16(b, 0) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
 }
-
-/// 0x68c (the registers it leaves, D0 = read head and A4 after the entry transmitted, are those that VBLANK saved).
-fn send_to_z80(b: &mut World) {
-    send(b);
-}
-
-pub const SEND_TO_Z80: Native = Native {
-    entry: 0x68c,
-    name: "sound_send_z80",
-    run: crate::Body::Memory(send_to_z80),
-    touches_sound: true,
-    outputs: 0,
-};
 
 // ---------------------------------------------------------------------------------------------
 // Service commands (0xe0882, 0xe0a10, 0xe0a2e-0xe0aae)

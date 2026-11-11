@@ -12,7 +12,6 @@ use crate::hw::video::{self as gfx, Vram};
 use crate::world::ram::{Byte, Long, Word};
 use crate::world::tables::engine;
 use crate::services::video::hw;
-use crate::Native;
 
 /// Palette pages concerned (bit k: page k), the state of the fades (`fade`).
 const PAGES: Byte = Byte::a5(0x48e);
@@ -455,9 +454,6 @@ pub(crate) fn fill_page(b: &mut World, page: u32, values: [u32; 8]) {
     }
 }
 
-pub const WHITE_PAGES: Native =
-    Native { entry: 0x1cf3c, name: "palette_white_pages", run: crate::Body::Memory(white_out), touches_sound: false, outputs: 0 };
-
 // ---------------------------------------------------------------------------------------------
 // Lightning: greyed palettes (U2)
 // ---------------------------------------------------------------------------------------------
@@ -587,40 +583,3 @@ pub(crate) fn character_palette_at(b: &mut World, o: u32) -> (u32, u32, u32) {
     (offset, plain.wrapping_add(offset), PALETTES.wrapping_add(offset))
 }
 
-/// Native routines of this module (the brightness settings are declared in `lib.rs`).
-pub const NATIVES: &[Native] = &[
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    WHITE_PAGES,
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-];

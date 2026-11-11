@@ -323,6 +323,4 @@ fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     ENEMY_8 0x63fb0 "enemy_8" run,
-    // get up after a common reaction (table 0x3e000 of `reactions.rs`)
-    ENEMY_8_GETUP 0x653b2 "enemy_8_getup" attacks::regroup,
 }

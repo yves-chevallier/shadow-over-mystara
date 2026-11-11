@@ -549,8 +549,3 @@ fn volley(g: &mut Ctx, p: Player) {
     }
 }
 
-
-action_native!(JUMP, 0x42012, "elf_jump", jump);
-action_native!(ATTACK, 0x4241c, "elf_attack", attack);
-action_native!(SPECIAL, 0x42b0c, "elf_special", special);
-action_native!(DASH, 0x444ca, "elf_dash", common::dash);

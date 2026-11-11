@@ -25,7 +25,6 @@ use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::Cell;
 use crate::world::ram::{Byte, Long, Table};
 use crate::world::record::record;
-use crate::Native;
 
 /// Settings and states, relative to A5.
 pub(crate) mod ram {
@@ -322,14 +321,6 @@ pub fn lock_counters(b: &mut World) {
         apply_lock(b, lock, mask);
     }
 }
-
-pub const READ_COIN_SLOTS: Native = Native {
-    entry: 0x143da,
-    name: "credits_read_coin_slots",
-    run: crate::Body::Memory(read_coin_slots),
-    touches_sound: false,
-    outputs: 0,
-};
 
 // ---------------------------------------------------------------------------------------------
 // Digit of the credits display (0x14e46)

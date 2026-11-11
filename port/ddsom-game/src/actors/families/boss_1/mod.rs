@@ -501,6 +501,4 @@ fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     BOSS_1 0x7acea "boss_1" run,
-    // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
-    BOSS_1_GETUP 0x7bece "boss_1_getup" hit::get_up,
 }

@@ -33,7 +33,6 @@ use crate::hw::mem::A5;
 use crate::world::tasks::{Flow, Sequence};
 use crate::world::objects::Obj;
 use crate::world::tasks::table::Next;
-use crate::Native;
 
 /// Script variables (A6).
 pub const VARS: u32 = A5 - 0x5520;
@@ -411,8 +410,3 @@ pub fn run(x: &mut Ctx, scene: u32) -> Flow {
     }
 }
 
-const COMMON: &[Native] = &[];
-
-pub fn natives() -> impl Iterator<Item = &'static Native> {
-    COMMON.iter().chain(early::NATIVES).chain(late::NATIVES)
-}

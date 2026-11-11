@@ -32,69 +32,6 @@ use crate::world::World;
 
 use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::record::{record, Value};
-use crate::Native;
-
-/// All the native routines of the object model.
-pub const NATIVES: &[Native] = &[
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-];
 
 /// Work RAM variables (offsets from A5 = 0xFF8000) used by the object model.
 pub mod ram {

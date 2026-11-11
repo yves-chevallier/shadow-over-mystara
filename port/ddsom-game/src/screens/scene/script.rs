@@ -23,7 +23,6 @@ use crate::world::screen_tables::{self as tables, Rom};
 use crate::screens::vars as sv;
 use crate::world::objects::{pools, Obj};
 use crate::screens::scene::var;
-use crate::Native;
 use crate::world::ram::{Byte, Long};
 
 /// Reader state (byte) and cursor in the script (long).
@@ -193,21 +192,3 @@ pub fn reset(b: &mut World) {
     STATE.set(b, state::LOAD);
 }
 
-
-
-pub const SPAWN_SCRIPT: Native = Native {
-    entry: 0xf2e5c,
-    name: "scene_script",
-    run: crate::Body::Memory(step),
-    touches_sound: false,
-    outputs: 0,
-};
-
-/// Resets the reader to the "load the script" state (scene change).
-pub const SCRIPT_RESET: Native = Native {
-    entry: 0xf2e56,
-    name: "scene_script_reset",
-    run: crate::Body::Memory(reset),
-    touches_sound: false,
-    outputs: 0,
-};

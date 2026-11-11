@@ -12,7 +12,6 @@ use crate::services::video::{clear_layer, Layer};
 use super::Ctx;
 pub use crate::world::tasks::stages::{Characters as Step, InterludePlayer as Player};
 use crate::world::tasks::{Flow, Sequence};
-use crate::Native;
 use crate::screens::obj;
 use crate::world::objects::Obj;
 
@@ -259,6 +258,3 @@ fn end(x: &mut Ctx) -> Flow {
     crate::world::tasks::wait_then_return(x, 1)
 }
 
-pub const NATIVES: &[Native] = &[
-    
-];

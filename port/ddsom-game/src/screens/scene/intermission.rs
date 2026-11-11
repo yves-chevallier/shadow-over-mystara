@@ -14,7 +14,6 @@ use crate::world::World;
 
 use super::{scratch, var, Ctx};
 use crate::world::objects::Obj;
-use crate::Native;
 use crate::world::objects::pools;
 use crate::world::ram::{Byte, Long, Word};
 
@@ -179,10 +178,3 @@ fn scroll_out(x: &mut Ctx) {
     }
 }
 
-pub const PHASE_24: Native = Native {
-    entry: 0x21c2a,
-    name: "scene_phase_24",
-    run: crate::Body::Memory(phase_24),
-    touches_sound: false,
-    outputs: 0,
-};

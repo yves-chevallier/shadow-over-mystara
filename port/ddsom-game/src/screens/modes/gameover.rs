@@ -14,7 +14,6 @@ use crate::hw::video::regs;
 use crate::screens::scene::fading;
 use crate::screens::vars as sv;
 use crate::world::tasks::Ctx;
-use crate::Native;
 pub use crate::world::tasks::stages::Gameover as Step;
 
 /// Mode machine loop, which the task becomes.
@@ -64,4 +63,3 @@ pub fn reset_modes(x: &mut Ctx) {
     }
 }
 
-pub const NATIVES: &[Native] = &[];

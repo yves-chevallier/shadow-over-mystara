@@ -7,7 +7,6 @@ use crate::world::World;
 use crate::world::objects::{Enemy, Obj};
 use crate::world::objects::player::Player;
 use crate::world::ram::{self, PLAYERS_FROZEN};
-use crate::Native;
 
 pub(crate) fn set_low_word(r: &mut u32, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
@@ -227,8 +226,6 @@ pub fn divide(mut n: u32, d: u32) -> (u32, u32) {
     }
     (n, r)
 }
-
-pub const NATIVES: &[Native] = &[];
 
 #[cfg(test)]
 mod tests {

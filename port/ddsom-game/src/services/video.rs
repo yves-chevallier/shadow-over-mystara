@@ -9,7 +9,6 @@ use crate::world::World;
 use crate::hw::video::{self as gfx, regs, Cell, Vram};
 use crate::world::ram::{Byte, Word};
 use crate::world::tables::engine;
-use crate::Native;
 
 /// Copy of the video control register (`regs::VIDEO_CONTROL`; bit 0: per-line scroll of layer 2).
 pub const VIDEO_CONTROL: Word = Word::a5(0x12);
@@ -177,9 +176,6 @@ pub fn clear_layer(b: &mut World, layer: Layer) {
     fill_layer(b, from, to, tile);
 }
 
-fn clear_scroll1(b: &mut World) {
-    clear_layer(b, Layer::One);
-}
 /// Bytes cleared by 0x3525c.
 pub(crate) const SCROLL1_START: u32 = 0x2000;
 
@@ -187,23 +183,6 @@ pub(crate) const SCROLL1_START: u32 = 0x2000;
 pub fn clear_layer1_start(b: &mut World) {
     fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SCROLL1_START, 0x1f);
 }
-
-fn clear_scroll2(b: &mut World) {
-    clear_layer(b, Layer::Two);
-}
-fn clear_scroll3(b: &mut World) {
-    clear_layer(b, Layer::Three);
-}
-
-const fn memory(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
-    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
-}
-
-pub const BLANK_SCREEN: Native = memory(0xc0c, "video_black_screen", black_screen);
-pub const CLEAR_OBJECTS: Native = memory(0xc58, "video_clear_objects", clear_objects);
-pub const CLEAR_SCROLL1: Native = memory(0xca8, "video_clear_scroll1", clear_scroll1);
-pub const CLEAR_SCROLL2: Native = memory(0xcc8, "video_clear_scroll2", clear_scroll2);
-pub const CLEAR_SCROLL3: Native = memory(0xce8, "video_clear_scroll3", clear_scroll3);
 
 pub use crate::world::terrain::{terrain, terrain_of, Terrain};
 
@@ -361,35 +340,3 @@ pub fn copy_fixed_screens(b: &mut World) {
     }
 }
 
-pub const COPY_FIXED_SCREENS: Native = Native {
-    entry: 0x19038,
-    name: "video_copy_fixed_screens",
-    run: crate::Body::Memory(copy_fixed_screens),
-    touches_sound: false,
-    outputs: 0,
-};
-
-/// Native routines of this module.
-pub const NATIVES: &[Native] = &[
-    COPY_FIXED_SCREENS,
-    
-    
-    
-    
-    
-    
-    
-    CLEAR_OBJECTS,
-    BLANK_SCREEN,
-    CLEAR_SCROLL1,
-    
-    CLEAR_SCROLL2,
-    CLEAR_SCROLL3,
-    
-    
-    
-    
-    
-    
-    
-];

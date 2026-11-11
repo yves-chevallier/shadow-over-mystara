@@ -365,8 +365,3 @@ pub fn dash(g: &mut Ctx, p: Player) {
     }
 }
 
-
-action_native!(JUMP, 0x45a78, "mage_jump", jump);
-action_native!(ATTACK, 0x45cfc, "mage_attack", attack);
-action_native!(SPECIAL, 0x4619e, "mage_special", special);
-action_native!(DASH, 0x4879a, "mage_dash", dash);

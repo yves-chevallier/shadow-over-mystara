@@ -13,7 +13,6 @@ use crate::hw::video::{PALETTES, SCROLL1, SCROLL2, SCROLL3, TEXT};
 use crate::world::ram::{Long, Word};
 use crate::world::screen_tables as tables;
 use crate::world::tasks::{Flow, Sequence};
-use crate::Native;
 use crate::actors::families::effects_creators::{end_screen, or_rest};
 use crate::world::objects::{pools, Obj};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
@@ -433,6 +432,3 @@ fn end(x: &mut Ctx) -> Flow {
     fade(x, crate::services::fading::descent, Step::Ended)
 }
 
-pub const NATIVES: &[Native] = &[
-    
-];

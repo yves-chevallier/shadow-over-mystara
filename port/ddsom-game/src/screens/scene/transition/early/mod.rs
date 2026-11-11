@@ -553,4 +553,3 @@ fn s4_fading_out(x: &mut Ctx) -> Flow {
     sprites_next_frame(x, Step::S4FadingOut)
 }
 
-pub const NATIVES: &[Native] = &[];

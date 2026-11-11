@@ -17,7 +17,7 @@ use crate::hw::mem::set_low_word;
 use crate::world::objects::Obj;
 use crate::world::ops::{Alu, Registers, Size};
 use crate::world::ram::{Long, Word};
-use crate::{world::ops, Native};
+use crate::world::ops;
 use crate::world::data::data;
 use crate::world::tables::engine;
 use crate::hw::video::Cell;
@@ -297,8 +297,6 @@ pub fn push_second_leftovers(b: &mut World, o: Obj, leftovers: [&mut u32; 4]) ->
     }
     c.zero()
 }
-
-pub const NATIVES: &[Native] = &[];
 
 // ---------------------------------------------------------------------------------------------
 // V2: terrain attribute under a point

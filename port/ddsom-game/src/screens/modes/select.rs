@@ -31,7 +31,6 @@ use crate::world::objects::{pools, Obj};
 use crate::screens::scene::{PLAYERS, PLAYER_STRIDE};
 use crate::world::tasks::Ctx;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
-use crate::Native;
 pub use crate::world::tasks::stages::Select as Step;
 
 /// Work RAM variables (absolute addresses).
@@ -796,6 +795,3 @@ fn step_e(x: &mut Ctx) -> Flow {
     x.subroutine(|x| crate::services::fading::descent_steps(x, 8), Step::StepEFaded)
 }
 
-pub const NATIVES: &[Native] = &[
-    
-];

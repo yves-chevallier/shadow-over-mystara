@@ -34,7 +34,6 @@ use crate::world::tasks::Sequence as _;
 use crate::world::objects::Obj;
 use crate::world::tasks::table::Next;
 pub use crate::world::tasks::stages::Exit as Step;
-use crate::Native;
 use crate::world::objects::pools;
 
 mod sequences;
@@ -687,8 +686,6 @@ fn dispatch_tail(x: &mut Ctx, index: u8) {
     let mut ex = Ex { x: Ctx::new(x.b), handed_off: false, entry: 0, dispatch_return: None, a0: Some(a0) };
     finish_frame(&mut ex, sequence);
 }
-
-pub const NATIVES: &[Native] = &[];
 
 /// Shared state 0xf792e (end-of-level screen): after the message, 0xf7b62 picks the continuation from byte `+0xc` of
 /// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside

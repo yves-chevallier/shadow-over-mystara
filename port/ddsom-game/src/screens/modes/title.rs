@@ -16,7 +16,6 @@ use crate::actors::families::creators::set_15_pure;
 use crate::services::palette::{load_palette_set, load_palette_page};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::world::tasks::Ctx;
-use crate::Native;
 use crate::world::objects::{pools, Obj};
 use crate::screens::obj;
 pub use crate::world::tasks::stages::Title as Step;
@@ -759,5 +758,3 @@ fn s06_wait_logo(x: &mut Ctx) -> Flow {
     title_text(x)
 }
 
-
-pub const NATIVES: &[Native] = &[];

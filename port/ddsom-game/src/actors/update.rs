@@ -10,7 +10,6 @@ use crate::hw::mem::{rd8, A5};
 use crate::world::tasks::stages::World as Step;
 use crate::world::tasks::table;
 use crate::world::tasks::Flow;
-use crate::Native;
 
 /// Work RAM variables (offsets from A5).
 mod ram {
@@ -173,20 +172,6 @@ const ORDERS: [Order; 4] = [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_
 pub(crate) const fn resume_address(order_index: u8, step: u8) -> u32 {
     ORDERS[order_index as usize][step as usize].0 + JSR
 }
-
-/// World update called by address (tools): a handler never cedes control there.
-pub const WORLD_UPDATE: Native = Native {
-    entry: 0x1c86e,
-    name: "world_update",
-    run: crate::Body::Memory(|b| {
-        update_world(b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
-/// Native of the world update.
-pub const NATIVES: &[Native] = &[WORLD_UPDATE];
 
 #[cfg(test)]
 mod tests {

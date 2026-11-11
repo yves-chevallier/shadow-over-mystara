@@ -13,7 +13,6 @@ use crate::screens::scene::fading;
 use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
 use crate::world::tasks::Ctx;
-use crate::Native;
 pub use crate::world::tasks::stages::Boot as Step;
 
 /// Tasks created at the end of startup: credits and freeze.
@@ -155,6 +154,3 @@ fn countdown_tick(x: &mut Ctx) -> bool {
     left > 0
 }
 
-
-
-pub const NATIVES: &[Native] = &[];

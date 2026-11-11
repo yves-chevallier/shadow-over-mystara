@@ -12,7 +12,6 @@ use super::screen;
 use super::Ctx;
 use crate::services::video::{clear_layer, Layer};
 use crate::world::tasks::{Flow, Sequence};
-use crate::Native;
 pub use crate::world::tasks::stages::Blackout as Step;
 
 const DISPATCH: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7eda);
@@ -141,4 +140,3 @@ fn script(x: &mut Ctx) -> Flow {
     super::transition::run(x, scene)
 }
 
-pub const NATIVES: &[Native] = &[];

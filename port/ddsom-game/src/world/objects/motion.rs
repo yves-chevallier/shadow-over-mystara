@@ -12,7 +12,6 @@ use crate::world::World;
 
 use super::Obj;
 use crate::world::data::{data, Missing, RomAddr};
-use crate::regs;
 
 /// One axis of motion: offsets of the speed, the acceleration and the position.
 #[derive(Clone, Copy)]
@@ -204,10 +203,5 @@ pub fn tick_counters(b: &mut World, obj: Obj) {
 // ---- 68000 flags ----
 
 // ---- adaptation to the 68000 registers ----
-
-/// Registers left behind by the original routines (see `diag::dead_regs`, label `motion`).
-pub const REGS_BALLISTIC: u32 = regs::d(0) | regs::CCR;
-pub const REGS_BY_TABLE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
-pub const REGS_SPEED: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 
 // ---- natives (remaining calls by address) ----

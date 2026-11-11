@@ -292,6 +292,10 @@ fn main() {
     let check = std::env::var("DDSOM_CHECK").is_ok();
     let all_tasks = std::env::var("DDSOM_TACHES_TOUT").is_ok();
     ddsom_game::set_check(check);
+    // the original handlers of `DDSOM_CHECK` run on copies of machine A, which has no ROM: they get that of B
+    if let Some(rom) = &mb.bus.rom {
+        ddsom_game::set_original_rom(rom.clone());
+    }
     ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     ddsom_game::set_count(true);
     let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");

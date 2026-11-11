@@ -28,7 +28,6 @@ use crate::world::World;
 use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::ram::Byte;
 use crate::world::tables::{self, engine_table};
-use crate::Native;
 
 mod ram {
     /// Game variant (region), in bytes (index ×2 in the block table).
@@ -97,7 +96,7 @@ pub fn is_factory(b: &mut World) -> bool {
 /// Copies the variant's default block into two copies (copy and backup), then clears the rest of the copy (the
 /// bookkeeping counters). The registers that the original leaves (A1 and A6 at the end of the zone, D0 = 0, D7 =
 /// 0xFFFF) are reread by nobody.
-fn defaults(b: &mut World) {
+pub(crate) fn defaults(b: &mut World) {
     let block = block_defaults(b);
     let mut destination = a5(ram::CONFIG);
     for _ in 0..2 {
@@ -213,7 +212,7 @@ pub fn validate(b: &mut World) {
 /// Copies the settings from the RAM copy to the game variables and derives the coin
 /// settings from them (`A5+0x1e..0x22`). The registers that the original leaves (D0 = twice the credit mode, D1 =
 /// the credit mode, A4 = the copy, flags of the last counter) are reread by nobody.
-fn variables(b: &mut World) {
+pub(crate) fn variables(b: &mut World) {
     let a4 = a5(ram::CONFIG);
     for k in [0x23, 0x25, 0x24] {
         wr8(b, a5(k), 0);
@@ -263,14 +262,6 @@ fn variables(b: &mut World) {
     }
 }
 
-const fn memory(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
-    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
-}
-
-pub const DEFAULTS: Native = memory(0x2d7aa, "config_defaults", defaults);
-pub const VALIDATE: Native = memory(0x2d662, "config_validate", validate);
-pub const VARIABLES: Native = memory(0x2d358, "config_variables", variables);
-
 // ---------------------------------------------------------------------------------------------
 // 0x2d30a: initialisation
 
@@ -310,10 +301,6 @@ pub fn initialize(b: &mut World) -> bool {
     true
 }
 
-fn init(b: &mut World) {
-    initialize(b);
-}
-
 /// 0x2d7d2: "EEPROM ERROR" and blocking (never seen: the emulated EEPROM does not refuse the write).
 fn error(b: &mut World) {
     for k in 0..12 {
@@ -323,10 +310,6 @@ fn error(b: &mut World) {
     }
     crate::world::tasks::traps::block(b, BLOCKED);
 }
-
-/// Native of 0x2d30a (startup calls it by address). After "EEPROM ERROR", the task is blocked (`traps::block`):
-/// the return is then that of no call.
-pub const INIT: Native = memory(0x2d30a, "config_init", init);
 
 // ---------------------------------------------------------------------------------------------
 // TEST menu, 7. CONFIGURATION: factory settings and saving

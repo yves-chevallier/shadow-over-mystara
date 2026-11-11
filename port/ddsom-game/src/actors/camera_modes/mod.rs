@@ -20,7 +20,6 @@ use crate::world::ram::{self, Word};
 use crate::services::scroll::{Camera, BACKDROP, BACKDROP_WORD, CAMERA_1, CAMERA_2};
 use crate::world::tables::engine;
 use crate::services::video::Grid;
-use crate::Native;
 
 mod camera2;
 mod follow;
@@ -290,4 +289,3 @@ pub fn start_shake(b: &mut World, mode: u16, frames: u16) -> Obj {
     cam.0
 }
 
-pub const NATIVES: &[Native] = &[];

@@ -36,10 +36,11 @@ pub mod tools;
 #[cfg(feature = "tools")]
 pub use tools::{
     all_natives, call, call_site, game_natives, idle, install_reference, is_native, report, run, run_native_only,
-    run_traced, set_check, set_check_all, set_count, set_native_hook, set_trace, Stats,
+    run_traced, set_check, set_check_all, set_count, set_native_hook, set_original_rom, set_trace, Stats,
 };
 
 /// Native routine.
+#[derive(Clone, Copy)]
 pub struct Native {
     pub entry: u32,
     pub name: &'static str,
@@ -68,13 +69,10 @@ pub enum Body {
     /// Object handler without registers: it receives what the dispatch loop passes it (the object, the counter,
     /// the leftovers that the handlers pass to each other: `dispatch::Dispatch`); the return is done for it.
     Handler(fn(&mut World, &mut crate::actors::dispatch::Dispatch)),
-}
-
-impl Native {
-    /// The body does not use the processor.
-    pub fn without_cpu(&self) -> bool {
-        matches!(self.run, Body::Memory(_) | Body::Handler(_))
-    }
+    /// Tools: like `Handler`, for a body shared by several entries (the common reactions): it receives the address of
+    /// its own.
+    #[cfg(feature = "tools")]
+    HandlerIn(fn(&mut World, &mut crate::actors::dispatch::Dispatch, u32)),
 }
 
 /// Register masks for `Native::outputs`.

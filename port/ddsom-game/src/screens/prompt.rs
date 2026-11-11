@@ -10,7 +10,6 @@ use crate::world::tasks::{cede, Wait};
 use crate::hw::mem::{rd32, wr32, A5};
 use crate::world::tasks::Flow;
 use crate::world::tasks::Ctx;
-use crate::Native;
 pub use crate::world::tasks::stages::Prompt as Step;
 
 /// Displayed text (long).
@@ -105,19 +104,3 @@ pub fn launch(b: &mut crate::world::World) {
     crate::world::tasks::traps::create_task(b, SLOT, crate::world::tasks::Task::Prompt);
 }
 
-pub const STOP: Native = Native {
-    entry: 0xe03c6,
-    name: "prompt_stop",
-    run: crate::Body::Memory(stop),
-    touches_sound: false,
-    outputs: 0,
-};
-pub const START: Native = Native {
-    entry: 0xe03e4,
-    name: "prompt_start",
-    run: crate::Body::Memory(launch),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const NATIVES: &[Native] = &[STOP, START];

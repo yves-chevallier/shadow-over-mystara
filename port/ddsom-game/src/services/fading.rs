@@ -23,7 +23,6 @@ pub use crate::world::tasks::stages::Fading as Step;
 use crate::world::tasks::stages::{Brightness, Component, Fade, Target};
 use crate::world::tasks::{Ctx, Flow};
 use crate::world::Leftovers;
-use crate::Native;
 
 /// State of the brightness fade (`A4` in the original).
 mod state {
@@ -287,4 +286,3 @@ pub fn to_palettes(x: &mut Ctx) -> Flow {
     component(0x1ce9e).start(x, false)
 }
 
-pub const NATIVES: &[Native] = &[];

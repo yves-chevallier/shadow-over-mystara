@@ -740,8 +740,3 @@ pub fn roll(g: &mut Ctx, p: Player) {
     }
 }
 
-action_native!(JUMP, 0x445ba, "dwarf_jump", jump);
-action_native!(ATTACK, 0x4491a, "dwarf_attack", attack);
-action_native!(SPECIAL, 0x45148, "dwarf_special", special);
-action_native!(DASH, 0x45988, "dwarf_dash", common::dash);
-action_native!(ROLL, 0x35b18, "dwarf_roll", roll);

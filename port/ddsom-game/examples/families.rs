@@ -9,6 +9,49 @@ use std::path::Path;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
+use ddsom_game::actors::families::{boxes, effects, items};
+use ddsom_game::Native;
+
+/// The handlers checked: those of the ITEM, BOX and EFFCT families declared in their modules.
+const NATIVES: &[Native] = &[
+    items::ITEM_0,
+    items::ITEM_1,
+    items::ITEM_3,
+    items::ITEM_4,
+    items::ITEM_5,
+    items::ITEM_6,
+    items::ITEM_7,
+    items::ITEM_8,
+    items::ITEM_9,
+    boxes::BOX_1,
+    boxes::BOX_2,
+    effects::EFFCT_1,
+    effects::EFFCT_4,
+    effects::EFFCT_5,
+    effects::EFFCT_6,
+    effects::EFFCT_7,
+    effects::EFFCT_8,
+    effects::EFFCT_9,
+    effects::EFFCT_15,
+    effects::EFFCT_17,
+    effects::EFFCT_19,
+    effects::EFFCT_21,
+    effects::EFFCT_24,
+    effects::EFFCT_25,
+    effects::EFFCT_26,
+    effects::EFFCT_27,
+    effects::EFFCT_28,
+    effects::EFFCT_29,
+    effects::EFFCT_32,
+    effects::EFFCT_33,
+    effects::EFFCT_45,
+    effects::EFFCT_51,
+    effects::EFFCT_52,
+    effects::EFFCT_56,
+    effects::EFFCT_57,
+    effects::EFFCT_62,
+];
+
 thread_local! {
     static REMAINDER: RefCell<u32> = const { RefCell::new(5) };
     static CALLS: RefCell<std::collections::BTreeMap<&'static str, (u64, u64)>> =
@@ -16,7 +59,7 @@ thread_local! {
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
-    let Some(n) = ddsom_game::actors::families::NATIVES.iter().find(|n| n.entry == pc) else {
+    let Some(n) = NATIVES.iter().find(|n| n.entry == pc) else {
         return ddsom_game::run(pc, c, b, dl);
     };
     let obj = c.a[0];

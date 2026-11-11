@@ -25,7 +25,6 @@ use ddsom_data::sprites::Entry;
 
 use super::Obj;
 use crate::world::data::{data, Missing, RomAddr};
-use crate::regs;
 
 /// Result of an animation step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,10 +205,5 @@ pub fn start_by_character(b: &mut World, obj: Obj, sets: &CharacterSets, n: u16)
 }
 
 // ---- adaptation to the 68000 registers ----
-
-/// Registers left behind by the original routines (see `diag::dead_regs`, label `anim`).
-pub const REGS_START: u32 = regs::d(0) | regs::a(4) | regs::CCR;
-pub const REGS_STEP: u32 = regs::d(0) | regs::a(4) | regs::CCR;
-pub const REGS_BY_CHARACTER: u32 = regs::d(5) | regs::d(6) | regs::a(4) | regs::CCR;
 
 // ---- natives (remaining calls by address) ----

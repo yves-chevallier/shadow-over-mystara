@@ -8,7 +8,6 @@ use crate::screens::scene::fading;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::world::screen_tables::Rom;
 use crate::world::tasks::Ctx;
-use crate::Native;
 use crate::world::ram::Byte;
 pub use crate::world::tasks::stages::Attract as Step;
 
@@ -261,4 +260,3 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     x.subroutine(crate::services::fading::descent, Step::NoticeFaded)
 }
 
-pub const NATIVES: &[Native] = &[];

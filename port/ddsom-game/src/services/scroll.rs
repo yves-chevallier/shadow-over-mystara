@@ -20,7 +20,6 @@ use crate::world::ram::{Byte, Long, Word};
 use crate::world::record::record;
 use crate::world::tables::engine;
 use crate::services::video::hw;
-use crate::Native;
 
 /// A camera: a work RAM record (`CAMERA_1`, `CAMERA_2`), whose mode script (`camera_modes`) moves the target and
 /// whose scenery copy (this module) follows it.
@@ -734,8 +733,6 @@ pub(crate) fn creep(b: &mut World, o: Obj, pixels: u16) -> u16 {
     o.set_u16(b, OBJECT_DRAWN_X, x);
     x
 }
-
-pub const NATIVES: &[Native] = &[];
 
 // ---------------------------------------------------------------------------------------------
 // Vertical tracking of the players and update of the two cameras

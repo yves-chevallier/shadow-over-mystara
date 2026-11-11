@@ -24,7 +24,6 @@ use crate::world::ram::Byte;
 const MODE_LOOP_FLAGS: Byte = Byte(0xff_0eaf);
 const MODE_LOOP_FLAGS_B: Byte = Byte(0xff_0eae);
 use crate::world::tasks::{Ctx, Flow, Sequence};
-use crate::Native;
 pub use crate::world::tasks::stages::Modes as Step;
 
 /// Mode machine state block (`A0` in the original) and its fields.
@@ -138,7 +137,3 @@ pub fn start(x: &mut Ctx) -> Flow {
     turn(x)
 }
 
-/// Native routines of the mode machine.
-pub fn natives() -> impl Iterator<Item = &'static Native> {
-    attract::NATIVES.iter().chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES).chain(ending::NATIVES)
-}

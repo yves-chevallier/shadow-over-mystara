@@ -331,9 +331,9 @@ fn dump(bytes: &[u8]) -> String {
     bytes.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join("")
 }
 
-/// Native routine of a family handler (written on `Ctx` or on `Cx`).
+/// Native routine of a family handler (written on `Ctx` or on `Cx`): a native of the game.
 fn handler(entry: u32) -> Option<&'static ddsom_game::Native> {
-    ddsom_game::actors::families::NATIVES.iter().chain(ddsom_game::actors::families::natives()).find(|n| n.entry == entry)
+    ddsom_game::game_natives().find(|n| n.entry == entry)
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {

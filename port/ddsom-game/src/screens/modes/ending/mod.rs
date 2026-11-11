@@ -22,7 +22,6 @@ use crate::world::ram::{Long, Word};
 use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
 use crate::world::tasks::Ctx;
-use crate::Native;
 use crate::world::objects::{pools, Obj};
 
 mod states;
@@ -528,10 +527,6 @@ fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grid: Gri
     let end = load_grid(x.b, grid, first, destination);
     load_grid(x.b, grid, second, end.destination);
 }
-
-pub const NATIVES: &[Native] = &[
-    
-];
 
 #[cfg(test)]
 mod tests {

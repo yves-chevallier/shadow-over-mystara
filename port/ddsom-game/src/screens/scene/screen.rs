@@ -6,7 +6,6 @@ use crate::world::World;
 use super::tiles::{BLANK_TILE, COLUMN};
 use crate::hw::video::{Cell, Vram, SCRATCH, TEXT};
 use crate::world::ram::Long;
-use crate::Native;
 
 /// Rectangle of empty cells: `columns` columns of `rows` cells starting at `at`.
 pub fn blank_rect(b: &mut World, at: u32, columns: u32, rows: u32) {
@@ -66,48 +65,6 @@ pub mod blocks {
     /// Ranking screen block, 4 longs (0xfc562).
     pub const RANKING: u32 = A5 - 0x54f0;
 }
-
-macro_rules! clear_native {
-    ($name:ident, $entry:expr, $label:expr, $at:expr, $n:expr) => {
-        pub const $name: Native = Native {
-            entry: $entry,
-            name: $label,
-            run: crate::Body::Memory(|b| clear_longs(b, $at, $n)),
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
-}
-
-/// 0xf3130: no more calls by address (scene entry calls `clear_longs`); A4 and D6 left by the original
-/// loop are read by nobody (code-mort.md).
-pub const RESET_EXIT: Native = Native {
-    entry: 0xf3130,
-    name: "scene_exit_reset",
-    run: crate::Body::Memory(|b| clear_longs(b, blocks::EXIT, 8)),
-    touches_sound: false,
-    outputs: 0,
-};
-clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5);
-pub const RESET_TRANSITION: Native = Native {
-    entry: 0xf7ee0,
-    name: "scene_transition_reset",
-    run: crate::Body::Memory(|b| clear_longs(b, blocks::TRANSITION, 4)),
-    touches_sound: false,
-    outputs: 0,
-};
-clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4);
-
-pub const CLEAR_TEXT: Native = Native {
-    entry: 0xf683c,
-    name: "scene_clear_text",
-    run: crate::Body::Memory(clear_text),
-    touches_sound: false,
-    outputs: 0,
-};
-
-/// No more calls by address to these five natives: registers left by the original not reproduced.
-pub const NATIVES: &[Native] = &[RESET_EXIT, RESET_SHOP, RESET_TRANSITION, RESET_RANKING, CLEAR_TEXT];
 
 #[cfg(test)]
 mod tests {

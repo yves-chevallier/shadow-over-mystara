@@ -18,7 +18,6 @@ use crate::world::objects::pools::{self, Queue};
 use crate::world::objects::Obj;
 use crate::world::tasks::stages::World as Step;
 use crate::world::tasks::table;
-use crate::Native;
 
 /// Work RAM variables (offsets from A5).
 mod ram {
@@ -189,14 +188,6 @@ pub fn phase0(b: &mut World) {
     }
 }
 
-pub const PHASE_0: Native = Native {
-    entry: 0x1c522,
-    name: "game_phase0",
-    run: crate::Body::Memory(phase0),
-    touches_sound: false,
-    outputs: 0,
-};
-
 // ---------------------------------------------------------------------------------------------
 // Phase 12: the game proper (0x1c6a0)
 
@@ -283,15 +274,3 @@ fn phase12_after_world(b: &mut World) {
     crate::screens::scene::debug_scene_skip(b);
 }
 
-pub const PHASE_12: Native = Native {
-    entry: 0x1c6a0,
-    name: "game_phase12",
-    run: crate::Body::Memory(|b| {
-        phase12(b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
-/// Native routines of the game loop.
-pub const NATIVES: &[Native] = &[PHASE_0, PHASE_12];

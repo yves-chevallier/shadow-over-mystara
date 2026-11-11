@@ -782,8 +782,3 @@ pub fn roll(g: &mut Ctx, p: Player) {
     }
 }
 
-action_native!(JUMP, 0x488bc, "thief_jump", jump);
-action_native!(ATTACK, 0x48d48, "thief_attack", attack);
-action_native!(SPECIAL, 0x49498, "thief_special", special);
-action_native!(DASH, 0x49d46, "thief_dash", dash);
-action_native!(ROLL, 0x35b50, "thief_roll", roll);

@@ -47,7 +47,6 @@ use crate::world::World;
 use crate::hw::mem::A5;
 use crate::world::tasks::Flow;
 use crate::world::tasks::Ctx;
-use crate::Native;
 use crate::world::ram::Byte;
 use crate::world::objects::Obj;
 pub use crate::world::tasks::stages::Interface as Step;
@@ -293,15 +292,6 @@ fn starting(x: &mut Ctx) -> Flow {
     tour(x)
 }
 
-/// 0x1507a, called by other modules.
-pub const FORGET_DISPLAYED: Native = Native {
-    entry: 0x1507a,
-    name: "hud_forget_displayed",
-    run: crate::Body::Memory(slot::forget_displayed),
-    touches_sound: false,
-    outputs: 0,
-};
-
 /// One turn of the task: panel update according to the display mode, services, then cession.
 fn tour(x: &mut Ctx) -> Flow {
     let mode = var::DISPLAY.get(x.b);
@@ -330,5 +320,3 @@ fn tour(x: &mut Ctx) -> Flow {
     crate::world::tasks::one_frame(x, Step::AfterWait)
 }
 
-/// Native routines of the player interface.
-pub const NATIVES: &[Native] = &[FORGET_DISPLAYED];

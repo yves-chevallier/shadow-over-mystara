@@ -13,7 +13,6 @@ use crate::world::World;
 
 use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::hw::mem::{wr32, A5};
-use crate::Native;
 use crate::actors::player::tables::{player_data, players, pc32, byte, word, long, Aligned, Read};
 
 /// Program ROM tables: one pointer per character (12), each to its own table.
@@ -82,22 +81,6 @@ pub fn clear_sub_objects(b: &mut World) {
         clear_overlays_of(&mut g, k);
     }
 }
-
-pub const CLEAR_PLAYERS: Native = Native {
-    entry: 0x2d9e,
-    name: "players_clear",
-    run: crate::Body::Memory(clear_all_players),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const CLEAR_OVERLAYS: Native = Native {
-    entry: 0x2df8,
-    name: "players_clear_overlays",
-    run: crate::Body::Memory(clear_sub_objects),
-    touches_sound: false,
-    outputs: 0,
-};
 
 /// Pointer to the table of `p`'s character in the pointer table `table`.
 pub(crate) fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
@@ -280,28 +263,6 @@ pub fn initialize(b: &mut World, k: u32) {
     init_slot(&mut Ctx::new(b), Player::nth(k), k as u8);
 }
 
-fn init_p1(b: &mut World) {
-    initialize(b, 0)
-}
-fn init_p2(b: &mut World) {
-    initialize(b, 1)
-}
-fn init_p3(b: &mut World) {
-    initialize(b, 2)
-}
-fn init_p4(b: &mut World) {
-    initialize(b, 3)
-}
-
-const fn init_native(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
-    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
-}
-
-pub const INIT_P1: Native = init_native(0x2e58, "player_init_1", init_p1);
-pub const INIT_P2: Native = init_native(0x2e6e, "player_init_2", init_p2);
-pub const INIT_P3: Native = init_native(0x2e86, "player_init_3", init_p3);
-pub const INIT_P4: Native = init_native(0x2e9e, "player_init_4", init_p4);
-
 // ---- arrival of a player during the game ---------------------------------------------------------
 
 /// Three ways to join during the game (one entry per player for each).
@@ -430,31 +391,6 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
         }
     }
 }
-
-const fn join_native(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
-    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
-}
-
-macro_rules! join_entry {
-    ($entry:literal, $name:literal, $k:literal, $how:expr) => {
-        join_native($entry, $name, |b| join_player(b, $k, $how))
-    };
-}
-
-pub const JOIN: &[Native] = &[
-    join_entry!(0x2f46, "player_join_new_1", 0, Join::New),
-    join_entry!(0x2f58, "player_join_new_2", 1, Join::New),
-    join_entry!(0x2f6c, "player_join_new_3", 2, Join::New),
-    join_entry!(0x2f80, "player_join_new_4", 3, Join::New),
-    join_entry!(0x3048, "player_join_continue_1", 0, Join::Continue),
-    join_entry!(0x305a, "player_join_continue_2", 1, Join::Continue),
-    join_entry!(0x306e, "player_join_continue_3", 2, Join::Continue),
-    join_entry!(0x3082, "player_join_continue_4", 3, Join::Continue),
-    join_entry!(0x3142, "player_join_refill_1", 0, Join::Refill),
-    join_entry!(0x3154, "player_join_refill_2", 1, Join::Refill),
-    join_entry!(0x3168, "player_join_refill_3", 2, Join::Refill),
-    join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
-];
 
 // ---------------------------------------------------------------------------------------------
 // Placement at scene entry (0x20de6)
