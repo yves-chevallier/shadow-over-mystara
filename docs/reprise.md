@@ -4,7 +4,7 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 
 ## Point d'arrêt du 2026-11-11
 
-**main = 6fd951d** : lots L0 à L15, L15c et L19 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
+**main = b402539** (L17 et L20 fusionnés après 6fd951d) : lots L0 à L15, L15c, L17, L19 et L20 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
 et L15 (`World` tient la RAM et la table des tâches, modules en six couches `hw`, `world`, `services`, `actors`,
 `screens`, `core`) sont dans main ; voir [fin.md](fin.md) « L14 » et « L15 », « Résultat ».
 
@@ -41,12 +41,23 @@ sprites, sprites, et l'identité des images de `frames.json` (numéro, ancre, mi
 (macroquad) : une façade prend `Game`, dessine `game.frame()` (par `cps2_gfx::render` à l'échelle 1, puis
 filtres) et joue `game.sound()` ; pour L22 : `DrawList::shown_frames()` donne les images à remplacer.
 
+**L21 (2026-11-11, branche `wt-l21-facade`, depuis main b402539, non fusionnée)** : la façade de présentation en
+macroquad remplace minifb (une seule façade). `ddsom` : `view.rs` (texture du rendu CPS2 au plus proche, échelle
+entière ou ajustée `F6`, filtres lissé et CRT `F7`, plein écran `F11`), cadence du jeu à 59,64 Hz à l'horloge quel
+que soit l'affichage, son rééchantillonné à 48 kHz avec latence asservie (~40 ms ; sorties PulseAudio/waveOut
+gardées, macroquad ne diffuse pas de PCM), manettes gilrs (Linux, Windows, macOS ; compiler sous Linux demande
+`libudev-dev`), `touches.cfg` en anglais (`p1.up`, `save`, `Pad1Up`...), anciens noms français lus puis le fichier
+réécrit. Image identique au rendu CPS2 à l'échelle 1 : `DDSOM_IDENTITY=N` relit la fenêtre, 1 500 images, 0 pixel
+différent, avec ROMs et avec `--assets`. Build web : compile (`wasm32-unknown-unknown`) mais ne joue pas (données lues
+par `std::fs`, pas de son) : **à décider** (voir [fin.md](fin.md) « L21 », « Résultat »). Jeu inchangé :
+`render_check` `09850058246a1e2c`.
+
 **Pour reprendre :**
-1. Fusionner `wt-l17-outils` (après relecture). Une nouvelle étape qui cède la main se déclare dans
+1. L17 et L20 sont dans main (b402539). Une nouvelle étape qui cède la main se déclare dans
    `world/tasks/stages.rs` (variante, et dans `Step` si c'est un nouveau module) et se code dans son module.
-2. Puis fusionner `wt-l20-coeur` (L20, après relecture), L16 facultatif, L18 (documentation finale), L21 (façade),
-   L22 (pack HD), et
-   le lot `touches.cfg` (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours
+2. Fusionner `wt-l21-facade` (L21, après relecture), puis L16 facultatif, L18 (documentation finale), L22 (pack HD :
+   `view::Screen` est le point d'entrée ; `touches.cfg` en anglais est fait par L21). Worktree d'un lot : copier
+   `rom/` et `testdata/` (ignorés par git) ; toujours
    exporter `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
    génération de `ddsom-rc`, ~12 min à 40 min).
 3. Piège de performance vu par L15c : sans LTO, une fonction non générique n'est pas incorporée d'une unité de
@@ -63,7 +74,7 @@ filtres) et joue `game.sound()` ; pour L22 : `DrawList::shown_frames()` donne le
   l'utilisateur juge que les états perturbés ne comptent pas.
 * façade de présentation (L21) : **minimale, en macroquad** (pas Bevy) ;
 * bug de saisie du nom des anciennes révisions : **non reproduit**, aucune option `DDSOM_*` ;
-* `touches.cfg` : noms en anglais, en acceptant encore les anciens noms français (lot ultérieur, pas L14) ; l'écart
+* `touches.cfg` : noms en anglais, en acceptant encore les anciens noms français (**fait par L21**) ; l'écart
   connu du Z80 en retard (2 scénarios, comparaison du son suspendue) est **accepté**.
 
 ## Où en est le projet

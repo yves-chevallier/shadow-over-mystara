@@ -203,7 +203,8 @@ Dernière mesure : lot F, `examples/bench` sur bot30k, 12 000 images, pilote son
 
 ```
 port/
-  ddsom/          application : fenêtre, clavier/manette (keys.rs, gamepad.rs), sortie audio, sauvegarde EEPROM
+  ddsom/          application (façade macroquad, L21) : fenêtre et filtres (view.rs), clavier/manette (keys.rs,
+                  gamepad.rs), sortie audio (audio.rs), sauvegardes et EEPROM (save.rs)
   ddsom-game/     le moteur du jeu (ci-dessous), sans 68000, sans ROM, sans Cps2Bus
   ddsom-data/     données typées : structures, chargement depuis assets/ (et depuis les ROMs pour extract et les tests)
   ddsom-sound/    pilote son (séquenceur), données en tableaux indexés
@@ -356,8 +357,8 @@ au pixel près, et `validate` compare justement ses entrées. Ce qui change :
 
 ### Entrées et plateforme
 
-`ddsom` (`main.rs`, `keys.rs`, `gamepad.rs`, `audio.rs`, `save.rs`) reste la seule crate de plateforme. Elle remplit
-`hw::inputs` et lit `Frame` et les échantillons. Depuis L20, elle ne parle au jeu que par `ddsom_game::Game`
+`ddsom` (`main.rs`, `view.rs`, `keys.rs`, `gamepad.rs`, `audio.rs`, `save.rs`) reste la seule crate de plateforme
+(façade macroquad depuis L21). Elle remplit `hw::inputs` et lit `Frame` et les échantillons. Depuis L20, elle ne parle au jeu que par `ddsom_game::Game`
 (`step(Inputs)`, `frame() -> DrawList`, `sound()`, `eeprom()`). Son ouverture devient
 `Game::new(GameData::load(assets)?, eeprom)` au lieu de `rebuild::contents` suivi de `Machine::ddsom`.
 
@@ -1684,10 +1685,78 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
     `ddsom` avec et sans `--features original`, `cps2-gfx`).
   * Aucun code mort nouveau.
 
-**L21. Façade de présentation**
+**L21. Façade de présentation** — **fait** (branche `wt-l21-facade`, voir « Résultat »)
 * **Décidé le 2026-11-11 : façade minimale en macroquad** (pas Bevy).
 * Rendu à échelle variable, filtres (CRT…), mixage, manettes, plein écran, build web.
 * Fin : le jeu se joue dans la façade, image identique au rendu CPS2 à l'échelle 1.
+* Résultat (branche `wt-l21-facade`, depuis main b402539) :
+  * **minifb est remplacé** : une seule façade, `ddsom` en macroquad 0.4 (sans la fonctionnalité `audio`). Rien ne
+    manquait (fenêtre, plein écran, clavier, texture, shader), garder minifb derrière une option aurait doublé
+    `main.rs` et `keys.rs` pour rien. macroquad charge X11/GL dynamiquement : aucune dépendance de compilation sous
+    Linux.
+  * **Image** (`view.rs`) : `cps2_gfx::render(&game.frame(), &atlas)` (384 x 224, RGB) est chargé dans une texture
+    RGBA filtrée au plus proche, dessinée centrée sur fond noir. Échelle (`F6`) : plus grand multiple entier qui tient
+    (défaut) ou ajustée à la fenêtre (proportions gardées) ; fenêtre redimensionnable, 2x au départ. Filtres (`F7`,
+    aucun par défaut) : lissé (bilinéaire) et CRT (shader GLSL 100 de lignes de balayage : la moitié basse de chaque
+    ligne de l'image s'assombrit ; à l'échelle 1 seul le milieu de la ligne est lu, l'image ne change pas). Plein
+    écran `F11` (`set_fullscreen`, souris cachée). Pour L22 : `Screen::show` prend une image ; un pack HD remplira
+    d'autres textures à partir de `DrawList::shown_frames()`, le reste (placement, filtres) ne change pas.
+  * **Identité à l'échelle 1, vérifiée en relisant la fenêtre** : `DDSOM_IDENTITY=N ddsom ...` ouvre une fenêtre de
+    384 x 224 (échelle 1, sans filtre), relit après chaque image du jeu le tampon de la fenêtre (`get_screen_data`,
+    après le dessin, avant l'échange) et le compare pixel à pixel à la sortie de `cps2_gfx::render`, puis quitte.
+    WSLg (OpenGL logiciel llvmpipe) : **1 500 images, 0 pixel différent, avec ROMs et avec `--assets`** (aussi 896 et
+    600 images). Contrôle négatif : la même comparaison sans retourner les lignes de la relecture donne 29 484 010
+    pixels différents sur 900 images : la vérification n'est pas creuse. Par construction aussi : texture RGBA8 sans
+    sRGB, filtre au plus proche, rectangle à coordonnées entières de la taille de la texture, couleur blanche (aucune
+    modulation), alpha 255.
+  * **Cadence** : la boucle tourne au rythme de l'affichage ; le jeu avance de `FRAME_HZ` (59,637 Hz, la cadence
+    CPS2 de l'ancienne application) images par seconde de l'horloge (`Clock` : 0, 1 ou 2 pas par image affichée,
+    resynchronisé après une pause, une reprise ou un retard de plus de 200 ms ; avance rapide `Tab` : 8 pas par image
+    affichée, sans son). Seule la dernière image du jeu est rendue. Sans synchronisation verticale (WSLg), la boucle
+    dort jusqu'à l'image suivante du jeu quand rien n'est dû (sinon ~900 tours/s) : ~2 tours par image du jeu.
+  * **Son** (`audio.rs`) : le mixage reste dans le cœur (`Game::sound()`, 24 038 Hz) ; macroquad ne joue que des sons
+    entiers (pas de flux PCM), on garde donc les sorties de l'ancienne application, chargées à l'exécution
+    (PulseAudio simple sous Linux, waveOut sous Windows : aucune dépendance de compilation ; cpal aurait demandé
+    `libasound2-dev` et sa fonctionnalité `pulseaudio` sous WSLg, qui n'a pas d'ALSA). Nouveau : une file entre le jeu
+    et le fil de sortie, qui **tire** les échantillons à 48 kHz (blocs de 10 ms, 30 ms tenus par le serveur PulseAudio ;
+    3 blocs de 20 ms pour waveOut), **rééchantillonnés** linéairement ; le rapport est corrigé d'au plus 0,5 %
+    (inaudible) selon le remplissage de la file, ce qui tient la latence près de 40 ms (+ ~30 ms du périphérique) au
+    lieu de dériver entre l'horloge du jeu et celle de la carte son (avant : 24 000 Hz pour 24 038, file qui
+    grossissait puis perdait des blocs). La file s'amorce à 40 ms (au départ et après s'être vidée), se coupe à 200 ms
+    après un arrêt. Test `latency_stays_near_the_target` (horloges à ±0,2 %). L'ouverture se fait dans le fil de
+    sortie : le jeu n'attend plus le serveur son (pendant les essais, le serveur PulseAudio de WSLg a refusé puis
+    bloqué les connexions quelques minutes, d'où ce changement ; ouvert normalement avant et après).
+  * **Manettes** (`gamepad.rs`) : gilrs 0.11 (evdev sous Linux, Windows.Gaming.Input/XInput, IOKit), deux manettes,
+    disposition Xbox (`Pad1A` bas, `Pad1B` droite, `Pad1X` gauche, `Pad1Y` haut, `LB`, `RB`, `Start`, `Back`, croix ou
+    stick gauche `Pad1Up`...). Gain : des manettes sous Linux et macOS (avant : XInput sous Windows seulement). Coût :
+    `libudev-dev` pour compiler sous Linux (play.sh, README). Pas testé avec une vraie manette (aucune sous WSL).
+  * **`touches.cfg` en anglais** : actions `p1.up`, `p1.button1`, `p1.coin`, `p2.start`, `test`, `service`, `pause`,
+    `save`, `load`, `fast`, `fullscreen`, `scale`, `filter`, `quit` ; touches aux noms de l'ancienne fenêtre minifb
+    (`LeftCtrl`, `Key1`, `NumPad0`... : les fichiers existants restent valables ; les noms macroquad `LeftControl`,
+    `Kp0` sont aussi lus) ; boutons `Pad1Up`. Les anciens noms (`j1.haut`, `sauver`, `plein_ecran`, `Pad1Haut`...)
+    sont lus, et un fichier qui en contient est réécrit en anglais (les commentaires de l'utilisateur sont perdus).
+    Test `former_names_are_read_and_rewritten_in_english`.
+  * **Inchangé** : arguments (`[roms]`, `--assets [dir]`), `--features original` (`DDSOM_ORIGINE`, `DDSOM_INTERP`),
+    sauvegarde rapide `F5`/`F9` (`save.rs`), `DDSOM_ENREGISTRE`, EEPROM `nvram/ddsom.eeprom` écrite à la sortie
+    (`Échap` ou fermeture de la fenêtre : `prevent_quit`), arrêt propre sur une routine manquante. Commandes de
+    `play.sh`/`play.bat` inchangées (commentaires mis à jour).
+  * **Build web : compile, ne joue pas.** `cargo build --release -p ddsom --target wasm32-unknown-unknown` passe (tout
+    le graphe : jeu, données, extract ; clippy sans avertissement ; sans son ni manettes : gilrs et les sorties son
+    sont hors wasm). Mais le jeu lit ses données par `std::fs` (13 appels dans `ddsom-data` `json.rs`/`palettes.rs`,
+    `ddsom-assets`, `cps2::Contents`, `ddsom-sound` `region.rs`, plus le résidu lu à la demande) : sur le web, il
+    faudrait une source de fichiers abstraite dans quatre crates, un préchargement asynchrone (`load_file`) d'environ
+    37 Mo d'assets (420 fichiers), une page `index.html` avec le chargeur JS de miniquad, l'EEPROM et les sauvegardes
+    hors système de fichiers, et un greffon WebAudio pour le son (macroquad ne diffuse pas de PCM). Ce n'est pas
+    « un peu de code » : **non fait, à décider**.
+  * Lancements (WSLg) : avec ROMs et avec `--assets` (assets réextraits), quelques dizaines de secondes, sans arrêt,
+    sortie son ouverte ; touches injectées par XTest (pièce, Start, `F5`, `F9`, `F6`, `F7`, `F11`, `Échap`) :
+    sauvegarde et reprise (image 1477), plein écran 1920 x 1200 ajusté avec le filtre CRT, EEPROM écrite à la sortie.
+  * Validation : le jeu (`ddsom-game`, `cps2`, `cps2-gfx`) n'est pas touché. `render_check` bot30k 12 000 images :
+    **`09850058246a1e2c`** (identités : 122 051 images, 0 écart), aussi avec `DDSOM_ASSETS` ; `validate` VALID sur
+    `modes/name_entry_overflow`, `boss/boss0_poke`, `boss/boss0_poke_mort`, `scene/scene_01`, et avec `DDSOM_ASSETS`
+    `name_entry_overflow` et `scene_01` ; pas de validation complète (rien du jeu n'a changé). `cargo tree -p ddsom -e normal` : ni `m68k`, ni `z80`, ni
+    `ddsom-rc`, ni `minifb`. `cargo clippy -p ddsom` sans avertissement : `--all-targets`, `--features original`,
+    `--target x86_64-pc-windows-gnu`, `--target wasm32-unknown-unknown`. Tests `ddsom` : 3.
 
 **L22. Pack HD (upgrade graphique)**
 * Outil d'export : chaque image de sprite assemblée et colorée (palette principale) en PNG RGBA, chaque niveau en une
@@ -1700,7 +1769,7 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 
 ## 4. Fin du projet : critères mesurables
 
-| Critère | Aujourd'hui (L20, `wt-l20-coeur`) | Cible |
+| Critère | Aujourd'hui (L20, `wt-l20-coeur` ; L21) | Cible |
 |---|---:|---:|
 | Validation (deux modes, `DDSOM_LONG=1`) | 309/309 | 308/308 (plus les nouveaux scénarios) |
 | Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 0 | 0 |
@@ -1716,3 +1785,4 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 | `rebuild` dans le jeu | non | non |
 | `bench` bot30k, avec et sans rendu | ~4 050 et ~25 000 images/s | au moins 2 500 et 14 000 images/s |
 | `ddsom` ne parle au jeu que par `Game` | oui (L20) | oui |
+| Image de la façade à l'échelle 1 identique au rendu CPS2 | oui (L21, `DDSOM_IDENTITY`, 0 pixel) | oui |
