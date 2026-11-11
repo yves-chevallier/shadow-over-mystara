@@ -102,8 +102,12 @@ Sous Linux, la compilation demande `libudev-dev` (manettes, crate gilrs) ; le so
 Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
 `Tab` avance rapide, `F11` plein écran, `F6` échelle (multiple entier ou ajustée à la fenêtre),
-`F7` filtre (aucun, lissé, CRT), `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`). La fenêtre se
-redimensionne librement.
+`F7` filtre (aucun, lissé, CRT), `F8` pack HD marche/arrêt, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
+La fenêtre se redimensionne librement.
+
+Pack HD (facultatif) : un dossier `hd/` à côté du jeu (ou `DDSOM_HD=<dossier>`) remplace des images de sprites et des
+tuiles de décor par des images agrandies ou retouchées, palettes et effets gardés ; il se fabrique avec l'outil
+`hd-pack` à partir de vos ROMs et ne se partage pas : voir [docs/pack-hd.md](docs/pack-hd.md).
 
 Manettes (Linux, Windows, macOS ; disposition Xbox) : A B X Y = boutons 4 3 1 2, croix ou stick gauche,
 Start = Start, Back = pièce.

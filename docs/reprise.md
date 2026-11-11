@@ -52,11 +52,19 @@ différent, avec ROMs et avec `--assets`. Build web : compile (`wasm32-unknown-u
 par `std::fs`, pas de son) : **à décider** (voir [fin.md](fin.md) « L21 », « Résultat »). Jeu inchangé :
 `render_check` `09850058246a1e2c`.
 
+**L22 (2026-11-11, branche `wt-l22-hd`, depuis main 567b93c, non fusionnée)** : le pack HD. Crate `ddsom-hd`
+(format, retour aux index, chargement, rendu HD `render_hd`) et outil `hd-pack` (`export`, `upscale [--scale2x]`,
+`index`, `check`) ; `ddsom` charge `hd/` ou `DDSOM_HD`, `F8` le coupe. Images de sprites par numéro de `frames.json`
+(palettes des morceaux à l'exécution), tuiles des couches 2 et 3 par numéro de graphisme ; niveaux exportés en une
+image par scène **et par couche** (`levels/NN_scroll2.png`). Pack « identité » ×2 : 0 pixel différent sur bot30k
+12 000 images ; `render_check` `09850058246a1e2c`. Guide : [pack-hd.md](pack-hd.md) ; détails : [fin.md](fin.md)
+« L22 », « Résultat ». `cps2-gfx` : seulement `render::tile_pens` (extraction).
+
 **Pour reprendre :**
 1. L17 et L20 sont dans main (b402539). Une nouvelle étape qui cède la main se déclare dans
    `world/tasks/stages.rs` (variante, et dans `Step` si c'est un nouveau module) et se code dans son module.
-2. Fusionner `wt-l21-facade` (L21, après relecture), puis L16 facultatif, L18 (documentation finale), L22 (pack HD :
-   `view::Screen` est le point d'entrée ; `touches.cfg` en anglais est fait par L21). Worktree d'un lot : copier
+2. L21 est dans main (567b93c). Fusionner `wt-l22-hd` (L22, après relecture), puis L16 facultatif, L18
+   (documentation finale). Worktree d'un lot : copier
    `rom/` et `testdata/` (ignorés par git) ; toujours
    exporter `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
    génération de `ddsom-rc`, ~12 min à 40 min).

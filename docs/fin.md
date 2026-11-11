@@ -205,6 +205,7 @@ Dernière mesure : lot F, `examples/bench` sur bot30k, 12 000 images, pilote son
 port/
   ddsom/          application (façade macroquad, L21) : fenêtre et filtres (view.rs), clavier/manette (keys.rs,
                   gamepad.rs), sortie audio (audio.rs), sauvegardes et EEPROM (save.rs)
+  ddsom-hd/       pack HD (L22) : export, retour aux index, chargement, rendu HD ; outil hd-pack
   ddsom-game/     le moteur du jeu (ci-dessous), sans 68000, sans ROM, sans Cps2Bus
   ddsom-data/     données typées : structures, chargement depuis assets/ (et depuis les ROMs pour extract et les tests)
   ddsom-sound/    pilote son (séquenceur), données en tableaux indexés
@@ -1758,7 +1759,7 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
     `ddsom-rc`, ni `minifb`. `cargo clippy -p ddsom` sans avertissement : `--all-targets`, `--features original`,
     `--target x86_64-pc-windows-gnu`, `--target wasm32-unknown-unknown`. Tests `ddsom` : 3.
 
-**L22. Pack HD (upgrade graphique)**
+**L22. Pack HD (upgrade graphique)** — **fait** (branche `wt-l22-hd`, voir « Résultat » ; guide : [pack-hd.md](pack-hd.md))
 * Outil d'export : chaque image de sprite assemblée et colorée (palette principale) en PNG RGBA, chaque niveau en une
   grande image continue.
 * Retour aux index : l'image retouchée (upscaler pixel art, Gemini…) est requantifiée sur les 16 index de sa palette
@@ -1766,6 +1767,65 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 * Chargement d'un dossier `hd/` (`frames/NNNNN.png`, `levels/NN.png`) par la façade, repli sur l'original si absent.
   Jamais versionné (dérivé des graphismes de Capcom).
 * Fin : un pack partiel s'affiche, la logique et la validation ne changent pas.
+* Résultat (branche `wt-l22-hd`, depuis main 567b93c) :
+  * **Nouvelle crate `ddsom-hd`** (`port/ddsom-hd`) : format du pack (`FrameMeta`, `LevelMeta`, PNG indexés),
+    retour aux index (`index_frame`, `index_level`), chargement (`load(dir) -> HdPack`), rendu HD
+    (`render_hd(&DrawList, &TileAtlas, &HdPack)`), et l'outil `hd-pack` (fonctionnalité `tool`, par défaut) :
+    `export`, `upscale [--scale2x]`, `index`, `check`. La façade prend `ddsom-hd` sans `tool` (ni jeu en double, ni
+    `extract` en plus de ce qu'elle a déjà). Le rendu HD est dans `ddsom-hd` et non dans `cps2-gfx` pour ne pas
+    relancer la compilation de `ddsom-rc` à chaque retouche ; `cps2-gfx` n'a reçu que `render::tile_pens` (rangée d'une
+    tuile de couche, extraite de `tile_row`, même calcul).
+  * **Export** : les images de sprites vues en jouant des scénarios (`--run <scénario> <images>`, ~1 s pour bot30k
+    12 000 images : 604 images), assemblées depuis `frames.json` et l'atlas, non retournées, avec les couleurs **le
+    plus souvent** à l'écran (un premier essai par « la plus claire » prenait des flashs blancs) ; `--all` ajoute les
+    21 887 en gris. Niveaux : décor complet des couches 2 et 3 de chaque scène depuis `levels.json` (une carte partagée
+    écrite une fois : 146 images), palettes des pages 2 et 3 de la scène (`scene_palettes.json` + `palettes.png`).
+    Écart au plan : **une image par scène et par couche** (`levels/NN_scroll2.png`, `NN_scroll3.png`) et non
+    `levels/NN.png` : les deux couches défilent à des vitesses différentes (parallaxe) et se recouvrent, une image
+    fusionnée ne se redécoupe pas.
+  * **Identité des images** : une image de sprite est identifiée par son numéro (`SpriteFrame` de L20) ; ses pixels
+    valent `16 × emplacement + encre`, un emplacement par palette distincte de ses morceaux, qui prend à l'exécution
+    la palette de l'entrée du morceau désigné (palette imposée par l'objet comprise). Une tuile de décor est
+    identifiée par son numéro de graphisme (`tile_key` : couche 3 `code & 0x3fff`, couche 1 avec la parité de la
+    colonne), stockée non retournée : la carte du niveau ne sert qu'à l'édition, le rendu n'a pas besoin de savoir
+    où la caméra est dans le niveau (le registre de défilement ne le dit pas : la carte de 64 × 64 tuiles boucle).
+  * **Retour aux index** : couleur la plus proche (distance RVB) parmi les 15 de la palette de la tuile, ou de toutes
+    les palettes de l'image de sprite ; alpha < 128 transparent ; échelle entière vérifiée. Les palettes contiennent
+    parfois deux fois la même couleur : le premier pack « identité » différait de 4,2 millions de pixels sur 3 000
+    images (une autre palette les distingue, ex. l'écran du trésor) ; l'export écrit donc aussi les encres d'origine
+    (`.pens.png`), qui départagent les ex aequo.
+  * **Rendu HD** : celui de `cps2_gfx::render` pixel à pixel à l'échelle `S` du pack (couches dans l'ordre et marques
+    de couche, sprites de la dernière entrée à la première avec `sprite_masks` et la marque 31) ; une image du pack
+    est tracée d'un bloc quand la boucle atteint la dernière entrée de l'image, les autres entrées sautées ; ce qui
+    n'est pas dans le pack est répété `S × S`. Les morceaux bouclent sur l'espace des sprites de 1024 : une image à
+    cheval sur son bord est tracée des deux côtés (la herse de l'écran titre manquait avant). Couleurs par la palette
+    de l'image en cours : variantes, flashs, fondus.
+  * **Façade** : `ddsom` charge `hd/` (dossier courant) ou `DDSOM_HD=<dossier>` s'il existe, `F8` (`hd` dans
+    `touches.cfg`) coupe et remet le pack, même en pause ; `view::Screen::show(image, échelle)` suit la taille de la
+    texture, placement et filtres inchangés. `DDSOM_IDENTITY` ignore le pack.
+  * **Vérifications** :
+    * pack « identité » complet (export bot30k, `upscale 2`, `index` : 604 images, 18 586 tuiles) : `hd-pack check`
+      bot30k 12 000 images : 122 051 images de sprites remplacées, **0 pixel différent** de l'original agrandi ×2 (ce
+      qui vérifie ancres, miroirs, palettes à l'exécution, priorités et défilement) ;
+    * pack partiel ×2 au plus proche (53 images 00000-00099 et `levels/00_scroll2`, 551 tuiles) : 4 197 images
+      remplacées, 0 pixel différent ; pack partiel ×4 Scale2x (mêmes images) : guerrier et rochers adoucis, le reste
+      (interface, objets, ombres) d'origine ; les tuiles HD prennent la palette du coucher de soleil de l'écran
+      « Game Over » (image 10 000), autre palette que celle de l'export ;
+    * fenêtre WSLg (`ddsom rom`, reprise `F9` à l'image 4400, plein écran 1920 × 1200, `F8`) : pack ×4 affiché, `F8`
+      rend l'image d'origine ; `DDSOM_IDENTITY=1500` sans `hd/` : **0 pixel différent** ;
+    * temps du rendu HD : 1,7 ms par image à ×2, 6,7 ms à ×4 ;
+    * jeu inchangé : `render_check` bot30k 12 000 images **`09850058246a1e2c`** (identités : 122 051, 0 écart) ;
+      `validate` VALID sur `scene/scene_01` et `modes/name_entry_overflow` ; pas de validation complète (seul
+      `cps2-gfx` est touché, par une extraction de fonction que `render_check` couvre ; `validate` ne compare pas le
+      rendu) ;
+    * `cargo clippy` sans avertissement : `cps2-gfx`, `ddsom-hd` (avec et sans `tool`), `ddsom` (`--all-targets`,
+      `--target wasm32-unknown-unknown`) ; `--features original` non relancé (code non touché) ; tests `ddsom-hd` (2),
+      `cps2-gfx`, `ddsom` ; `cargo tree -p ddsom -e normal` : ni `m68k`, ni `z80`, ni `ddsom-rc`.
+  * **Limites** (voir [pack-hd.md](pack-hd.md)) : une tuile retouchée vaut partout (première image de niveau gagnante
+    en cas de conflit) ; couche 1 (texte, interface) non exportée ; sprites hors table des images (ombres…) non
+    remplacés ; une image HD reste dans le cadre et les 16 couleurs de l'original ; positions par pas de `S` pixels HD ;
+    une seule échelle par pack (la plus grande) ; images jamais vues dans les scénarios exportées en gris ; mode
+    `--assets` de l'outil non essayé (même code, atlas identique).
 
 ## 4. Fin du projet : critères mesurables
 
@@ -1785,4 +1845,5 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 | `rebuild` dans le jeu | non | non |
 | `bench` bot30k, avec et sans rendu | ~4 050 et ~25 000 images/s | au moins 2 500 et 14 000 images/s |
 | `ddsom` ne parle au jeu que par `Game` | oui (L20) | oui |
-| Image de la façade à l'échelle 1 identique au rendu CPS2 | oui (L21, `DDSOM_IDENTITY`, 0 pixel) | oui |
+| Image de la façade à l'échelle 1 identique au rendu CPS2 | oui (L21, `DDSOM_IDENTITY`, 0 pixel ; L22 sans `hd/`) | oui |
+| Pack HD « identité » ×2 identique au rendu CPS2 agrandi | oui (L22, `hd-pack check`, 0 pixel) | oui |
