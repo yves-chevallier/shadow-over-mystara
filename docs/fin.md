@@ -1346,7 +1346,8 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
   3. documenter le bug, sa cause dans les autres révisions si on la trouve dans `docs/modes.md`, et le scénario.
 
   Corriger le bug ne se ferait que derrière une option (`DDSOM_*`), hors validation, sur décision de l'utilisateur.
-  Le comportement par défaut reste celui de l'original.
+  Le comportement par défaut reste celui de l'original. **Décidé le 2026-11-11 : le bug des anciennes révisions
+  n'est pas reproduit, aucune option `DDSOM_*`.**
 * Fin : le scénario est dans la validation (309/309), et la section de `docs/modes.md` est écrite.
 * Résultat :
   * le bug (fiche KLOV du jeu) : avec un personnage dont le nom par défaut a six lettres, le bouton « nom par
@@ -1372,7 +1373,7 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 * Fin : `ddsom` ne parle au jeu que par cette interface ; validation 308/308 inchangée.
 
 **L21. Façade de présentation**
-* Choix à confirmer avec l'utilisateur : Bevy (Rust natif, sprites, shaders, audio, wasm) ou wgpu/macroquad (minimal).
+* **Décidé le 2026-11-11 : façade minimale en macroquad** (pas Bevy).
 * Rendu à échelle variable, filtres (CRT…), mixage, manettes, plein écran, build web.
 * Fin : le jeu se joue dans la façade, image identique au rendu CPS2 à l'échelle 1.
 

@@ -249,6 +249,20 @@ struct State {
     max_step: u32,
     examples: usize,
     trace: bool,
+    // reads of the residue by the natives in the trials from a base state (unperturbed) or with plausible
+    // perturbations only (values seen in the base states or compared by the original), per (category, table, key)
+    residue: BTreeMap<(&'static str, &'static str, u32), u64>,
+}
+
+/// The reads of the residue made by `f`, per key (difference of the counters of `ddsom_game::data::residue`).
+fn residue_during<T>(f: impl FnOnce() -> T) -> (T, Vec<(ddsom_game::data::Missing, u64)>) {
+    let before: BTreeMap<_, _> = ddsom_game::data::residue().into_iter().collect();
+    let r = f();
+    let diff = ddsom_game::data::residue()
+        .into_iter()
+        .filter_map(|(m, n)| Some((m, n - before.get(&m).copied().unwrap_or(0))).filter(|x| x.1 > 0))
+        .collect();
+    (r, diff)
 }
 
 thread_local! {
@@ -737,7 +751,24 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
     }
     let is_new = o.pcs.iter().any(|&p| !bit(&e.union, p));
     let n = e.targets[&entry].n;
-    let r = compare(n, &c0, &b0, &o);
+    // the residue is followed for the unperturbed and the plausible trials only (the others are counted in the total)
+    let category = if muts.is_empty() {
+        Some("base")
+    } else if muts.iter().all(|m| m.plausible) {
+        Some("plausible")
+    } else {
+        None
+    };
+    let r = match category {
+        Some(c) => {
+            let (r, diff) = residue_during(|| compare(n, &c0, &b0, &o));
+            for (m, k) in diff {
+                *e.residue.entry((c, m.table, m.key)).or_default() += k;
+            }
+            r
+        }
+        None => compare(n, &c0, &b0, &o),
+    };
     if matches!(&r, Ok(d) if d.is_empty()) {
         for &pc in &o.pcs {
             set_bit(&mut e.identical_seen, pc);
@@ -1112,6 +1143,7 @@ fn main() {
             max_step: env("FUZZ_PAS", 300_000) as u32,
             examples: env("FUZZ_EXEMPLES", 3) as usize,
             trace: std::env::var_os("FUZZ_TRACE").is_some(),
+            residue: BTreeMap::new(),
         })
     });
     // trial panics are counted, not displayed (FUZZ_PANIQUES=1: displayed)
@@ -1143,12 +1175,16 @@ fn main() {
             println!("    {x}");
         }
     }
-    // reads outside the typed tables by the natives (docs/fin.md, L14: `Residue`)
-    let residue = ddsom_game::data::residue();
+    // reads outside the typed tables by the natives (docs/fin.md, L14: `Residue`): in all, then from the base states
+    // and with plausible perturbations only (the rest comes from values that no base state holds)
+    let residue_total: u64 = ddsom_game::data::residue().iter().map(|r| r.1).sum();
+    let in_category = |c: &str| e.residue.iter().filter(|(k, _)| k.0 == c).map(|(_, &n)| n).sum::<u64>();
     println!(
-        "residue: {} reads of the program ROM outside the typed tables{}",
-        residue.iter().map(|r| r.1).sum::<u64>(),
-        residue.iter().map(|(m, n)| format!(", {} {:#x} ×{n}", m.table, m.key)).collect::<String>()
+        "residue: {residue_total} reads of the program ROM outside the typed tables, {} from base states, {} with plausible \
+         perturbations{}",
+        in_category("base"),
+        in_category("plausible"),
+        e.residue.iter().map(|((c, t, k), n)| format!(", {c} {t} {k:#x} ×{n}")).collect::<String>()
     );
     let trials: u64 = e.targets.values().map(|c| c.summary.tests).sum();
     if trials == 0 {

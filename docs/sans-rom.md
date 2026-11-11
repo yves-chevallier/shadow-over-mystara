@@ -17,36 +17,41 @@ cargo build --release -p ddsom
 target/release/ddsom --assets <assets>
 ```
 
-`ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM.
-Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contents` puis
-`cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contents::from_roms`). Le son passe par le pilote Rust,
-comme toujours dans le jeu (avec ou sans ROM : `ddsom` n'a pas de Z80, [son.md](son.md) § 13). Avec un dossier de ROMs donné, `--assets` ne prend que les
-graphismes et les échantillons dans les assets (le programme vient des ROMs).
+`ddsom --assets <assets>` joue ainsi sans ROM (lot L14). Aucun fichier ROM n'est ouvert, et **la machine du jeu
+n'a plus d'image ROM** (`cps2::Machine::game`, bus sans programme 68000, vecteurs de reset non lus) :
+`extract::install_game_assets` installe les données typées (`ddsom_data::GameData::load`) et le résidu (lu
+paresseusement, voir « Le résidu »), puis donne ce que la machine porte (`cps2::GameContents`) : atlas de tuiles,
+données du pilote son (`ddsom_sound::SoundData`), tables du DSP (`qsound::DspTables`) et banque d'échantillons. Sans
+`--assets`, `extract::install_game` fait de même en extrayant tout en mémoire depuis les ROMs : c'est la même
+machine sans ROM. Le son passe par le pilote Rust, comme toujours dans le jeu (`ddsom` n'a pas de Z80,
+[son.md](son.md) § 13). La reconstruction d'images ROM depuis les assets (`extract::rebuild`) ne sert plus qu'aux
+tests sans perte d'`extract`.
 
 Le dossier d'assets est local (dérivé des ROMs de l'utilisateur), jamais versionné.
 
 **Régénérer ses assets.** Un dossier d'assets produit par une version plus ancienne d'`extract` peut manquer de
 données : relancer `extract` sur le même dossier (il réécrit tous les fichiers ; `extract <roms> <assets> data`
-suffit quand seules les tables de données ont changé, en quelques secondes). Un dossier sans `data/reste.json`
-(antérieur à la couverture complète) est refusé au démarrage (« assets incomplets : data/reste.json »). Sous
-Windows, `play.bat` réextrait de lui-même un `assets\` sans `data\reste.json` (il lui faut alors `ddsom.zip` et
+suffit quand seules les tables de données ont changé, en quelques secondes). Un dossier sans `data/overreads.json`
+(antérieur au lot L14) est refusé au démarrage (« Cannot load the assets »). Sous
+Windows, `play.bat` réextrait de lui-même un `assets\` sans `data\overreads.json` (il lui faut alors `ddsom.zip` et
 `qsound.zip` à la racine, ou `rom\` déjà décompressé) ; pour forcer une réextraction après une autre mise à jour
 d'`extract`, supprimer `assets\` puis relancer `play.bat`.
 
 ## D'où vient chaque puce
 
-| Puce (`cps2::Contents`) | Depuis les assets | Ce qui manque, et pourquoi c'est sans effet |
+| Puce (`cps2::GameContents`, `ddsom_data::GameData`) | Depuis les assets | Ce qui manque, et pourquoi c'est sans effet |
 |---|---|---|
 | Programme 68000, vue données et vue programme déchiffrée (`Program::load`) | toutes les tables décrites (`palettes.png`, `sprites/*.json`, `levels.json`, `terrain.json`, `scene_palettes.json`, `texts.json`, `data/*.json`) ; `data/natives.json` : les zones lues par les natives qu'aucun autre fichier ne décrit (ci-dessous) ; `data/reste.json` : tout le reste, sauf le code 68000 (« Couverture complète des données ») | le code 68000 exécuté (486 399 octets, zéro) : sans 68000 il n'est plus exécuté ni lu |
-| Région du Z80 (`rebuild::audio_region`) | `sound/music.json` (`ddsom_sound::SoundData`, tableaux indexés), replacé à ses adresses d'origine par `SoundData::region_parts` | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
-| DSP QSound (`rebuild::qsound_dsp`) | `sound/qsound_dsp.json` : pan (0x110, 0x150 mots), pas de l'ADPCM (0x9dc, 16), coefficients des filtres (0xd53-0xfff, et 0-2 où le second filtre déborde) | le code du DSP : l'émulation haut niveau (`qsound`, d'après MAME) le remplace et ne lit que ces tables |
+| Région du Z80 (remplacée par `GameContents::sound`) | `sound/music.json` (`ddsom_sound::SoundData`, tableaux indexés), replacé à ses adresses d'origine par `SoundData::region_parts` | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
+| DSP QSound (remplacé par `GameContents::dsp`) | `sound/qsound_dsp.json` : pan (0x110, 0x150 mots), pas de l'ADPCM (0x9dc, 16), coefficients des filtres (0xd53-0xfff, et 0-2 où le second filtre déborde) | le code du DSP : l'émulation haut niveau (`qsound`, d'après MAME) le remplace et ne lit que ces tables |
 | Graphismes (`ddsom_assets::tile_atlas`, `cps2_gfx::TileAtlas`) | `gfx/cells_NN.png`, lus tels quels (un octet par pixel) | rien |
 | Échantillons (`ddsom_assets::samples::bank`) | `sound/music.json` et `sounds/NNN.wav` (et la suite de chaque échantillon, `sample_tails`) | les octets qu'aucune voix ne lit |
 
 **Le Z80.** Son programme n'est plus nécessaire : le pilote Rust, seul pilote du jeu, le remplace écriture par
 écriture ([son.md](son.md)) et ne lit que les tableaux indexés de `music.json` (`ddsom_sound::SoundData` : sons,
-pistes, bancs d'instruments, fiches d'échantillons, tables), relus depuis la région du Z80 au démarrage. Contrôles : `sans_rom` compare aussi les échantillons audio produits (pilote Rust sur la région des ROMs
-contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit à ses tables) ; le test
+pistes, bancs d'instruments, fiches d'échantillons, tables), chargés tels quels depuis `music.json` (ou lus une
+fois dans la région du Z80 des ROMs). Contrôles : `no_rom` compare aussi les échantillons audio produits (données
+extraites des ROMs contre données des assets) ; le test
 `music_driver_identical` joue chaque son de la table sur les deux régions ; `validate` avec `DDSOM_ASSETS` compare les
 écritures du pilote du jeu à celles du Z80 de la référence. Ce dernier contrôle a trouvé le seul écart : l'octet bas
 du numéro d'échantillon des deux sons ADPCM manquait à `music.json` (corrigé le 2026-11-02 : réextraire `music`).
@@ -141,10 +146,44 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/native
 `extract` (`natives.rs`) : ses zones dans le code sont indispensables, et celles hors du code, en double avec `reste.json`
 aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` grandit (nouveaux scénarios).
 
+## Le résidu et les débordements de l'original (L14)
+
+Le jeu lit ses données par les tables typées de `ddsom_data::GameData`. Une lecture qu'aucune table ne sert (clé
+que l'extraction ne connaît pas, index au-delà de la fin d'une table) passe par `Missing` (`ddsom-game/src/data.rs`) :
+
+1. d'abord les **débordements nommés de l'original** (`data/overreads.json`, `ddsom_data::Overreads`, liste
+   versionnée `port/extract/overreads.txt`, 17 lectures sans octet de ROM) : glitches que les scénarios jouent
+   (scripts d'animation incohérents autour de 0x1af22c-0x1bf902, pointeurs d'images invalides 0x0b200b30,
+   0x23002310, 0x32003200, objet sans table de vitesses lu depuis l'adresse 0, rangée de dégâts critiques lue après
+   sa table). Ce sont des données typées, nommées par la lecture qui les prend (table et clé du lecteur) ;
+2. sinon le **résidu** (`ddsom_data::residue::Residue`), compté par clé : avec les ROMs, le programme lui-même ;
+   avec les assets, `data/natives.json` et `data/reste.json`, chargés paresseusement à la première consultation
+   (le seul lecteur de `reste.json` dans le jeu). `DDSOM_STRICT=1` arrête le jeu à la première consultation ;
+   `DDSOM_RESIDUE_BYTES=1` imprime chaque octet lu (entrée de `overreads.txt`).
+
+**Mesure (2026-11-11).** `validate` imprime le compte (`residue: N reads...`), `no_rom` et `bench` aussi :
+
+* **0 consultation sur les 309 scénarios**, en mode par défaut et avec `DDSOM_ASSETS` ;
+* `fuzz_couv` (C02 : 4 scénarios d'ennemis, C04 : 4 de boss, C06 : `sorts_elfe`, `sorts_clerc`, `cov_2p_a`,
+  C10 : `bot30k`, `bot_2p`, `cov_4p_a` ; 12 000 images, `FUZZ_PERIODE=8 FUZZ_ESSAIS=32`, graine 1) : **0 depuis
+  les états de base** (les appels réels, non perturbés), 2 536 avec des perturbations « plausibles » seulement
+  (valeurs vues dans un état de base) et 983 584 en tout. Toutes viennent de pointeurs ou d'index que la
+  perturbation rend incohérents : clés de SET (`set`, ~970 000 dont 1 231 plausibles : une adresse de table de SET
+  prise dans un champ perturbé), entrées et sauts d'animation (`anim entry`, `anim jump` : 1 305 plausibles, un
+  pointeur d'animation d'un autre objet avec la position de script de celui-ci), puis `part/offsets`,
+  `speed table`, `part/sub_for_host`, `engine`, `ai/*`, `creators/*` (quelques centaines). Aucune ne correspond à
+  un état que le jeu produit ; aucune table typée ne peut les servir (il faudrait le programme entier).
+
+**Décision (2026-11-11).** L'utilisateur retire `reste.json` une fois `Residue` à zéro sur les scénarios **et** sur
+`fuzz_couv`. Ce n'est pas le cas sur `fuzz_couv` (états perturbés) : `reste.json` est **gardé** comme assurance (un
+chemin jamais joué lit alors les octets de l'original, et non zéro), avec la liste ci-dessus.
+
 ## Vérifications
 
-* **`sans_rom`** (exemple de `ddsom-game`) : `sans_rom <roms> <eeprom> <assets> <scénario>:<images> ...` fait tourner
-  deux machines sans 68000 avec le pilote son Rust, l'une sur les ROMs, l'autre sur les seuls assets, et compare
+* **`no_rom`** (exemple de `ddsom-game`, ex-`sans_rom`) : `no_rom <roms> <eeprom> <assets> <scénario>:<images> ...`
+  fait tourner le jeu (machine sans ROM, `cps2::Machine::game`) dans deux processus, l'un sur les données extraites
+  en mémoire des ROMs (`extract::install_game`), l'autre sur les seuls assets (`extract::install_game_assets`), et
+  compare (empreinte par image et par partie)
   à chaque image l'image affichée, les échantillons audio, la RAM de travail, la GFX RAM, la RAM d'objets, la
   palette et la RAM partagée. Sur `bot_2p`, `boss/boss13_dragon`, `cov/cov_4p_a`, `modes/ending` (12 000 images
   chacun), `scene_end/end_02` (9 000), `cov/cov_service_tests` et `modes/attract` (6 000) : identique.
@@ -193,5 +232,5 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   d'adresses (positions `(piste, octet)`, numéros de banc et de son) et les débordements utiles de l'original sont
   écrits en clair. L'émulation du DSP QSound lit ses trois tables nommées (`qsound::DspTables`). Reste un détour :
   sans ROM, `cps2::Contents` porte encore la région du Z80 (reconstruite depuis `music.json` par
-  `rebuild::audio_region`) et le programme du DSP (`rebuild::qsound_dsp`), que `cps2` relit en tables au démarrage ;
-  le jeu chargera directement `SoundData` et `DspTables` quand `Contents` cédera la place aux données du jeu (lot L14).
+  `rebuild::audio_region`) et le programme du DSP (`rebuild::qsound_dsp`), que `cps2` relit en tables au démarrage.
+  **Fait (L14)** : la machine du jeu charge directement `SoundData` et `DspTables` (`cps2::GameContents`).
