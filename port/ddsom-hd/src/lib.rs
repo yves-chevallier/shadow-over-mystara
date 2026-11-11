@@ -244,6 +244,29 @@ pub fn upscale<P: Copy>(image: &Image<P>, k: usize) -> Image<P> {
     Image { width: image.width * k, height: image.height * k, pixels: enlarge(&image.pixels, image.width, k) }
 }
 
+/// An image enlarged twice by Scale2x (EPX), the simplest pixel-art upscaler: an edge between two equal neighbours
+/// becomes a diagonal; no new colour appears. To test a pack whose images visibly differ from the original.
+pub fn scale2x<P: Copy + PartialEq>(image: &Image<P>) -> Image<P> {
+    let (w, h) = (image.width, image.height);
+    let at = |x: isize, y: isize| image.pixels[y.clamp(0, h as isize - 1) as usize * w + x.clamp(0, w as isize - 1) as usize];
+    let mut pixels = vec![image.pixels[0]; 4 * w * h];
+    for y in 0..h as isize {
+        for x in 0..w as isize {
+            let (e, b, d, f, hh) = (at(x, y), at(x, y - 1), at(x - 1, y), at(x + 1, y), at(x, y + 1));
+            let quad = if b != hh && d != f {
+                [if d == b { d } else { e }, if b == f { f } else { e }, if d == hh { d } else { e }, if hh == f { f } else { e }]
+            } else {
+                [e; 4]
+            };
+            let (x, y) = (2 * x as usize, 2 * y as usize);
+            for (k, p) in quad.into_iter().enumerate() {
+                pixels[(y + k / 2) * 2 * w + x + k % 2] = p;
+            }
+        }
+    }
+    Image { width: 2 * w, height: 2 * h, pixels }
+}
+
 /// Loads the pack of folder `dir` (`frames/`, `levels/`: indexed PNG and their metadata). All the images are brought
 /// to the largest scale found (an image whose scale does not divide it is skipped); a tile met in several level images
 /// keeps its first image. Problems are reported on the standard error, the images concerned skipped.

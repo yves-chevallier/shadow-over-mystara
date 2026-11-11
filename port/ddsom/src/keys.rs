@@ -32,6 +32,8 @@ pub enum Command {
     Scale,
     /// Next filter (none, smooth, CRT).
     Filter,
+    /// HD pack off and on.
+    Hd,
 }
 
 /// Actions: name in the file, former French name (still read), effect, default keys (as in MAME).
@@ -65,6 +67,7 @@ const ACTIONS: &[(&str, &str, Port, &str)] = &[
     ("fullscreen", "plein_ecran", Port::Command(Command::FullScreen), "F11"),
     ("scale", "", Port::Command(Command::Scale), "F6"),
     ("filter", "", Port::Command(Command::Filter), "F7"),
+    ("hd", "", Port::Command(Command::Hd), "F8"),
     ("quit", "quitter", Port::Quit, "Escape"),
 ];
 

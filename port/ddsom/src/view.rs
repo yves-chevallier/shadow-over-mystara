@@ -2,7 +2,8 @@
 //! drawn centred at a variable scale, through an optional filter. Without filter (the default), the texture is
 //! sampled at the nearest texel: at a whole scale `s`, each pixel of the frame is an `s` x `s` square of its exact
 //! colour, so at scale 1 the window shows the CPS2 image itself (`DDSOM_IDENTITY` checks it by reading the window
-//! back, `main.rs`). A future source of frames (HD pack, L22) only has to fill another texture.
+//! back, `main.rs`). With an HD pack (`ddsom_hd`), the frame is `S` times larger: the texture follows its size, and
+//! is drawn at the same place and size.
 
 use cps2_gfx::{SCREEN_H, SCREEN_W};
 use macroquad::prelude::*;
@@ -27,6 +28,8 @@ pub enum Filter {
 
 pub struct Screen {
     texture: Texture2D,
+    /// Size of the texture: the frame, `S` times larger with an HD pack.
+    size: (usize, usize),
     rgba: Vec<u8>,
     pub scale: Scale,
     pub filter: Filter,
@@ -43,15 +46,28 @@ impl Screen {
         )
         .map_err(|e| eprintln!("CRT filter unavailable: {e}"))
         .ok();
-        Screen { texture, rgba: vec![0; SCREEN_W * SCREEN_H * 4], scale: Scale::Whole, filter: Filter::None, crt }
+        let size = (SCREEN_W, SCREEN_H);
+        Screen { texture, size, rgba: vec![0; SCREEN_W * SCREEN_H * 4], scale: Scale::Whole, filter: Filter::None, crt }
     }
 
-    /// Shows the frame `image` (rows of RGB pixels, as `cps2_gfx::render` gives them) from now on.
-    pub fn show(&mut self, image: &[[u8; 3]]) {
+    /// Shows the frame `image` (rows of RGB pixels, as `cps2_gfx::render` gives them, or `ddsom_hd::render_hd` at
+    /// `scale` times the size) from now on.
+    pub fn show(&mut self, image: &[[u8; 3]], scale: usize) {
+        let size = (SCREEN_W * scale, SCREEN_H * scale);
+        if size != self.size {
+            self.size = size;
+            self.rgba = vec![0; size.0 * size.1 * 4];
+            self.texture = Texture2D::from_rgba8(size.0 as u16, size.1 as u16, &self.rgba);
+            self.texture.set_filter(self.filter_mode());
+        }
         for (d, p) in self.rgba.as_chunks_mut::<4>().0.iter_mut().zip(image) {
             *d = [p[0], p[1], p[2], 255];
         }
-        self.texture.update_from_bytes(SCREEN_W as u32, SCREEN_H as u32, &self.rgba);
+        self.texture.update_from_bytes(size.0 as u32, size.1 as u32, &self.rgba);
+    }
+
+    fn filter_mode(&self) -> FilterMode {
+        if self.filter == Filter::Smooth { FilterMode::Linear } else { FilterMode::Nearest }
     }
 
     pub fn next_scale(&mut self) {
@@ -67,7 +83,7 @@ impl Screen {
             Filter::Smooth if self.crt.is_some() => Filter::Crt,
             _ => Filter::None,
         };
-        self.texture.set_filter(if self.filter == Filter::Smooth { FilterMode::Linear } else { FilterMode::Nearest });
+        self.texture.set_filter(self.filter_mode());
     }
 
     /// Where the frame goes in the window: top left corner and scale (whole pixels for the corner).

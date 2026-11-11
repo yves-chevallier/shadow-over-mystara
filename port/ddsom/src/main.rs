@@ -15,9 +15,11 @@
 //! read the ROMs.
 //! Keys (as in MAME): 5 coin, 1 Start, arrows, Ctrl/Alt/Space/Shift = buttons 1-4
 //! (or W X C V), 6 coin P2 / 2 Start P2, F2 test, P pause, Tab fast forward, F11 full screen, F6 scale (whole
-//! multiples or fit), F7 filter (none, smooth, CRT), Esc quit; rebindable in touches.cfg (`keys.rs`), gamepads
+//! multiples or fit), F7 filter (none, smooth, CRT), F8 HD pack on/off, Esc quit; rebindable in touches.cfg (`keys.rs`), gamepads
 //! included (`gamepad.rs`).
 //! The EEPROM (settings, counters) is kept in nvram/ddsom.eeprom.
+//! HD pack (docs/pack-hd.md): the folder `hd/` (or `DDSOM_HD=<dir>`), if present, replaces the sprite frames and
+//! layer tiles it holds by its larger images (`ddsom_hd::render_hd`); F8 switches it off and on.
 //! F5 saves the game to sauvegardes/rapide.txt, F9 resumes it (`save.rs`: input replay).
 //! `DDSOM_ENREGISTRE=partie.txt` likewise writes the game on exit: `validate <roms> partie.txt.eeprom
 //! partie.txt <frames>` replays it.
@@ -138,6 +140,9 @@ async fn play<B: Board>(
     let mut game = new_game(eeprom.as_deref());
     let mut screen = view::Screen::new();
     let mut identity = std::env::var("DDSOM_IDENTITY").ok().map(|n| Identity::new(n.parse().unwrap_or(600)));
+    // the HD pack (not with DDSOM_IDENTITY, which checks the CPS2 image)
+    let pack = if identity.is_some() { None } else { load_pack() };
+    let mut hd = pack.is_some();
 
     let audio = audio::Audio::open();
 
@@ -145,6 +150,7 @@ async fn play<B: Board>(
     let mut paused = false;
     let mut full_screen = false;
     let mut session = save::Session::new(&game);
+    let mut redraw = false;
 
     loop {
         let t = keys.read();
@@ -160,6 +166,10 @@ async fn play<B: Board>(
                 }
                 Command::Scale => screen.next_scale(),
                 Command::Filter => screen.next_filter(),
+                Command::Hd => {
+                    hd = !hd && pack.is_some();
+                    redraw = true;
+                }
                 Command::Pause => paused = !paused,
                 Command::Save => saved(&session, SAVE.as_ref()),
                 Command::Load => {
@@ -198,12 +208,16 @@ async fn play<B: Board>(
                 audio.push(game.sound());
             }
         }
-        let image = (steps > 0).then(|| cps2_gfx::render(&game.frame(), graphics));
-        if let Some(image) = &image {
-            screen.show(image);
+        let image = (steps > 0 || redraw).then(|| match (&pack, hd) {
+            (Some(pack), true) => (ddsom_hd::render_hd(&game.frame(), graphics, pack), pack.scale),
+            _ => (cps2_gfx::render(&game.frame(), graphics), 1),
+        });
+        redraw = false;
+        if let Some((image, scale)) = &image {
+            screen.show(image, *scale);
         }
         screen.draw();
-        if let (Some(check), Some(image)) = (&mut identity, &image) {
+        if let (Some(check), Some((image, _))) = (&mut identity, &image) {
             if check.compare(image, &screen, game.frame_count()) {
                 return;
             }
@@ -214,6 +228,18 @@ async fn play<B: Board>(
         next_frame().await;
     }
     finish(&game, &session, nvram);
+}
+
+/// The HD pack of `DDSOM_HD`, or of `hd/` if it exists; nothing if there is none or it holds no image.
+fn load_pack() -> Option<ddsom_hd::HdPack> {
+    let dir = std::env::var_os("DDSOM_HD").map_or_else(|| PathBuf::from("hd"), PathBuf::from);
+    if !dir.is_dir() {
+        return None;
+    }
+    let pack = ddsom_hd::load(&dir);
+    let tiles: usize = pack.tiles.iter().map(|t| t.len()).sum();
+    eprintln!("HD pack {}: scale {}, {} frames, {tiles} tiles (F8: on/off).", dir.display(), pack.scale, pack.frames.len());
+    (!pack.is_empty()).then_some(pack)
 }
 
 fn saved(session: &save::Session, file: &Path) {

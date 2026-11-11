@@ -11,6 +11,8 @@ cps2-gfx = { path = "../cps2-gfx" }
 # The original code (diagnostics DDSOM_ORIGINE / DDSOM_INTERP, feature `original`): the game itself has no 68000.
 ddsom-rc = { path = "../ddsom-rc", optional = true }
 ddsom-game = { path = "../ddsom-game", default-features = false }
+# The HD pack (L22): loading and HD rendering, without the `hd-pack` tool.
+ddsom-hd = { path = "../ddsom-hd", default-features = false }
 # The game data of the mode with ROMs, extracted in memory (without the 68000 decoder of the `extract` program).
 extract = { path = "../extract", default-features = false }
 # The window, the keyboard, the frame texture and its filters (L21 facade).

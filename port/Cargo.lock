@@ -112,6 +112,7 @@ dependencies = [
  "cps2",
  "cps2-gfx",
  "ddsom-game",
+ "ddsom-hd",
  "ddsom-rc",
  "extract",
  "gilrs",

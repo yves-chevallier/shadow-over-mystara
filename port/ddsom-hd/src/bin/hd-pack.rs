@@ -5,9 +5,10 @@
 //!       their pens (.pens.png: `index` settles with them the colours that a palette holds twice).
 //!       The frames are those shown while playing the scenarios, with the colours they had most often on screen;
 //!       `--all` adds every other frame of the table, in grey.
-//!   hd-pack upscale <dir> <out> <k> [name...]
-//!       Trivial upscale (nearest pixel, `k` times) of the images of `dir` (all, or those named, e.g. `frames/01234`,
-//!       `levels/03_scroll2`), metadata copied: to test a pack.
+//!   hd-pack upscale <dir> <out> <k> [--scale2x] [name...]
+//!       Trivial upscale (nearest pixel, `k` times; with `--scale2x`, Scale2x applied until `k`, a power of 2) of the
+//!       images of `dir` (all, or those named, e.g. `frames/01234`, `levels/03_scroll2`), metadata copied: to test a
+//!       pack.
 //!   hd-pack index   <export> <retouched> <hd>
 //!       Retouched images (in `frames/`, `levels/` of <retouched>, any whole scale) back to the pens of their original
 //!       palettes: indexed PNG and metadata in <hd>, the folder the game loads.
@@ -152,8 +153,24 @@ fn export_cmd(args: &[String]) -> Result {
 }
 
 fn upscale_cmd(args: &[String]) -> Result {
-    let [dir, out, k, names @ ..] = args else { return Err("upscale <dir> <out> <k> [name...]".into()) };
+    let [dir, out, k, names @ ..] = args else { return Err("upscale <dir> <out> <k> [--scale2x] [name...]".into()) };
     let k: usize = k.parse().map_err(|_| format!("bad scale {k}"))?;
+    let (epx, names) = match names {
+        [flag, rest @ ..] if flag == "--scale2x" => (true, rest),
+        _ => (false, names),
+    };
+    if epx && !k.is_power_of_two() {
+        return Err(format!("--scale2x: {k} is not a power of 2"));
+    }
+    let enlarge = |mut image: Image<[u8; 4]>| {
+        if !epx {
+            return ddsom_hd::upscale(&image, k);
+        }
+        for _ in 0..k.trailing_zeros() {
+            image = ddsom_hd::scale2x(&image);
+        }
+        image
+    };
     let (dir, out) = (PathBuf::from(dir), PathBuf::from(out));
     let mut done = 0;
     for sub in ["frames", "levels"] {
@@ -164,7 +181,7 @@ fn upscale_cmd(args: &[String]) -> Result {
             }
             let (src, dst) = (dir.join(sub).join(&name), out.join(sub).join(&name));
             let image = io(ddsom_hd::read_rgba(&src.with_extension("png")), &src)?;
-            io(ddsom_hd::write_rgba(&dst.with_extension("png"), &ddsom_hd::upscale(&image, k)), &dst)?;
+            io(ddsom_hd::write_rgba(&dst.with_extension("png"), &enlarge(image)), &dst)?;
             io(std::fs::copy(src.with_extension("json"), dst.with_extension("json")), &src)?;
             done += 1;
         }
