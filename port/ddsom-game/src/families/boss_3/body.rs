@@ -5,7 +5,7 @@
 //! The players are pushed by the boss itself (`push_players`); the other objects call 0x81aa4
 //! (`boss_common`), which calls these shapes through `push`.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::*;
 use crate::families::cx::Bench;
@@ -21,7 +21,7 @@ const SIDE: Shape = Shape { slices: "boss_3/side_slices", rows: "boss_3/side_row
 
 /// 0x81916 / 0x81a0a: push for object `other` at distance `d` from boss `me`, 0 outside the shape (object height
 /// above the slice, or too far in depth).
-fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> u16 {
+fn shove_amount(b: &mut World, shape: &Shape, me: Obj, other: Obj, d: u16) -> u16 {
     if (d as i16) >= 0x200 {
         return 0;
     }
@@ -41,7 +41,7 @@ fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> 
 }
 
 /// 0x818e6: shape 1: object `other` in front of boss `me` (up to 0x20 behind it) is pushed forward.
-pub(crate) fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+pub(crate) fn shove_front(b: &mut World, me: Obj, other: Obj) -> bool {
     let ahead = me.u8(b, Enemy::FLIP) != 0;
     let mut d = other.u16(b, Obj::X).wrapping_sub(me.u16(b, Obj::X));
     if !ahead {
@@ -64,7 +64,7 @@ pub(crate) fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
 }
 
 /// 0x819e2: shape 2: object `other` is pushed away from boss `me`, on the side where it is.
-pub(crate) fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+pub(crate) fn shove_side(b: &mut World, me: Obj, other: Obj) -> bool {
     let mut d = other.u16(b, Obj::X).wrapping_sub(me.u16(b, Obj::X));
     if (d as i16) < 0 {
         d = d.wrapping_neg();
@@ -104,7 +104,7 @@ pub(super) fn push_players<R: Bench>(x: &mut Cx<'_, R>, shape: u8) {
 
 /// Body shape `shape` (1 front, 0x818e6; 2 sideways, 0x819e2) applied to object `other` by boss `me`; true if the
 /// object was pushed (for 0x81aa4 of `boss_common`, which jumps through the table 0x81ad4 of the two shapes).
-pub fn push(b: &mut Cps2Bus, me: Obj, other: Obj, shape: u8) -> bool {
+pub fn push(b: &mut World, me: Obj, other: Obj, shape: u8) -> bool {
     match shape {
         1 => shove_front(b, me, other),
         2 => shove_side(b, me, other),

@@ -40,14 +40,14 @@ record! {
 }
 
 /// Starts object `o` (active) as kind `kind`, variant `variant`.
-fn start(b: &mut Cps2Bus, o: Obj, kind: u8, variant: u8) {
+fn start(b: &mut World, o: Obj, kind: u8, variant: u8) {
     o.set_active(b, 1);
     o.set_kind(b, kind);
     o.set_variant(b, variant);
 }
 
 /// Copies the position of `from` to `to`, set 16 pixels higher and just in front.
-fn place_above(b: &mut Cps2Bus, from: Obj, to: Obj) {
+fn place_above(b: &mut World, from: Obj, to: Obj) {
     for field in [Obj::X, Obj::Z, Obj::Y] {
         let v = from.u16(b, field);
         to.set_u16(b, field, v);
@@ -59,7 +59,7 @@ fn place_above(b: &mut Cps2Bus, from: Obj, to: Obj) {
 }
 
 /// Debris (EFFCT of type 0x32, variant 0xc) at the abscissa of `me`; its speeds come from the rows of the caller.
-fn debris(b: &mut Cps2Bus, fx: Obj, me: Obj) {
+fn debris(b: &mut World, fx: Obj, me: Obj) {
     start(b, fx, 0x32, 0xc);
     let x = me.u16(b, Obj::X);
     fx.set_u16(b, Obj::X, x);
@@ -67,7 +67,7 @@ fn debris(b: &mut Cps2Bus, fx: Obj, me: Obj) {
 
 /// Throws an object into the air above `o` (kind `kind`, variant `variant`): speeds ±0x140 in x, 0x300 upwards,
 /// `vy` in depth, flipped if `mirrored`.
-fn toss_item(b: &mut Cps2Bus, o: Obj, item: Obj, kind: u8, variant: u8, vy: u16, mirrored: bool) {
+fn toss_item(b: &mut World, o: Obj, item: Obj, kind: u8, variant: u8, vy: u16, mirrored: bool) {
     start(b, item, kind, variant);
     place_above(b, o, item);
     item.set_vz(b, 0x300);
@@ -80,7 +80,7 @@ fn toss_item(b: &mut Cps2Bus, o: Obj, item: Obj, kind: u8, variant: u8, vy: u16,
 }
 
 /// The x and depth speeds of `item` change sign.
-fn flip_speeds(b: &mut Cps2Bus, item: Obj) {
+fn flip_speeds(b: &mut World, item: Obj) {
     let vx = item.vx(b).wrapping_neg();
     item.set_vx(b, vx);
     let vy = item.vy(b).wrapping_neg();
@@ -88,7 +88,7 @@ fn flip_speeds(b: &mut Cps2Bus, item: Obj) {
 }
 
 /// Number of loot draws: two with more than three players alive, otherwise one.
-fn loot_rolls(b: &mut Cps2Bus) -> u16 {
+fn loot_rolls(b: &mut World) -> u16 {
     if PLAYERS_ALIVE.get(b) > 3 {
         2
     } else {
@@ -125,15 +125,15 @@ enum Draw {
     Next,
 }
 
-fn drawn(b: &mut Cps2Bus) -> (u8, u8) {
+fn drawn(b: &mut World) -> (u8, u8) {
     (DRAWN_KIND.get(b), DRAWN_VARIANT.get(b))
 }
-fn set_drawn(b: &mut Cps2Bus, kind: u8, variant: u8) {
+fn set_drawn(b: &mut World, kind: u8, variant: u8) {
     DRAWN_KIND.set(b, kind);
     DRAWN_VARIANT.set(b, variant);
 }
 /// New kind 4 variant drawn in `at`: 0 cancels the draw, 1 and 2 refer back to the draws `on_1`, `on_2`.
-fn redraw(b: &mut Cps2Bus, at: u32, on_1: Draw, on_2: Draw) -> Draw {
+fn redraw(b: &mut World, at: u32, on_1: Draw, on_2: Draw) -> Draw {
     let variant = engine().byte(b, at);
     set_drawn(b, 4, variant);
     match variant {
@@ -144,7 +144,7 @@ fn redraw(b: &mut Cps2Bus, at: u32, on_1: Draw, on_2: Draw) -> Draw {
     }
 }
 
-fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
+fn reroll_or_none(b: &mut World, at: u32) -> Draw {
     let variant = engine().byte(b, at);
     set_drawn(b, 4, variant);
     if variant == 0 { Draw::Next } else { Draw::Spawn }
@@ -152,9 +152,9 @@ fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
 
 /// 0x1172e: debris set no. `set` (`ai/debris_sets`: number - 1, then rows of 4 words: x offset, x speed, `+0x18`,
 /// `+0x58`) around `o`, flipped if `o` faces left. A row is only read if the effect could be created.
-pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
+pub fn debris_set(b: &mut World, o: Obj, set: u16) {
     let mut at = crate::tables::engine_table!("ai/debris_sets").at32(b, offset(set.wrapping_mul(4)));
-    let mut next = |b: &mut Cps2Bus| {
+    let mut next = |b: &mut World| {
         let v = engine().word(b, at);
         at += 2;
         v
@@ -185,10 +185,10 @@ pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
 
 /// 0x11a36: five pieces of ground debris (depth `ram::CAMERA1_Y`), rows of 6 words (`ai/ground_debris_0`, `_1` if
 /// `second`: x offset, x speed, z speed, `+0x18`, depth offset, `+0x1c`), flipped if `o` faces left; then a sound.
-pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
+pub fn ground_debris(b: &mut World, o: Obj, second: bool) {
     let rows = table(if second { "ai/ground_debris_1" } else { "ai/ground_debris_0" });
     let mut at = 0;
-    let mut next = |b: &mut Cps2Bus| {
+    let mut next = |b: &mut World| {
         let v = rows.at16(b, at);
         at += 2;
         v
@@ -224,7 +224,7 @@ pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
 /// 0xb648: only once per object (`+0x9d`), if the bit drawn in the mask `+0x9c` is set, drops the kind 2 object
 /// specific to its type (`ai/once_variants`, luck masks `ai/once_masks`; nothing for a zero variant), thrown to a
 /// randomly drawn side.
-pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
+pub fn drop_once(b: &mut World, o: Obj) {
     let e = Enemy(o);
     if e.once_done(b) != 0 {
         return;
@@ -250,7 +250,7 @@ pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
 
 /// 0xb780: loot of `o` (`ai/loot`, 16 draws per row `+0x80`; negative variant: nothing), one or two draws
 /// depending on the number of players; the second thrown to the other side.
-pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
+pub fn drop_loot(b: &mut World, o: Obj) {
     let row = Enemy(o).loot_row(b) as u16;
     if row == 0 {
         return;
@@ -270,7 +270,7 @@ pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
 /// `ai/treasure_lists`, ended by a negative byte; one or two draws); the objects of a list are numbered from 1 (`+0x2f`) and
 /// placed above `o`. Returns the low word of D2 that the original leaves (the row, × 16 if non-zero) and its
 /// D5 (the draw counter of the `dbf` loop, 0x0000ffff at the end), if it wrote it.
-pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
+pub fn drop_treasure(b: &mut World, o: Obj) -> (u16, Option<u32>) {
     let row = Enemy(o).loot_row(b) as u16;
     if row == 0 {
         return (0, None);
@@ -300,7 +300,7 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
 }
 
 /// The players in play and alive (present, non-zero HP), in order, with their class (`+3` / 2).
-fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
+fn party_classes(b: &mut World) -> Vec<u8> {
     let mut classes = Vec::with_capacity(4);
     for p in crate::ram::PLAYERS.iter().map(Player::of) {
         if p.active(b) != 0 && p.hp(b) != 0 {
@@ -311,13 +311,13 @@ fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
 }
 
 /// Draws an entry of `table` at `base` + (draw & `mask`) × `scale`.
-fn special_entry(b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
+fn special_entry(b: &mut World, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
     let roll = (rng::random(b) & mask).wrapping_mul(scale).wrapping_add(base);
     table.wrapping_add(offset(roll))
 }
 
 /// Start of the difficulty row (`ram::LEVEL_ROW`) of `size` bytes.
-fn difficulty_line(b: &mut Cps2Bus, size: u16) -> u16 {
+fn difficulty_line(b: &mut World, size: u16) -> u16 {
     LEVEL_ROW.get(b) as u16 * size
 }
 
@@ -327,7 +327,7 @@ fn difficulty_line(b: &mut Cps2Bus, size: u16) -> u16 {
 /// objects are reserved for a group of a single kind of spellcasters (`restrict_draw`). The object is thrown into
 /// the air like loot. Returns the low word of D3 that the original leaves if it wrote it (difficulty row, or
 /// classes in play).
-pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
+pub fn drop_special(b: &mut World, o: Obj) -> Option<u16> {
     let row = Enemy(o).loot_row(b) as u16;
     if row == 0 {
         return None;
@@ -425,7 +425,7 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
 /// 0xbcb4: reserved objects. Kind 3 variant 5: clerics and magicians only (table 0xd776); kind 4 variant
 /// 15: magicians only (0xda56); kind 4 variants 8 and 9: clerics only (0xdbc6); kind 4 variants 10
 /// and 11: according to the magicians and clerics in play (0xdd36). A group that does not fit keeps the object drawn.
-fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
+fn restrict_draw(b: &mut World, d3: &mut Option<u16>) -> Draw {
     let (kind, variant) = drawn(b);
     match (kind, variant) {
         (3, 5) => {
@@ -475,7 +475,7 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
 }
 
 /// All the players in play are of class `class`: new kind 4 variant drawn in `table`.
-fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, rows: &Table) -> Draw {
+fn only_class_draw(b: &mut World, d3: &mut Option<u16>, class: u8, rows: &Table) -> Draw {
     if party_classes(b).iter().any(|&k| k != class) {
         return Draw::Spawn;
     }

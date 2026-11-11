@@ -16,7 +16,7 @@
 //!
 //! States (byte `A5-0x55cc`): 0 loads the scene's script, 2 reads, 4 moves to 6, 6 done.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::screens::obj;
 use crate::screens::tables::{self, Rom};
@@ -72,7 +72,7 @@ mod entry {
 /// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
 /// with their argument (the D0.w of the entry, of which 0xa8ae8 takes the low byte). The registers they leave are
 /// reread by nobody, except the D5 of the trampolines (a leftover of the game, `dispatch::Leftovers`).
-fn script_routine(b: &mut Cps2Bus, routine: u32, arg: u16) {
+fn script_routine(b: &mut World, routine: u32, arg: u16) {
     use crate::families::{effects_creators, small, set_b, set_residue::camera};
     match routine {
         0x2a24 => camera::set_limit_x(b, arg),
@@ -88,7 +88,7 @@ fn script_routine(b: &mut Cps2Bus, routine: u32, arg: u16) {
 }
 
 /// One reader step (one frame). The registers of the original loop (D0, D1, D6, A1, A4, A6) are reread by nobody.
-pub fn step(b: &mut Cps2Bus) {
+pub fn step(b: &mut World) {
     if var::PLAYERS.get(b) == 0 {
         return;
     }
@@ -143,7 +143,7 @@ enum Spawn {
 }
 
 /// A spawn entry.
-fn spawn(b: &mut Cps2Bus, e: u32) -> Spawn {
+fn spawn(b: &mut World, e: u32) -> Spawn {
     if tables::byte(b, e + entry::MAX_RANK) > RANK.get(b) {
         return Spawn::Done;
     }
@@ -179,7 +179,7 @@ fn spawn(b: &mut Cps2Bus, e: u32) -> Spawn {
 
 /// The pool of class `class` (even byte): the allocator table (0xf2f38, program-space words) gives
 /// the address of the allocation routine of one of the pools.
-fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
+fn pool_of_class(b: &mut World, class: u16) -> &'static pools::Pool {
     let alloc = ALLOCATORS.pc_word(b, class as i16 as i32 as u32) as i16 as i32 as u32 & 0xff_ffff;
     pools::POOLS
         .into_iter()
@@ -189,7 +189,7 @@ fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
 }
 
 /// Resets the reader to the "load the script" state (0xf2e56, scene change).
-pub fn reset(b: &mut Cps2Bus) {
+pub fn reset(b: &mut World) {
     STATE.set(b, state::LOAD);
 }
 

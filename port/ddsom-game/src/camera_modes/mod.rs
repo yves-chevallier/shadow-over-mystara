@@ -8,7 +8,7 @@
 //! `Cam::o` designates the one the script modifies (a few scripts act on camera 2). The scripts only
 //! touch memory: no register or processor ([`Cam`]).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::families::cx::Cx;
 use crate::hw::video::{regs, Vram};
@@ -37,7 +37,7 @@ use stage::*;
 type Cam<'a> = Cx<'a, ()>;
 
 /// Context of a script on camera `cam`.
-fn on(b: &mut Cps2Bus, cam: Camera) -> Cam<'_> {
+fn on(b: &mut World, cam: Camera) -> Cam<'_> {
     Cx { c: (), b, o: cam.0 }
 }
 
@@ -96,7 +96,7 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
 
 /// 0x2ede0: camera 1 (A5+0x4fe) is initialised at the first call of a scene, then updated each frame.
 /// Returns the D4 left by the scenery copy.
-pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+pub fn update_camera_1(b: &mut World) -> crate::scroll::D4Leftovers {
     if CAMERA_1.active(b) != 0 {
         step(b)
     } else {
@@ -104,7 +104,7 @@ pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+fn init_camera_1(b: &mut World) -> crate::scroll::D4Leftovers {
     let mut x = on(b, CAMERA_1);
     x.set16(Camera::STATE, 0x0200);
     let stage = ram::SCENE.get(x.b);
@@ -176,7 +176,7 @@ fn load_scroll3_blocks(x: &mut Cam, first: u32, slots: [u32; 8]) {
 
 /// 0x32108: camera 2 (A5+0x54e) is initialised at the first call of a scene, then updated each frame.
 /// Returns the D4 left by the scenery copy.
-pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+pub fn update_camera_2(b: &mut World) -> crate::scroll::D4Leftovers {
     if CAMERA_2.active(b) != 0 {
         step_2(b)
     } else {
@@ -184,7 +184,7 @@ pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+fn init_camera_2(b: &mut World) -> crate::scroll::D4Leftovers {
     let mut x = on(b, CAMERA_2);
     x.set16(Camera::STATE, 0x0200);
     x.set16(Camera::MODE, 0);
@@ -223,7 +223,7 @@ fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
 
 /// 0x2f80c: one step of the initialised camera 1: mode script, then target stops and scenery
 /// copy (`scroll`).
-fn step(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+fn step(b: &mut World) -> crate::scroll::D4Leftovers {
     let mut x = on(b, CAMERA_1);
     x.set8(Camera::SHAKING, 0);
     let m = x.u16(Camera::MODE);
@@ -254,7 +254,7 @@ pub mod shake {
 /// 0x2824, 0x2860, 0x289c: starts a shake of the camera in service (1, or 2 if `A5+0x36`) in mode
 /// `mode` for `frames` frames. If no shake is in progress, the rest position and the current
 /// mode are kept for the end of the shake. Returns the camera.
-pub fn start_shake(b: &mut Cps2Bus, mode: u16, frames: u16) -> Obj {
+pub fn start_shake(b: &mut World, mode: u16, frames: u16) -> Obj {
     let cam = if ram::CAMERA_ALT_ACTIVE.is_set(b) { CAMERA_2 } else { CAMERA_1 };
     if cam.shaking(b) == 0 {
         cam.set_shaking(b, 1);

@@ -18,7 +18,7 @@
 //! return D0-D2, A1-A4 and the flags as it does, depending on the path followed (`tools::objects::lists`). The
 //! callers without this contract use `SortedList::reinsert`, the same writes without registers.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{Link, Obj};
 use crate::mem::{set_low_word, A5};
@@ -43,13 +43,13 @@ fn is_sentinel_or_none(l: Link) -> bool {
 }
 
 impl SortedList {
-    fn head(self, b: &mut Cps2Bus) -> Link {
+    fn head(self, b: &mut World) -> Link {
         Link(Word::a5(self.head).get(b))
     }
-    fn set_head(self, b: &mut Cps2Bus, l: Link) {
+    fn set_head(self, b: &mut World, l: Link) {
         Word::a5(self.head).set(b, l.0)
     }
-    fn set_tail(self, b: &mut Cps2Bus, l: Link) {
+    fn set_tail(self, b: &mut World, l: Link) {
         Word::a5(self.tail).set(b, l.0)
     }
 
@@ -58,7 +58,7 @@ impl SortedList {
     /// The writes are those of 0x1ee1a, in the same order (like `Reinsert`, without registers): on an
     /// inconsistent list (overlapping links), the original and this function leave the same memory, which the
     /// plan-based version (`plan_reinsert`, `apply`) did not guarantee (discrepancy found by `fuzz_couv` on ESHL 44).
-    pub fn reinsert(self, b: &mut Cps2Bus, obj: Obj) {
+    pub fn reinsert(self, b: &mut World, obj: Obj) {
         let a0 = obj.0;
         let (prev, next) = (Obj(a0).u16(b, Obj::PREV), Obj(a0).u16(b, Obj::NEXT));
         if prev.wrapping_add(next) == 0 {
@@ -71,7 +71,7 @@ impl SortedList {
     }
 
     /// `Reinsert::relocate` without registers.
-    fn relocate_exact(self, b: &mut Cps2Bus, obj: Obj, w: Way) -> bool {
+    fn relocate_exact(self, b: &mut World, obj: Obj, w: Way) -> bool {
         let a0 = obj.0;
         let link = Obj(a0).u16(b, w.ahead);
         if (link as i16) >= 0 {
@@ -114,7 +114,7 @@ impl SortedList {
     }
 
     /// `Reinsert::insert` without registers (0x1eef2).
-    fn insert_exact(self, b: &mut Cps2Bus, obj: Obj) {
+    fn insert_exact(self, b: &mut World, obj: Obj) {
         let a0 = obj.0;
         let y = Obj(a0).u32(b, Obj::Y);
         let tail = Word::a5(self.tail).get(b);
@@ -171,7 +171,7 @@ pub(super) enum Removal {
 }
 
 /// Analyzes the removal of `obj` (without modifying anything), like `0x1f0be`.
-fn plan_removal(b: &mut Cps2Bus, obj: Obj) -> Removal {
+fn plan_removal(b: &mut World, obj: Obj) -> Removal {
     let (prev, next) = (obj.prev(b), obj.next(b));
     if prev.is_none() {
         return Removal::NotListed;
@@ -200,12 +200,12 @@ fn list_ending_with_mark(end: Link) -> SortedList {
 }
 
 /// Removes `obj` from its list (if it is in one) and resets its links to zero: `0x1f0be`.
-pub fn unlink(b: &mut Cps2Bus, obj: Obj) {
+pub fn unlink(b: &mut World, obj: Obj) {
     let removal = plan_removal(b, obj);
     apply_removal(b, obj, removal);
 }
 
-fn apply_removal(b: &mut Cps2Bus, obj: Obj, removal: Removal) {
+fn apply_removal(b: &mut World, obj: Obj, removal: Removal) {
     match removal {
         Removal::NotListed => return,
         Removal::Middle { prev, next } => {
@@ -234,7 +234,7 @@ fn apply_removal(b: &mut Cps2Bus, obj: Obj, removal: Removal) {
 
 /// Removes from their lists all the actor objects then, if the actors were not empty,
 /// those of the foreground: `0x1f184`. Returns the last object removed.
-pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn unlink_all(b: &mut World) -> Option<Obj> {
     let mut last = None;
     for list in [ACTORS, FOREGROUND] {
         let head = list.head(b);
@@ -287,7 +287,7 @@ impl Way {
 /// (`store`), the `movea.w` sign-extend and touch no flag.
 pub(crate) struct Reinsert<'a, R: Alu> {
     pub(crate) c: &'a mut R,
-    pub(crate) b: &'a mut Cps2Bus,
+    pub(crate) b: &'a mut World,
     /// The reinserted object (A0 of the original).
     pub(crate) obj: Obj,
     pub(crate) list: SortedList,
@@ -448,7 +448,7 @@ impl SortedList {
     /// word of D2
     /// receives the link it leaves (`move.w (behind,A0),D2`). Original glitch: a following handler re-reads it (the
     /// bounce of the freeze shard, 0x4bda8). D2 goes in and out unchanged otherwise.
-    pub fn reinsert_leftovers(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
+    pub fn reinsert_leftovers(self, b: &mut World, obj: Obj, d2: &mut u32) {
         let mut c = Registers::default();
         c.d[2] = *d2;
         Reinsert { c: &mut c, b, obj, list: self }.run();

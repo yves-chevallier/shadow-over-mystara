@@ -497,7 +497,7 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Crawl: random duration, then the beast springs up and strikes (+6 = 20 and 22, 0x72a16 / 0x72b16).
-fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             let r = rand_and(x, 0xf);

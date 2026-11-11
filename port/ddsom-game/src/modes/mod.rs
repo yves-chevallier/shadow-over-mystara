@@ -17,7 +17,7 @@ pub mod ranking;
 pub mod select;
 pub mod title;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::objects::Obj;
 use crate::ram::Byte;
@@ -78,7 +78,7 @@ pub trait Sequence {
 
 /// Call of a native subroutine from a Rust step: its continuation is a current call of the task, not a pushed
 /// address.
-fn push(b: &mut Cps2Bus, next: impl Into<Next>) {
+fn push(b: &mut World, next: impl Into<Next>) {
     crate::tasks::table::call(b, next);
 }
 

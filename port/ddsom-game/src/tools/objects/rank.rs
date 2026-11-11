@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::rank` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -12,7 +12,7 @@ use crate::tools::objects::motion::{cmp, lsl_word};
 use crate::mem::{rd8, set_low_byte, set_low_word, A5};
 
 /// 0x1f258: `reset`. Leaves A0 = structure.
-fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn reset_regs(c: &mut Cpu, b: &mut World) {
     c.a[0] = BASE;
     let active = rd8(b, A5 + GAME_ACTIVE);
     c.flags_logic(active as u32, Size::Byte);
@@ -22,7 +22,7 @@ fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1f1b8: loads the settings row `A5+0x2a`, then `reset`.
-fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn load_preset_regs(c: &mut Cpu, b: &mut World) {
     let row = rd8(b, A5 + PRESET_ROW);
     let off = lsl_word(c, row as u16, 4);
     c.d[0] = off as u32;
@@ -32,7 +32,7 @@ fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1f27c: `tick`, operations and flags of the original (D0 = rank, A0 = structure).
-fn tick_regs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn tick_regs(c: &mut Cpu, b: &mut World) {
     let active = rd8(b, A5 + GAME_ACTIVE);
     c.flags_logic(active as u32, Size::Byte);
     if active == 0 {
@@ -80,7 +80,7 @@ fn tick_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1f2c0: `raise`.
-fn raise_regs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn raise_regs(c: &mut Cpu, b: &mut World) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     c.flags_logic(delay as u32, Size::Word);
@@ -100,7 +100,7 @@ fn raise_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1f300: `lower`.
-fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn lower_regs(c: &mut Cpu, b: &mut World) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     c.flags_logic(delay as u32, Size::Word);

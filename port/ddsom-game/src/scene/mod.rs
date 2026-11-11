@@ -27,7 +27,7 @@ pub mod tally;
 pub mod tiles;
 pub mod transition;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::A5;
 use crate::ram::{Byte, Long, Word};
@@ -97,14 +97,14 @@ pub mod fading {
     pub const FROM_WHITE: Task = Task::Fading(Fade::FromWhite);
 
     /// Creates the fade task `task` in slot 0x10 (`jsr 0x9b6`).
-    pub fn launch(b: &mut cps2::Cps2Bus, task: Task) {
+    pub fn launch(b: &mut crate::world::World, task: Task) {
         crate::kernel::create_task(b, 0x10, task);
     }
 }
 
 /// Context of a scene sequence: the machine, and named accesses to work RAM.
 pub struct Ctx<'a> {
-    pub b: &'a mut Cps2Bus,
+    pub b: &'a mut World,
     /// Scene entry (phase 8): the address of the phase handler, which the original keeps in A0 (`jsr (A0)` of the
     /// game loop and of the demo) and which the opening sequences reread as an object (original glitch: see
     /// `entry::phase_8`); 0 elsewhere.
@@ -112,7 +112,7 @@ pub struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(b: &'a mut Cps2Bus) -> Self {
+    pub fn new(b: &'a mut World) -> Self {
         Ctx { b, phase_handler: 0 }
     }
 

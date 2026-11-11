@@ -9,10 +9,14 @@ fn main() {
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);
     if a[8] == "1" {
-        ddsom_game::install(&mut m)
+        dump(ddsom_game::install(m), &a)
     } else {
-        ddsom_game::install_reference(&mut m)
+        ddsom_game::install_reference(&mut m);
+        dump(m, &a)
     }
+}
+
+fn dump<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let (from, to): (usize, usize) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let addr = u32::from_str_radix(&a[6], 16).unwrap();
@@ -23,7 +27,7 @@ fn main() {
         if f + 1 >= from {
             let gfx = (0x900000..0xb00000).contains(&addr);
             let base = if gfx { ((addr - 0x900000) / 2) as usize } else { ((addr - 0xff0000) / 2) as usize };
-            let words: Vec<String> = (0..len / 2).map(|i| format!("{:04x}", if gfx { m.bus.gfxram[base + i] } else { m.bus.ram[base + i] })).collect();
+            let words: Vec<String> = (0..len / 2).map(|i| format!("{:04x}", if gfx { m.bus.hw().gfxram[base + i] } else { m.bus.ram()[base + i] })).collect();
             println!("{:5} {}", f + 1, words.join(" "));
         }
     }

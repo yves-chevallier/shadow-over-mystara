@@ -19,7 +19,7 @@
 //! The routines read, decide and write like the original; the coin sound, the EEPROM bookkeeping and the
 //! locks (0xb96/0xbac) are called through their Rust functions.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::Cell;
@@ -97,7 +97,7 @@ record! {
 /// 0x14cb8: the four coin slot records zeroed, then their settings: `+0xb` = 0xff, `+8` =
 /// "more than one coin per credit", `+9` = 4 and `+0xf` = "free start" (`A5+0x24`) in coin
 /// mode 17; free play (`A5+0x25`) in mode 18.
-pub fn initialize(b: &mut Cps2Bus) {
+pub fn initialize(b: &mut World) {
     const COIN_MODE: Byte = Byte::a5(0x1c);
     const FREE_START: Byte = Byte::a5(0x24);
     for slot in COIN_SLOTS.iter() {
@@ -140,7 +140,7 @@ struct Line {
 /// Walks the configured coin slots in the original's order: the lines to examine and, between
 /// them, the decisions of the tests on the number of coin slots (`apres_ligne(k)` is called after each
 /// line). The second coin slot reads line 3 if the coins are shared.
-fn walk(b: &mut Cps2Bus, mut line: impl FnMut(&mut Cps2Bus, Line)) {
+fn walk(b: &mut World, mut line: impl FnMut(&mut World, Line)) {
     let n = ram::COIN_SLOTS.get(b) as i8;
     line(b, Line { k: 0, mask: 0x10 });
     if n == 0 {
@@ -166,7 +166,7 @@ fn walk(b: &mut Cps2Bus, mut line: impl FnMut(&mut Cps2Bus, Line)) {
 // Reading the coin slots (0x143da)
 
 /// Processes a line (0x14546 common counters, 0x145cc separate counters). `level`: `IN2 & mask`.
-fn handle_line(b: &mut Cps2Bus, separate: bool, l: Line, level: u8) {
+fn handle_line(b: &mut World, separate: bool, l: Line, level: u8) {
     let a0 = CoinSlot::nth(l.k);
     let counters = if separate { a0 } else { CoinSlot::nth(0) };
     let debounce = a0.debounce(b);
@@ -208,7 +208,7 @@ fn handle_line(b: &mut Cps2Bus, separate: bool, l: Line, level: u8) {
 
 /// 0x143da (VBLANK): reads the coin slot lines. The original leaves D0 and A0 intact and VBLANK restores all the
 /// registers: nothing comes out in the registers.
-pub fn read_coin_slots(b: &mut Cps2Bus) {
+pub fn read_coin_slots(b: &mut World) {
     let menu = ram::MENU_TEST.get(b);
     if menu != 0 {
         return;
@@ -225,7 +225,7 @@ pub fn read_coin_slots(b: &mut Cps2Bus) {
 
 /// 0x1422e: start button of coin slot `coin_slot` (`service` = byte of IN2+1). A start adds a free credit
 /// to the coin slot (0x1427a), with bookkeeping for the first.
-pub(crate) fn line_start(b: &mut Cps2Bus, coin_slot: CoinSlot, service: u8) {
+pub(crate) fn line_start(b: &mut World, coin_slot: CoinSlot, service: u8) {
     // the original compares A0 with the absolute address of the first record
     let first = coin_slot == CoinSlot::nth(0);
     if service & 4 != 0 {
@@ -252,7 +252,7 @@ pub(crate) fn line_start(b: &mut Cps2Bus, coin_slot: CoinSlot, service: u8) {
 }
 
 /// 0x141e0: the start buttons of the configured coin slots.
-pub fn read_starts(b: &mut Cps2Bus) {
+pub fn read_starts(b: &mut World) {
     let service = IN2_SERVICE.get(b);
     line_start(b, CoinSlot::nth(0), service);
     for k in 1..4 {
@@ -274,7 +274,7 @@ pub fn read_starts(b: &mut Cps2Bus) {
 
 /// Decides the lock for coin slot `coin_slot` (0x14322): locked (true) if the game is not free and
 /// the credits plus the gain of a threshold stay below 10.
-fn simple_lock(b: &mut Cps2Bus, coin_slot: CoinSlot) -> bool {
+fn simple_lock(b: &mut World, coin_slot: CoinSlot) -> bool {
     if ram::FREE.get(b) != 0 {
         return false;
     }
@@ -283,7 +283,7 @@ fn simple_lock(b: &mut Cps2Bus, coin_slot: CoinSlot) -> bool {
 }
 
 /// Same for coin slots 2 to 4 (0x14300): `rank` is their number.
-fn rank_lock(b: &mut Cps2Bus, coin_slot: CoinSlot, rank: u8) -> bool {
+fn rank_lock(b: &mut World, coin_slot: CoinSlot, rank: u8) -> bool {
     if ram::FREE.get(b) != 0 {
         return false;
     }
@@ -303,7 +303,7 @@ fn rank_lock(b: &mut Cps2Bus, coin_slot: CoinSlot, rank: u8) -> bool {
     simple_lock(b, coin_slot)
 }
 
-fn apply_lock(b: &mut Cps2Bus, locked: bool, mask: u8) {
+fn apply_lock(b: &mut World, locked: bool, mask: u8) {
     if locked {
         crate::video::lock_counters(b, mask);
     } else {
@@ -312,7 +312,7 @@ fn apply_lock(b: &mut Cps2Bus, locked: bool, mask: u8) {
 }
 
 /// 0x14290: locks or releases the coin counter of each coin slot.
-pub fn lock_counters(b: &mut Cps2Bus) {
+pub fn lock_counters(b: &mut World) {
     let separate = ram::SEPARATE_MODE.get(b) != 0;
     let lock = simple_lock(b, CoinSlot::nth(0));
     apply_lock(b, lock, 0x10);
@@ -336,7 +336,7 @@ pub const READ_COIN_SLOTS: Native = Native {
 
 /// 0x14e46: writes the digit `value & 15` (tile) then the attribute `attr` into the character layer at
 /// `case`. Returns the cell following the tile (the original's A4 only advances by one word).
-pub fn write_digit(b: &mut Cps2Bus, case: u32, value: u8, attr: u16) -> u32 {
+pub fn write_digit(b: &mut World, case: u32, value: u8, attr: u16) -> u32 {
     // addi.w #0,D0: offset of the base tile of the digits, zero in this ROM
     let tile = (value & 15) as u16;
     Cell(case).put(b, tile, attr);

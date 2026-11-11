@@ -265,7 +265,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn rd8(b: &mut cps2::Cps2Bus, a: u32) -> u8 {
+fn rd8(b: &mut crate::world::World, a: u32) -> u8 {
     crate::mem::rd8(b, a)
 }
 

@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::motion` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_X, SR_Z};
 
@@ -58,7 +58,7 @@ fn add_flags(c: &mut Cpu, old: u32, delta: u32) {
     c.addsub(false, delta, old, false, Size::Long, false);
 }
 
-fn ballistic_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd {
+fn ballistic_regs(c: &mut Cpu, b: &mut World, obj: Obj, axes: Axes) -> LastAdd {
     let mut last = LastAdd { old: 0, delta: 0 };
     for &axis in axes {
         let (old, delta) = advance(b, obj, axis);
@@ -69,7 +69,7 @@ fn ballistic_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd
     last
 }
 
-fn by_table_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, second: Axis) -> LastAdd {
+fn by_table_regs(c: &mut Cpu, b: &mut World, obj: Obj, second: Axis) -> LastAdd {
     c.d[0] = (obj.u8(b, Obj::SPEED_INDEX) as u32) << 2;
     c.a[4] = obj.u32(b, Obj::SPEED_TABLE);
     advance_by_table(b, obj, AXIS_X, 0);
@@ -80,7 +80,7 @@ fn by_table_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, second: Axis) -> LastAd
 }
 
 /// Speed table selection: D0 = table number. Leaves D0 = index << 2 and A4 = table.
-fn speed_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables) {
+fn speed_regs(c: &mut Cpu, b: &mut World, obj: Obj, tables: &SpeedTables) {
     let n = lsl_word(c, c.d[0] as u16, 2);
     let table = prog32(b, tables.pointers.wrapping_add(n as i16 as i32 as u32));
     select_speed_table(b, obj, table);
@@ -91,7 +91,7 @@ fn speed_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables) {
 }
 
 /// Flags left by 0xf1bfc (without the writes, done by `tick_counters`).
-fn countdown_flags(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+fn countdown_flags(c: &mut Cpu, b: &mut World, obj: Obj) {
     let v53 = obj.u8(b, Obj::COUNTER_53);
     c.flags_logic(v53 as u32, Size::Byte);
     if (v53 as i8) < 0 {
@@ -129,12 +129,12 @@ motion_native!(SPEED_TABLE_A, 0x1a94, "obj_select_speed_table_a", |c, b, o| spee
 
 motion_native!(SPEED_TABLE_B, 0x1b64, "obj_select_speed_table_b", |c, b, o| speed_regs(c, b, o, &SPEEDS_B));
 
-motion_native!(PAUSE_HOOK, 0x29ea, "obj_pause_hook", |c: &mut Cpu, b: &mut Cps2Bus, o: Obj| {
+motion_native!(PAUSE_HOOK, 0x29ea, "obj_pause_hook", |c: &mut Cpu, b: &mut World, o: Obj| {
     let v = o.u8(b, Obj::HIDDEN);
     c.flags_logic(v as u32, Size::Byte);
 });
 
-motion_native!(COUNTDOWNS, 0xf1bfc, "obj_tick_counters", |c: &mut Cpu, b: &mut Cps2Bus, o: Obj| {
+motion_native!(COUNTDOWNS, 0xf1bfc, "obj_tick_counters", |c: &mut Cpu, b: &mut World, o: Obj| {
     countdown_flags(c, b, o);
     tick_counters(b, o);
 });

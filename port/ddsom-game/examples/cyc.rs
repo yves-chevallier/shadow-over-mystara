@@ -35,12 +35,17 @@ fn main() {
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let hybrid = a[5] == "1";
     if hybrid {
-        ddsom_game::install(&mut m);
+        let mut m = ddsom_game::install(m);
         m.executor = Some(run_hybrid);
+        cycles(m, &a);
     } else {
         ddsom_game::install_reference(&mut m);
         m.executor = Some(run_original);
+        cycles(m, &a);
     }
+}
+
+fn cycles<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
     m.set_overclock(16.0);
     NAMES.with(|n| {
         for x in ddsom_game::all_natives() {

@@ -7,7 +7,7 @@ use crate::player::Player;
 
 /// Address entries of `to_stand` (0x35614, called by `aids.rs`) and `start_stand` (0x35620). The
 /// registers left by the animation (D5, D6, A4) are read by nobody (`DDSOM_POISON=anim`).
-fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
+fn stand_native(c: &mut m68k::Cpu, b: &mut crate::world::World, reset: bool) {
     let p = Player(c.a[0]);
     super::on_bench(c, b, |g| {
         if reset {

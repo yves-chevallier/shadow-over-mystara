@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::kernel` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::kernel::*;
@@ -28,7 +28,7 @@ macro_rules! native {
 // wrappers called by `jsr` take their return address as resumption (the continuation of the call in progress).
 
 /// Cession wrapper called by `jsr`: its return address is the resumption.
-fn envelope(c: &mut Cpu, b: &mut Cps2Bus, frames: Option<u8>) {
+fn envelope(c: &mut Cpu, b: &mut World, frames: Option<u8>) {
     let resume = crate::tools::frames::pop_return_68k(c, b);
     match frames {
         Some(frames) => wait(b, frames, resume),
@@ -74,31 +74,31 @@ fn task_of_game(entry: u32) -> Task {
 }
 
 /// 0x9b6: creates task D0 (offset), entry A0.
-fn create(c: &mut Cpu, b: &mut Cps2Bus) {
+fn create(c: &mut Cpu, b: &mut World) {
     create_task(b, c.d[0], task_of_game(c.a[0]));
     rts(c, b);
 }
 
 /// 0xa14: kills task D0.
-fn kill(c: &mut Cpu, b: &mut Cps2Bus) {
+fn kill(c: &mut Cpu, b: &mut World) {
     kill_task(b, c.d[0]);
     rts(c, b);
 }
 
 /// 0xaac: suspends task D0.
-fn suspend(c: &mut Cpu, b: &mut Cps2Bus) {
+fn suspend(c: &mut Cpu, b: &mut World) {
     table(b).suspend(slot(c.d[0]));
     rts(c, b);
 }
 
 /// 0xac8: wakes task D0 with count D1.
-fn wake(c: &mut Cpu, b: &mut Cps2Bus) {
+fn wake(c: &mut Cpu, b: &mut World) {
     table(b).wake(slot(c.d[0]), c.d[1] as u8);
     rts(c, b);
 }
 
 /// `0xaf6` (`trap #12`): D0.b ≠ 0 masks all the task's interrupts, D0.b = 0 enables them.
-fn mask(c: &mut Cpu, b: &mut Cps2Bus) {
+fn mask(c: &mut Cpu, b: &mut World) {
     set_interrupt_mask(b, if c.d[0] as u8 == 0 { 0 } else { MASK_ALL });
     rts(c, b);
 }

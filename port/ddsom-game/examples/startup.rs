@@ -69,17 +69,17 @@ fn compare(roms: &str, ee: Option<&[u8]>, images: u64) {
         m.set_overclock(16.0);
         m
     };
-    let (mut ma, mut mb) = (load(), load());
-    ddsom_game::install(&mut ma);
+    let (ma, mut mb) = (load(), load());
+    let mut ma = ddsom_game::install(ma);
     ddsom_game::install_reference(&mut mb);
     for f in 0..images {
         ma.run_frame();
         mb.run_frame();
         let ram = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).count();
-        let gfx = different(&ma.bus.gfxram, &mb.bus.gfxram);
-        let obj = different(&ma.obj_buffer, &mb.obj_buffer) + (0..2).map(|k| different(&ma.bus.objram[k], &mb.bus.objram[k])).sum::<usize>();
-        let pal = different(&ma.bus.palette, &mb.bus.palette);
-        let qram = ma.bus.qram.iter().zip(&mb.bus.qram).filter(|(p, q)| p != q).count();
+        let gfx = different(&ma.bus.hw.gfxram, &mb.bus.gfxram);
+        let obj = different(&ma.obj_buffer, &mb.obj_buffer) + (0..2).map(|k| different(&ma.bus.hw.objram[k], &mb.bus.objram[k])).sum::<usize>();
+        let pal = different(&ma.bus.hw.palette, &mb.bus.palette);
+        let qram = ma.bus.hw.qram.iter().zip(&mb.bus.qram).filter(|(p, q)| p != q).count();
         let zram = ma.sound.ram.iter().zip(&mb.sound.ram).filter(|(p, q)| p != q).count();
         let z80 = format!("{:?}", ma.sound.z80) == format!("{:?}", mb.sound.z80);
         println!("frame {}: ram {ram} gfx {gfx} objects {obj} palette {pal} | shared {qram} Z80 ram {zram} Z80 registers {}", f + 1, if z80 { "identical" } else { "different" });
@@ -95,10 +95,14 @@ fn main() {
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let images: u64 = a.get(3).and_then(|v| v.parse().ok()).unwrap_or(12);
     if a.get(4).is_some_and(|v| v == "1") {
-        ddsom_game::install(&mut m);
+        trace(ddsom_game::install(m), images);
     } else {
         ddsom_game::install_reference(&mut m);
+        trace(m, images);
     }
+}
+
+fn trace<B: cps2::Board>(mut m: cps2::Machine<B>, images: u64) {
     m.set_overclock(16.0);
     NEXT.with(|s| *s.borrow_mut() = m.executor);
     m.executor = Some(executor);
@@ -111,10 +115,10 @@ fn main() {
             "end of frame {f}: pc {:06x} sr {:04x} CFFD {:02x} CFFF {:02x} Z80 {} IRQ {}",
             m.cpu.pc,
             m.cpu.sr,
-            m.bus.qram[0xffd],
-            m.bus.qram[0xfff],
-            if m.bus.z80_running { "running" } else { "in reset" },
-            m.bus.irq_vblank
+            m.bus.hw().qram[0xffd],
+            m.bus.hw().qram[0xfff],
+            if m.bus.hw().z80_running { "running" } else { "in reset" },
+            m.bus.hw().irq_vblank
         );
     }
 }

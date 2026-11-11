@@ -54,7 +54,7 @@ pub mod tables;
 pub mod update;
 pub mod walk;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
@@ -238,7 +238,7 @@ pub mod ram {
 
 /// Execution context of the players' code: the memory, without registers.
 pub struct Ctx<'a> {
-    pub b: &'a mut Cps2Bus,
+    pub b: &'a mut World,
     /// What the last step dispatch left (see [`Jumped`]).
     pub jumped: Jumped,
     /// The leftovers D2-D5 that the players' code leaves to what follows (the object handlers read them:
@@ -257,13 +257,13 @@ pub struct Jumped {
 
 impl<'a> Ctx<'a> {
     /// Context of a caller whose leftovers are not read afterwards.
-    pub fn new(b: &'a mut Cps2Bus) -> Self {
+    pub fn new(b: &'a mut World) -> Self {
         Ctx { b, jumped: Jumped::default(), leftovers: Leftovers::default() }
     }
 
     /// Runs `f` on the player that a native at an original address receives (`Body::Handler`: the player is the
     /// object, A0 of the original), the leftovers D2-D5 passing in and out like those of the dispatch loop.
-    pub fn on_player(b: &mut Cps2Bus, a: &mut crate::dispatch::Dispatch, f: impl FnOnce(&mut Ctx, Player)) {
+    pub fn on_player(b: &mut World, a: &mut crate::dispatch::Dispatch, f: impl FnOnce(&mut Ctx, Player)) {
         let mut g = Ctx { b, jumped: Jumped::default(), leftovers: a.leftovers };
         f(&mut g, Player(a.object.0));
         a.leftovers = g.leftovers;
@@ -282,7 +282,7 @@ impl<'a> Ctx<'a> {
 }
 
 impl crate::machine::Machine for Ctx<'_> {
-    fn bus(&mut self) -> &mut Cps2Bus {
+    fn bus(&mut self) -> &mut World {
         &mut *self.b
     }
 }

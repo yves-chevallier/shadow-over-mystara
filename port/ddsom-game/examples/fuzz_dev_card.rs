@@ -12,7 +12,7 @@ use std::path::Path;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use ddsom_game::mem::{rd32, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -129,8 +129,8 @@ fn main() {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ a.get(4).map_or(1, |s| s.parse::<u64>().unwrap()).wrapping_mul(0x1000_0000_01b3));
     std::panic::set_hook(Box::new(|_| {}));
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     // a few frames: the work RAM is that of a game that has started
     for _ in 0..700 {
         m.run_frame();
@@ -143,12 +143,16 @@ fn main() {
     let case: Vec<(&str, u32, Rust)> = vec![
         ("startup 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
         ("reset 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
-            ddsom_game::eeprom::reset_card(b);
-            ddsom_game::tools::frames::rts(c, b);
+            ddsom_game::world::World::lend(b, |w| {
+                ddsom_game::eeprom::reset_card(w);
+                ddsom_game::tools::frames::rts(c, w);
+            });
         })),
         ("game time 0x2e540", 0x2e540, Box::new(|c, b| {
-            ddsom_game::eeprom::dev_card::play_time(b);
-            ddsom_game::tools::frames::rts(c, b);
+            ddsom_game::world::World::lend(b, |w| {
+                ddsom_game::eeprom::dev_card::play_time(w);
+                ddsom_game::tools::frames::rts(c, w);
+            });
         })),
         ("coin 0x2e448", 0x2e448, natives(0x2e448)),
         ("start 0x2e49a", 0x2e49a, natives(0x2e49a)),
@@ -162,7 +166,7 @@ fn main() {
         let mut examples = Vec::new();
         for _ in 0..tests {
             let mut c = m.cpu.clone();
-            let mut b = m.bus.clone();
+            let mut b = m.bus.to_bus();
             let region = rng.below(7) as u32;
             wr16(&mut b, A5 + 0x70, region as u16);
             wr8(&mut b, A5 + 0x82, 1);
@@ -230,7 +234,5 @@ fn main() {
         }
         total += gaps + panics;
     }
-    let _ = rd32;
-    let _ = rd8;
     println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

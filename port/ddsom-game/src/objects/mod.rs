@@ -27,7 +27,7 @@ pub mod rank;
 pub use current::Current;
 pub use enemy::Enemy;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::record::{record, Value};
@@ -116,10 +116,10 @@ pub mod ram {
 pub struct Link(pub u16);
 
 impl Value for Link {
-    fn read(b: &mut Cps2Bus, a: u32) -> Self {
+    fn read(b: &mut World, a: u32) -> Self {
         Link(rd16(b, a))
     }
-    fn write(self, b: &mut Cps2Bus, a: u32) {
+    fn write(self, b: &mut World, a: u32) {
         wr16(b, a, self.0)
     }
 }
@@ -260,31 +260,31 @@ impl Obj {
         self.0 as u16 as i16 as i32 as u32
     }
 
-    pub fn u8(self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn u8(self, b: &mut World, off: u32) -> u8 {
         rd8(b, self.at(off))
     }
-    pub fn u16(self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn u16(self, b: &mut World, off: u32) -> u16 {
         rd16(b, self.at(off))
     }
-    pub fn u32(self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn u32(self, b: &mut World, off: u32) -> u32 {
         rd32(b, self.at(off))
     }
-    pub fn set_u8(self, b: &mut Cps2Bus, off: u32, v: u8) {
+    pub fn set_u8(self, b: &mut World, off: u32, v: u8) {
         wr8(b, self.at(off), v)
     }
-    pub fn set_u16(self, b: &mut Cps2Bus, off: u32, v: u16) {
+    pub fn set_u16(self, b: &mut World, off: u32, v: u16) {
         wr16(b, self.at(off), v)
     }
-    pub fn set_u32(self, b: &mut Cps2Bus, off: u32, v: u32) {
+    pub fn set_u32(self, b: &mut World, off: u32, v: u32) {
         wr32(b, self.at(off), v)
     }
 
-    pub fn is_active(self, b: &mut Cps2Bus) -> bool {
+    pub fn is_active(self, b: &mut World) -> bool {
         self.u8(b, Self::ACTIVE) != 0
     }
 
     /// Depth (sort key), signed.
-    pub fn depth(self, b: &mut Cps2Bus) -> i32 {
+    pub fn depth(self, b: &mut World) -> i32 {
         self.u32(b, Self::Y) as i32
     }
 

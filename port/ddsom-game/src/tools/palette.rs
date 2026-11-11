@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::palette` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -22,27 +22,27 @@ macro_rules! page_native {
 }
 
 // Natives (calls by address): D0 is the argument; 0x1686 and 0x168c leave it set.
-fn or_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn or_brightness_native(c: &mut Cpu, b: &mut World) {
     or_brightness(b, c.d[0] as u16);
     rts(c, b);
 }
 
-fn full_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn full_brightness_native(c: &mut Cpu, b: &mut World) {
     c.d[0] = (c.d[0] & 0xffff_0000) | 0xf000;
     or_brightness_native(c, b);
 }
 
-fn no_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn no_brightness_native(c: &mut Cpu, b: &mut World) {
     c.d[0] = 0;
     or_brightness_native(c, b);
 }
 
-fn set_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_brightness_native(c: &mut Cpu, b: &mut World) {
     set_brightness(b, c.d[0] as u16);
     rts(c, b);
 }
 
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: 0 }
 }
 
@@ -59,7 +59,7 @@ struct StageEnd {
 }
 
 /// Where `load_stage_palettes(b, a5, d0, dst)` ends (read before the load: the lists do not change).
-fn stage_end(b: &mut Cps2Bus, d0: u32, dst: u32) -> StageEnd {
+fn stage_end(b: &mut World, d0: u32, dst: u32) -> StageEnd {
     let (list, count) = (stage_list(d0), stage_count(d0 as u8));
     let listed = (0..count).rev().find(|&i| rd16(b, list + 2 * i) & 0x8000 == 0);
     let extra = stage_extra(b);
@@ -70,7 +70,7 @@ fn stage_end(b: &mut Cps2Bus, d0: u32, dst: u32) -> StageEnd {
 
 /// Registers that 0x1a36c leaves: D0 = current scene x 4, D1-D6/A1/A2 = last palette copied
 /// (D1 = 0 if there are no extra palettes), A3, A4, A6, D7 = 0xffff.
-fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
+fn stage_regs(c: &mut Cpu, b: &mut World, end: &StageEnd) {
     let current = crate::ram::SCENE.get(b) as u32;
     c.d[0] = (current << 2) & 0xffff;
     if let Some(at) = end.last {
@@ -93,7 +93,7 @@ fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
 /// Arguments of 0x1a350 / 0x1a360 / 0x1a366: scene number loaded (D0) and destination.
 /// 0x1a350 and 0x1a360 read the current scene; 0x1a366 takes D0 as is. 0x1a350 writes into the
 /// scroll layer 1 (scenes 0x2f and 0x42, where page 0 serves as the fade source).
-fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
+fn stage_args(b: &mut World, c: &Cpu, entry: u32) -> (u32, u32) {
     let stage = crate::ram::SCENE.get(b) as u32;
     match entry {
         0x1a350 => (stage, hw::SCROLL1),
@@ -102,7 +102,7 @@ fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
     }
 }
 
-fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
+fn stage_run(c: &mut Cpu, b: &mut World, entry: u32) {
     let (d0, dst) = stage_args(b, c, entry);
     let end = stage_end(b, d0, dst);
     load_stage_palettes(b, d0, dst);
@@ -116,7 +116,7 @@ pub(crate) const STAGE_PAGE0: Native = native(0x1a360, "palette_scene", |c, b| s
 
 pub(crate) const STAGE_SCROLL1: Native = native(0x1a350, "palette_scene_scroll1", |c, b| stage_run(c, b, 0x1a350));
 
-fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_run(c: &mut Cpu, b: &mut World) {
     let source = load_set(b, c.d[0]);
     // registers of the original: D0.w shifted, A4 = end of the page, A3 = end of the source
     let shifted = (c.d[0] as u16) << 2;
@@ -140,7 +140,7 @@ fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Registers left by a page loader: D0-D6 = first seven longs of the last palette,
 /// the eighth in A4 (pages 1 and 2) or A2 (page 3); source and destination (end) in A2/A3
 /// (pages 1 and 2) or A4/A1 (page 3); D7.w = -1.
-fn page_regs(c: &mut Cpu, b: &mut Cps2Bus, k: usize, source: u32) {
+fn page_regs(c: &mut Cpu, b: &mut World, k: usize, source: u32) {
     let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
     let l = palette_longs(b, page + (PAGE_PALETTES - 1) * PALETTE_BYTES);
     c.d[..7].copy_from_slice(&l[..7]);
@@ -159,7 +159,7 @@ fn page_regs(c: &mut Cpu, b: &mut Cps2Bus, k: usize, source: u32) {
 
 /// Effective D0 of a page loader: the caller's for the "D0" entry, otherwise 0 (page 1)
 /// or the current scene.
-fn page_d0(b: &mut Cps2Bus, c: &Cpu, k: usize, entry: u32) -> u32 {
+fn page_d0(b: &mut World, c: &Cpu, k: usize, entry: u32) -> u32 {
     if entry == [0x1a60a, 0x1a67e, 0x1a8b2][k] {
         c.d[0]
     } else if k == 0 {
@@ -169,7 +169,7 @@ fn page_d0(b: &mut Cps2Bus, c: &Cpu, k: usize, entry: u32) -> u32 {
     }
 }
 
-fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
+fn page_run(c: &mut Cpu, b: &mut World, k: usize, entry: u32) {
     let d0 = page_d0(b, c, k, entry);
     let source = load_page(b, k, d0);
     page_regs(c, b, k, source);
@@ -178,7 +178,7 @@ fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
 
 /// 0x1a296. Of the registers that the scene loader leaves, the following steps (the three pages) only keep A6 (end
 /// of its list) and the high word of D7 (zero); the flags are those of the final `clr.w`.
-fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
+fn load_all(c: &mut Cpu, b: &mut World) {
     let stage = crate::ram::SCENE.get(b);
     load_all_palettes(b);
     c.a[6] = stage_list(stage as u32) + 2 * stage_count(stage);
@@ -192,7 +192,7 @@ fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1cd7c: one fade step of each checked page towards its target palette (`A5 + 0x492 + 4 k`).
-fn fade_to_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
+fn fade_to_palettes(c: &mut Cpu, b: &mut World) {
     for (k, page) in flagged_pages(b) {
         let target = SOURCES[k].get(b);
         approach_page(b, page, target);
@@ -201,7 +201,7 @@ fn fade_to_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1cdd6: one fade step of each checked page towards the colour (word) `A5 + 0x492 + 4 k`.
-fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
+fn fade_to_colors(c: &mut Cpu, b: &mut World) {
     for (k, page) in flagged_pages(b) {
         let goal = crate::ram::Word(SOURCES[k].0).get(b);
         approach_constant(b, page, goal);
@@ -210,14 +210,14 @@ fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1cd32: one fade step towards white of each checked page.
-fn fade_to_white(c: &mut Cpu, b: &mut Cps2Bus) {
+fn fade_to_white(c: &mut Cpu, b: &mut World) {
     for (_, page) in flagged_pages(b) {
         brighten_page(b, page);
     }
     rts(c, b);
 }
 
-fn fill_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn fill_page_native(c: &mut Cpu, b: &mut World) {
     let values = [c.d[0], c.d[1], c.d[2], c.d[3], c.d[4], c.d[5], c.d[6], c.a[1]];
     fill_page(b, c.a[0], values);
     c.a[0] = c.a[0].wrapping_add(0x400);
@@ -251,7 +251,7 @@ pub(crate) const BRIGHTEN_PAGE: Native = native(
     },
 );
 
-fn save_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn save_flash_native(c: &mut Cpu, b: &mut World) {
     save_flash(b);
     c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
     c.a[2] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
@@ -259,7 +259,7 @@ fn save_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn restore_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn restore_flash_native(c: &mut Cpu, b: &mut World) {
     restore_flash(b);
     c.a[1] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
     c.a[2] = flash::SPARE + 2 * flash::SPARE_COLORS;
@@ -268,7 +268,7 @@ fn restore_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Native of a lightning: the work registers as the original leaves them (last colour processed).
-fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, tint: Flash) {
+fn flash_native_run(c: &mut Cpu, b: &mut World, tint: Flash) {
     let last = flash(b, tint);
     let (base, mask) = tint.tint();
     let level = flash_level(last);
@@ -284,7 +284,7 @@ fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, tint: Flash) {
     rts(c, b);
 }
 
-const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::ALL }
 }
 
@@ -305,13 +305,13 @@ pub(crate) const FLASH_F: Native = flash_native(0x1ab22, "palette_lightning_f", 
 pub(crate) const FLASH_G: Native = flash_native(0x1ab3c, "palette_lightning_g", |c, b| flash_native_run(c, b, Flash::G));
 
 /// The natives leave the flags of the `move.w`.
-fn flash_color_native_run(c: &mut Cpu, b: &mut Cps2Bus, color: u16) {
+fn flash_color_native_run(c: &mut Cpu, b: &mut World, color: u16) {
     set_flash_color(b, color);
     c.flags_logic(color as u32, m68k::decode::Size::Word);
     rts(c, b);
 }
 
-const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::CCR }
 }
 
@@ -326,7 +326,7 @@ pub(crate) const FLASH_COLOR_WHITE_B: Native =
 
 /// Copies `longs` × 8 longs from `from` to `to` by `movem.l` of eight registers (D0-D5, A3, A4 keep the
 /// last block); returns the end addresses.
-fn movem_copy(c: &mut Cpu, b: &mut Cps2Bus, from: u32, to: u32, blocks: u32, step: u32) -> (u32, u32) {
+fn movem_copy(c: &mut Cpu, b: &mut World, from: u32, to: u32, blocks: u32, step: u32) -> (u32, u32) {
     let (mut from, mut to) = (from, to);
     for _ in 0..blocks {
         let v: [u32; 8] = std::array::from_fn(|i| rd32(b, from + 4 * i as u32));
@@ -343,7 +343,7 @@ fn movem_copy(c: &mut Cpu, b: &mut Cps2Bus, from: u32, to: u32, blocks: u32, ste
 }
 
 /// 0x1ad2a: backup of palette page 1 (0x91c400, 1 KB) to FF1190.
-fn save_page1(c: &mut Cpu, b: &mut Cps2Bus) {
+fn save_page1(c: &mut Cpu, b: &mut World) {
     let (from, to) = movem_copy(c, b, 0x91c400, 0xff1190, 32, 0x20);
     c.a[2] = from;
     c.a[1] = to;
@@ -353,7 +353,7 @@ fn save_page1(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Native of 0x37882: D0 = offset, D1-D5/A3/A4 = the longs copied (`movem`), A1 = end of the source, A2 = the
 /// destination.
-fn character_palette_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn character_palette_native(c: &mut Cpu, b: &mut World) {
     let (offset, from, to) = character_palette_at(b, c.a[0]);
     c.d[0] = offset & 0xffff;
     let (end, _) = movem_copy(c, b, from, to, 1, 0);

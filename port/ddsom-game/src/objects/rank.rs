@@ -18,7 +18,7 @@
 //! The settings (+0x02..=+0x11) are copied from a 16-byte row of the table `rank/presets` (0x1f1d8), chosen
 //! by the byte `A5+0x2a`.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::ram::{Byte, Long, Word};
 use crate::regs;
@@ -38,15 +38,15 @@ pub(crate) const GAME_ACTIVE: u32 = 0x30;
 pub(crate) const PLAYERS_MODE: u32 = 0x35;
 pub(crate) const PRESET_ROW: u32 = 0x2a;
 
-pub(crate) fn get(b: &mut Cps2Bus, off: u32) -> u16 {
+pub(crate) fn get(b: &mut World, off: u32) -> u16 {
     Word(BASE + off).get(b)
 }
-pub(crate) fn set(b: &mut Cps2Bus, off: u32, v: u16) {
+pub(crate) fn set(b: &mut World, off: u32, v: u16) {
     Word(BASE + off).set(b, v)
 }
 
 /// Copies the settings of row `row` of the table `rank/presets`.
-pub fn load_preset(b: &mut Cps2Bus, row: u8) {
+pub fn load_preset(b: &mut World, row: u8) {
     let presets = crate::tables::engine_table!("rank/presets");
     for i in 0..4 {
         let v = presets.at32(b, 16 * row as u32 + 4 * i);
@@ -55,14 +55,14 @@ pub fn load_preset(b: &mut Cps2Bus, row: u8) {
 }
 
 /// 0x1f238: the settings of row `A5+0x2a`, then `reset`.
-pub fn load_current_preset(b: &mut Cps2Bus) {
+pub fn load_current_preset(b: &mut World) {
     let row = Byte::a5(PRESET_ROW).get(b);
     load_preset(b, row);
     reset(b);
 }
 
 /// Resets the countdown and the rank to their starting value.
-pub fn reset(b: &mut Cps2Bus) {
+pub fn reset(b: &mut World) {
     if !Byte::a5(GAME_ACTIVE).is_set(b) {
         set(b, IDLE_DELAY, 0x384);
         set(b, INITIAL, 0xe);
@@ -74,7 +74,7 @@ pub fn reset(b: &mut Cps2Bus) {
 }
 
 /// One step per frame: the rank rises by one notch every `RAMP_DELAY` frames up to the maximum.
-pub fn tick(b: &mut Cps2Bus) {
+pub fn tick(b: &mut World) {
     if !Byte::a5(GAME_ACTIVE).is_set(b) || !Byte::a5(PLAYERS_MODE).is_set(b) {
         return;
     }
@@ -99,7 +99,7 @@ pub fn tick(b: &mut Cps2Bus) {
 }
 
 /// Rises by one notch (at most to the maximum) and restarts the countdown.
-pub fn raise(b: &mut Cps2Bus) {
+pub fn raise(b: &mut World) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     let next = (get(b, CURRENT).wrapping_add(1) as i16).min(get(b, MAX) as i16);
@@ -107,7 +107,7 @@ pub fn raise(b: &mut Cps2Bus) {
 }
 
 /// Drops according to the game mode (at most down to the minimum) and restarts the countdown.
-pub fn lower(b: &mut Cps2Bus) {
+pub fn lower(b: &mut World) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     let mode = Byte::a5(PLAYERS_MODE).get(b) as u32;

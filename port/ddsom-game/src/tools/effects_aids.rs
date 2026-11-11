@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::effects_aids` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -20,14 +20,14 @@ macro_rules! leaf {
     };
 }
 
-fn shock_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn shock_native(c: &mut Cpu, b: &mut World) {
     let (me, variant, setting, vx, vy) = (Obj(c.a[0]), c.d[0] as u8, c.d[1] as u16, c.d[2] as u16, c.d[3] as u16);
     shock_by(c, b, me, variant, setting, vx, vy);
     rts(c, b);
 }
 
 /// Natives of the sparks: A0 = the creator, A1 = the other object, D1.b = variant; A1 to A4 are returned.
-fn spark_native(c: &mut Cpu, b: &mut Cps2Bus, between: Option<bool>) {
+fn spark_native(c: &mut Cpu, b: &mut World, between: Option<bool>) {
     let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
     let (me, other, variant) = (Obj(c.a[0]), c.a[1], c.d[1] as u8);
     match between {
@@ -39,7 +39,7 @@ fn spark_native(c: &mut Cpu, b: &mut Cps2Bus, between: Option<bool>) {
 }
 
 /// Creates an object of type `kind` in `pool`, variant D0; flags of D0.b.
-fn spawn(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<Obj> {
+fn spawn(c: &mut Cpu, b: &mut World, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     let object = pool.alloc_68k(c, b)?;
     object.set_u8(b, Obj::ACTIVE, 1);
     object.set_u8(b, Obj::KIND, kind);
@@ -49,12 +49,12 @@ fn spawn(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<O
 }
 
 /// 0xddeaa: scenery of type 6.
-fn spawn_scenery_6(c: &mut Cpu, b: &mut Cps2Bus) {
+fn spawn_scenery_6(c: &mut Cpu, b: &mut World) {
     spawn(c, b, &pools::SOBJ, 6);
 }
 
 /// 0xdfa4a: scenery of type 11, oriented according to D1.
-fn spawn_scenery_11(c: &mut Cpu, b: &mut Cps2Bus) {
+fn spawn_scenery_11(c: &mut Cpu, b: &mut World) {
     if let Some(object) = spawn(c, b, &pools::SOBJ, 11) {
         object.set_u8(b, 0x2c, c.d[1] as u8);
         c.flags_logic(c.d[1] & 0xff, Size::Byte);
@@ -62,7 +62,7 @@ fn spawn_scenery_11(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x517ba: player effect of type 44; its setting `+0x2f` is the next byte in the A4 table.
-fn spawn_player_effect_44(c: &mut Cpu, b: &mut Cps2Bus) {
+fn spawn_player_effect_44(c: &mut Cpu, b: &mut World) {
     if let Some(object) = spawn(c, b, &pools::PEFF, 44) {
         let setting = rd8(b, c.a[4]);
         c.a[4] = c.a[4].wrapping_add(1);
@@ -70,14 +70,14 @@ fn spawn_player_effect_44(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-fn count_living_players(c: &mut Cpu, b: &mut Cps2Bus) {
+fn count_living_players(c: &mut Cpu, b: &mut World) {
     if let Some(alive) = living_players(b, Obj(c.a[0])) {
         c.d[0] = alive as u32;
     }
 }
 
 /// 0x25260: a scripted player places itself in front of the object (`A5+0x46`), shifted according to its number (`+2`).
-fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
+fn place_scripted_player(c: &mut Cpu, b: &mut World) {
     /// X offsets by player number (words, program space: 0x40, 0x10, -0x18, -0x44).
     const OFFSETS: u32 = 0x2528c;
     let me = c.a[0];
@@ -97,7 +97,7 @@ fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, me + 0x10, depth as u16);
 }
 
-const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 

@@ -13,23 +13,23 @@
 //! declares the offset `Obj::X` (for the code that still passes offsets around), `obj.x(b)` and `obj.set_x(b, v)`.
 //! The record type must have a method `at(self, off: u32) -> u32` giving the address of a field.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 
 /// A value stored in RAM, big-endian like the 68000.
 pub trait Value: Sized {
-    fn read(b: &mut Cps2Bus, a: u32) -> Self;
-    fn write(self, b: &mut Cps2Bus, a: u32);
+    fn read(b: &mut World, a: u32) -> Self;
+    fn write(self, b: &mut World, a: u32);
 }
 
 macro_rules! value {
     ($($t:ty: $u:ty, $rd:ident, $wr:ident;)*) => {$(
         impl Value for $t {
-            fn read(b: &mut Cps2Bus, a: u32) -> Self {
+            fn read(b: &mut World, a: u32) -> Self {
                 $rd(b, a) as $t
             }
-            fn write(self, b: &mut Cps2Bus, a: u32) {
+            fn write(self, b: &mut World, a: u32) {
                 $wr(b, a, self as $u)
             }
         }
@@ -54,11 +54,11 @@ macro_rules! record {
                 pub const $off: u32 = $at;
 
                 $(#[$doc])*
-                pub fn $get(self, b: &mut cps2::Cps2Bus) -> $t {
+                pub fn $get(self, b: &mut crate::world::World) -> $t {
                     <$t as $crate::record::Value>::read(b, self.at(Self::$off))
                 }
 
-                pub fn $set(self, b: &mut cps2::Cps2Bus, v: $t) {
+                pub fn $set(self, b: &mut crate::world::World, v: $t) {
                     <$t as $crate::record::Value>::write(v, b, self.at(Self::$off))
                 }
             )*

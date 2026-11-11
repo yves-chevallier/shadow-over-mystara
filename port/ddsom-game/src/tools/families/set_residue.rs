@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::families::set_residue` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -11,7 +11,7 @@ use crate::{regs, Native};
 use crate::objects::Obj;
 
 /// 0xd5f12: clears three columns of the tile buffer (44 rows each) for the scene exit.
-fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
+fn erase_columns(c: &mut Cpu, b: &mut World) {
     let end = clear_columns(b);
     columns_regs(c, end);
     rts(c, b);
@@ -27,12 +27,12 @@ fn columns_regs(c: &mut Cpu, end: u32) {
 }
 
 /// `two_grids` (character D0) for the tools (the game calls `two_grids`).
-fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
+fn load_two_grids(c: &mut Cpu, b: &mut World) {
     two_grids(b, c.d[0] as u16);
     rts(c, b);
 }
 
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 

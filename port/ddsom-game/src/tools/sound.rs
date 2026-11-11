@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::sound` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
@@ -13,7 +13,7 @@ use crate::mem::{rd16, rd32};
 use crate::objects::Obj;
 
 /// Read and write heads of the sound queue.
-fn heads(b: &mut Cps2Bus) -> (u16, u16) {
+fn heads(b: &mut World) -> (u16, u16) {
     (rd16(b, a5(ram::READ_HEAD)), rd16(b, a5(ram::WRITE_HEAD)))
 }
 
@@ -36,7 +36,7 @@ fn register_command(c: &Cpu) -> Command {
 }
 
 /// 0xe0848: enqueues D1, D2, D3 (C raised if the queue is full).
-fn enqueue_direct(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enqueue_direct(c: &mut Cpu, b: &mut World) {
     let before = heads(b);
     let enqueued = enqueue(b, register_command(c));
     finish_enqueue(c, before, enqueued);
@@ -44,7 +44,7 @@ fn enqueue_direct(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xe0836: enqueues D1, D2, D3 if sound is allowed.
-fn enqueue_if_sound(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enqueue_if_sound(c: &mut Cpu, b: &mut World) {
     if sound_allowed(b) {
         enqueue_direct(c, b);
     } else {
@@ -71,7 +71,7 @@ pub(crate) const ENQUEUE_DIRECT: Native = Native {
 
 /// Native of a wrapper or a dispatcher (calls by address): the core, with what it reads from the registers;
 /// all registers are returned intact, the flags are those of the last `move.l` of the private stack pointer.
-fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
+fn native_sound_in(c: &mut Cpu, b: &mut World, sound: u32) {
     play_with(b, Sound::at(sound), Source { object: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
     let top = rd32(b, a5(ram::PRIVATE_STACK));
     c.flags_logic(top, Size::Long);
@@ -99,7 +99,7 @@ pub(crate) fn native_wrappers() -> &'static [Native] {
 
 /// Native of a service command: all registers are returned (movem on the stack), only the flags of
 /// 0xe0848 remain.
-fn service_native_run(c: &mut Cpu, b: &mut Cps2Bus, s: Service) {
+fn service_native_run(c: &mut Cpu, b: &mut World, s: Service) {
     let before = heads(b);
     let enqueued = service_enqueue(b, s);
     let (d0, a1) = (c.d[0], c.a[1]);
@@ -130,7 +130,7 @@ const fn service_native(entry: u32, name: &'static str, touches_sound: bool) -> 
 }
 
 /// `clear_private_stack`; A0 = the pointer, flags of its value.
-fn init_private_stack(c: &mut Cpu, b: &mut Cps2Bus) {
+fn init_private_stack(c: &mut Cpu, b: &mut World) {
     clear_private_stack(b);
     let p = a5(ram::PRIVATE_STACK);
     c.a[0] = p;

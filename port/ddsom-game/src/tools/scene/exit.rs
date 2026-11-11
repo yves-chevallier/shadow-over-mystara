@@ -1,7 +1,6 @@
 //! Tools: the natives of `crate::scene::exit` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::scene::exit::*;
@@ -21,7 +20,7 @@ pub(crate) const PHASE_16: Native = Native {
     outputs: 0,
 };
 
-pub(crate) fn patch_shared_next(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+pub(crate) fn patch_shared_next(c: &mut Cpu, b: &mut cps2::Cps2Bus) -> bool {
     if rd8(b, c.a[6] + 0xc) < SHARED_NEXT_TABLE_LEN {
         return false;
     }

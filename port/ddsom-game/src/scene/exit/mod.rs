@@ -24,7 +24,7 @@
 //! Sequences 0, 6, 20, 29, 31 and 33 have no `jsr` dispatch: their states end the
 //! frame themselves (`Update::Nothing`). Sequence 27 becomes 29 when `A5+0x66` is set.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use super::fading;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
@@ -102,7 +102,7 @@ pub struct Ex<'a> {
 /// final state, at the end of a shared state or on the return of a cession (`Step::DispatchTail`). The dispatch puts
 /// A0 on the block, and A0 survives the cessions; the black screen moves it (the last object unlinked from the lists,
 /// 0xf7f12), the shop puts it back on the block. The value is kept in the task table across the cessions.
-pub fn set_dispatch_a0(b: &mut Cps2Bus, a0: u32) {
+pub fn set_dispatch_a0(b: &mut World, a0: u32) {
     crate::tasks::table::table(b).scene_exit_a0 = a0;
 }
 
@@ -360,7 +360,7 @@ struct Sequence {
     states: &'static [St],
 }
 
-use Update::{Full, NoCollisions, Nothing, Reduced, World};
+use Update::{Full, NoCollisions, Nothing, Reduced};
 use St::Idle;
 use crate::ram::{Byte, Word};
 
@@ -390,7 +390,7 @@ const WALK: St = St::WalkWait { timer: None };
 // ---------------------------------------------------------------------------------------------
 // Running a frame
 
-pub fn phase_16(b: &mut Cps2Bus) -> bool {
+pub fn phase_16(b: &mut World) -> bool {
     // the original dispatch works with A0 on the block
     set_dispatch_a0(b, BASE);
     let mut ex = Ex { x: Ctx::new(b), handed_off: false, entry: 0, dispatch_return: None, a0: None };

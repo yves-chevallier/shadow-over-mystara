@@ -8,7 +8,7 @@
 //! counters: `dbf` leaves the low word at -1).
 
 use crate::families::shell::records::view;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::effects_creators::leftovers::Regs;
 use crate::mem::{rd16, wr16, wr32, wr8};
@@ -41,7 +41,7 @@ mod f {
 
 
 /// Allocates an ESHL of type `kind` (active); `None` (carry set) if the pool is full.
-fn spawn(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
+fn spawn(r: &mut impl Regs, b: &mut World, kind: u8) -> Option<Obj> {
     let o = r.allocated(b, &pools::ESHL)?;
     o.set_u8(b, f::ACTIVE, 1);
     o.set_u8(b, f::KIND, kind);
@@ -49,7 +49,7 @@ fn spawn(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
 }
 
 /// Copies the creator's position (words X, Z, Y).
-fn copy_position(b: &mut Cps2Bus, from: Obj, to: Obj) {
+fn copy_position(b: &mut World, from: Obj, to: Obj) {
     for off in [f::X, f::Z, f::Y] {
         let v = from.u16(b, off);
         to.set_u16(b, off, v);
@@ -59,7 +59,7 @@ fn copy_position(b: &mut Cps2Bus, from: Obj, to: Obj) {
 /// Numbered fragments: `count` objects of type `kind`, variant `variant`, index (`+0x2f`) from `count - 1` down to 0
 /// (except `skip`), linked to the creator (`+0x46`), at its position; orientation: the creator's, or `flip` imposed.
 /// D1.w serves as counter. False if the pool is full before the end.
-fn fragments(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: u8, count: u16, skip: Option<u8>, flip: Option<u8>, creator_kind: bool) -> bool {
+fn fragments(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, variant: u8, count: u16, skip: Option<u8>, flip: Option<u8>, creator_kind: bool) -> bool {
     let mut i = count.wrapping_sub(1);
     loop {
         r.d_word(1, i);
@@ -87,7 +87,7 @@ fn fragments(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: u8,
 
 /// 0xa7b0a: bursts of boss 11 (type 0x44); a draw chooses their number and the one that is missing (table 0xa7b64:
 /// pairs number, absent).
-pub(crate) fn boss11_shards(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn boss11_shards(r: &mut impl Regs, b: &mut World, me: Obj) {
     let i = crate::rng::random(b) & 0xe;
     r.d_word(0, i);
     let count = tables().boss11_shard_counts.at8(b, i as u32);
@@ -98,7 +98,7 @@ pub(crate) fn boss11_shards(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0xa7570: fragments of type 0x42 of variant `variant`, their number read from table 0xa75b6.
-pub(crate) fn fragments_42(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u16) {
+pub(crate) fn fragments_42(r: &mut impl Regs, b: &mut World, me: Obj, variant: u16) {
     let count = tables().fragments_42_counts.at8(b, variant as i16 as i32 as u32);
     r.d(1, count as u32);
     fragments(r, b, me, 0x42, variant as u8, count as u16, None, None, false);
@@ -106,7 +106,7 @@ pub(crate) fn fragments_42(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant:
 
 /// 0xa7da2: two rows of fragments of type 0x45 (number read at 0xa7d92), turned right (with the creator's type in
 /// `+0x42`) then left.
-pub(crate) fn fragments_45(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn fragments_45(r: &mut impl Regs, b: &mut World, me: Obj) {
     r.d(0, 0);
     let count = tables().fragments_45_count.at8(b, 0) as u16;
     r.d(2, count as u32);
@@ -118,7 +118,7 @@ pub(crate) fn fragments_45(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// Series of objects linked by `+0x5c`: variants `last` down to 0 (D5), `+0x2f` = `index`.
-fn series(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, last: u8, index: u8) {
+fn series(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, last: u8, index: u8) {
     let mut n = last as u16;
     r.d(5, n as u32);
     while let Some(o) = spawn(r, b, kind) {
@@ -135,17 +135,17 @@ fn series(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, last: u8, index
 }
 
 /// 0xa4e84: 17 objects of type 0x36 (variants 16 down to 0), `+0x2f` = `index`.
-pub(crate) fn series_36(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, index: u8) {
+pub(crate) fn series_36(r: &mut impl Regs, b: &mut World, me: Obj, index: u8) {
     series(r, b, me, 0x36, 0x10, index);
 }
 
 /// 0xa5c9a: 16 objects of type 0x3b (variants 15 down to 0), `+0x2f` = 1.
-pub(crate) fn series_3b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn series_3b(r: &mut impl Regs, b: &mut World, me: Obj) {
     series(r, b, me, 0x3b, 0xf, 1);
 }
 
 /// An object linked to the creator by `+0x5c`, of type `kind`, variant `variant` (None: not set), `+0x2f` = `index`.
-fn linked(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: Option<u8>, index: u8) -> Option<Obj> {
+fn linked(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, variant: Option<u8>, index: u8) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     if let Some(v) = variant {
         o.set_u8(b, f::VARIANT, v);
@@ -157,19 +157,19 @@ fn linked(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: Option
 }
 
 /// 0xa5c7c: an object of type 0x3b, `+0x2f` = 0.
-pub(crate) fn single_3b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn single_3b(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     linked(r, b, me, 0x3b, None, 0)
 }
 
 /// 0xa6e6a: an object of type 0x40, variant 0, `+0x2f` = 5.
-pub(crate) fn single_40(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn single_40(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     linked(r, b, me, 0x40, Some(0), 5)
 }
 
 /// The creator's orientation is copied into the object A1 (`move.b D0b,(0x2c,A1)`). Original glitch: when the pool is
 /// full, A1 is the leftover of the allocation (first slot or end of the pool): the byte is written there anyway (type 1
 /// of `thrown`, `sweeping_8`).
-fn copy_flip(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, a1: Obj) {
+fn copy_flip(r: &mut impl Regs, b: &mut World, me: Obj, a1: Obj) {
     let flip = me.u8(b, f::FLIP);
     r.d_byte(0, flip);
     wr8(b, a1.0 + f::FLIP, flip);
@@ -179,7 +179,7 @@ fn copy_flip(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, a1: Obj) {
 /// Shot launched in front of the creator (types 1 and 2): `+0x2a` = 2, angle 8 (0x18 and speed reversed if it faces
 /// right), orientation of the creator. `always_flip`: the orientation is copied into A1 even when the pool is full
 /// (type 1, see `copy_flip`).
-fn thrown(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, vx: Option<u32>, always_flip: bool) -> Option<Obj> {
+fn thrown(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, vx: Option<u32>, always_flip: bool) -> Option<Obj> {
     let a1 = match r.alloc_or_rest(b, &pools::ESHL) {
         Ok(o) => {
             o.set_u8(b, f::ACTIVE, 1);
@@ -209,26 +209,26 @@ fn thrown(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, vx: Option<u32>
 }
 
 /// 0x9dda8: type 1 shot (speed left at zero by the allocation).
-pub(crate) fn thrown_1(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn thrown_1(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     thrown(r, b, me, 1, None, true)
 }
 
 /// 0x9e062: type 2 shot, speed 5 pixels per frame.
-pub(crate) fn thrown_2(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn thrown_2(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     thrown(r, b, me, 2, Some(0x0500_0000), false)
 }
 
 /// Cores of 0x9dda8 and 0x9e062 for the handlers that receive the shot to launch as a parameter.
-pub(crate) fn throw_1(b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn throw_1(b: &mut World, me: Obj) {
     thrown_1(&mut super::effects_creators::leftovers::Pure, b, me);
 }
-pub(crate) fn throw_2(b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn throw_2(b: &mut World, me: Obj) {
     thrown_2(&mut super::effects_creators::leftovers::Pure, b, me);
 }
 
 /// 0x9ed78: type 8 shot that sweeps: its angle (`+0x1c`, ±8 per shot between -0x40 and 0x40, direction in `+0x42`) is
 /// taken from the creator, advanced then returned to the creator.
-pub(crate) fn sweeping_8(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn sweeping_8(r: &mut impl Regs, b: &mut World, me: Obj) {
     let a1 = match r.alloc_or_rest(b, &pools::ESHL) {
         Ok(o) => {
             o.set_u8(b, f::ACTIVE, 1);
@@ -270,7 +270,7 @@ pub(crate) fn sweeping_8(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0x9eba6: type 6 shot, variant `variant`, orientation of the creator.
-pub(crate) fn shot_6(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn shot_6(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, 6)?;
     o.set_u8(b, f::VARIANT, variant);
     let flip = me.u8(b, f::FLIP);
@@ -283,7 +283,7 @@ pub(crate) fn shot_6(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -
 
 /// Objects of type `kind` linked to the creator (`link`: `+0x5c`, otherwise `+0x50`), variants `count - 1` down to 0
 /// (D1); stops if the pool is full (false, carry set).
-fn ring(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, count: u16, link: u32) -> bool {
+fn ring(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, count: u16, link: u32) -> bool {
     let mut n = count - 1;
     r.d(1, n as u32);
     loop {
@@ -300,13 +300,13 @@ fn ring(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, count: u16, link:
 }
 
 /// 0x9e194: four objects of type 3 (variants 3 down to 0, D1), linked by `+0x50`; false if the pool is full.
-pub(crate) fn four_3(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> bool {
+pub(crate) fn four_3(r: &mut impl Regs, b: &mut World, me: Obj) -> bool {
     ring(r, b, me, 3, 4, f::OWNER)
 }
 
 /// 0x9e2a0: object of type 4 above the creator (Z = 0x28), variant = `+0x2f` of the creator, linked by a long in
 /// `+0x46`; the creator receives 0x8000 in `+0x12`.
-pub(crate) fn above_4(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn above_4(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 4)?;
     wr32(b, o.0 + f::PARENT, me.0);
     let v = me.u8(b, f::INDEX);
@@ -323,7 +323,7 @@ pub(crate) fn above_4(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj
 }
 
 /// 0x9eede: two objects of type 9 (variants 1 and 2), the second linked to the first; D0 = 1.
-pub(crate) fn pair_9(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn pair_9(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let first = spawn(r, b, 9)?;
     first.set_u8(b, f::VARIANT, 1);
     first.set_u16(b, f::PARENT, me.word());
@@ -337,7 +337,7 @@ pub(crate) fn pair_9(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
 }
 
 /// 0x9dbd6: object of type 0, variant = `+0x2f` of the creator, linked by `+0x42` and `+0x50`.
-pub(crate) fn shot_0(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn shot_0(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0)?;
     o.set_u16(b, f::CREATOR, me.word());
     o.set_u16(b, f::OWNER, me.word());
@@ -351,7 +351,7 @@ pub(crate) fn shot_0(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
 
 /// 0x9e426: twelve objects of type 5 (`+0x2f` = 0 to 11, linked by `+0x46`) if `count` is less than the word
 /// `A5+0x7e64`; true (D0 = 1) if they are created.
-pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, count: u16) -> bool {
+pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut World, me: Obj, count: u16) -> bool {
     r.d(1, 12);
     let limit = vars::LIMIT_TWELVE.get(b);
     if (count as i16) >= limit as i16 {
@@ -378,7 +378,7 @@ pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, count: u16) 
 
 /// Row of bursts (types 0x19 and 0x1a): `count` + 1 objects (D5.w) numbered D3 = 0, 1..., `+0x58` = 1, 9, 17... (D4),
 /// with the creator's `+0x5c`; `directions`: byte `+0x2d` of each (type 0x1a), read from a table that advances (A2).
-fn row(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, mut count: u16, mut directions: Option<u32>) -> Option<Obj> {
+fn row(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, mut count: u16, mut directions: Option<u32>) -> Option<Obj> {
     let (mut n3, mut n4) = (0u8, 1u16);
     r.d(3, 0);
     r.d(4, 1);
@@ -408,14 +408,14 @@ fn row(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, mut count: u16, mu
 }
 
 /// Number of bursts minus one, read from a (program) table indexed by rank / 2.
-fn count_by_rank(r: &mut impl Regs, b: &mut Cps2Bus, table: &Table) -> u8 {
+fn count_by_rank(r: &mut impl Regs, b: &mut World, table: &Table) -> u8 {
     let i = vars::RANK.get(b) >> 1;
     r.d_word(0, i);
     table.at8(b, i as i16 as i32 as u32)
 }
 
 /// 0xa1670: row of bursts of type 0x19 (number drawn from table 0xa16ac).
-pub(crate) fn row_19(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn row_19(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let n = count_by_rank(r, b, &tables().bursts_19_counts);
     r.d(5, n as u32);
     row(r, b, me, 0x19, n as u16, None)
@@ -425,7 +425,7 @@ pub(crate) fn row_19(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
 /// chosen by the kind, or by the position of the target `+0x6c`, then by chance. Original glitch: `move.b (table),D5.b`
 /// without `moveq #0,D5` (unlike 0xa1670): the high byte of the word D5 left by the caller (`d5`, the crate
 /// `boxes::effect_special`) is added to the count of the `dbf D5.w` loop, which can then fill the ESHL pool.
-pub(crate) fn row_1a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16, d5: u16) -> Option<Obj> {
+pub(crate) fn row_1a(r: &mut impl Regs, b: &mut World, me: Obj, kind: u16, d5: u16) -> Option<Obj> {
     me.set_u16(b, Creator::KIND, kind);
     let n = count_by_rank(r, b, &tables().bursts_1a_counts);
     r.d_byte(5, n);
@@ -448,7 +448,7 @@ pub(crate) fn row_1a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16, d5:
 }
 
 /// 0xa1c6a: four objects of type 0x1c (variants 0 to 3, `+0x5c` of the creator), then the sound 0xebef8.
-pub(crate) fn four_1c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn four_1c(r: &mut impl Regs, b: &mut World, me: Obj) {
     r.d(4, 0);
     r.d(5, 3);
     for k in 0..4u16 {
@@ -463,17 +463,17 @@ pub(crate) fn four_1c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0xa31c2: three objects of type 0x28.
-pub(crate) fn ring_28(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn ring_28(r: &mut impl Regs, b: &mut World, me: Obj) {
     ring(r, b, me, 0x28, 3, f::LINK);
 }
 
 /// 0xa2f96: sixteen objects of type 0x27.
-pub(crate) fn ring_27(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn ring_27(r: &mut impl Regs, b: &mut World, me: Obj) {
     ring(r, b, me, 0x27, 16, f::LINK);
 }
 
 /// 0xa6824: two objects of type 0x3f linked to the creator, turned right then left (variant 0).
-pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut World, me: Obj) {
     for flip in [0, 0x20] {
         let Some(o) = spawn(r, b, 0x3f) else { break };
         o.set_u16(b, f::LINK, me.word());
@@ -484,7 +484,7 @@ pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0xa3354: an object of type 0x29 linked to the creator.
-pub(crate) fn single_29(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn single_29(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0x29)?;
     o.set_u16(b, f::LINK, me.word());
     r.flags(me.word() as u32, Size::Word);
@@ -492,7 +492,7 @@ pub(crate) fn single_29(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
 }
 
 /// 0x9ddee: a type 1 shot (`+0x2f` = 1) of variant `variant`, linked to the creator by `+0x50`.
-pub(crate) fn single_1(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn single_1(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, 1)?;
     o.set_u8(b, f::INDEX, 1);
     o.set_u8(b, f::VARIANT, variant);
@@ -503,7 +503,7 @@ pub(crate) fn single_1(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8)
 
 /// 0xa460a, 0xa464e, 0xa4676 and 0xa462c: an object of type 0x34 (`+0x2f` = 0) of variant 2, 1 (with the creator's
 /// orientation), 0 and 3, linked by `+0x46`.
-pub(crate) fn linked_34(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn linked_34(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, 0x34)?;
     o.set_u8(b, f::VARIANT, variant);
     o.set_u8(b, f::INDEX, 0);
@@ -517,7 +517,7 @@ pub(crate) fn linked_34(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8
 }
 
 /// 0xa5f38: an object of type 0x3c, variant 2, `+0x2f` and links of the creator (`+0x2f` copied, `+0x5c` = itself).
-pub(crate) fn single_3c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn single_3c(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0x3c)?;
     o.set_u8(b, f::VARIANT, 2);
     let v = me.u8(b, f::INDEX);
@@ -528,7 +528,7 @@ pub(crate) fn single_3c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
 }
 
 /// 0xa2b4a: an object of type 0x25 linked to the creator (`+0x5c`).
-pub(crate) fn single_25(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn single_25(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0x25)?;
     o.set_u16(b, f::LINK, me.word());
     r.flags(me.word() as u32, Size::Word);
@@ -536,7 +536,7 @@ pub(crate) fn single_25(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
 }
 
 /// 0xa1360: an object of type 0x18 that inherits the creator's `+0x5c`, then the sound 0xebe14.
-pub(crate) fn single_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn single_18(r: &mut impl Regs, b: &mut World, me: Obj) {
     if let Some(o) = spawn(r, b, 0x18) {
         let link = me.u16(b, f::LINK);
         o.set_u16(b, f::LINK, link);
@@ -547,7 +547,7 @@ pub(crate) fn single_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 
 /// 0xa1a40: an object of type 0x1b; the creator keeps `kind` in `+0x56`, the object takes its `+0x5c` and its target
 /// (`+0x6c` -> `+0x50`).
-pub(crate) fn single_1b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16) -> Option<Obj> {
+pub(crate) fn single_1b(r: &mut impl Regs, b: &mut World, me: Obj, kind: u16) -> Option<Obj> {
     let o = spawn(r, b, 0x1b)?;
     me.set_u16(b, Creator::KIND, kind);
     let link = me.u16(b, f::LINK);
@@ -561,7 +561,7 @@ pub(crate) fn single_1b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16) 
 /// 0xa44bc: three objects of type 0x33 (variant `variant`) around the position of `target`, at the offsets of table
 /// 0xa4516 (two words per object) and numbered 2 down to 0; the last one created (D0 = 1, A1), `None` (D0 = 0) if the
 /// pool is full before the end.
-pub(crate) fn chasers(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, target: Obj) -> Option<Obj> {
+pub(crate) fn chasers(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8, target: Obj) -> Option<Obj> {
     let mut d4 = 1u16;
     r.d(4, 1);
     r.d(5, 2);

@@ -12,7 +12,7 @@
 
 use std::sync::OnceLock;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::{data, Missing, RomAddr};
 
@@ -75,7 +75,7 @@ fn missing(a: u32) -> Missing {
 }
 
 /// Byte of the data space at `a` (ROM table, or RAM).
-pub fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub fn byte(b: &mut World, a: u32) -> u8 {
     if a & 0xff_ffff >= ROM_END {
         return crate::mem::rd8(b, a);
     }
@@ -83,7 +83,7 @@ pub fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word of the data space at `a`.
-pub fn word(b: &mut Cps2Bus, a: u32) -> u16 {
+pub fn word(b: &mut World, a: u32) -> u16 {
     if a & 0xff_ffff >= ROM_END {
         return crate::mem::rd16(b, a);
     }
@@ -91,7 +91,7 @@ pub fn word(b: &mut Cps2Bus, a: u32) -> u16 {
 }
 
 /// Long of the data space at `a`.
-pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
+pub fn long(b: &mut World, a: u32) -> u32 {
     if a & 0xff_ffff >= ROM_END {
         return crate::mem::rd32(b, a);
     }
@@ -99,17 +99,17 @@ pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
 }
 
 /// Byte of the program space (table read PC-relative).
-pub fn pc_byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub fn pc_byte(b: &mut World, a: u32) -> u8 {
     bytes(true, a, 1).map_or_else(|| missing(a).byte_in(b, a, true), |v| v as u8)
 }
 
 /// Word of the program space.
-pub fn pc_word(b: &mut Cps2Bus, a: u32) -> u16 {
+pub fn pc_word(b: &mut World, a: u32) -> u16 {
     bytes(true, a, 2).map_or_else(|| missing(a).word_in(b, a, true), |v| v as u16)
 }
 
 /// Long of the program space.
-pub fn pc_long(b: &mut Cps2Bus, a: u32) -> u32 {
+pub fn pc_long(b: &mut World, a: u32) -> u32 {
     bytes(true, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, true))
 }
 
@@ -125,22 +125,22 @@ impl Rom {
     pub const fn addr(self) -> u32 {
         self.0 .0
     }
-    pub fn byte(self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn byte(self, b: &mut World, off: u32) -> u8 {
         byte(b, self.addr().wrapping_add(off))
     }
-    pub fn word(self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn word(self, b: &mut World, off: u32) -> u16 {
         word(b, self.addr().wrapping_add(off))
     }
-    pub fn long(self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn long(self, b: &mut World, off: u32) -> u32 {
         long(b, self.addr().wrapping_add(off))
     }
-    pub fn pc_byte(self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn pc_byte(self, b: &mut World, off: u32) -> u8 {
         pc_byte(b, self.addr().wrapping_add(off))
     }
-    pub fn pc_word(self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn pc_word(self, b: &mut World, off: u32) -> u16 {
         pc_word(b, self.addr().wrapping_add(off))
     }
-    pub fn pc_long(self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn pc_long(self, b: &mut World, off: u32) -> u32 {
         pc_long(b, self.addr().wrapping_add(off))
     }
 }

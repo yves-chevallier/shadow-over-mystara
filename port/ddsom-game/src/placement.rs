@@ -1,6 +1,6 @@
 //! Placement of a player on free ground and the players' effect palettes (subsystem X2).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::hw::video;
 use crate::objects::Obj;
@@ -16,18 +16,18 @@ const LAST_Y: Word = Word(0xff0e68);
 
 /// Offset of the starting point of the search for player `o` in `table` (`placement/start_x`, `start_y`: words of
 /// the code, per player).
-fn start_offset(b: &mut Cps2Bus, o: Obj, table: &crate::tables::Table) -> u16 {
+fn start_offset(b: &mut World, o: Obj, table: &crate::tables::Table) -> u16 {
     let player = Player::of(o).index(b) as u32;
     table.nth16(b, player)
 }
 
 /// Starting point of the search for player `o` (relative to the camera): x.
-pub(crate) fn start_x(b: &mut Cps2Bus, o: Obj) -> u16 {
+pub(crate) fn start_x(b: &mut World, o: Obj) -> u16 {
     camera(b).0.wrapping_add(start_offset(b, o, crate::tables::engine_table!("placement/start_x")))
 }
 
 /// Starting point of the search for player `o`: depth.
-pub(crate) fn start_y(b: &mut Cps2Bus, o: Obj) -> u16 {
+pub(crate) fn start_y(b: &mut World, o: Obj) -> u16 {
     camera(b).1.wrapping_add(start_offset(b, o, crate::tables::engine_table!("placement/start_y")))
 }
 
@@ -40,7 +40,7 @@ pub(crate) fn is_free(t: &crate::video::Terrain) -> bool {
 /// by trying, like the original, the starting point and then the same point shifted by 16 pixels (in depth,
 /// then in x); failing that, the screen centre (+192, +80). The height makes the player fall from the top of the
 /// screen (camera + 256 - depth).
-pub fn place_on_free_ground(b: &mut Cps2Bus, o: Obj) {
+pub fn place_on_free_ground(b: &mut World, o: Obj) {
     let x0 = start_x(b, o);
     LAST_X.set(b, x0);
     let mut found = None;
@@ -87,7 +87,7 @@ pub mod effect_palette {
 
 /// 0x3b1c: copies the effect palette at offset `offset` (32 bytes); returns the eight longs copied and the next
 /// source.
-pub fn load_effect_palette(b: &mut Cps2Bus, offset: u16) -> ([u32; 8], u32) {
+pub fn load_effect_palette(b: &mut World, offset: u16) -> ([u32; 8], u32) {
     let from = EFFECT_PALETTES.wrapping_add(offset as i16 as i32 as u32);
     let longs: [u32; 8] = std::array::from_fn(|i| engine().long(b, from + 4 * i as u32));
     for (i, &v) in longs.iter().enumerate() {

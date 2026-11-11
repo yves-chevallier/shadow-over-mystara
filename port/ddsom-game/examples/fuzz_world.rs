@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{rd16, wr16, wr32, wr8, A5};
+use ddsom_game::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -142,8 +142,8 @@ fn main() {
     let rounds: u32 = a[5].parse().unwrap();
     let filter = a.get(6).cloned().unwrap_or_default();
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
@@ -154,7 +154,7 @@ fn main() {
     std::panic::set_hook(Box::new(|_| {}));
     let seed: u64 = std::env::var("DDSOM_GRAINE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut rng = Rng(0x1234_5678_9abc_def1 ^ seed.wrapping_mul(0x9e37_79b9_7f4a_7c15));
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
 
     type Prep = fn(&mut Cpu, &mut Bus, &mut Rng);
     let routines: Vec<(u32, &str, Prep)> = vec![
@@ -176,7 +176,6 @@ fn main() {
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
         }
     }
-    let _ = rd16;
     let mut bad = 0;
     for (name, s) in ddsom_game::report() {
         if routines.iter().any(|r| r.1 == name) {

@@ -58,7 +58,7 @@ pub const GAME_PAUSED: u32 = 0x3d;
 
 /// The camera the players see: the main one (`A5+0x506`), or the alternate one (`A5+0x556`) when `A5+0x36` is set.
 /// Its x and y words.
-pub fn camera(b: &mut cps2::Cps2Bus) -> (crate::ram::Word, crate::ram::Word) {
+pub fn camera(b: &mut crate::world::World) -> (crate::ram::Word, crate::ram::Word) {
     use crate::ram;
     if ram::CAMERA_ALT_ACTIVE.get(b) != 0 {
         (ram::CAMERA_ALT_X, ram::CAMERA_ALT_Y)

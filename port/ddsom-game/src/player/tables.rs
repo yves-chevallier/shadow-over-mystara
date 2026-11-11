@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 pub(crate) use crate::families::effects::tables::Read;
 pub(crate) use ddsom_data::effects::Table;
@@ -30,30 +30,30 @@ pub(crate) trait Aligned: Read {
 
     /// Byte at offset `off`, read by address: an offset past the table (or negative) reads the tables that follow
     /// (or precede) it, like the original.
-    fn byte_past(&self, b: &mut Cps2Bus, off: u32) -> u8 {
+    fn byte_past(&self, b: &mut World, off: u32) -> u8 {
         let a = self.rom().wrapping_add(off);
         if self.program() { pc8(b, a) } else { byte(b, a) }
     }
 
     /// Word at offset `off`, read by address (see `byte_past`).
-    fn word_past(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+    fn word_past(&self, b: &mut World, off: u32) -> u16 {
         let a = self.rom().wrapping_add(off);
         if self.program() { pc16(b, a) } else { word(b, a) }
     }
 
     /// Long at offset `off`, read by address (see `byte_past`).
-    fn long_past(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+    fn long_past(&self, b: &mut World, off: u32) -> u32 {
         let a = self.rom().wrapping_add(off);
         if self.program() { pc32(b, a) } else { long(b, a) }
     }
 
     /// Word at offset `off`, the address rounded down to even.
-    fn word_at(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+    fn word_at(&self, b: &mut World, off: u32) -> u16 {
         self.at16(b, off.wrapping_sub(self.rom().wrapping_add(off) & 1))
     }
 
     /// Long at offset `off`, the address rounded down to even.
-    fn long_at(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+    fn long_at(&self, b: &mut World, off: u32) -> u32 {
         self.at32(b, off.wrapping_sub(self.rom().wrapping_add(off) & 1))
     }
 }
@@ -134,7 +134,7 @@ fn box_byte(a: u32) -> Option<u8> {
 
 /// The six useful bytes of the collision box at the address `a` (offset and half-size per axis), as [`byte`] reads
 /// them one by one: a box of a box block is copied at once (the collision tests read every box of every pair).
-pub(crate) fn box_bytes(b: &mut Cps2Bus, a: u32) -> [u8; 6] {
+pub(crate) fn box_bytes(b: &mut World, a: u32) -> [u8; 6] {
     if a & 0xff_ffff < RAM {
         let blocks = &data().sprite_tables.box_blocks;
         if let Some(k) = blocks.partition_point(|k| k.rom <= a).checked_sub(1).map(|i| &blocks[i]) {
@@ -151,7 +151,7 @@ pub(crate) fn box_bytes(b: &mut Cps2Bus, a: u32) -> [u8; 6] {
 }
 
 /// Byte at the address `a` of a table read PC-relative.
-pub(crate) fn pc8(b: &mut Cps2Bus, a: u32) -> u8 {
+pub(crate) fn pc8(b: &mut World, a: u32) -> u8 {
     match holding(a, true) {
         Some((t, off)) => t.at8(b, off),
         None => residue(a, true).byte_in(b, a, true),
@@ -159,7 +159,7 @@ pub(crate) fn pc8(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word at the address `a` of a table read PC-relative.
-pub(crate) fn pc16(b: &mut Cps2Bus, a: u32) -> u16 {
+pub(crate) fn pc16(b: &mut World, a: u32) -> u16 {
     let a = a & !1;
     match holding(a, true) {
         Some((t, off)) => t.at16(b, off),
@@ -168,7 +168,7 @@ pub(crate) fn pc16(b: &mut Cps2Bus, a: u32) -> u16 {
 }
 
 /// Long at the address `a` of a table read PC-relative.
-pub(crate) fn pc32(b: &mut Cps2Bus, a: u32) -> u32 {
+pub(crate) fn pc32(b: &mut World, a: u32) -> u32 {
     let a = a & !1;
     match holding(a, true) {
         Some((t, off)) => t.at32(b, off),
@@ -181,7 +181,7 @@ pub(crate) fn pc32(b: &mut Cps2Bus, a: u32) -> u32 {
 const RAM: u32 = 0xff_0000;
 
 /// Byte at the address `a` of a table (data space).
-pub(crate) fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub(crate) fn byte(b: &mut World, a: u32) -> u8 {
     if a & 0xff_ffff >= RAM {
         return crate::mem::rd8(b, a);
     }
@@ -195,7 +195,7 @@ pub(crate) fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word at the address `a` of a table (data space).
-pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
+pub(crate) fn word(b: &mut World, a: u32) -> u16 {
     let a = a & !1;
     if a & 0xff_ffff >= RAM {
         return crate::mem::rd16(b, a);
@@ -213,7 +213,7 @@ pub(crate) fn word(b: &mut Cps2Bus, a: u32) -> u16 {
 }
 
 /// Long at the address `a` of a table (data space).
-pub(crate) fn long(b: &mut Cps2Bus, a: u32) -> u32 {
+pub(crate) fn long(b: &mut World, a: u32) -> u32 {
     let a = a & !1;
     if a & 0xff_ffff >= RAM {
         return crate::mem::rd32(b, a);

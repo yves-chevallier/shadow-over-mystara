@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::video` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::video::*;
@@ -10,14 +10,14 @@ use crate::{regs, Native};
 use crate::mem::{rd16, set_low_byte, wr16};
 
 /// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
-fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
+fn gauge_with_value(c: &mut Cpu, b: &mut World) {
     c.d[1] = GAUGE;
     gauge(c, b);
 }
 
 /// `update_gauge` (D1 = marker) with the registers of the original: D2 and the flags of the last computation, A0
 /// after the last write (the world update leaves them to the next handler).
-pub(crate) fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn gauge_68k(c: &mut Cpu, b: &mut World) {
     let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
     if !update_gauge(b, c.d[1]) {
         c.d[2] = c.d[2] & 0xffff_0000 | 0x400;
@@ -31,30 +31,30 @@ pub(crate) fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
+fn gauge(c: &mut Cpu, b: &mut World) {
     gauge_68k(c, b);
     rts(c, b);
 }
 
-fn lock(c: &mut Cpu, b: &mut Cps2Bus) {
+fn lock(c: &mut Cpu, b: &mut World) {
     let forced = lock_counters(b, c.d[0] as u8);
     set_low_byte(&mut c.d[1], forced);
     rts(c, b);
 }
 
 /// D0 is returned unchanged.
-fn unlock(c: &mut Cpu, b: &mut Cps2Bus) {
+fn unlock(c: &mut Cpu, b: &mut World) {
     let forced = unlock_counters(b, c.d[0] as u8);
     set_low_byte(&mut c.d[1], forced);
     rts(c, b);
 }
 
-fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enable_layers(c: &mut Cpu, b: &mut World) {
     turn_layers_on(b, c.d[0] as u16);
     rts(c, b);
 }
 
-fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
+fn disable_layers(c: &mut Cpu, b: &mut World) {
     let bits = c.d[0] as u16;
     set_low_word(&mut c.d[0], !bits);
     turn_layers_off(b, bits);
@@ -63,7 +63,7 @@ fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `clear_layer1_start` with the registers of the original: the cell in D0-D5, A2 and A3, D6 = -1 and A1 at the end
 /// of the zone.
-pub(crate) fn clear_layer1_start_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn clear_layer1_start_68k(c: &mut Cpu, b: &mut World) {
     clear_layer1_start(b);
     leftovers_clear_layer1_start(c);
 }
@@ -81,24 +81,24 @@ pub(crate) fn leftovers_clear_layer1_start(c: &mut Cpu) {
     c.sr &= !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
 }
 
-fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
+fn clear_scroll1_start(c: &mut Cpu, b: &mut World) {
     clear_layer1_start_68k(c, b);
     rts(c, b);
 }
 
-const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 /// 0x24b0: terrain number at (D0, D1).
-fn terrain_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn terrain_native(c: &mut Cpu, b: &mut World) {
     let t = terrain(b, c.d[0] as u16, c.d[1] as u16);
     terrain_regs(c, &t);
     rts(c, b);
 }
 
 /// 0x24a8: terrain number under object A0 (x position at +8, y at +0x10).
-fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
+fn terrain_of_object(c: &mut Cpu, b: &mut World) {
     set_low_word(&mut c.d[0], rd16(b, c.a[0] + 8));
     set_low_word(&mut c.d[1], rd16(b, c.a[0] + 0x10));
     terrain_native(c, b);
@@ -106,14 +106,14 @@ fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `load_grid` (D0 = number, A1 = destination) with the registers of the original: D0 = 0xffff, A1 and A2 at the end
 /// of the grid.
-pub(crate) fn load_grid_68k(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
+pub(crate) fn load_grid_68k(c: &mut Cpu, b: &mut World, grid: Grid) {
     let end = load_grid(b, grid, c.d[0] as u16, c.a[1]);
     c.d[0] = 0xffff;
     c.a[1] = end.destination;
     c.a[2] = end.indices;
 }
 
-fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
+fn load_blocks(c: &mut Cpu, b: &mut World, grid: Grid) {
     load_grid_68k(c, b, grid);
     rts(c, b);
 }
@@ -126,7 +126,7 @@ pub(crate) const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocks_small",
 
 /// 0x255a: D0 (0 to 99, saturated) as two decimal digits: tens in A1, units one column further.
 /// Returns D0 = units, D1 = tens, A1 = units cell + 2.
-fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
+fn decimal_digits(c: &mut Cpu, b: &mut World) {
     let mut value = c.d[0] as u16;
     if value >= 100 {
         value = 99;
@@ -143,7 +143,7 @@ fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x25e8: D0 as four hexadecimal digits (high nibble first), one per column starting at A1.
 /// Returns A1 = A1 + 4 columns.
-fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
+fn hex_digits(c: &mut Cpu, b: &mut World) {
     for i in 0..4 {
         put_digit(b, c.a[1] + COLUMN * i, (c.d[0] as u16) >> (12 - 4 * i) & 0xf);
     }
@@ -191,7 +191,7 @@ const LOAD_OUT: u32 = regs::d(0) | regs::a(1) | regs::a(2);
 
 /// Writes a digit (tile number = value, attribute 0) at `at`; the next cell of the row is
 /// `COLUMN` further in the character layer.
-fn put_digit(b: &mut Cps2Bus, at: u32, digit: u16) {
+fn put_digit(b: &mut World, at: u32, digit: u16) {
     wr16(b, at, digit);
     wr16(b, at + 2, 0);
 }

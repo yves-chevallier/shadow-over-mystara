@@ -26,7 +26,7 @@ mod table {
 }
 
 /// 0x3bbe: adds to `base` a variation drawn from the `ROLL` table (row according to the value).
-pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
+pub(super) fn roll_variation(w: &mut Combat, base: u16) -> u16 {
     cov::hit("roll_variation");
     let line = base.wrapping_sub(1).min(4) as u8;
     let line = (line << 5) as u16;
@@ -36,7 +36,7 @@ pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
 }
 
 /// 0x422a: damage of a player shot. Power A against an ordinary enemy, B otherwise.
-pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
+pub(super) fn shot_damage(w: &mut Combat, shot: Obj, e: Obj) -> u16 {
     cov::hit("shot_damage");
     let mut base = shot.u8(w.b, f::POWER_A);
     if e.u8(w.b, f::CLASS) != 2 {
@@ -56,7 +56,7 @@ pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
 /// type 2), +50% under bonus (`+0x79`), random variation, then modifiers: position
 /// bonus (`+0x100`), critical hit, enemy weakness/resistance, group bonus. The result
 /// is also displayed (`show_damage`).
-pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
+pub(super) fn player_damage(w: &mut Combat, p: Obj, e: Obj) -> u16 {
     cov::hit("player_damage");
     let kind = p.u8(w.b, f::ATTACK_KIND);
     let mut d5: u16 = match kind {
@@ -103,7 +103,7 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
 }
 
 /// 0x3cb6..: critical hit of the classes other than the magician: +5 damage, flag `+0x77`.
-fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
+fn critical_hit(w: &mut Combat, p: Obj, d5: u16) -> u16 {
     cov::hit("critical_hit");
     if (p.u8(w.b, Player::BUBBLE_ACTION) as i8) > 2 {
         return d5;
@@ -126,7 +126,7 @@ fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
 /// 0x3e8e: the magician (class 4) equipped with weapon 0x30 makes a critical hit of the "fraction
 /// of the victim's max HP" kind (max HP >> n), otherwise 1 damage point; with another weapon the
 /// common computation continues (`None`).
-fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
+fn mage_critical(w: &mut Combat, p: Obj, e: Obj) -> Option<u16> {
     cov::hit("mage_critical");
     if p.u8(w.b, Player::BLOW_ID) != 0x30 {
         return None;
@@ -153,7 +153,7 @@ fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
 
 /// 0x3d10: elemental weakness/resistance of the victim (`+0x9e`, `+0x9f`) to the player's weapon
 /// (`+0x107`): +4 if weak, half if resistant.
-fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
+fn elemental(w: &mut Combat, p: Obj, e: Obj, d5: u16) -> u16 {
     cov::hit("elemental");
     let element = p.u8(w.b, Player::ELEMENT);
     if element == 0 {
@@ -174,7 +174,7 @@ fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
 
 /// 0x3d3a: the group of living players adjusts the damage: bonus (signed byte) from the weapon's
 /// table, floor from the same record.
-fn party_bonus(w: &mut World, p: Obj, d5: u16) -> u16 {
+fn party_bonus(w: &mut Combat, p: Obj, d5: u16) -> u16 {
     cov::hit("party_bonus");
     let alive = ram::PLAYERS_ALIVE.get(w.b);
     if (alive as i8) <= 1 {
@@ -207,7 +207,7 @@ pub(super) enum DamageDisplay {
 
 /// 0x3f28 / 0x3f32: draws the damage number (two digits, low byte) next to player
 /// `p`, unless the screen setting hides it (bit 0x200 of `FFFFD0`). Returns `dmg`.
-pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay) -> u16 {
+pub(super) fn show_damage(w: &mut Combat, p: Obj, dmg: u16, which: DamageDisplay) -> u16 {
     cov::hit("show_damage");
     let base = match which {
         DamageDisplay::Dealt => 0x9121e8,
@@ -244,7 +244,7 @@ pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay)
 /// plus the attack power (`+0x45`), random variation, minus the player's defence
 /// (`+0x10b`); then reduction in 1/32 slices according to protection (`+0x108`) or, at 32 HP and
 /// below, according to the low-HP table. Displays the result.
-pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
+pub(super) fn damage_vs_player(w: &mut Combat, p: Obj, atk: Obj) -> u16 {
     cov::hit("damage_vs_player");
     let setting = ram::DAMAGE_SETTING.get(w.b);
     let table = {
@@ -290,7 +290,7 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
 }
 
 /// 0x388a: a thief's hit (`ATTACK_KIND` 3) can make enemy `e` drop loot.
-pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
+pub(super) fn steal_loot(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("steal_loot");
     if p.u8(w.b, f::VARIANT) >> 1 != 5 {
         return;

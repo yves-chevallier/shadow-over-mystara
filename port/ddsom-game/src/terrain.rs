@@ -11,7 +11,7 @@
 //! is transcribed instruction by instruction (A1 = address of the original subroutine, which the
 //! 68000 reached through a jump table, corrected D1...).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::set_low_word;
 use crate::objects::Obj;
@@ -65,7 +65,7 @@ const SLOPES: [u32; 4] = [0x341a4, 0x341d0, 0x341fe, 0x3422e];
 /// D2-D5 and the Z flag that follow it, the tools all the registers and flags.
 pub(crate) struct Push<'a, R: Alu> {
     pub(crate) c: &'a mut R,
-    pub(crate) b: &'a mut Cps2Bus,
+    pub(crate) b: &'a mut World,
     pub(crate) variant: Variant,
 }
 
@@ -255,12 +255,12 @@ impl<R: Alu> Push<'_, R> {
     }
 }
 
-pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn push(b: &mut World, o: Obj) -> bool {
     push_collides(b, o).0
 }
 
 /// `push`, and true second if the object hit an obstacle (the original's D5 = 1, which callers reread).
-pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
+pub fn push_collides(b: &mut World, o: Obj) -> (bool, bool) {
     let mut c = Registers::default();
     c.a[0] = o.0;
     Push { c: &mut c, b, variant: FIRST }.run();
@@ -271,7 +271,7 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
 /// (cell and terrain gap, original glitch: speeds of the spark of `flash_and_shake`, bounce setting of the
 /// frost shard) and D5 (1 after a collision). The leftovers go in and out unchanged when the routine does not write
 /// them. Returns the original's Z flag.
-pub fn push_leftovers(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
+pub fn push_leftovers(b: &mut World, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
     let mut c = Registers::default();
     c.a[0] = o.0;
     (c.d[2], c.d[3], c.d[5]) = (*d2, *d3, *d5);
@@ -282,7 +282,7 @@ pub fn push_leftovers(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &
 
 /// 0x3403c (the second copy of the routine) on object `o`, without registers; `leftovers` are the D2-D5 leftovers
 /// (`dispatch::Leftovers`) passed to it and left by it. Returns the original's Z flag.
-pub fn push_second_leftovers(b: &mut Cps2Bus, o: Obj, leftovers: [&mut u32; 4]) -> bool {
+pub fn push_second_leftovers(b: &mut World, o: Obj, leftovers: [&mut u32; 4]) -> bool {
     let mut c = Registers::default();
     c.a[0] = o.0;
     for (k, r) in leftovers.iter().enumerate() {

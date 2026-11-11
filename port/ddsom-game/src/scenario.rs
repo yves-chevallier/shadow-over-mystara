@@ -13,6 +13,7 @@
 //!
 //! Scenarios only contain inputs and RAM addresses/values, never ROM data.
 
+use cps2::{Board, Machine};
 use std::io;
 use std::path::Path;
 
@@ -54,7 +55,7 @@ impl Scenario {
     }
 
     /// Applies the inputs due before executing the frame of index `f` (0 = first frame).
-    pub fn apply(&self, f: usize, m: &mut cps2::Machine) {
+    pub fn apply<B: Board>(&self, f: usize, m: &mut Machine<B>) {
         for &(af, addr, val, size) in &self.pokes {
             if af + 1 == f {
                 poke(m, addr, val, size);
@@ -69,26 +70,27 @@ impl Scenario {
 }
 
 /// Writes `value` (big-endian, `size` bytes) to the work RAM (FF0000-FFFFFF).
-pub fn poke(m: &mut cps2::Machine, addr: u32, val: u32, size: u8) {
+pub fn poke<B: Board>(m: &mut Machine<B>, addr: u32, val: u32, size: u8) {
     for k in 0..size as u32 {
         let a = (addr + k - 0xff0000) as usize;
         let byte = (val >> (8 * (size as u32 - 1 - k))) as u8;
-        let w = &mut m.bus.ram[a / 2];
+        let w = &mut m.bus.ram_mut()[a / 2];
         *w = if a.is_multiple_of(2) { *w & 0x00ff | (byte as u16) << 8 } else { *w & 0xff00 | byte as u16 };
     }
 }
 
-fn set_bit(m: &mut cps2::Machine, port: u8, bit: u16, down: bool) {
+fn set_bit<B: Board>(m: &mut Machine<B>, port: u8, bit: u16, down: bool) {
+    let inputs = &mut m.bus.hw_mut().inputs;
     let reg = match port {
-        0 => &mut m.bus.inputs.in0,
-        1 => &mut m.bus.inputs.in1,
-        _ => &mut m.bus.inputs.in2,
+        0 => &mut inputs.in0,
+        1 => &mut inputs.in1,
+        _ => &mut inputs.in2,
     };
     if down { *reg &= !bit } else { *reg |= bit }
 }
 
 /// Presses (`down`) or releases the MAME input `name` (e.g. "P1 Button 2"); false if the name is unknown.
-pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
+pub fn set_input<B: Board>(m: &mut Machine<B>, name: &str, down: bool) -> bool {
     match input_bit(name) {
         Some((port, bit)) => {
             set_bit(m, port, bit, down);
@@ -127,9 +129,10 @@ impl<W: io::Write> Recorder<W> {
 
     /// Resumes the recording of a replayed game up to frame `image` (already written to `out`): the inputs
     /// of `m` are those of the last replayed frame.
-    pub fn resumes(out: W, image: usize, m: &cps2::Machine) -> Self {
+    pub fn resumes<B: Board>(out: W, image: usize, m: &Machine<B>) -> Self {
         let mut e = Recorder::new(out);
-        e.before = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
+        let inputs = m.bus.hw().inputs;
+        e.before = [inputs.in0, inputs.in1, inputs.in2];
         e.image = image;
         e
     }
@@ -144,8 +147,9 @@ impl<W: io::Write> Recorder<W> {
     }
 
     /// To be called just before each executed frame, inputs set: `apply` replays them at the same instant.
-    pub fn image(&mut self, m: &cps2::Machine) -> io::Result<()> {
-        let ports = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
+    pub fn image<B: Board>(&mut self, m: &Machine<B>) -> io::Result<()> {
+        let inputs = m.bus.hw().inputs;
+        let ports = [inputs.in0, inputs.in1, inputs.in2];
         let f = self.image.saturating_sub(1);
         for (name, port, bit) in &self.inputs {
             let (a, b) = (self.before[*port as usize] & bit, ports[*port as usize] & bit);

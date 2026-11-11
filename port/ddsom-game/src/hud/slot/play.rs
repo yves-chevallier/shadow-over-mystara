@@ -30,7 +30,7 @@ pub(super) fn play(x: &mut Ctx, s: Slot) {
 }
 
 /// Mode 1: updates the elements that changed, then the HP gauge.
-pub(super) fn update_panel(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn update_panel(b: &mut World, s: Slot) {
     update_hp(b, s);
     update_selection(b, s);
     money_changed(b, s);
@@ -44,7 +44,7 @@ pub(super) fn update_panel(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x16838: the displayed HP catch up with those of the player (the decrease is gradual, one point per frame).
-pub(super) fn update_hp(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn update_hp(b: &mut World, s: Slot) {
     let hp = s.g16(b, player::HP);
     let shown = s.p16(b, panel::SHOWN_HP);
     if hp != shown {
@@ -63,13 +63,13 @@ pub(super) fn update_hp(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// Byte of the class table (`+0x120` of the player, 16-byte row per family `+0x15d`).
-pub(super) fn selection_class(b: &mut Cps2Bus, s: Slot) -> u8 {
+pub(super) fn selection_class(b: &mut World, s: Slot) -> u8 {
     let kind = s.g8(b, player::SELECTION_KIND) as u32;
     s.g8(b, player::SELECTIONS + (kind << 4))
 }
 
 /// 0x15f9e: must the player's selection image be redrawn?
-pub(super) fn update_selection(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn update_selection(b: &mut World, s: Slot) {
     if s.g8(b, player::ACTIVE) == 0 {
         return;
     }
@@ -94,7 +94,7 @@ pub(super) fn update_selection(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15ffc: redraws the selection letters and name when they have changed.
-pub(super) fn letters(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn letters(b: &mut World, s: Slot) {
     if s.g8(b, player::ACTIVE) == 0 {
         return;
     }
@@ -109,7 +109,7 @@ pub(super) fn letters(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15e1e: has the score changed? (in narrow columns, after a delay)
-pub(super) fn score_changed(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn score_changed(b: &mut World, s: Slot) {
     s.set_p8(b, panel::SCORE_DIRTY, 0);
     if draw::narrow(b) {
         let delay = s.p8(b, panel::DELAY_2E);
@@ -127,7 +127,7 @@ pub(super) fn score_changed(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15e6e: has the money changed?
-pub(super) fn money_changed(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn money_changed(b: &mut World, s: Slot) {
     s.set_p8(b, panel::MONEY_DIRTY, 0);
     if s.g32(b, player::MONEY) != s.p32(b, panel::SHOWN_MONEY) {
         s.set_p8(b, panel::MONEY_DIRTY, 0xff);
@@ -135,13 +135,13 @@ pub(super) fn money_changed(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15e50 / 0x15e58: redraws the score (followed by a closing cell in narrow columns).
-pub(super) fn score_redraw(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn score_redraw(b: &mut World, s: Slot) {
     if s.p8(b, panel::SCORE_DIRTY) != 0 {
         draw_score(b, s);
     }
 }
 
-pub(super) fn draw_score(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn draw_score(b: &mut World, s: Slot) {
     let end = draw::score(b, s);
     if draw::narrow(b) {
         draw::closing_cell(b, s, end, 0x2608);
@@ -149,7 +149,7 @@ pub(super) fn draw_score(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15e86: redraws the money if it has changed.
-pub(super) fn money_redraw(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn money_redraw(b: &mut World, s: Slot) {
     if s.g32(b, player::MONEY) == s.p32(b, panel::SHOWN_MONEY) || s.p8(b, panel::MONEY_DIRTY) == 0 {
         return;
     }
@@ -163,7 +163,7 @@ pub(super) fn money_redraw(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15ec8: the player name (multi-player layouts), or the blinking of the lone player.
-pub(super) fn update_names(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn update_names(b: &mut World, s: Slot) {
     if var::GAME_ON.get(b) == 0 {
         return;
     }
@@ -205,14 +205,14 @@ pub(super) fn update_names(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15f44: everything will be redrawn on the next turn.
-pub(super) fn refresh_all(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn refresh_all(b: &mut World, s: Slot) {
     s.set_p8(b, panel::DISPLAYED_A, 0xff);
     s.set_p8(b, panel::PLAYER_DIRTY, 0xff);
     s.set_p8(b, panel::HP_DIRTY, 1);
 }
 
 /// 0x16878: the player has changed: portrait, name, gauge, items, names and values are redrawn.
-pub(super) fn redraw_player(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn redraw_player(b: &mut World, s: Slot) {
     if s.p8(b, panel::PLAYER_DIRTY) == 0 || var::DISPLAY.get(b) == 0 {
         return;
     }
@@ -224,7 +224,7 @@ pub(super) fn redraw_player(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x168a2: redraws all the zones of the player.
-pub(super) fn redraw_all(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn redraw_all(b: &mut World, s: Slot) {
     draw::portrait(b, s, false);
     let character = s.g8(b, player::CHARACTER);
     draw::character_name(b, s, character);
@@ -248,7 +248,7 @@ pub(super) fn redraw_all(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// Mode 2 (ranking): the player's items, or the banner if the player has special conditions.
-pub(super) fn rank_mode(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn rank_mode(b: &mut World, s: Slot) {
     if s.p8(b, panel::HINT) != 0 {
         return notice_banner(b, s);
     }
@@ -262,7 +262,7 @@ pub(super) fn rank_mode(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// Mode 3 (locked choice of the players): the character chosen by each player is displayed, without duplicates.
-pub(super) fn lock_mode(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn lock_mode(b: &mut World, s: Slot) {
     if s.p8(b, panel::FLAG_27) == 0xfe {
         return;
     }

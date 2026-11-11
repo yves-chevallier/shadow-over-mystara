@@ -422,5 +422,4 @@ fn main() {
         }
     }
     println!("{}", if total_gaps == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
-    let _ = rd16;
 }

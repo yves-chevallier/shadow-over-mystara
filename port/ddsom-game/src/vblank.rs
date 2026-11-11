@@ -9,7 +9,7 @@
 //! zero in this game (no wait for the test input, no dump combination, DSW settings
 //! forced to 0xffff). They therefore do not appear here.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
@@ -94,7 +94,7 @@ fn a5(off: u32) -> u32 {
 
 /// Writes to the plane's X register the previous copy minus the 0x40-pixel margin, then copies
 /// the wanted value.
-fn advance_x(b: &mut Cps2Bus, p: &Plan) {
+fn advance_x(b: &mut World, p: &Plan) {
     let previous = rd16(b, a5(p.copy));
     wr16(b, p.register, previous.wrapping_sub(0x40));
     let wanted = rd32(b, a5(p.wanted));
@@ -102,7 +102,7 @@ fn advance_x(b: &mut Cps2Bus, p: &Plan) {
 }
 
 /// Same for the vertical scroll: the register receives `original` minus the previous copy.
-fn advance_y(b: &mut Cps2Bus, p: &Plan, original: u16) {
+fn advance_y(b: &mut World, p: &Plan, original: u16) {
     let previous = rd16(b, a5(p.copy));
     wr16(b, p.register, original.wrapping_sub(previous));
     let wanted = rd32(b, a5(p.wanted));
@@ -111,7 +111,7 @@ fn advance_y(b: &mut Cps2Bus, p: &Plan, original: u16) {
 
 /// 0x722: CPS-A scroll registers, one frame late, screen shake and alternation
 /// modes (`SCROLL_MODE` = 1: pages; 2: lines).
-fn display_regs(b: &mut Cps2Bus) {
+fn display_regs(b: &mut World) {
     let remainder = rd16(b, a5(var::QUAKE));
     if remainder != 0 {
         wr16(b, a5(Y_1.wanted), 0x100);
@@ -149,7 +149,7 @@ fn display_regs(b: &mut Cps2Bus) {
 }
 
 /// 0x902: video control register (bit 15: shadows) and service output.
-fn video_control(b: &mut Cps2Bus) {
+fn video_control(b: &mut World) {
     let mut control = rd16(b, a5(var::CONTROL));
     let mut exit = 0x807d;
     if rd8(b, a5(var::SHADOWS)) != 0 {
@@ -161,7 +161,7 @@ fn video_control(b: &mut Cps2Bus) {
 }
 
 /// Wakes the tasks whose wait count falls to zero (Rust table, `tasks::table`).
-fn wake_tasks(b: &mut Cps2Bus) {
+fn wake_tasks(b: &mut World) {
     let mut slowdown = rd8(b, a5(var::SLOWDOWN));
     crate::tasks::table::table(b).count_down_frame(&mut slowdown);
     wr8(b, a5(var::SLOWDOWN), slowdown);
@@ -177,15 +177,15 @@ fn wake_tasks(b: &mut Cps2Bus) {
 /// FF01A6-FF0DA5, or of the supervisor, below FF0E66). `validate` ignores these words
 /// (`tasks::table::kernel_ram`), and the game does not reread them
 /// (proof: docs/refactorisation.md, batch "CPU removal", part 4).
-pub fn interruption(b: &mut Cps2Bus, level: u8) {
+pub fn interruption(b: &mut World, level: u8) {
     let _ = level;
-    b.irq_ack();
+    b.hw.irq_ack();
     vblank(b);
 }
 
 /// 0x574: the interrupt processing. The original saves and restores all registers: what its
 /// services leave in them does not come out.
-fn vblank(b: &mut Cps2Bus) {
+fn vblank(b: &mut World) {
     let exit = rd8(b, a5(var::EXIT));
     wr8(b, port::EXIT, exit);
     wr16(b, a5(var::RAZ), 0);

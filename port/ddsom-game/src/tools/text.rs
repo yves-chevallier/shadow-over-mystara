@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::text` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::text::*;
@@ -10,33 +10,33 @@ use crate::{regs, Native};
 
 /// End of routine: A4 advanced, flags of the final comparison (equality) and X left by the
 /// last operation that modifies it.
-fn finish(c: &mut Cpu, b: &mut Cps2Bus, a4: u32, x: bool) {
+fn finish(c: &mut Cpu, b: &mut World, a4: u32, x: bool) {
     c.a[4] = a4;
     c.sr = (c.sr & !(SR_X | SR_N | SR_V | SR_C)) | SR_Z | if x { SR_X } else { 0 };
     rts(c, b);
 }
 
-fn native_text(c: &mut Cpu, b: &mut Cps2Bus, kind: Kind) {
+fn native_text(c: &mut Cpu, b: &mut World, kind: Kind) {
     let (end, x) = text(b, c.a[4], kind);
     finish(c, b, end, x);
 }
 
-fn print_tall_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn print_tall_native(c: &mut Cpu, b: &mut World) {
     let end = print_tall(b, c.a[4]);
     finish(c, b, end, false);
 }
 
-fn print_tall_at_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn print_tall_at_native(c: &mut Cpu, b: &mut World) {
     let end = print_tall_at(b, c.a[4], c.d[5] as u8, c.d[6] as u8);
     finish(c, b, end, false);
 }
 
-fn blocks_native(c: &mut Cpu, b: &mut Cps2Bus, drawn: bool) {
+fn blocks_native(c: &mut Cpu, b: &mut World, drawn: bool) {
     let (end, x) = blocks(b, c.a[4], c.a[0], drawn);
     finish(c, b, end, x);
 }
 
-fn clear_box_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn clear_box_native(c: &mut Cpu, b: &mut World) {
     let (end, height) = clear_box_height(b, c.a[4]);
     c.a[4] = end;
     // flags: last move.w #0 (Z); X = carry of "height - 1"
@@ -45,7 +45,7 @@ fn clear_box_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(4) | regs::CCR }
 }
 

@@ -11,8 +11,8 @@ use std::path::Path;
 
 use cps2::Machine;
 
-fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine {
-    let mut m = match assets {
+fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> ddsom_game::GameMachine {
+    let m = match assets {
         Some(dir) => {
             let gfx = ddsom_assets::tile_atlas(&dir.join("gfx")).expect("graphics");
             let pcm = ddsom_assets::samples::bank(dir).expect("samples").bytes;
@@ -21,7 +21,7 @@ fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine
         None => Machine::load_ddsom(roms, eeprom),
     }
     .expect("loading");
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     m.set_overclock(16.0);
     m
 }

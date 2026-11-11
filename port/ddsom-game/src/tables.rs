@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::{data, Missing};
 use ddsom_data::DataFile;
@@ -37,7 +37,7 @@ impl Table {
     }
 
     /// Byte at offset `off` from the start of the table.
-    pub fn at8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn at8(&self, b: &mut World, off: u32) -> u8 {
         match self.bytes.get(off as usize) {
             Some(&v) => v,
             None => self.missing().byte_in(b, self.rom.wrapping_add(off), self.program),
@@ -45,7 +45,7 @@ impl Table {
     }
 
     /// Word (big-endian) at offset `off`.
-    pub fn at16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn at16(&self, b: &mut World, off: u32) -> u16 {
         match self.slice(off, 2) {
             Some(s) => u16::from_be_bytes([s[0], s[1]]),
             None => self.missing().word_in(b, self.rom.wrapping_add(off), self.program),
@@ -53,7 +53,7 @@ impl Table {
     }
 
     /// Long (big-endian) at offset `off`.
-    pub fn at32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn at32(&self, b: &mut World, off: u32) -> u32 {
         match self.slice(off, 4) {
             Some(s) => u32::from_be_bytes([s[0], s[1], s[2], s[3]]),
             None => self.missing().long_in(b, self.rom.wrapping_add(off), self.program),
@@ -61,12 +61,12 @@ impl Table {
     }
 
     /// Long `i` (offset `4 i`).
-    pub fn nth32(&self, b: &mut Cps2Bus, i: u32) -> u32 {
+    pub fn nth32(&self, b: &mut World, i: u32) -> u32 {
         self.at32(b, i.wrapping_mul(4))
     }
 
     /// Word `i` (offset `2 i`).
-    pub fn nth16(&self, b: &mut Cps2Bus, i: u32) -> u16 {
+    pub fn nth16(&self, b: &mut World, i: u32) -> u16 {
         self.at16(b, i.wrapping_mul(2))
     }
 
@@ -167,7 +167,7 @@ impl Tables {
     }
 
     /// Byte of the data space at `a` (ROM table, or RAM).
-    pub fn byte(&self, b: &mut Cps2Bus, a: u32) -> u8 {
+    pub fn byte(&self, b: &mut World, a: u32) -> u8 {
         if a & 0xff_ffff >= ROM_END {
             return crate::mem::rd8(b, a);
         }
@@ -175,7 +175,7 @@ impl Tables {
     }
 
     /// Word of the data space at `a`.
-    pub fn word(&self, b: &mut Cps2Bus, a: u32) -> u16 {
+    pub fn word(&self, b: &mut World, a: u32) -> u16 {
         if a & 0xff_ffff >= ROM_END {
             return crate::mem::rd16(b, a);
         }
@@ -183,7 +183,7 @@ impl Tables {
     }
 
     /// Long of the data space at `a`.
-    pub fn long(&self, b: &mut Cps2Bus, a: u32) -> u32 {
+    pub fn long(&self, b: &mut World, a: u32) -> u32 {
         if a & 0xff_ffff >= ROM_END {
             return crate::mem::rd32(b, a);
         }
@@ -191,17 +191,17 @@ impl Tables {
     }
 
     /// Byte of the program space at `a` (table read PC-relative).
-    pub fn pc_byte(&self, b: &mut Cps2Bus, a: u32) -> u8 {
+    pub fn pc_byte(&self, b: &mut World, a: u32) -> u8 {
         self.runs[1].get(a, 1).map_or_else(|| self.missing(a).pc_byte(b, a), |v| v as u8)
     }
 
     /// Word of the program space at `a`.
-    pub fn pc_word(&self, b: &mut Cps2Bus, a: u32) -> u16 {
+    pub fn pc_word(&self, b: &mut World, a: u32) -> u16 {
         self.runs[1].get(a, 2).map_or_else(|| self.missing(a).pc_word(b, a), |v| v as u16)
     }
 
     /// Long of the program space at `a`.
-    pub fn pc_long(&self, b: &mut Cps2Bus, a: u32) -> u32 {
+    pub fn pc_long(&self, b: &mut World, a: u32) -> u32 {
         self.runs[1].get(a, 4).unwrap_or_else(|| self.missing(a).pc_long(b, a))
     }
 }

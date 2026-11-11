@@ -12,7 +12,7 @@
 //! reproduced (accepted difference, `play_wrapper`): a sound only reads from its caller the object (A0) and, for
 //! a few, D4 or A1 ([`Source`]).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
@@ -101,7 +101,7 @@ const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
 
 /// Original dead code (debug screen, docs/code-mort.md): the locks of the Z80 in hexadecimal, attribute 2. The
 /// cursor (A1 of the original) moves on after each byte, unless the table gives a new address.
-fn show_locks(b: &mut Cps2Bus) {
+fn show_locks(b: &mut World) {
     let mut at = 0;
     for (address, latch) in LATCH_DISPLAY {
         if let Some(address) = address {
@@ -114,7 +114,7 @@ fn show_locks(b: &mut Cps2Bus) {
 
 /// `0x29d78`: byte `value` as two hexadecimal digits (tile = the digit) of attribute `attribute`, from cell `at` of
 /// the text layer, one column per digit; returns the cell that follows.
-fn hex_byte(b: &mut Cps2Bus, mut at: u32, value: u8, attribute: u16) -> u32 {
+fn hex_byte(b: &mut World, mut at: u32, value: u8, attribute: u16) -> u32 {
     for digit in [value >> 4, value & 0xf] {
         crate::mem::wr16(b, at, digit as u16);
         crate::mem::wr16(b, at + 2, attribute);
@@ -140,21 +140,21 @@ pub struct Command {
 }
 
 /// Can the command be emitted? (sound allowed: 0xe0836)
-pub(crate) fn sound_allowed(b: &mut Cps2Bus) -> bool {
+pub(crate) fn sound_allowed(b: &mut World) -> bool {
     rd16(b, a5(ram::SOUND_WORD)) != 0
         || rd8(b, a5(ram::GAME_SOUND)) != 0
         || rd8(b, a5(ram::ATTRACT_SOUND)) != 0
 }
 
 /// The queue is full when the write would catch up with the read (one cell always stays free).
-fn queue_full(b: &mut Cps2Bus) -> bool {
+fn queue_full(b: &mut World) -> bool {
     let read = rd16(b, a5(ram::READ_HEAD));
     let write = rd16(b, a5(ram::WRITE_HEAD));
     read.wrapping_sub(ENTRY) & MASK_HEAD == write
 }
 
 /// Enqueues a command (0xe0848, without the permission test); returns false if the queue is full.
-pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> bool {
+pub(crate) fn enqueue(b: &mut World, cmd: Command) -> bool {
     let write = rd16(b, a5(ram::WRITE_HEAD));
     if queue_full(b) {
         return false;
@@ -170,7 +170,7 @@ pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> bool {
 
 /// 0xe0836: enqueues the command if sound is allowed; returns `false` if nothing is enqueued (sound forbidden, queue
 /// full).
-pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
+pub fn emit(b: &mut World, cmd: Command) -> bool {
     sound_allowed(b) && enqueue(b, cmd)
 }
 
@@ -179,7 +179,7 @@ pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
 
 /// Word of a command table: the tables are stored in the code and read PC-relative (`sound/*` of the engine data, by
 /// address).
-fn program_read(b: &mut Cps2Bus, address: u32) -> u16 {
+fn program_read(b: &mut World, address: u32) -> u16 {
     crate::tables::engine().pc_word(b, address & 0xff_ffff)
 }
 
@@ -312,19 +312,19 @@ impl Source {
 
 /// Plays sound `sound` for object `object` (A0 of the original). The few sounds that also read D4 or A1 go through
 /// [`play_with`].
-pub fn play(b: &mut Cps2Bus, sound: Sound, object: Obj) {
+pub fn play(b: &mut World, sound: Sound, object: Obj) {
     play_with(b, sound, Source { object: Some(object), ..Source::default() });
 }
 
 /// Plays a sound that reads nothing from its caller (no pan, player or variant: music, interface
 /// noises), for callers without an object.
-pub fn play_global(b: &mut Cps2Bus, sound: Sound) {
+pub fn play_global(b: &mut World, sound: Sound) {
     debug_assert!(!sound.reads_object(), "sound {:x}: reads its object, use `play`", sound.entry);
     play_with(b, sound, Source::default());
 }
 
 /// Plays sound `sound` with everything it may read (see [`Source`]).
-pub fn play_with(b: &mut Cps2Bus, sound: Sound, source: Source) {
+pub fn play_with(b: &mut World, sound: Sound, source: Source) {
     match sound.kind {
         Kind::Wrapper(w) => play_wrapper(b, &w, source),
         Kind::Dispatch(d) => dispatch(b, d, source),
@@ -338,7 +338,7 @@ pub fn play_with(b: &mut Cps2Bus, sound: Sound, source: Source) {
 
 /// Pan (0-0x2f -> byte of the table `sound_pan`, one byte per 8-pixel slice of screen, 0xee04e) of an object: screen position of the object relative to
 /// the camera, clamped to 0..0x178, in 8-pixel slices.
-fn pan(b: &mut Cps2Bus, object: u32) -> u8 {
+fn pan(b: &mut World, object: u32) -> u8 {
     let x = rd16(b, object + 8);
     let camera_2 = rd8(b, a5(ram::CAMERA_CHOICE)) != 0;
     let camera = rd16(b, a5(if camera_2 { ram::CAMERA_2_X } else { ram::CAMERA_1_X }));
@@ -356,7 +356,7 @@ struct Plan {
     allowed: bool,
 }
 
-fn schedule(b: &mut Cps2Bus, w: &Wrapper, source: Source) -> Plan {
+fn schedule(b: &mut World, w: &Wrapper, source: Source) -> Plan {
     // index of the command table, computed by the subroutines 0xedee4 / 0xedef2
     let index = match w.cmd {
         Cmd::Fixed(_) => 0,
@@ -401,7 +401,7 @@ fn schedule(b: &mut Cps2Bus, w: &Wrapper, source: Source) -> Plan {
 // wrappers themselves (read trace on the original machine, all scenarios: docs/son-68000.md), and
 // `validate` ignores them: the game no longer writes them, and a sound no longer depends on the registers of its
 // caller.
-fn play_wrapper(b: &mut Cps2Bus, w: &Wrapper, source: Source) {
+fn play_wrapper(b: &mut World, w: &Wrapper, source: Source) {
     let plan = schedule(b, w, source);
     if let Cmd::Alternate(_) = w.cmd {
         let v = rd16(b, a5(ram::ALTERNATION));
@@ -489,7 +489,7 @@ pub const OTHERS: [Sound; 21] = [
 ];
 
 /// Long of a dispatcher table (read PC-relative).
-fn program_read32(b: &mut Cps2Bus, address: u32) -> u32 {
+fn program_read32(b: &mut World, address: u32) -> u32 {
     crate::tables::engine().pc_long(b, address & 0xff_ffff)
 }
 
@@ -500,7 +500,7 @@ fn low_word(r: u32, v: u16) -> u32 {
 /// A dispatcher: chooses the sound to play, which reads the modified source as in the original (doubled D4,
 /// designated A1), or enqueues the scene music. The original saves and restores its registers (private stack, see
 /// `play_wrapper`).
-fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
+fn dispatch(b: &mut World, kind: Dispatch, source: Source) {
     let (target, source) = match kind {
         Dispatch::ByD4(table) => {
             let d4 = source.d4() as u8 as i8;
@@ -561,7 +561,7 @@ fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
 // Transmission to the Z80 (VBLANK)
 
 /// Transmits queue entry `entry` to the bytes of the shared RAM.
-fn transmit(b: &mut Cps2Bus, entry: u32) {
+fn transmit(b: &mut World, entry: u32) {
     for (byte, address) in z80::FIELDS {
         let v = rd8(b, entry + byte as u32);
         wr8(b, address, v);
@@ -570,7 +570,7 @@ fn transmit(b: &mut Cps2Bus, entry: u32) {
 
 /// 0x68c (VBLANK): one command of the queue goes to the Z80 if it has acknowledged the previous one. Returns the
 /// queue entry transmitted.
-pub fn send(b: &mut Cps2Bus) -> Option<u32> {
+pub fn send(b: &mut World) -> Option<u32> {
     let silence = rd8(b, a5(ram::SILENCE)) != 0;
     wr8(b, z80::LOCK, if silence { 0xff } else { 0 });
     let delay = rd16(b, a5(ram::DELAY));
@@ -597,12 +597,12 @@ pub fn send(b: &mut Cps2Bus) -> Option<u32> {
 
 /// The debug display of the locks is active (program word 0xc0, word 0 of `startup/header`, and `A5+0x7fc6`
 /// non-zero).
-fn shown_locks(b: &mut Cps2Bus) -> bool {
+fn shown_locks(b: &mut World) -> bool {
     crate::tables::engine_table!("startup/header").at16(b, 0) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
 }
 
 /// 0x68c (the registers it leaves, D0 = read head and A4 after the entry transmitted, are those that VBLANK saved).
-fn send_to_z80(b: &mut Cps2Bus) {
+fn send_to_z80(b: &mut World) {
     send(b);
 }
 
@@ -641,11 +641,11 @@ pub enum Service {
 
 /// Enqueues a service command. A delayed command first writes the Z80 lock, then reads the delay
 /// (`A5+0x7fc2`) and the high word of the command from the delay table.
-pub fn service(b: &mut Cps2Bus, s: Service) {
+pub fn service(b: &mut World, s: Service) {
     service_enqueue(b, s);
 }
 
-pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> bool {
+pub(crate) fn service_enqueue(b: &mut World, s: Service) -> bool {
     let simple = |d1: u32| Command { d1, d2: 0, d3: 0 };
     let cmd = match s {
         Service::GeneralStop => simple(0xff00),
@@ -658,7 +658,7 @@ pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> bool {
     enqueue(b, cmd)
 }
 
-fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
+fn has_delay(b: &mut World, command: u16, lock: u8, line: u16) -> Command {
     wr8(b, SERVICE_LOCK, lock);
     let line = DELAYS.wrapping_add(line as i16 as u32);
     let delay = crate::tables::engine().word(b, line);
@@ -668,12 +668,12 @@ fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
 }
 
 /// Alternate-palette version (`A5+0x70` non-zero).
-fn version_alternative(b: &mut Cps2Bus) -> bool {
+fn version_alternative(b: &mut World) -> bool {
     rd16(b, a5(0x70)) != 0
 }
 
 /// 0xee044: wrappers' private stack empty (pointer = its own address).
-pub fn clear_private_stack(b: &mut Cps2Bus) {
+pub fn clear_private_stack(b: &mut World) {
     let p = a5(ram::PRIVATE_STACK);
     wr32(b, p, p);
 }

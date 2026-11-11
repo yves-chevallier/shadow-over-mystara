@@ -1,6 +1,6 @@
 //! Effect creation helpers (EFFCT) called by the player and scenery handlers.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::families::effects_creators::leftovers::{Pure, Regs};
 use crate::objects::{pools, Obj};
@@ -59,11 +59,11 @@ const SPARK_KIND: u8 = 4;
 
 /// 0xb10c8: shock effect (dust, spark; type 25) at the creator's position: variant, setting (low byte:
 /// `+0x2d`, high: `+0x2f`), speeds (`+0x14`, `+0x1c`). Nothing in scene 41.
-pub fn shock(b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
+pub fn shock(b: &mut World, creator: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
     shock_by(&mut Pure, b, creator, variant, setting, vx, vy)
 }
 
-pub(crate) fn shock_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
+pub(crate) fn shock_by(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
     let scene = crate::ram::SCENE.get(b);
     r.comparison(NO_SHOCK_SCENE as u32, scene as u32, Size::Byte);
     if scene == NO_SHOCK_SCENE {
@@ -95,7 +95,7 @@ pub(crate) fn shock_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8,
 /// 0xaa96c: spark (type 4, variant `variant`) tied to the creator and placed between it and `other` (A1), except for a
 /// player in certain states. The processor receives D0 to D3 of the placement (`place_between`); the native returns
 /// A1 to A4.
-pub(crate) fn spark_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, other: u32, variant: u8) -> Option<Obj> {
+pub(crate) fn spark_by(r: &mut impl Regs, b: &mut World, me: Obj, other: u32, variant: u8) -> Option<Obj> {
     let p = Player::of(me);
     let skip = (p.attack_kind(b) as i8) < 2 && p.weapon_a(b).wrapping_sub(16) <= 3;
     if skip {
@@ -114,7 +114,7 @@ pub(crate) fn spark_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, other: u32, 
 }
 
 /// Places the spark (`place_between`); the processor receives D0, D1 (longs) and the low words of D2, D3.
-fn set(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, fx: Obj, other: u32) -> u16 {
+fn set(r: &mut impl Regs, b: &mut World, me: Obj, fx: Obj, other: u32) -> u16 {
     let (d0, d1, d2, d3) = place_between(b, me, fx, Obj(other));
     r.d(0, d0 as u32);
     r.d(1, d1 as u32);
@@ -125,7 +125,7 @@ fn set(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, fx: Obj, other: u32) -> u16 
 
 /// 0xaaa04 (`owner_first`) / 0xaaa84: spark (type 4, variant `variant`) between the creator and the touched object
 /// `other`; `+0x50` / `+0x54` designate one or the other depending on the routine. Flags of D1.w.
-pub(crate) fn spark_between_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, other: u32, variant: u8, owner_first: bool) -> Option<Obj> {
+pub(crate) fn spark_between_by(r: &mut impl Regs, b: &mut World, me: Obj, other: u32, variant: u8, owner_first: bool) -> Option<Obj> {
     let fx = r.allocated(b, &pools::EFFCT)?;
     fx.set_u8(b, Obj::ACTIVE, 1);
     fx.set_u8(b, Obj::KIND, SPARK_KIND);
@@ -142,7 +142,7 @@ pub(crate) fn spark_between_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, othe
 
 /// Box of object `o`, in the collision boxes (`sprites/tables.json`): of the table `body` with the index `+0x38`
 /// (`hit`), otherwise of the table `attack` with the index `+0x3a`; one set per `+0x2e`, eight bytes per box.
-fn hit_box(b: &mut Cps2Bus, o: Obj, hit: bool) -> u32 {
+fn hit_box(b: &mut World, o: Obj, hit: bool) -> u32 {
     let tables = &crate::data::data().sprite_tables.box_tables;
     let (table, index) = if hit { (tables[0].rom, o.body_box(b)) } else { (tables[2].rom, o.attack_box(b)) };
     let set = o.box_set(b) as u32;
@@ -153,7 +153,7 @@ fn hit_box(b: &mut Cps2Bus, o: Obj, hit: bool) -> u32 {
 /// 0xab2b4: places the spark `fx` halfway between a box of the attacker `me` and a box of the
 /// target `victim`, depending on the variant (variants 0, 1, 3: body of one against hit box of the other...),
 /// at halfway depth, just in front of the nearest. Returns D0 to D3 as the original leaves them.
-fn place_between(b: &mut Cps2Bus, me: Obj, fx: Obj, victim: Obj) -> (u16, u16, u16, u16) {
+fn place_between(b: &mut World, me: Obj, fx: Obj, victim: Obj) -> (u16, u16, u16, u16) {
     let (me_hit, victim_hit) = match fx.variant(b) {
         0 | 1 | 3 => (false, true),
         4 | 6 => (false, false),
@@ -161,7 +161,7 @@ fn place_between(b: &mut Cps2Bus, me: Obj, fx: Obj, victim: Obj) -> (u16, u16, u
     };
     let (mine, theirs) = (hit_box(b, me, me_hit), hit_box(b, victim, victim_hit));
     // middle of the two edges, on one axis: x (offset 0 of the box, flipped according to the orientation) or z
-    let middle = |b: &mut Cps2Bus, off: u32, field: u32, flip: bool| -> (u16, u16) {
+    let middle = |b: &mut World, off: u32, field: u32, flip: bool| -> (u16, u16) {
         let mut d0 = engine().byte(b, mine + off) as i8 as i16 as u16;
         let mut d1 = engine().byte(b, theirs + off) as i8 as i16 as u16;
         if flip && me.flip(b) != 0 {
@@ -192,7 +192,7 @@ fn place_between(b: &mut Cps2Bus, me: Obj, fx: Obj, victim: Obj) -> (u16, u16, u
 
 /// Creates an active object of type `kind` in `pool`, with variant `variant`. On failure returns the A1 that the
 /// original leaves (`Pool::alloc_or_leftover`), for the callers that do not test the carry.
-fn create(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: u8) -> Result<Obj, Obj> {
+fn create(b: &mut World, pool: &pools::Pool, kind: u8, variant: u8) -> Result<Obj, Obj> {
     let object = pool.alloc_or_leftover(b)?;
     object.set_u8(b, Obj::ACTIVE, 1);
     object.set_u8(b, Obj::KIND, kind);
@@ -201,19 +201,19 @@ fn create(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: u8) -> Result<
 }
 
 /// 0xddeaa: scenery (SOBJ) of type 6, variant `variant`.
-pub fn scenery_6(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
+pub fn scenery_6(b: &mut World, variant: u8) -> Result<Obj, Obj> {
     create(b, &pools::SOBJ, 6, variant)
 }
 
 /// 0xdfa4a: scenery (SOBJ) of type 11, variant `variant`, oriented according to `orientation` (`+0x2c`).
-pub fn scenery_11(b: &mut Cps2Bus, variant: u8, orientation: u8) -> Result<Obj, Obj> {
+pub fn scenery_11(b: &mut World, variant: u8, orientation: u8) -> Result<Obj, Obj> {
     let object = create(b, &pools::SOBJ, 11, variant)?;
     object.set_flip(b, orientation);
     Ok(object)
 }
 
 /// 0x517ba: player effect (PEFF) of type 44, variant `variant`, setting `+0x2f` = `setting`.
-pub fn effect_44(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
+pub fn effect_44(b: &mut World, variant: u8, setting: u8) -> Option<Obj> {
     let object = create(b, &pools::PEFF, 44, variant).ok()?;
     Created(object).set_setting(b, setting);
     Some(object)
@@ -221,7 +221,7 @@ pub fn effect_44(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
 
 /// 0xcc18e: every 32 frames (counter `+0x20` of object `me`), counts the living players into `ram::PLAYERS_ALIVE`;
 /// returns the count when it is redone (D0 of the original).
-pub fn living_players(b: &mut Cps2Bus, me: Obj) -> Option<u8> {
+pub fn living_players(b: &mut World, me: Obj) -> Option<u8> {
     let census = Census(me);
     let timer = census.timer(b).wrapping_sub(1);
     census.set_timer(b, timer);

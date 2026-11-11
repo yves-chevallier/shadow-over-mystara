@@ -8,7 +8,7 @@
 //! - *by table*: the speed is read from the table `Obj::SPEED_TABLE` at index `Obj::SPEED_INDEX`
 //!   (two words per index: vx then vy or vz), the acceleration is added to it (`advance_by_table`).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::Obj;
 use crate::data::{data, Missing, RomAddr};
@@ -32,7 +32,7 @@ fn to_displacement(vel: u16) -> u32 {
 }
 
 /// Applies `delta` to the position of the axis; returns the old position.
-fn displace(b: &mut Cps2Bus, obj: Obj, axis: Axis, delta: u32) -> u32 {
+fn displace(b: &mut World, obj: Obj, axis: Axis, delta: u32) -> u32 {
     let old = obj.u32(b, axis.pos);
     obj.set_u32(b, axis.pos, old.wrapping_add(delta));
     old
@@ -40,7 +40,7 @@ fn displace(b: &mut Cps2Bus, obj: Obj, axis: Axis, delta: u32) -> u32 {
 
 /// Ballistic motion: speed += acceleration, position += speed.
 /// Returns (old position, 16.16 displacement).
-pub fn advance(b: &mut Cps2Bus, obj: Obj, axis: Axis) -> (u32, u32) {
+pub fn advance(b: &mut World, obj: Obj, axis: Axis) -> (u32, u32) {
     let vel = obj.u16(b, axis.vel).wrapping_add(obj.u16(b, axis.acc));
     obj.set_u16(b, axis.vel, vel);
     let delta = to_displacement(vel);
@@ -49,7 +49,7 @@ pub fn advance(b: &mut Cps2Bus, obj: Obj, axis: Axis) -> (u32, u32) {
 
 /// Speed word at byte `offset` of the speed table `table` (the original reads `table + offset`, past the end of the
 /// table if the index goes beyond it).
-fn speed(b: &mut Cps2Bus, table: u32, offset: u32) -> u16 {
+fn speed(b: &mut World, table: u32, offset: u32) -> u16 {
     let a = table.wrapping_add(offset);
     match data().speeds.at(RomAddr(a)) {
         Some(v) => v,
@@ -59,7 +59,7 @@ fn speed(b: &mut Cps2Bus, table: u32, offset: u32) -> u16 {
 
 /// Motion by table: speed = table value + acceleration, position += speed.
 /// `entry`: 0 for the speed in X, 2 for that in Y or Z. Returns (old position, displacement).
-pub fn advance_by_table(b: &mut Cps2Bus, obj: Obj, axis: Axis, entry: u32) -> (u32, u32) {
+pub fn advance_by_table(b: &mut World, obj: Obj, axis: Axis, entry: u32) -> (u32, u32) {
     let table = obj.speed_table(b);
     let index = (obj.speed_index(b) as u32) << 2;
     let base = speed(b, table, index + entry);
@@ -71,7 +71,7 @@ pub fn advance_by_table(b: &mut Cps2Bus, obj: Obj, axis: Axis, entry: u32) -> (u
 
 /// Selects the speed table `table` (address) for the object and takes its first speed (current
 /// index) in X and in Y.
-pub fn select_speed_table(b: &mut Cps2Bus, obj: Obj, table: u32) {
+pub fn select_speed_table(b: &mut World, obj: Obj, table: u32) {
     obj.set_speed_table(b, table);
     let index = (obj.speed_index(b) as u32) << 2;
     let vx = speed(b, table, index);
@@ -141,7 +141,7 @@ pub const Y: Axes = &[AXIS_Y];
 
 /// Ballistic motion on each of the axes, in order (`move_xy`, `move_xz`... of the original). Returns the addition
 /// of the last axis.
-pub fn ballistic(b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd {
+pub fn ballistic(b: &mut World, obj: Obj, axes: Axes) -> LastAdd {
     let mut last = LastAdd { old: 0, delta: 0 };
     for &axis in axes {
         let (old, delta) = advance(b, obj, axis);
@@ -151,7 +151,7 @@ pub fn ballistic(b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd {
 }
 
 /// Motion by table on X then on `second` (Y: 0x1cb4, Z: 0x1cee). Returns the addition of the second axis.
-pub fn move_by_table(b: &mut Cps2Bus, obj: Obj, second: Axis) -> LastAdd {
+pub fn move_by_table(b: &mut World, obj: Obj, second: Axis) -> LastAdd {
     advance_by_table(b, obj, AXIS_X, 0);
     let (old, delta) = advance_by_table(b, obj, second, 2);
     LastAdd { old, delta }
@@ -171,7 +171,7 @@ pub const SPEEDS_A: SpeedTables = SpeedTables { routine: 0x1a94, pointers: 0x1ab
 pub const SPEEDS_B: SpeedTables = SpeedTables { routine: 0x1b64, pointers: 0x1b84 };
 
 /// Selects the speed table `n` of the array `tables` and takes its current speed in X and in Y.
-pub fn select_speed(b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
+pub fn select_speed(b: &mut World, obj: Obj, tables: &SpeedTables, n: u16) {
     let index = (n << 2) as i16 as i32;
     let table = match data().speeds.array(RomAddr(tables.pointers)).and_then(|p| p.get(index / 4)) {
         Some(t) => t.0,
@@ -182,13 +182,13 @@ pub fn select_speed(b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
 
 /// 0x29ea: extension point left empty by the game; only tests the byte `Obj::HIDDEN`. True: object
 /// suspended (the original caller chains on `bne`).
-pub fn suspended(b: &mut Cps2Bus, obj: Obj) -> bool {
+pub fn suspended(b: &mut World, obj: Obj) -> bool {
     obj.hidden(b) != 0
 }
 
 /// 0xf1bfc: end-of-handler counters. A negative byte in `COUNTER_53` is reset to zero; the
 /// countdown `COUNTDOWN` decreases and, when it reaches zero (or less), clears `COUNTDOWN_FLAG`.
-pub fn tick_counters(b: &mut Cps2Bus, obj: Obj) {
+pub fn tick_counters(b: &mut World, obj: Obj) {
     if (obj.counter_53(b) as i8) < 0 {
         obj.set_counter_53(b, 0);
     }

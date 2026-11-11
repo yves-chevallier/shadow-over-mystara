@@ -19,7 +19,7 @@
 //! An animation *set* is an array of words (signed offsets relative to the start of the array);
 //! each offset designates the first element of a script.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use ddsom_data::sprites::Entry;
 
@@ -57,7 +57,7 @@ struct Loaded {
 
 /// The entry at `at` (`long`: 24 bytes, with `FRAME_DATA_C/D`), from the animation table, or from the residue when
 /// the table does not know it.
-fn read_entry(b: &mut Cps2Bus, at: u32, long: bool) -> Loaded {
+fn read_entry(b: &mut World, at: u32, long: bool) -> Loaded {
     let d = data();
     let mut longs = [0; 5];
     if let Some(e) = d.anims.entry_at(RomAddr(at), long) {
@@ -77,7 +77,7 @@ fn read_entry(b: &mut Cps2Bus, at: u32, long: bool) -> Loaded {
 
 /// Flags word (`+2`) of the entry at `at`, read without loading the entry (the table searches of `ai_aids` step from
 /// entry to entry by 16 bytes, as the original does).
-pub fn entry_flags(b: &mut Cps2Bus, at: u32) -> u16 {
+pub fn entry_flags(b: &mut World, at: u32) -> u16 {
     let d = data();
     match [false, true].into_iter().find_map(|long| d.anims.entry_at(RomAddr(at), long)) {
         Some(e) => e.flags,
@@ -87,7 +87,7 @@ pub fn entry_flags(b: &mut Cps2Bus, at: u32) -> u16 {
 
 /// Copies the entry located at `at` into the object and returns the address following it.
 /// `long`: the entry also contains `FRAME_DATA_C/D`.
-pub fn load_entry(b: &mut Cps2Bus, obj: Obj, at: u32, long: bool) -> u32 {
+pub fn load_entry(b: &mut World, obj: Obj, at: u32, long: bool) -> u32 {
     let e = read_entry(b, at, long);
     obj.set_anim_timer(b, e.timer);
     obj.set_anim_flags(b, e.flags);
@@ -105,7 +105,7 @@ pub fn load_entry(b: &mut Cps2Bus, obj: Obj, at: u32, long: bool) -> u32 {
 }
 
 /// Script offset at byte `offset` of the animation set `set` (signed, relative to the set).
-fn script_offset(b: &mut Cps2Bus, set: u32, offset: u32) -> i16 {
+fn script_offset(b: &mut World, set: u32, offset: u32) -> i16 {
     match data().anims.script_offset(RomAddr(set), offset as i32) {
         Some(o) => o,
         None => Missing { table: "anim set", key: set }.read16(b, set.wrapping_add(offset)) as i16,
@@ -114,13 +114,13 @@ fn script_offset(b: &mut Cps2Bus, set: u32, offset: u32) -> i16 {
 
 /// Address of script `index` in an animation set (offset read at `set + 2 × index`, without 16-bit wrap-around:
 /// see `start` for the exact indexing of the original).
-pub fn script_of(b: &mut Cps2Bus, set: u32, index: u16) -> u32 {
+pub fn script_of(b: &mut World, set: u32, index: u16) -> u32 {
     let off = script_offset(b, set, 2 * index as u32);
     set.wrapping_add(off as i32 as u32)
 }
 
 /// One animation step: counts down the duration and, at zero, loads the next entry.
-pub fn step(b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
+pub fn step(b: &mut World, obj: Obj, long: bool) -> Step {
     let before = obj.anim_timer(b);
     let timer = before.wrapping_sub(1);
     obj.set_anim_timer(b, timer);
@@ -150,18 +150,18 @@ pub fn step(b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
 /// 0x1a32: starts script `n` of the animation set `set` (`lea set,A4 ; moveq #n,D0 ; jsr 0x1a32`). The index
 /// is a word (`add.w D0,D0 ; move.w (A4,D0.w),D0`): the double is sign-extended. Returns the address following
 /// the loaded entry.
-pub fn start(b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u32 {
+pub fn start(b: &mut World, obj: Obj, set: u32, n: u16) -> u32 {
     let script = script_at(b, set, n);
     load_entry(b, obj, script, false)
 }
 
-fn script_at(b: &mut Cps2Bus, set: u32, n: u16) -> u32 {
+fn script_at(b: &mut World, set: u32, n: u16) -> u32 {
     let off = script_offset(b, set, n.wrapping_add(n) as i16 as i32 as u32);
     set.wrapping_add(off as i32 as u32)
 }
 
 /// 0x1a3c: starts the animation at entry `at` (A4 of the original).
-pub fn start_entry(b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
+pub fn start_entry(b: &mut World, obj: Obj, at: u32) -> u32 {
     load_entry(b, obj, at, false)
 }
 
@@ -192,7 +192,7 @@ pub const SETS_BY_VARIANT: CharacterSets =
 pub(crate) const ARMED: u32 = 0x68;
 
 /// Starts animation `n` (D6 of the original) of the set specific to the object's character (long entries).
-pub fn start_by_character(b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
+pub fn start_by_character(b: &mut World, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
     let n = if sets.weapon_offset && obj.u8(b, ARMED) == 0 { n.wrapping_add(0x40) } else { n };
     let variant = obj.variant(b);
     let v = if sets.sign_extend { variant as i8 as i16 as u16 } else { variant as u16 };

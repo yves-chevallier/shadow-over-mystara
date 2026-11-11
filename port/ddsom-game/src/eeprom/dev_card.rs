@@ -27,7 +27,7 @@
 //! zone, even those of 48 or 16 bytes; zone 0x1048 is not reset to zero by the full
 //! reset; zone 0x1240, which has a vote but no caller, does not exist here.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
@@ -83,17 +83,17 @@ impl Zone {
 // ---------------------------------------------------------------------------------------------
 // "movep" values: one byte per word, at odd addresses
 
-fn read_long(b: &mut Cps2Bus, address: u32) -> u32 {
+fn read_long(b: &mut World, address: u32) -> u32 {
     (0..4).fold(0, |v, i| v << 8 | rd8(b, address + 1 + 2 * i) as u32)
 }
 
-fn write_long(b: &mut Cps2Bus, address: u32, value: u32) {
+fn write_long(b: &mut World, address: u32, value: u32) {
     for i in 0..4 {
         wr8(b, address + 1 + 2 * i, (value >> (24 - 8 * i)) as u8);
     }
 }
 
-fn write_three(b: &mut Cps2Bus, zone: Zone, value: u32) {
+fn write_three(b: &mut World, zone: Zone, value: u32) {
     for k in 0..3 {
         write_long(b, zone.instance(k), value);
     }
@@ -114,7 +114,7 @@ impl Vote {
 
 /// Compares the low bytes of the words of the three copies (the differences accumulate over the whole zone);
 /// stops at the first word where all three differ.
-fn vote(b: &mut Cps2Bus, zone: Zone) -> Vote {
+fn vote(b: &mut World, zone: Zone) -> Vote {
     let mut v = 0;
     for i in 0..zone.words {
         let [a, bb, c] = [0, 1, 2].map(|k| rd16(b, zone.instance(k) + 2 * i) as u8);
@@ -154,7 +154,7 @@ fn verdict(v: Vote) -> Verdict {
 }
 
 /// Copies the first 8 bytes of a copy onto another (the whole repair of the original).
-fn repair(b: &mut Cps2Bus, zone: Zone, de: u32, to: u32) {
+fn repair(b: &mut World, zone: Zone, de: u32, to: u32) {
     for i in 0..2 {
         let v = rd32(b, zone.instance(de) + 4 * i);
         wr32(b, zone.instance(to) + 4 * i, v);
@@ -162,7 +162,7 @@ fn repair(b: &mut Cps2Bus, zone: Zone, de: u32, to: u32) {
 }
 
 /// Vote, then repair or reset to zero (`lost`) of the zone.
-fn check(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus)) {
+fn check(b: &mut World, zone: Zone, lost: fn(&mut World)) {
     match verdict(vote(b, zone)) {
         Verdict::Good => {}
         Verdict::Repair { de, to } => repair(b, zone, de, to),
@@ -173,17 +173,17 @@ fn check(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus)) {
 // ---------------------------------------------------------------------------------------------
 // Resets
 
-fn region(b: &mut Cps2Bus) -> u32 {
+fn region(b: &mut World) -> u32 {
     rd16(b, A5 + REGION) as u32
 }
 
 /// Byte `i` of the region signature (the offset `region << 4` is a signed word, as in the original).
-fn signature_byte(b: &mut Cps2Bus, i: u32) -> u8 {
+fn signature_byte(b: &mut World, i: u32) -> u8 {
     let offset = (region(b) << 4) as u16 as i16 as i32;
     rd8(b, SIGNATURE.wrapping_add(offset as u32) + i)
 }
 
-fn write_signature(b: &mut Cps2Bus) {
+fn write_signature(b: &mut World) {
     for k in 0..3 {
         for i in 0..SIGNATURE_ZONE.words {
             let o = signature_byte(b, i);
@@ -192,33 +192,33 @@ fn write_signature(b: &mut Cps2Bus) {
     }
 }
 
-fn zero_pieces(b: &mut Cps2Bus) {
+fn zero_pieces(b: &mut World) {
     zone_zero(b, PIECES, 8)
 }
-fn zero_starts(b: &mut Cps2Bus) {
+fn zero_starts(b: &mut World) {
     zone_zero(b, STARTS, 8)
 }
-fn zero_time(b: &mut Cps2Bus) {
+fn zero_time(b: &mut World) {
     zone_zero(b, TIME, 8)
 }
-fn zero_paid(b: &mut Cps2Bus) {
+fn zero_paid(b: &mut World) {
     zone_zero(b, PAID, 8)
 }
-fn zero_free(b: &mut Cps2Bus) {
+fn zero_free(b: &mut World) {
     zone_zero(b, FREE, 8)
 }
-fn zero_cards(b: &mut Cps2Bus) {
+fn zero_cards(b: &mut World) {
     zone_zero(b, CARDS, 8)
 }
-fn zero_characters(b: &mut Cps2Bus) {
+fn zero_characters(b: &mut World) {
     zone_zero(b, CHARACTERS, 96)
 }
-fn zero_durations(b: &mut Cps2Bus) {
+fn zero_durations(b: &mut World) {
     zone_zero(b, DURATIONS, 16)
 }
 
 /// Resets to zero the first `bytes` bytes of each copy (full longs, not "movep").
-fn zone_zero(b: &mut Cps2Bus, zone: Zone, bytes: u32) {
+fn zone_zero(b: &mut World, zone: Zone, bytes: u32) {
     for k in 0..3 {
         for i in 0..bytes / 4 {
             wr32(b, zone.instance(k) + 4 * i, 0);
@@ -227,14 +227,14 @@ fn zone_zero(b: &mut Cps2Bus, zone: Zone, bytes: u32) {
 }
 
 /// Default values of the two settings: the long 0x1c3 (written in full, not "movep").
-fn default_settings(b: &mut Cps2Bus) {
+fn default_settings(b: &mut World) {
     for k in 0..3 {
         wr32(b, SETTINGS.instance(k), 0x1c3);
     }
 }
 
 /// Full reset (0x2e91a, 0x2e8e4): all the zones, except the cards dispensed.
-fn reset_zones(b: &mut Cps2Bus) {
+fn reset_zones(b: &mut World) {
     zero_pieces(b);
     zero_starts(b);
     zero_time(b);
@@ -251,7 +251,7 @@ fn reset_zones(b: &mut Cps2Bus) {
 
 /// Vote on the signature, then repair by comparing it with the one in the ROM. False if the signature does not
 /// match the region (blank RAM or from another version: everything is reset).
-fn valid_signature(b: &mut Cps2Bus) -> bool {
+fn valid_signature(b: &mut World) -> bool {
     let (de, to) = match verdict(vote(b, SIGNATURE_ZONE)) {
         Verdict::Good => (0, 1),
         Verdict::Repair { de, to } => (de, to),
@@ -278,7 +278,7 @@ enum Cabinet {
     Cap(u32),
 }
 
-fn check_counter(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus), cabinet: Cabinet) {
+fn check_counter(b: &mut World, zone: Zone, lost: fn(&mut World), cabinet: Cabinet) {
     check(b, zone, lost);
     let value = read_long(b, zone.instance(0));
     match cabinet {
@@ -288,34 +288,34 @@ fn check_counter(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus), cabinet: C
     }
 }
 
-fn check_coins(b: &mut Cps2Bus) {
+fn check_coins(b: &mut World) {
     check_counter(b, PIECES, zero_pieces, Cabinet::Zero(999_999))
 }
-fn check_starts(b: &mut Cps2Bus) {
+fn check_starts(b: &mut World) {
     check_counter(b, STARTS, zero_starts, Cabinet::Zero(999_999))
 }
-fn check_time(b: &mut Cps2Bus) {
+fn check_time(b: &mut World) {
     check_counter(b, TIME, zero_time, Cabinet::Cap(0x127a_3980))
 }
-fn check_paid(b: &mut Cps2Bus) {
+fn check_paid(b: &mut World) {
     check_counter(b, PAID, zero_paid, Cabinet::Cap(0x4f_5880))
 }
-fn check_free(b: &mut Cps2Bus) {
+fn check_free(b: &mut World) {
     check_counter(b, FREE, zero_free, Cabinet::Cap(0x4f_5880))
 }
-fn check_cards(b: &mut Cps2Bus) {
+fn check_cards(b: &mut World) {
     check_counter(b, CARDS, zero_cards, Cabinet::Cap(0x4f_5880))
 }
-fn check_characters(b: &mut Cps2Bus) {
+fn check_characters(b: &mut World) {
     check(b, CHARACTERS, zero_characters)
 }
-fn check_durations(b: &mut Cps2Bus) {
+fn check_durations(b: &mut World) {
     check(b, DURATIONS, zero_durations)
 }
 
 /// The two settings: a zero byte (at 0x...1 or 0x...3) makes 0x1c3 be put back in the three words, in
 /// "movep" (odd bytes 1, 3, 5, 7: 0x01 0x01 0x01 0xc3).
-fn check_settings(b: &mut Cps2Bus) {
+fn check_settings(b: &mut World) {
     check(b, SETTINGS, default_settings);
     for byte in [1, 3] {
         if rd8(b, SETTINGS.instance(0) + byte) == 0 {
@@ -331,26 +331,26 @@ fn check_settings(b: &mut Cps2Bus) {
 // ---------------------------------------------------------------------------------------------
 // Work variables
 
-fn copy_counter(b: &mut Cps2Bus, zone: Zone, variable: u32) {
+fn copy_counter(b: &mut World, zone: Zone, variable: u32) {
     let v = read_long(b, zone.instance(0));
     wr32(b, var(variable), v);
 }
 
-fn copy_characters(b: &mut Cps2Bus) {
+fn copy_characters(b: &mut World) {
     for i in 0..CHARACTERS.words {
         let o = rd16(b, CHARACTERS.instance(0) + 2 * i) as u8;
         wr8(b, var(VAR_CHARACTERS) + i, o);
     }
 }
 
-fn copy_durations(b: &mut Cps2Bus) {
+fn copy_durations(b: &mut World) {
     let min_max = DURATIONS.instance(0);
     let (maxi, mini) = (read_long(b, min_max), read_long(b, min_max + 8));
     wr32(b, var(VAR_MAX_DURATION), maxi);
     wr32(b, var(VAR_MIN_DURATION), mini);
 }
 
-fn copy_settings(b: &mut Cps2Bus) {
+fn copy_settings(b: &mut World) {
     for i in 0..SETTINGS.words {
         let o = rd16(b, SETTINGS.instance(0) + 2 * i) as u8;
         wr8(b, A5 + VAR_SETTINGS + i, o);
@@ -358,7 +358,7 @@ fn copy_settings(b: &mut Cps2Bus) {
 }
 
 /// 0x2dcd2: all the zones to the work variables.
-fn copy_all(b: &mut Cps2Bus) {
+fn copy_all(b: &mut World) {
     copy_counter(b, PIECES, VAR_PIECES);
     copy_counter(b, STARTS, VAR_STARTS);
     copy_counter(b, PAID, VAR_PAID);
@@ -374,7 +374,7 @@ fn copy_all(b: &mut Cps2Bus) {
 // Entry points
 
 /// 0x2dc9a at reset (0x2dca6 then 0x2dcd2): check of the whole extra RAM, then variables.
-pub fn start_up(b: &mut Cps2Bus) {
+pub fn start_up(b: &mut World) {
     if valid_signature(b) {
         check_coins(b);
         check_starts(b);
@@ -392,12 +392,12 @@ pub fn start_up(b: &mut Cps2Bus) {
 }
 
 /// 0x2e8e4 (buttons held at reset): reset of the extra RAM, then variables.
-pub fn reset(b: &mut Cps2Bus) {
+pub fn reset(b: &mut World) {
     reset_zones(b);
     copy_all(b);
 }
 
-fn increment(b: &mut Cps2Bus, zone: Zone) {
+fn increment(b: &mut World, zone: Zone) {
     for k in 0..3 {
         let a = zone.instance(k);
         let v = read_long(b, a).wrapping_add(1);
@@ -407,20 +407,20 @@ fn increment(b: &mut Cps2Bus, zone: Zone) {
 
 /// One more count (coin 0x2e456, start 0x2e4a8, paid game 0x2e4fc, free 0x2e59a), its zone
 /// checked, and its work variable updated. Returns the new value (last long loaded).
-pub fn pieces(b: &mut Cps2Bus) -> u32 {
+pub fn pieces(b: &mut World) -> u32 {
     count(b, PIECES, check_coins, VAR_PIECES)
 }
-pub fn starts(b: &mut Cps2Bus) -> u32 {
+pub fn starts(b: &mut World) -> u32 {
     count(b, STARTS, check_starts, VAR_STARTS)
 }
-pub fn paid_games(b: &mut Cps2Bus) -> u32 {
+pub fn paid_games(b: &mut World) -> u32 {
     count(b, PAID, check_paid, VAR_PAID)
 }
-pub fn free_games(b: &mut Cps2Bus) -> u32 {
+pub fn free_games(b: &mut World) -> u32 {
     count(b, FREE, check_free, VAR_FREE)
 }
 
-fn count(b: &mut Cps2Bus, zone: Zone, control: fn(&mut Cps2Bus), variable: u32) -> u32 {
+fn count(b: &mut World, zone: Zone, control: fn(&mut World), variable: u32) -> u32 {
     increment(b, zone);
     control(b);
     copy_counter(b, zone, variable);
@@ -428,12 +428,12 @@ fn count(b: &mut Cps2Bus, zone: Zone, control: fn(&mut Cps2Bus), variable: u32) 
 }
 
 /// 0x2e540 (once per second of play): one more second on the total play time.
-pub fn play_time(b: &mut Cps2Bus) -> u32 {
+pub fn play_time(b: &mut World) -> u32 {
     count(b, TIME, check_time, VAR_TIME)
 }
 
 /// 0x2e638: one more game for character `character` (signed word; the counters are 8 bytes).
-pub fn character_part(b: &mut Cps2Bus, character: u16) {
+pub fn character_part(b: &mut World, character: u16) {
     let offset = ((character as i16) << 3) as i32 as u32;
     for k in 0..3 {
         let a = CHARACTERS.instance(k).wrapping_add(offset);
@@ -445,7 +445,7 @@ pub fn character_part(b: &mut Cps2Bus, character: u16) {
 }
 
 /// 0x2e69e: duration of a game (`images`, signed long), in seconds; keeps the longest and the shortest.
-pub fn game_duration(b: &mut Cps2Bus, images: u32) {
+pub fn game_duration(b: &mut World, images: u32) {
     let seconds = (images as i32).wrapping_div(60) as u32;
     if seconds > rd32(b, var(VAR_MAX_DURATION)) {
         write_three_durations(b, 0, seconds);
@@ -458,7 +458,7 @@ pub fn game_duration(b: &mut Cps2Bus, images: u32) {
     copy_durations(b);
 }
 
-fn write_three_durations(b: &mut Cps2Bus, offset: u32, value: u32) {
+fn write_three_durations(b: &mut World, offset: u32, value: u32) {
     for k in 0..3 {
         write_long(b, DURATIONS.instance(k) + offset, value);
     }

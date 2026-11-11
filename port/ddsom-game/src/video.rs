@@ -4,7 +4,7 @@
 //! addresses of the tables in GFX RAM (in units of 256 bytes): objects at `0x804100`, layers 1 to 3 at
 //! `0x804102/04/06`; `0x804166` (CPS-B) enables the layers.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::data;
 use crate::hw::video::{self as gfx, regs, Cell, Vram};
@@ -52,7 +52,7 @@ pub(crate) const GAUGE_LONGS: u32 = 32;
 
 /// 0xb46: fills the first column of the character layer with `marker` (the loading gauge), unless
 /// the settings hide it (bit 0x400 of DSW: always, in this game). Returns true if the gauge is drawn.
-pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
+pub fn update_gauge(b: &mut World, marker: u32) -> bool {
     let hidden = crate::ram::DSW.get(b) & 0x400 != 0;
     if !hidden {
         for i in 0..GAUGE_LONGS {
@@ -67,14 +67,14 @@ pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
 /// reread by a following handler, which writes it into an object field (`DDSOM_POISON=call_b3e`: long_nain_57_86,
 /// frame 13398, ram ffd692): it is the leftover D2 of the game (`dispatch::Leftovers`). A0 and the flags are reread by
 /// nobody.
-pub fn gauge_in_world(b: &mut Cps2Bus, marker: u32) {
+pub fn gauge_in_world(b: &mut World, marker: u32) {
     let drawn = update_gauge(b, marker);
     let leftovers = &mut crate::tasks::table::table(b).leftovers;
     leftovers.d2 = if drawn { leftovers.d2 | 0xffff } else { leftovers.d2 & 0xffff_0000 | 0x400 };
 }
 
 /// 0xb96: locks the coin counters of bits `bits` (in addition to the forced bits). Returns the forced bits (D1.b).
-pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
+pub fn lock_counters(b: &mut World, bits: u8) -> u8 {
     let forced = LOCKOUT_FORCED.get(b);
     for lock in LOCKOUTS {
         let v = lock.get(b) | bits | forced;
@@ -84,7 +84,7 @@ pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
 }
 
 /// 0xbac: unlocks bits `bits` (except the forced bits). Returns the forced bits (D1.b).
-pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
+pub fn unlock_counters(b: &mut World, bits: u8) -> u8 {
     let forced = LOCKOUT_FORCED.get(b);
     for lock in LOCKOUTS {
         let v = lock.get(b) & !bits | forced;
@@ -95,7 +95,7 @@ pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
 
 /// 0xbc6: enables the layers `bits` (added to the register image) and programs the display registers, unless
 /// the screen is frozen. No register or flag changes.
-pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
+pub fn turn_layers_on(b: &mut World, bits: u16) {
     let enable = LAYER_ENABLE.get(b) | bits;
     LAYER_ENABLE.set(b, enable);
     if !FROZEN.is_set(b) {
@@ -109,7 +109,7 @@ pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
 }
 
 /// 0xbfc: disables the layers `bits`. The processor receives D0.w complemented.
-pub fn turn_layers_off(b: &mut Cps2Bus, bits: u16) {
+pub fn turn_layers_off(b: &mut World, bits: u16) {
     let enable = LAYER_ENABLE.get(b) & !bits;
     LAYER_ENABLE.set(b, enable);
     regs::LAYER_CONTROL.set(b, enable);
@@ -117,7 +117,7 @@ pub fn turn_layers_off(b: &mut Cps2Bus, bits: u16) {
 
 /// 0xc58: writes the end-of-list entry (0x8000, 0x18000000) at the head of the Object RAM, twice,
 /// toggling the bank between the two: the list is empty in both banks.
-pub fn clear_objects(b: &mut Cps2Bus) {
+pub fn clear_objects(b: &mut World) {
     for _ in 0..2 {
         gfx::OBJECTS.set_long(b, 0x8000);
         gfx::OBJECTS.offset(4).set_long(b, 0x1800_0000);
@@ -129,13 +129,13 @@ pub fn clear_objects(b: &mut Cps2Bus) {
 
 /// Black screen, first half (0xc0c, 0xc32): all layers off (`0xbfc` with D0 = 0x12ce, after
 /// resetting `A5+0x14` to zero).
-fn switch_layers_off(b: &mut Cps2Bus) {
+fn switch_layers_off(b: &mut World) {
     LAYER_ENABLE.set(b, 0);
     regs::LAYER_CONTROL.set(b, 0);
 }
 
 /// Black screen, second half: empty object list and the three layers cleared.
-fn clear_screen(b: &mut Cps2Bus) {
+fn clear_screen(b: &mut World) {
     clear_objects(b);
     for layer in [Layer::One, Layer::Two, Layer::Three] {
         clear_layer(b, layer);
@@ -144,7 +144,7 @@ fn clear_screen(b: &mut Cps2Bus) {
 
 /// 0xc0c: black screen in one go (layers off, objects and layers cleared). The registers that the original leaves
 /// (D0.w = 0x1f00, D1 = 0) are reread by nobody.
-pub fn black_screen(b: &mut Cps2Bus) {
+pub fn black_screen(b: &mut World) {
     switch_layers_off(b);
     clear_screen(b);
 }
@@ -178,7 +178,7 @@ pub mod black_screen {
 }
 
 /// Fills [start, end) with cells (tile, 0): 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
-fn fill_layer(b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
+fn fill_layer(b: &mut World, from: u32, to: u32, tile: u16) {
     for a in (from..to).step_by(4) {
         Cell(a).put(b, tile, 0);
     }
@@ -205,30 +205,30 @@ impl Layer {
 
 /// 0xca8, 0xcc8, 0xce8: fills the layer with its empty tile. The registers that the original leaves (D0.w = the
 /// tile, D1 = 0; A0 and A1 are restored) are reread by nobody.
-pub fn clear_layer(b: &mut Cps2Bus, layer: Layer) {
+pub fn clear_layer(b: &mut World, layer: Layer) {
     let (from, to, tile) = layer.zone();
     fill_layer(b, from, to, tile);
 }
 
-fn clear_scroll1(b: &mut Cps2Bus) {
+fn clear_scroll1(b: &mut World) {
     clear_layer(b, Layer::One);
 }
 /// Bytes cleared by 0x3525c.
 pub(crate) const SCROLL1_START: u32 = 0x2000;
 
 /// 0x3525c: clears the first 8 KB of layer 1 with the empty tile 0x1f.
-pub fn clear_layer1_start(b: &mut Cps2Bus) {
+pub fn clear_layer1_start(b: &mut World) {
     fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SCROLL1_START, 0x1f);
 }
 
-fn clear_scroll2(b: &mut Cps2Bus) {
+fn clear_scroll2(b: &mut World) {
     clear_layer(b, Layer::Two);
 }
-fn clear_scroll3(b: &mut Cps2Bus) {
+fn clear_scroll3(b: &mut World) {
     clear_layer(b, Layer::Three);
 }
 
-const fn memory(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+const fn memory(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
     Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
@@ -262,7 +262,7 @@ pub struct Terrain {
 /// Terrain number under point (x, y) (0x24b0). Scenes 2 and 0x14: fixed map in ROM (y shifted by -/+ 0x10);
 /// elsewhere: cell of scroll layer 2 in GFX RAM, with the camera correction when camera 2 is
 /// current.
-pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
+pub fn terrain(b: &mut World, x: u16, y: u16) -> Terrain {
     let stage = crate::ram::SCENE.get(b);
     let (mut x, mut y) = (x, y);
     // the fixed maps of `terrain.json` (scenes 2 and 0x14), with their correction of y
@@ -308,7 +308,7 @@ pub(crate) fn terrain_regs(r: &mut impl crate::ops::Alu, t: &Terrain) {
 }
 
 /// Terrain number under object `o` (0x24a8: x position at +8, y at +0x10).
-pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
+pub fn terrain_of(b: &mut World, o: crate::objects::Obj) -> Terrain {
     use crate::objects::Obj;
     let (x, y) = (o.u16(b, Obj::X), o.u16(b, Obj::Y));
     terrain(b, x, y)
@@ -378,7 +378,7 @@ const LOAD_SMALL: Blocks = Blocks {
 
 impl Blocks {
     /// ROM address of the cells of the block whose index is read at `at`.
-    fn block_source(&self, b: &mut Cps2Bus, at: u32) -> u32 {
+    fn block_source(&self, b: &mut World, at: u32) -> u32 {
         let index = engine().word(b, at) as u32;
         match self.source {
             Source::Fixed(base) => base.wrapping_add(index << 6),
@@ -392,7 +392,7 @@ impl Blocks {
     }
 
     /// Loads index grid D0 at `dst`. Returns the final address of the destination and the end of the indices.
-    fn load(&self, b: &mut Cps2Bus, d0: u16, mut dst: u32) -> (u32, u32) {
+    fn load(&self, b: &mut World, d0: u16, mut dst: u32) -> (u32, u32) {
         let page_base = self.page.map_or(0, |p| dst & !(p - 1));
         let mut at = self.index_base.wrapping_add(d0 as u32 * self.index_size);
         let row_advance = (self.cells * self.row_stride).wrapping_sub(self.grid * self.cells * 4);
@@ -447,7 +447,7 @@ pub struct GridEnd {
 }
 
 /// Loads block grid `n` of `grid` to `destination` (GFX RAM).
-pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridEnd {
+pub fn load_grid(b: &mut World, grid: Grid, n: u16, destination: u32) -> GridEnd {
     let (destination, indices) = grid.blocks().load(b, n, destination);
     GridEnd { destination, indices }
 }
@@ -460,7 +460,7 @@ pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridE
 /// into work RAM at startup (0x19038).
 const FIXED_SCREENS_RAM: u32 = 0xff111c;
 
-pub fn copy_fixed_screens(b: &mut Cps2Bus) {
+pub fn copy_fixed_screens(b: &mut World) {
     let screens = crate::tables::engine_table!("video/fixed_screens");
     for i in 0..60 {
         let word = screens.nth16(b, i);

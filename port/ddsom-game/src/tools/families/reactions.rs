@@ -12,7 +12,7 @@ use crate::objects::Obj;
 const PLAYER_HURT_SETS: u32 = 0x3bb52;
 
 /// 0x3bb16: player reaction animation `D6` (set per character `+3`, table 0x3bb52).
-fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut crate::world::World) {
     let o = Obj(c.a[0]);
     let character = rd8(b, o.0 + 3) as u32;
     c.d[5] = 4 * character;

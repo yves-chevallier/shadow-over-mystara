@@ -83,7 +83,7 @@ fn step_then_after<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Animation key: launched shot `throw` (0x9dda8 or 0x9e062; the key is reset to zero).
-fn key_effect<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn key_effect<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);

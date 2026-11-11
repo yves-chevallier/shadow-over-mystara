@@ -6,7 +6,7 @@
 use std::io;
 use std::path::Path;
 
-use cps2::Machine;
+use cps2::{Board, Machine};
 use ddsom_game::scenario::{Recorder, Scenario};
 
 pub struct Game {
@@ -16,12 +16,12 @@ pub struct Game {
 
 impl Game {
     /// Game that starts on the fresh `m`.
-    pub fn new(m: &Machine) -> Self {
-        Game { eeprom: m.bus.eeprom.to_bytes(), inputs: Recorder::new(Vec::new()) }
+    pub fn new<B: Board>(m: &Machine<B>) -> Self {
+        Game { eeprom: m.bus.hw().eeprom.to_bytes(), inputs: Recorder::new(Vec::new()) }
     }
 
     /// To be called just before each executed frame, inputs set.
-    pub fn image(&mut self, m: &Machine) {
+    pub fn image<B: Board>(&mut self, m: &Machine<B>) {
         self.inputs.image(m).expect("in-memory write");
     }
 
@@ -42,7 +42,7 @@ impl Game {
 
     /// Replays `file` on a fresh machine (`machine` builds it from the starting EEPROM) up to the saved
     /// frame.
-    pub fn load(file: &Path, machine: impl FnOnce(&[u8]) -> Machine) -> io::Result<(Machine, Game)> {
+    pub fn load<B: Board>(file: &Path, machine: impl FnOnce(&[u8]) -> Machine<B>) -> io::Result<(Machine<B>, Game)> {
         let eeprom = std::fs::read(eeprom_of(file))?;
         let text = std::fs::read_to_string(file)?;
         let end = text.lines().rev().find_map(|l| l.strip_suffix(" quit")?.trim().parse::<usize>().ok());

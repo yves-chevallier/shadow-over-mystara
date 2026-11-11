@@ -142,7 +142,7 @@ fn principal() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
@@ -155,7 +155,7 @@ fn principal() {
     }
     let rounds: u32 = rounds.parse().unwrap();
     let mut rng = Rng(0x1234_5678_9abc_def1);
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     let mut b = b0.clone();
     let mut summaries: BTreeMap<u32, Summary> = BTreeMap::new();
     let mut lines = Vec::new();

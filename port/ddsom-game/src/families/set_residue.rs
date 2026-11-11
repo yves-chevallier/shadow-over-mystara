@@ -2,7 +2,7 @@
 //! families: the 68000 leftover that fit no handler. Each is a native at its original
 //! address; the registers it leaves are those of the original.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
@@ -17,7 +17,7 @@ const ROW: u32 = 0x80;
 pub(crate) const BLANK: u32 = 0x20_0000;
 
 /// Clears the three columns of the tile buffer; returns the end of the last one (A1 of the original).
-pub fn clear_columns(b: &mut Cps2Bus) -> u32 {
+pub fn clear_columns(b: &mut World) -> u32 {
     let mut a1 = 0;
     for column in COLUMNS {
         a1 = column;
@@ -36,7 +36,7 @@ const LIFE_BAR_OBJECT: u32 = 0xff_2476;
 /// 0xd5ef8: when the health bar is displayed, attaches it to boss `boss` (`+0x34`, variant 1, state reset to
 /// zero) and clears the tile columns of the old bar (0xd5f12). Returns the end of the cleared columns (the A1
 /// of the original), `None` if the bar is not displayed. Core.
-pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32> {
+pub fn attach_life_bar(b: &mut World, boss: crate::objects::Obj) -> Option<u32> {
     if rd8(b, A5 + LIFE_BAR_SHOWN) == 0 {
         return None;
     }
@@ -49,7 +49,7 @@ pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32
 
 /// 0xce668: loads two block grids (0x26d4, destination 0x917000, the second right after) whose numbers are
 /// read, as word pairs, from table 0xce686 at index `character`.
-pub fn two_grids(b: &mut Cps2Bus, character: u16) {
+pub fn two_grids(b: &mut World, character: u16) {
     const GRIDS: u32 = 0xce686;
     let table = GRIDS.wrapping_add(character.wrapping_mul(4) as u32);
     let mut destination = 0x91_7000;
@@ -61,7 +61,7 @@ pub fn two_grids(b: &mut Cps2Bus, character: u16) {
 
 /// Core of `variant_routine` for generator `me`: the variant's routine, nothing (0xd99f8) or a scene
 /// music (0xe0c5c, 0xe0d8c), with no registers.
-fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
+fn variant_sound(b: &mut World, me: Obj, kinds: u32, routines: u32) {
     const NOTHING: u32 = 0xd99f8;
     let variant = me.u8(b, Obj::VARIANT) as u32;
     let index = (set_tables::pc_byte(b, kinds + variant) as u16).wrapping_mul(4);
@@ -73,12 +73,12 @@ fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
 }
 
 /// 0xd98b8 with no registers (generator `me`).
-pub fn begin_wave(b: &mut Cps2Bus, me: Obj) {
+pub fn begin_wave(b: &mut World, me: Obj) {
     variant_sound(b, me, 0xd98d8, 0xd98cc);
 }
 
 /// 0xd995a with no registers (generator `me`).
-pub fn finish_wave(b: &mut Cps2Bus, me: Obj) {
+pub fn finish_wave(b: &mut World, me: Obj) {
     variant_sound(b, me, 0xd9976, 0xd996e);
 }
 
@@ -93,17 +93,17 @@ pub(crate) mod camera {
     const MODE: u32 = 0x4ff;
 
     /// 0x2a24: scroll limit `v` (the flags of the `move.w` are reread by nobody).
-    pub fn set_limit_x(b: &mut Cps2Bus, v: u16) {
+    pub fn set_limit_x(b: &mut World, v: u16) {
         wr16(b, A5 + LIMIT_X, v);
     }
 
     /// 0x2a2a: vertical position `v`.
-    pub fn set_position_y(b: &mut Cps2Bus, v: u16) {
+    pub fn set_position_y(b: &mut World, v: u16) {
         wr16(b, A5 + POSITION_Y, v);
     }
 
     /// 0x2a30: camera mode `v`.
-    pub fn set_mode(b: &mut Cps2Bus, v: u8) {
+    pub fn set_mode(b: &mut World, v: u8) {
         wr8(b, A5 + MODE, v);
     }
 }

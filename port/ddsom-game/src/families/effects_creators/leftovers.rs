@@ -1,6 +1,6 @@
 //! What a routine of the batch leaves in the original's registers.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::ops::Size;
 
@@ -13,11 +13,11 @@ use crate::objects::Obj;
 /// processor (natives for the original code) receives all those that the original leaves (allocation included: A1,
 /// D6 and the carry).
 pub(crate) trait Regs {
-    fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj>;
+    fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj>;
     /// Original glitch: allocation whose failure is not tested (see `Pool::alloc_unchecked`).
-    fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj;
+    fn alloc_without_test(&mut self, b: &mut World, pool: &Pool) -> Obj;
     /// Allocation whose failure returns the A1 that the original leaves (see `Pool::alloc_or_leftover`).
-    fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj>;
+    fn alloc_or_rest(&mut self, b: &mut World, pool: &Pool) -> Result<Obj, Obj>;
     /// Flags of a `move`/`tst`/`and` of `v`.
     fn flags(&mut self, _v: u32, _size: Size) {}
     /// X flag alone (last bit shifted out, which the following instructions keep).
@@ -52,13 +52,13 @@ fn mask(v: u32, size: Size) -> u32 {
 pub(crate) struct Pure;
 
 impl Regs for Pure {
-    fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+    fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj> {
         pool.alloc(b)
     }
-    fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+    fn alloc_without_test(&mut self, b: &mut World, pool: &Pool) -> Obj {
         pool.alloc_unchecked(b)
     }
-    fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+    fn alloc_or_rest(&mut self, b: &mut World, pool: &Pool) -> Result<Obj, Obj> {
         pool.alloc_or_leftover(b)
     }
 }
@@ -77,13 +77,13 @@ pub(crate) fn leftover(l: &mut crate::dispatch::Leftovers, n: usize) -> Option<&
 /// Code without a bench that keeps by name the leftovers D2-D5 that the original leaves to what follows
 /// (`player::Ctx::leftovers`); the rest is dead.
 impl Regs for crate::dispatch::Leftovers {
-    fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+    fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj> {
         pool.alloc(b)
     }
-    fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+    fn alloc_without_test(&mut self, b: &mut World, pool: &Pool) -> Obj {
         pool.alloc_unchecked(b)
     }
-    fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+    fn alloc_or_rest(&mut self, b: &mut World, pool: &Pool) -> Result<Obj, Obj> {
         pool.alloc_or_leftover(b)
     }
     fn d(&mut self, n: usize, v: u32) {
@@ -120,13 +120,13 @@ impl<R: crate::families::cx::Bench> OnBench<'_, R> {
 }
 
 impl<R: crate::families::cx::Bench> Regs for OnBench<'_, R> {
-    fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+    fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj> {
         pool.alloc(b)
     }
-    fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+    fn alloc_without_test(&mut self, b: &mut World, pool: &Pool) -> Obj {
         pool.alloc_unchecked(b)
     }
-    fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+    fn alloc_or_rest(&mut self, b: &mut World, pool: &Pool) -> Result<Obj, Obj> {
         pool.alloc_or_leftover(b)
     }
     fn d(&mut self, n: usize, v: u32) {

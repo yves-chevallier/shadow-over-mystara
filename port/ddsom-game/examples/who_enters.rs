@@ -63,7 +63,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     m.executor = Some(ddsom_game::run_traced);
     ddsom_game::set_native_hook(hook);
     ddsom_game::set_trace(trace);

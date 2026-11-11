@@ -332,7 +332,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Animation key: effect `effect`; at the end of the script, the Kobold resumes its walk one step forward (`−0x20` to
 /// the right, `+0x20` to the left).
-fn landing_hit<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn landing_hit<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);

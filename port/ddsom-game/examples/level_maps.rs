@@ -283,27 +283,27 @@ fn read_png(path: &Path) -> (usize, usize, Vec<u8>) {
 // Machine: reaching a scene
 // ---------------------------------------------------------------------------------------------
 
-fn rw(m: &cps2::Machine, a: u32) -> u16 {
+fn rw(m: &ddsom_game::GameMachine, a: u32) -> u16 {
     m.bus.ram[((a - 0xff0000) / 2) as usize]
 }
 
-fn phase(m: &cps2::Machine) -> u32 {
+fn phase(m: &ddsom_game::GameMachine) -> u32 {
     (rw(m, 0xff802c) >> 8) as u32
 }
 
-fn scene(m: &cps2::Machine) -> u32 {
+fn scene(m: &ddsom_game::GameMachine) -> u32 {
     (rw(m, 0xff8034) >> 8) as u32
 }
 
-fn poke(m: &mut cps2::Machine, a: u32, v: u32, size: u8) {
+fn poke(m: &mut ddsom_game::GameMachine, a: u32, v: u32, size: u8) {
     ddsom_game::scenario::poke(m, a, v, size);
 }
 
 /// Starts the game: coin, Start, chosen character, `FF8034` forced during the selection (scene 1).
-fn start_up(roms: &Path, eeprom: &Path) -> cps2::Machine {
+fn start_up(roms: &Path, eeprom: &Path) -> ddsom_game::GameMachine {
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(roms, ee.as_deref()).unwrap();
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(roms, ee.as_deref()).unwrap();
+    let mut m = ddsom_game::install(m);
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);
     let inputs = [(922, "Coin 1", true), (928, "Coin 1", false), (1002, "1 Player Start", true), (1008, "1 Player Start", false), (1442, "P1 Button 1", true), (1448, "P1 Button 1", false)];
@@ -332,7 +332,7 @@ struct Reading {
 }
 
 /// Jumps to scene `n` (game in progress, invincible player), waits for the game phase and reads the palette.
-fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
+fn enter(m: &mut ddsom_game::GameMachine, n: u32) -> Reading {
     for (a, v) in [(0xff8034, n), (0xff802c, 8), (0xff802d, 0), (0xff802e, 0)] {
         poke(m, a, v, 1);
     }
@@ -349,10 +349,10 @@ fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
         }
     }
     let b = &m.bus;
-    let v = cps2_gfx::VideoState { gfxram: &b.gfxram, cps_a: &b.cps_a, cps_b: &b.cps_b, objram: &m.obj_buffer, output: &m.pri_ctrl_buffer, palette_ram: Some(&b.palette) };
-    let command = b.cps_b[0x26 / 2];
+    let v = cps2_gfx::VideoState { gfxram: &b.hw.gfxram, cps_a: &b.hw.cps_a, cps_b: &b.hw.cps_b, objram: &m.obj_buffer, output: &m.pri_ctrl_buffer, palette_ram: Some(&b.hw.palette) };
+    let command = b.hw.cps_b[0x26 / 2];
     // active layer: CPS-B bit (0x04 / 0x08) and CPS-A video command bit (4 / 8), as in `cps2-gfx`
-    let active = |l: u8| command & (1 << l) != 0 && b.cps_a[0x22 / 2] & (1 << l) != 0;
+    let active = |l: u8| command & (1 << l) != 0 && b.hw.cps_a[0x22 / 2] & (1 << l) != 0;
     let order = (0..4).map(|i| (command >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
     // target positions of the cameras (records `A5 + 0x4fe` and `A5 + 0x54e`, field `+0x0c`)
     let (y1, y2) = (rw(m, 0xff84fe + 0xc) as i16 as i64, rw(m, 0xff854e + 0xc) as i16 as i64);
@@ -360,7 +360,7 @@ fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
 }
 
 /// Scene that naturally follows: phase 16 (scene exit) is forced and the next scene is read.
-fn next_scene(m: &mut cps2::Machine) -> Option<u32> {
+fn next_scene(m: &mut ddsom_game::GameMachine) -> Option<u32> {
     let n = scene(m);
     for (a, v) in [(0xff802c, 16), (0xff802d, 0), (0xff802e, 0)] {
         poke(m, a, v, 1);
@@ -377,7 +377,7 @@ fn next_scene(m: &mut cps2::Machine) -> Option<u32> {
 
 fn cards(roms: &Path, eeprom: &Path, exit: &Path, scenes: &[u32]) {
     let mut m = start_up(roms, eeprom);
-    let (gfx, program) = (m.gfx.clone(), m.bus.rom.clone().expect("machine with the ROMs"));
+    let (gfx, program) = (m.gfx.clone(), m.bus.hw.rom.clone().expect("machine with the ROMs"));
     let rom = Rom { data: &program.data, prog: &program.decrypted, gfx: &gfx };
     for d in ["couches", "infos"] {
         std::fs::create_dir_all(exit.join(d)).unwrap();

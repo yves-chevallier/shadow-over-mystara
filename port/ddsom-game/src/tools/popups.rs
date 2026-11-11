@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::popups` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::popups::*;
@@ -11,7 +11,7 @@ use crate::mem::A5;
 
 /// `animate_obj` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
 /// `animate_obj` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).
-pub(crate) fn animate_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn animate_68k(c: &mut Cpu, b: &mut World) {
     c.a[0] = A5.wrapping_add(CURRENT);
     c.a[2] = A5 + INPUTS;
     if let Some(index) = animate_obj(b) {

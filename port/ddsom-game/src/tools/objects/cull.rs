@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::cull` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -44,20 +44,20 @@ fn cmp_w(c: &mut Cpu, n: usize, src: u16) {
 }
 
 /// D`n`.w = screen abscissa; `move.w X,Dn ; sub.w cam.x,Dn`.
-fn load_screen_x(c: &mut Cpu, b: &mut Cps2Bus, n: usize, obj: Obj, cam: u32) {
+fn load_screen_x(c: &mut Cpu, b: &mut World, n: usize, obj: Obj, cam: u32) {
     move_w(c, n, obj.u16(b, Obj::X));
     sub_w(c, n, rd16(b, cam + 8));
 }
 
 /// D`n`.w = screen height; `move.w Z,Dn ; add.w Y,Dn ; sub.w cam.y,Dn`.
-fn load_screen_height(c: &mut Cpu, b: &mut Cps2Bus, n: usize, obj: Obj, cam: u32) {
+fn load_screen_height(c: &mut Cpu, b: &mut World, n: usize, obj: Obj, cam: u32) {
     move_w(c, n, obj.u16(b, Obj::Z));
     add_w(c, n, obj.u16(b, Obj::Y));
     sub_w(c, n, rd16(b, cam + 0xc));
 }
 
 /// 0x1e1a, registers included.
-fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+fn cull_offscreen(c: &mut Cpu, b: &mut World, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
     load_screen_x(c, b, 0, obj, cam);
@@ -92,7 +92,7 @@ pub(crate) const CULL_OFFSCREEN: Native = Native {
 };
 
 /// 0x1e92, registers included: margin in D0.w.
-fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+fn in_arena_regs(c: &mut Cpu, b: &mut World, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
     load_screen_x(c, b, 1, obj, cam);
@@ -140,7 +140,7 @@ pub(crate) const IN_ARENA_DEFAULT: Native = Native {
 };
 
 /// 0x1ed2, registers included; true if the object is visible.
-fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
+fn on_screen(c: &mut Cpu, b: &mut World, obj: Obj) -> bool {
     let cam = camera(b);
     c.a[2] = cam;
     let class = obj.u8(b, Obj::CLASS);

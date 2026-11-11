@@ -10,7 +10,7 @@
 //! active (`+0`), of main state < 4 (`+4`), and not masked (bit 1 of `+1`), with a rule on `+0x182`
 //! ([`Rule`]).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::objects::Obj;
 use crate::player::Player;
@@ -81,7 +81,7 @@ impl Criterion {
 }
 
 /// Can player `p` be targeted?
-pub fn targetable(b: &mut Cps2Bus, p: Obj, rule: Rule) -> bool {
+pub fn targetable(b: &mut World, p: Obj, rule: Rule) -> bool {
     let aura = p.u8(b, Player::AURA) != 0;
     let hidden = p.u8(b, Player::FLAGS) & 2 != 0;
     let visible = match rule {
@@ -92,7 +92,7 @@ pub fn targetable(b: &mut Cps2Bus, p: Obj, rule: Rule) -> bool {
 }
 
 /// Distance |dx| + |dy| (words, like the original: `sub`, `neg` if negative, `add`).
-fn manhattan(b: &mut Cps2Bus, a: Obj, other: Obj) -> u16 {
+fn manhattan(b: &mut World, a: Obj, other: Obj) -> u16 {
     let dx = other.u16(b, Obj::X).wrapping_sub(a.u16(b, Obj::X)) as i16;
     let dy = other.u16(b, Obj::Y).wrapping_sub(a.u16(b, Obj::Y)) as i16;
     (dx.wrapping_abs() as u16).wrapping_add(dy.wrapping_abs() as u16)
@@ -100,7 +100,7 @@ fn manhattan(b: &mut Cps2Bus, a: Obj, other: Obj) -> u16 {
 
 /// Body of 0x427a / 0x42e0 / 0x4338 (strict rule) and 0x43ca / 0x4430 / 0x4488 (wide rule): the player who
 /// best meets the criterion becomes the target of `o` (`+0x50`, 0 if none).
-pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> Option<Obj> {
+pub fn target_by(b: &mut World, o: Obj, criterion: Criterion, rule: Rule) -> Option<Obj> {
     let mut best: u16 = match criterion {
         Criterion::Nearest => 0xffff,
         Criterion::LowestHp => 0x7fff,
@@ -143,7 +143,7 @@ fn criteria(rule: Rule) -> &'static Table {
 }
 
 /// 0x424e (strict rule) / 0x43ae (wide rule): randomly drawn criterion, then `target_by`.
-pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
+pub fn pick_target(b: &mut World, o: Obj, rule: Rule) -> Option<Obj> {
     let roll = rng::random(b) & 15;
     let criterion = Criterion::from_byte(criteria(rule).at8(b, roll as u32));
     target_by(b, o, criterion, rule)
@@ -151,7 +151,7 @@ pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
 
 /// 0x44ee: a targetable player (strict rule) drawn at random becomes the target: three tries, each on the player
 /// following the previous one. With no player alive, neither a draw nor a write.
-pub fn random_player(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
+pub fn random_player(b: &mut World, o: Obj) -> Option<Obj> {
     if PLAYERS_ALIVE.get(b) == 0 {
         return None;
     }
@@ -188,7 +188,7 @@ impl HpTable {
 
 /// 0x453c / 0x4544: initial HP of `o` read from `table` (block of type `+2`; second half beyond level 5;
 /// row of the number of players alive; column of rank / 2), copied to `+0x60`, `+0x62` and `+0x64`.
-pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: HpTable) {
+pub fn initial_hp(b: &mut World, o: Obj, table: HpTable) {
     let mut index = (o.u8(b, Obj::KIND) as u16) << 8;
     if LEVEL.get(b) > 5 {
         index = index.wrapping_add(0x80);
@@ -203,7 +203,7 @@ pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: HpTable) {
 
 /// 0xfe5a: immunities of `o` (`+0x94`) according to its class and type (table `immunities`, longs: enemies, class 2,
 /// then bosses, class 4, 32 types further). Returns the index (bytes) read in the table.
-pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
+pub fn set_immunities(b: &mut World, o: Obj) -> u16 {
     let base: u8 = if o.u8(b, Obj::CLASS) == 4 { 32 } else { 0 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
     let v = crate::tables::engine_table!("immunities").at32(b, index as u32);
@@ -212,7 +212,7 @@ pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
 }
 
 /// 0x1059e: HP rank of `o` (`+0xac`) = (players alive - 1) × 32 + (rank & 0x1e), on one byte.
-pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
+pub fn hp_rank(b: &mut World, o: Obj) {
     let players = PLAYERS_ALIVE.get(b).wrapping_sub(1) << 5;
     let v = players.wrapping_add(RANK.get(b) as u8 & 0x1e);
     o.set_u8(b, f::HP_RANK, v);
@@ -223,7 +223,7 @@ pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
 
 /// Mask decision: row `+0x72` (`decision_a`, 0xa4b4) or `+0x73` (`decision_b`, 0xa4c2) gives a
 /// table of 32-bit masks indexed by rank; a bit in it is drawn at random. True if it is set.
-fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &Table) -> bool {
+fn decision(b: &mut World, o: Obj, field: u32, table: &Table) -> bool {
     let line = (o.u8(b, field) as u16) << 2;
     let masks = table.at32(b, line as i16 as u32);
     let rank = RANK.get(b);
@@ -233,17 +233,17 @@ fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: &Table) -> bool {
 }
 
 /// 0xa4b4: does the AI act on this frame (row `+0x72`)?
-pub fn decision_a(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn decision_a(b: &mut World, o: Obj) -> bool {
     decision(b, o, f::DECISION_A, engine_table!("ai/decisions_a"))
 }
 
 /// 0xa4c2: same with row `+0x73`.
-pub fn decision_b(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn decision_b(b: &mut World, o: Obj) -> bool {
     decision(b, o, f::DECISION_B, engine_table!("ai/decisions_b"))
 }
 
 /// 0xac3a: `+0x77` = byte of the table of row `+0x76` (`ai/bytes_by_rank`), at the rank index.
-pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
+pub fn pick_byte(b: &mut World, o: Obj) {
     let line = (o.u8(b, f::BYTE_TABLE) as u16) << 2;
     let table = crate::tables::engine_table!("ai/bytes_by_rank").at32(b, line as i16 as u32);
     let rank = RANK.get(b);
@@ -255,14 +255,14 @@ pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
 // Position of the target (0xb5e0, 0x1050c, 0x1052e, 0x104e0, 0x1047a, 0x10560)
 
 /// The target of `o` (`+0x50`), if designated by a negative word (an object in high RAM).
-fn linked_target(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
+fn linked_target(b: &mut World, o: Obj) -> Option<Obj> {
     let w = o.u16(b, f::TARGET);
     ((w as i16) < 0).then(|| Obj::from_word(w))
 }
 
 /// Orientation looking from `o` towards `other`: 0x20 (left) if `other` is to the left (`o.x - other.x` > 0
 /// is false for a negative difference: the original tests the sign of the subtraction).
-fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
+fn side_of(b: &mut World, o: Obj, other: Obj) -> u8 {
     if (o.u16(b, Obj::X).wrapping_sub(other.u16(b, Obj::X)) as i16) < 0 {
         0x20
     } else {
@@ -272,7 +272,7 @@ fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
 
 /// 0xb5e0: is the target of `o` (`+0x50`, on the ground) inside the box `hitbox` in front of `o` (0x7f19c on the
 /// target)?
-pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) -> crate::ai_aids::InHitbox {
+pub fn target_in_front(b: &mut World, o: Obj, hitbox: crate::ai_aids::Hitbox) -> crate::ai_aids::InHitbox {
     match o.u16(b, f::TARGET) {
         0 => crate::ai_aids::InHitbox::No,
         w => crate::ai_aids::box_around(b, o, Obj::from_word(w), hitbox),
@@ -280,13 +280,13 @@ pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) 
 }
 
 /// 0x1050c: is `o` facing its target? True also without a target (positive word).
-pub fn facing_target(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn facing_target(b: &mut World, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return true };
     side_of(b, o, t) == o.u8(b, f::FLIP)
 }
 
 /// 0x1052e: is the target facing `o`?
-pub fn target_faces_me(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn target_faces_me(b: &mut World, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return false };
     let gap = o.u16(b, Obj::X).wrapping_sub(t.u16(b, Obj::X)) & 0x8000;
     let flip = (o.u8(b, f::FLIP) as u16).rotate_right(6);
@@ -295,7 +295,7 @@ pub fn target_faces_me(b: &mut Cps2Bus, o: Obj) -> bool {
 }
 
 /// 0x104e0 (Z clear): the target faces the same way as `o`, which has its back turned to it.
-pub fn back_to_target(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn back_to_target(b: &mut World, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return false };
     let flip = o.u8(b, f::FLIP);
     if flip != t.u8(b, f::FLIP) {
@@ -316,7 +316,7 @@ pub enum Turn {
 }
 
 /// 0x1047a: AI decision according to the side of the target.
-pub fn turn_decision(b: &mut Cps2Bus, o: Obj) -> Turn {
+pub fn turn_decision(b: &mut World, o: Obj) -> Turn {
     if target_faces_me(b, o) {
         if decision_a(b, o) {
             Turn::FaceToFace
@@ -331,7 +331,7 @@ pub fn turn_decision(b: &mut Cps2Bus, o: Obj) -> Turn {
 }
 
 /// 0x10560: is the direction of the X speed (`+0x14`) that of the orientation?
-pub fn moving_forward(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn moving_forward(b: &mut World, o: Obj) -> bool {
     let flip = (o.u8(b, f::FLIP) as u16).rotate_right(6);
     o.u16(b, Obj::VX) & 0x8000 == flip
 }
@@ -344,7 +344,7 @@ pub const ZONE_MARGIN: u16 = 0x30;
 
 /// Brings an axis (`field`) of `o` back into the window `[origin - margin, origin + span + margin]`: a negative
 /// position becomes 0, a position outside the window is set to the nearest edge. True if it changed.
-fn pull_inside(b: &mut Cps2Bus, o: Obj, field: u32, origin: u16, span: u16, margin: u16) -> bool {
+fn pull_inside(b: &mut World, o: Obj, field: u32, origin: u16, span: u16, margin: u16) -> bool {
     let pos = o.u16(b, field);
     if (pos as i16) < 0 {
         o.set_u16(b, field, 0);
@@ -361,7 +361,7 @@ fn pull_inside(b: &mut Cps2Bus, o: Obj, field: u32, origin: u16, span: u16, marg
 
 /// 0xfbb0: keeps `o` within the screen of the active camera, to within `margin` pixels in X (16 pixels less than the
 /// screen height in depth). True if it was moved.
-pub fn keep_on_screen(b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
+pub fn keep_on_screen(b: &mut World, o: Obj, margin: u16) -> bool {
     let (x, y) = ram::camera(b);
     let moved_x = pull_inside(b, o, Obj::X, x, 0x180, margin);
     let moved_y = pull_inside(b, o, Obj::Y, y, 0x100, (-16i16) as u16);
@@ -369,7 +369,7 @@ pub fn keep_on_screen(b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
 }
 
 /// 0xfbae: `keep_on_screen` with the margin of 0x30 pixels.
-pub fn keep_in_zone(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn keep_in_zone(b: &mut World, o: Obj) -> bool {
     keep_on_screen(b, o, ZONE_MARGIN)
 }
 
@@ -378,7 +378,7 @@ pub fn keep_in_zone(b: &mut Cps2Bus, o: Obj) -> bool {
 
 /// 0xf0e8: turns the heading of `o` (`+0x2d`, 0..31) by one notch towards the point `to` (direction of 0x137e), by the
 /// shortest way.
-pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
+pub fn turn_toward(b: &mut World, o: Obj, to: (u16, u16)) {
     let wanted = crate::aids::direction_from(b, o, to);
     let heading = o.u8(b, f::HEADING);
     let diff = wanted.wrapping_sub(heading) & 0x1f;
@@ -390,7 +390,7 @@ pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
 }
 
 /// 0x10574: the heading of `o` changes by at most one notch, drawn at random (`ai/drift_steps`, signed bytes).
-pub fn drift_heading(b: &mut Cps2Bus, o: Obj) {
+pub fn drift_heading(b: &mut World, o: Obj) {
     let roll = rng::random(b) & 15;
     let step = crate::tables::engine_table!("ai/drift_steps").at8(b, roll as u32);
     let heading = o.u8(b, f::HEADING).wrapping_add(step) & 0x1f;

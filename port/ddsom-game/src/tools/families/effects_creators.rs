@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::families::effects_creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -31,12 +31,12 @@ macro_rules! creators {
 }
 
 /// 0xa8a42: scene camera in mode 0x60 (`A5+0x51e`), `A5+0x4ff` cleared.
-fn camera_mode_60(c: &mut Cpu, b: &mut Cps2Bus) {
+fn camera_mode_60(c: &mut Cpu, b: &mut World) {
     camera_in_mode_60(b);
     c.flags_logic(0x60, Size::Word);
 }
 
-const fn creator(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn creator(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
@@ -50,14 +50,14 @@ fn d1b(c: &Cpu) -> u8 {
 }
 
 /// 0xaaa40: A1 to A4 are returned.
-fn spark_at_native(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) {
+fn spark_at_native(c: &mut Cpu, b: &mut World, me: Obj) {
     let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
     let (other, variant, pos) = (c.a[1], d1b(c), (c.d[2] as u16, c.d[3] as u16, c.d[4] as u16));
     spark_at_via(c, b, me, other, variant, pos);
     [c.a[1], c.a[2], c.a[3], c.a[4]] = saved;
 }
 
-fn tile_block_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn tile_block_native(c: &mut Cpu, b: &mut World) {
     let (at, tile) = tile_block(b, c.a[1], c.d[0] as u16, c.d[1] as u16);
     c.a[1] = at;
     set_low_word(&mut c.d[0], tile);
@@ -133,15 +133,15 @@ creators! {
 /// The original's registers.
 impl Regs for Cpu {
     #[track_caller]
-    fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+    fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj> {
         pool.alloc_68k(self, b)
     }
     #[track_caller]
-    fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+    fn alloc_without_test(&mut self, b: &mut World, pool: &Pool) -> Obj {
         pool.alloc_unchecked_68k(self, b)
     }
     #[track_caller]
-    fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+    fn alloc_or_rest(&mut self, b: &mut World, pool: &Pool) -> Result<Obj, Obj> {
         let a1 = pool.alloc_unchecked_68k(self, b);
         if self.sr & m68k::SR_C != 0 { Err(a1) } else { Ok(a1) }
     }

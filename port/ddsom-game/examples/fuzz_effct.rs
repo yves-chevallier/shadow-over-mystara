@@ -407,7 +407,7 @@ fn principal() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
@@ -417,7 +417,7 @@ fn principal() {
     let mut clean_gaps = 0u64;
     ddsom_game::set_check(!clean);
     std::panic::set_hook(Box::new(|_| {}));
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (env("FUZZ_GRAINE", 1) as u64).wrapping_mul(0x1000_0000_01b3));
     let mut table = Vec::new();
     {

@@ -8,7 +8,7 @@
 //! Four pools (player shots, enemies and bosses, enemy shots, boxes, items) also have a
 //! collision candidate queue (`Queue`), emptied at initialization.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::lists;
 use super::Obj;
@@ -24,7 +24,7 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn reset(&self, b: &mut Cps2Bus) {
+    pub fn reset(&self, b: &mut World) {
         Word::a5(self.cursor).set(b, (A5 + self.array) as u16);
         Word::a5(self.count).set(b, 0);
     }
@@ -112,7 +112,7 @@ impl Pool {
         A5 + self.first + self.slots * self.stride
     }
 
-    pub fn free_count(&self, b: &mut Cps2Bus) -> u16 {
+    pub fn free_count(&self, b: &mut World) -> u16 {
         Word::a5(self.free).get(b)
     }
 
@@ -122,7 +122,7 @@ impl Pool {
     }
 
     /// Empties all the slots and resets the counters to new.
-    pub fn reset(&self, b: &mut Cps2Bus) {
+    pub fn reset(&self, b: &mut World) {
         for i in 0..self.slots {
             self.clear_slot(b, self.slot(i));
         }
@@ -132,13 +132,13 @@ impl Pool {
         Word::a5(self.free).set(b, self.slots as u16);
     }
 
-    pub(crate) fn clear_slot(&self, b: &mut Cps2Bus, obj: Obj) {
+    pub(crate) fn clear_slot(&self, b: &mut World, obj: Obj) {
         for off in (0..self.stride).step_by(4) {
             obj.set_u32(b, off, 0);
         }
     }
 
-    pub(crate) fn scan(&self, b: &mut Cps2Bus) -> Scan {
+    pub(crate) fn scan(&self, b: &mut World) -> Scan {
         if self.free_count(b) == 0 {
             return Scan::NoneLeft;
         }
@@ -150,7 +150,7 @@ impl Pool {
 
     /// Reserves a slot: the counter decreases and the class is written. The object is not
     /// yet active.
-    pub fn alloc(&self, b: &mut Cps2Bus) -> Option<Obj> {
+    pub fn alloc(&self, b: &mut World) -> Option<Obj> {
         match self.scan(b) {
             Scan::Found(i) => {
                 let obj = self.slot(i);
@@ -164,7 +164,7 @@ impl Pool {
     }
 
     /// Releases an object: removed from the sorted lists, counter incremented, slot reset to zero.
-    pub fn release(&self, b: &mut Cps2Bus, obj: Obj) {
+    pub fn release(&self, b: &mut World, obj: Obj) {
         if self.listed {
             lists::unlink(b, obj);
         }
@@ -183,14 +183,14 @@ impl Pool {
     /// leaves.
     /// Original glitch: pool full, the caller writes into the first slot (counter zero, object possibly
     /// active) or just after the last one (in the next pool).
-    pub fn alloc_unchecked(&self, b: &mut Cps2Bus) -> Obj {
+    pub fn alloc_unchecked(&self, b: &mut World) -> Obj {
         self.alloc_or_leftover(b).unwrap_or_else(|a1| a1)
     }
 
     /// Allocation whose failure also returns the A1 that the original leaves: the first slot (counter zero) or the
     /// end of the
     /// pool (no free slot). For original callers that re-read A1 after a failure.
-    pub fn alloc_or_leftover(&self, b: &mut Cps2Bus) -> Result<Obj, Obj> {
+    pub fn alloc_or_leftover(&self, b: &mut World) -> Result<Obj, Obj> {
         match self.scan(b) {
             Scan::NoneLeft => Err(Obj(A5 + self.first)),
             Scan::Found(_) => Ok(self.alloc(b).expect("slot found")),

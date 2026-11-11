@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::families::cx` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::families::cx::*;
@@ -11,7 +11,7 @@ use crate::objects::Obj;
 
 impl Bench for &mut Cpu {
     #[track_caller]
-    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
+    fn relink(&mut self, b: &mut World, o: Obj, foreground: bool) {
         let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         list.reinsert_68k(self, b, o);
     }
@@ -34,7 +34,7 @@ impl Bench for &mut Cpu {
 
 impl<'a> Cx<'a, &'a mut Cpu> {
     /// Context for the object designated by A0.
-    pub fn new(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
+    pub fn new(c: &'a mut Cpu, b: &'a mut World) -> Self {
         let o = Obj(c.a[0]);
         Cx { c, b, o }
     }
@@ -46,7 +46,7 @@ impl<'a> Cx<'a, &'a mut Cpu> {
     pub fn call(&mut self, addr: u32) {
         self.c.a[0] = self.o.0;
         self.c.a[5] = A5;
-        crate::tools::call(self.c, self.b, addr);
+        crate::tools::call_in(self.c, self.b, addr);
     }
 
     /// RTS.

@@ -94,14 +94,14 @@ fn print_shown(x: &mut Ctx, print: Print) {
 /// `0xe03c6`: erases the text (like the coin text, 0xf4a) and stops the task (0xa14); no register
 /// changes. The erasure only reads the caller's object A0 if the text attributes are negative: never for
 /// the texts the task keeps (attribute 3, tables 0xe048c, 0xe04b0, 0xe04e4).
-pub fn stop(b: &mut cps2::Cps2Bus) {
+pub fn stop(b: &mut crate::world::World) {
     let text = rd32(b, SHOWN);
     crate::text::clear_blocks(b, text, 0);
     crate::kernel::kill_task(b, SLOT);
 }
 
 /// `0xe03e4`: launches the task; registers kept.
-pub fn launch(b: &mut cps2::Cps2Bus) {
+pub fn launch(b: &mut crate::world::World) {
     crate::kernel::create_task(b, SLOT, super::Task::Prompt);
 }
 

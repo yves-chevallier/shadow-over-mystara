@@ -11,7 +11,7 @@
 //! mode script (0x2f81c: with target stops; 0x2f86e and 0x328a8: copy only); the mode
 //! scripts and the scene initialisation (first call) remain original code.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::data;
 use crate::hw::video::Vram;
@@ -131,7 +131,7 @@ fn layer(i: usize) -> &'static ddsom_data::levels::Layer {
 // ---------------------------------------------------------------------------------------------
 
 struct Camera1<'a> {
-    b: &'a mut Cps2Bus,
+    b: &'a mut World,
     cam: Camera,
     /// D4 left by the last copy (0x3f: column, 0x40: row), reread by the following routines.
     d4: Option<u32>,
@@ -400,14 +400,14 @@ fn layer_row_offset(page: u16, y: u16) -> u16 {
     0x3000u16.wrapping_sub((page & 0x300) << 4).wrapping_add(0x3c - (((y & 0xf0) >> 2) as u8 as u16))
 }
 
-fn camera(b: &mut Cps2Bus) -> Camera1<'_> {
+fn camera(b: &mut World) -> Camera1<'_> {
     Camera1 { b, cam: CAMERA_1, d4: None }
 }
 
 /// ROM address of the map strip designated by the cursor row `row`: the scene's strip table (its address in the
 /// program-space table of the layer, by scene), the strip number in it, then the strip in the map (`1 << shift`
 /// bytes per strip as the cursors count them).
-fn strip_address(b: &mut Cps2Bus, layer: &ddsom_data::levels::Layer, row: u16, shift: u32) -> u32 {
+fn strip_address(b: &mut World, layer: &ddsom_data::levels::Layer, row: u16, shift: u32) -> u32 {
     let stage = crate::ram::SCENE.get(b) as u32;
     let table = engine().pc_long(b, layer.scenes_rom + 4 * stage);
     let strip = row.wrapping_mul(2) as i16 as u32;
@@ -420,14 +420,14 @@ fn strip_address(b: &mut Cps2Bus, layer: &ddsom_data::levels::Layer, row: u16, s
 pub type D4Leftovers = Option<(u32, u32)>;
 
 /// 0x2f81c: continuation of camera 1's mode script, after the script.
-pub(crate) fn after_mode(b: &mut Cps2Bus) -> D4Leftovers {
+pub(crate) fn after_mode(b: &mut World) -> D4Leftovers {
     let mut cam = camera(b);
     cam.after_mode();
     cam.d4.map(|v| (v, u32::MAX))
 }
 
 /// 0x2f86e: gaps target - drawn of camera 1, then copy of the missing columns and rows.
-pub(crate) fn draw1(b: &mut Cps2Bus) -> D4Leftovers {
+pub(crate) fn draw1(b: &mut World) -> D4Leftovers {
     let mut cam = camera(b);
     cam.draw();
     cam.d4.map(|v| (v, u32::MAX))
@@ -444,7 +444,7 @@ const ROW_CELLS_3: u32 = 15;
 const MAP_TILE_OFFSET_3: u32 = 0x1f00_0000;
 
 struct Camera2<'a> {
-    b: &'a mut Cps2Bus,
+    b: &'a mut World,
     cam: Camera,
     /// D4 left by the last copy: 0x1f (long) for a column, 0xe0 (low word) for a row.
     d4: Option<(u32, u32)>,
@@ -670,7 +670,7 @@ impl Camera2<'_> {
 }
 
 /// 0x328a8: gaps target - drawn of camera 2, then copy of the missing columns and rows.
-pub(crate) fn draw2(b: &mut Cps2Bus) -> D4Leftovers {
+pub(crate) fn draw2(b: &mut World) -> D4Leftovers {
     let mut cam = Camera2 { b, cam: CAMERA_2, d4: None };
     cam.draw();
     cam.d4
@@ -687,7 +687,7 @@ pub(crate) const OBJECT_Y: u32 = Camera::Y_LONG;
 const OBJECT_DRAWN_X: u32 = Camera::DRAWN_X;
 
 /// Scroll of camera 1 since the previous frame (16.16) on axis 0 (x) or 1 (y).
-pub(crate) fn scroll_delta(b: &mut Cps2Bus, axis: usize) -> i32 {
+pub(crate) fn scroll_delta(b: &mut World, axis: usize) -> i32 {
     let (now, before) = if axis == 0 {
         (CAMERA_1.x_long(b), CAMERA_1.previous_x_long(b))
     } else {
@@ -697,14 +697,14 @@ pub(crate) fn scroll_delta(b: &mut Cps2Bus, axis: usize) -> i32 {
 }
 
 /// Adds `d` to a position of object `o`. Returns the sum (the flags of the addition: `move_object_68k`).
-pub(crate) fn move_object(b: &mut Cps2Bus, o: Obj, field: u32, d: i32) -> (u32, u32) {
+pub(crate) fn move_object(b: &mut World, o: Obj, field: u32, d: i32) -> (u32, u32) {
     let v = o.u32(b, field);
     o.set_u32(b, field, v.wrapping_add(d as u32));
     (d as u32, v)
 }
 
 /// Frame scroll for scenery that follows `(fx, fy)` of the scroll (x, y).
-pub(crate) fn parallax(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
+pub(crate) fn parallax(b: &mut World, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
     (fx(scroll_delta(b, 0)), fy(scroll_delta(b, 1)))
 }
 /// Share of the scroll delta that a parallax scenery follows, in x and in y.
@@ -713,14 +713,14 @@ pub(crate) const QUARTER: Parallax = (|dx| dx >> 2, |dy| dy >> 1);
 pub(crate) const THREE_QUARTERS: Parallax = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
 
 /// 0x33178: scenery `o` follows a quarter of the scroll in x and half in y.
-pub(crate) fn parallax_quarter(b: &mut Cps2Bus, o: Obj) {
+pub(crate) fn parallax_quarter(b: &mut World, o: Obj) {
     let (dx, dy) = parallax(b, QUARTER.0, QUARTER.1);
     move_object(b, o, OBJECT_X, dx);
     move_object(b, o, OBJECT_Y, dy);
 }
 
 /// 0x33196: scenery `o` follows half of the scroll in x and three quarters in y.
-pub(crate) fn parallax_three_quarters(b: &mut Cps2Bus, o: Obj) {
+pub(crate) fn parallax_three_quarters(b: &mut World, o: Obj) {
     let (dx, dy) = parallax(b, THREE_QUARTERS.0, THREE_QUARTERS.1);
     move_object(b, o, OBJECT_X, dx);
     move_object(b, o, OBJECT_Y, dy);
@@ -728,7 +728,7 @@ pub(crate) fn parallax_three_quarters(b: &mut Cps2Bus, o: Obj) {
 
 /// 0x331e8 / 0x3326c: scenery `o` advances 6 / 3 pixels per frame, its drawn position follows. Returns the new
 /// position (flags of the original: `creep_68k`).
-pub(crate) fn creep(b: &mut Cps2Bus, o: Obj, pixels: u16) -> u16 {
+pub(crate) fn creep(b: &mut World, o: Obj, pixels: u16) -> u16 {
     let x = o.u16(b, OBJECT_X).wrapping_add(pixels);
     o.set_u16(b, OBJECT_X, x);
     o.set_u16(b, OBJECT_DRAWN_X, x);
@@ -744,7 +744,7 @@ pub const NATIVES: &[Native] = &[];
 /// 0x33e20: updates the two cameras. The first remembers its previous target (+0x26, +0x2a)
 /// before its mode script (0x2ede0) moves it; the second is processed by 0x32108.
 /// Returns the D4 left by the scenery copies of the two cameras (in order).
-pub fn update_cameras(b: &mut Cps2Bus) -> [D4Leftovers; 2] {
+pub fn update_cameras(b: &mut World) -> [D4Leftovers; 2] {
     let (x, y) = (CAMERA_1.x_long(b), CAMERA_1.y_long(b));
     CAMERA_1.set_previous_x_long(b, x);
     CAMERA_1.set_previous_y_long(b, y);
@@ -754,7 +754,7 @@ pub fn update_cameras(b: &mut Cps2Bus) -> [D4Leftovers; 2] {
 /// `update_cameras` in the game. Original glitch: the D4 of the scenery copies is reread by a following handler
 /// (boss13_dragon, frame 7241): it is the leftover D4 of the game (`dispatch::Leftovers`); A0 (camera 2) is reread by
 /// nobody.
-pub fn update_cameras_in_game(b: &mut Cps2Bus) {
+pub fn update_cameras_in_game(b: &mut World) {
     for (v, m) in update_cameras(b).into_iter().flatten() {
         let leftovers = &mut crate::tasks::table::table(b).leftovers;
         leftovers.d4 = leftovers.d4 & !m | v;
@@ -764,7 +764,7 @@ pub fn update_cameras_in_game(b: &mut Cps2Bus) {
 /// 0x33aa6: cameras of the scene at their starting position. The two cameras are reset to zero, the start of layer 1
 /// cleared (0x3525c); the scene chooses the camera in service (`ram::CAMERA_ALT_ACTIVE`) and the starting position of
 /// the first, then the cameras are updated (0x33e20, by the caller: `cameras_start` only does the reset).
-pub fn cameras_start(b: &mut Cps2Bus) {
+pub fn cameras_start(b: &mut World) {
     for cam in [CAMERA_2, CAMERA_1] {
         for field in [Camera::STATE, Camera::X_LONG, Camera::Y_LONG, Camera::DRAWN_X_LONG, Camera::DRAWN_Y_LONG] {
             cam.0.set_u32(b, field, 0);
@@ -795,7 +795,7 @@ pub fn cameras_start(b: &mut Cps2Bus) {
 /// of camera 1, the video control word 0x400004 and the displayed layers (0xbc6), then the cameras are put back to
 /// their initial position (0x200) and their stops reloaded (per-scene tables), before their update (0x33e20, by the
 /// caller).
-pub fn cameras_return(b: &mut Cps2Bus) {
+pub fn cameras_return(b: &mut World) {
     let stage = crate::ram::SCENE.get(b) as u32;
     let service = crate::tables::engine_table!("scroll/camera_service").at8(b, stage);
     crate::ram::CAMERA_ALT_ACTIVE.set(b, service);

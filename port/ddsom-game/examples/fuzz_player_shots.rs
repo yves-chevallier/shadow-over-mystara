@@ -145,8 +145,8 @@ fn main() {
     let choice = a.get(6).map(String::as_str).unwrap_or("");
     let filter = std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok());
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
@@ -167,13 +167,13 @@ fn main() {
             continue;
         }
         for k in 0..n {
-            let e = (m.bus.fetch16(table + 4 * k) as u32) << 16 | m.bus.fetch16(table + 4 * k + 2) as u32;
+            let e = (m.bus.hw.fetch16(table + 4 * k) as u32) << 16 | m.bus.hw.fetch16(table + 4 * k + 2) as u32;
             if ddsom_game::all_natives().any(|nat| nat.entry == e) && filter.is_none_or(|f| f == e) {
                 inputs.push((e, pool, k as u8));
             }
         }
     }
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     let (mut tests, mut shown) = (0u64, 0);
     for _ in 0..rounds {
         for &(entry, pool, kind) in &inputs {

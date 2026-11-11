@@ -16,7 +16,7 @@
 //! of 8x8 tiles (width and height in pixels: 2nd and 3rd words) with the text at the top; in a two-player
 //! game (`A5+0x20` bit 0) the bubble is halved.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::hw::video::{Cell, TEXT};
 use crate::mem::A5;
@@ -67,25 +67,25 @@ const EDGE_COIN: u16 = 0x1310;
 const ATTR_FRAME: u16 = 0xd;
 const ATTR_TEXT: u16 = 2;
 
-fn reduced(b: &mut Cps2Bus, a5: u32) -> bool {
+fn reduced(b: &mut World, a5: u32) -> bool {
     Obj(a5).u8(b, REDUCED) & 1 != 0
 }
 
 /// 0x19ee0: erases the bubble of pop-up `entry`.
-fn clear(b: &mut Cps2Bus, a5: u32, entry: u32) {
+fn clear(b: &mut World, a5: u32, entry: u32) {
     let table = rom::CLEARS[reduced(b, a5) as usize];
     let case = 4 * Obj(entry).u8(b, ID) as u32;
     clear_box(b, table, case);
 }
 
 /// The rectangle of empty cells described at `case` bytes from `table` (column, row, width, height).
-fn clear_box(b: &mut Cps2Bus, table: Rom, case: u32) {
+fn clear_box(b: &mut World, table: Rom, case: u32) {
     let [col, row, width, height] = [0, 1, 2, 3].map(|k| table.byte(b, case + k));
     clear_cells(b, col, row, width, height);
 }
 
 /// 0x19f24: draws the bubble of pop-up `entry`.
-fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
+fn draw(b: &mut World, a5: u32, entry: u32) {
     let id = Obj(entry).u16(b, ID);
     let mut width = Obj(entry).u16(b, WIDTH);
     let mut height = Obj(entry).u16(b, HEIGHT);
@@ -116,7 +116,7 @@ fn shifted(id: u16, small: bool) -> bool {
 }
 
 /// 0x19fd2: the text, one tile per cell, in a column.
-fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
+fn text(b: &mut World, a4: u32, id: u16, small: bool) {
     let mut case = a4 + 0x100 + if shifted(id, small) { 4 } else { 0 };
     let start = rom::TEXTS.pc_word(b, 2 * (id & 0xff) as u32) as i16 as i32 as u32;
     let mut s = rom::TEXTS.addr().wrapping_add(start);
@@ -133,7 +133,7 @@ fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
 
 /// 0x1a20e: the frame under the text. `width` and `height` in pixels: whole edge columns, then
 /// the remainder column (a tile chosen by the number of remaining pixels).
-fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i16) {
+fn frame(b: &mut World, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i16) {
     let mut case = a4 + 0x104 - if shifted(id, small) { 4 } else { 0 };
     loop {
         d1 = d1.wrapping_sub(8);
@@ -172,7 +172,7 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
 
 /// Makes the next pop-up of the queue the current pop-up (if there is one) and starts its drawing. Returns the read
 /// index read.
-fn next(b: &mut Cps2Bus, current: u32) -> u8 {
+fn next(b: &mut World, current: u32) -> u8 {
     let index = READ.get(b);
     let case = Obj(A5 + INPUTS + index as u32);
     if case.u16(b, ID) == EMPTY {
@@ -193,7 +193,7 @@ fn next(b: &mut Cps2Bus, current: u32) -> u8 {
 
 /// 0x19e20: one step of the pop-up state machine. Returns the queue read index if it was read (the D0.b of the
 /// original). Core.
-pub fn animate_obj(b: &mut Cps2Bus) -> Option<u8> {
+pub fn animate_obj(b: &mut World) -> Option<u8> {
     let current = A5.wrapping_add(CURRENT);
     let duration = Obj(current).u16(b, DURATION);
     if duration != 0 {
@@ -217,7 +217,7 @@ pub fn animate_obj(b: &mut Cps2Bus) -> Option<u8> {
 
 /// 0x19eb0: erases the bubbles of all slots (4, or 3 reduced), from last to first. Returns the erase table
 /// read (the A2 of the original). Core.
-pub fn clear_all(b: &mut Cps2Bus) -> u32 {
+pub fn clear_all(b: &mut World) -> u32 {
     let small = reduced(b, A5);
     let table = rom::CLEARS[small as usize];
     let last = if small { 2 } else { 3 };

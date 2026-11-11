@@ -9,7 +9,7 @@
 //! 0x914000, layer 3 at 0x918000, the palettes at 0x91c000), so the places stay addresses here, typed by what they
 //! hold: the screens write a cell or a register, never a bus address.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, wr16, wr32, wr8};
 
@@ -22,17 +22,17 @@ impl Vram {
     pub const fn offset(self, n: u32) -> Vram {
         Vram(self.0.wrapping_add(n))
     }
-    pub fn get(self, b: &mut Cps2Bus) -> u16 {
+    pub fn get(self, b: &mut World) -> u16 {
         rd16(b, self.0)
     }
-    pub fn set(self, b: &mut Cps2Bus, v: u16) {
+    pub fn set(self, b: &mut World, v: u16) {
         wr16(b, self.0, v)
     }
     /// Two words read together (a cell, a palette pair...).
-    pub fn long(self, b: &mut Cps2Bus) -> u32 {
+    pub fn long(self, b: &mut World) -> u32 {
         rd32(b, self.0)
     }
-    pub fn set_long(self, b: &mut Cps2Bus, v: u32) {
+    pub fn set_long(self, b: &mut World, v: u32) {
         wr32(b, self.0, v)
     }
 }
@@ -47,27 +47,27 @@ impl Cell {
         Cell(self.0.wrapping_add(n))
     }
     /// Writes the tile and its attributes.
-    pub fn put(self, b: &mut Cps2Bus, tile: u16, attr: u16) {
+    pub fn put(self, b: &mut World, tile: u16, attr: u16) {
         wr16(b, self.0, tile);
         wr16(b, self.0.wrapping_add(2), attr);
     }
-    pub fn tile(self, b: &mut Cps2Bus) -> u16 {
+    pub fn tile(self, b: &mut World) -> u16 {
         rd16(b, self.0)
     }
-    pub fn set_tile(self, b: &mut Cps2Bus, tile: u16) {
+    pub fn set_tile(self, b: &mut World, tile: u16) {
         wr16(b, self.0, tile)
     }
-    pub fn attr(self, b: &mut Cps2Bus) -> u16 {
+    pub fn attr(self, b: &mut World) -> u16 {
         rd16(b, self.0.wrapping_add(2))
     }
-    pub fn set_attr(self, b: &mut Cps2Bus, attr: u16) {
+    pub fn set_attr(self, b: &mut World, attr: u16) {
         wr16(b, self.0.wrapping_add(2), attr)
     }
     /// Tile and attributes as one long (tile in the high word).
-    pub fn long(self, b: &mut Cps2Bus) -> u32 {
+    pub fn long(self, b: &mut World) -> u32 {
         rd32(b, self.0)
     }
-    pub fn set_long(self, b: &mut Cps2Bus, v: u32) {
+    pub fn set_long(self, b: &mut World, v: u32) {
         wr32(b, self.0, v)
     }
 }
@@ -116,14 +116,14 @@ pub const fn palette(page: u32, color: u32) -> Vram {
 pub struct Reg(pub u32);
 
 impl Reg {
-    pub fn set(self, b: &mut Cps2Bus, v: u16) {
+    pub fn set(self, b: &mut World, v: u16) {
         wr16(b, self.0, v)
     }
-    pub fn get(self, b: &mut Cps2Bus) -> u16 {
+    pub fn get(self, b: &mut World) -> u16 {
         rd16(b, self.0)
     }
     /// Two consecutive registers written together (a scroll position x, y).
-    pub fn set_long(self, b: &mut Cps2Bus, v: u32) {
+    pub fn set_long(self, b: &mut World, v: u32) {
         wr32(b, self.0, v)
     }
     /// The register `n` words further.
@@ -137,7 +137,7 @@ impl Reg {
 pub struct ByteReg(pub u32);
 
 impl ByteReg {
-    pub fn set(self, b: &mut Cps2Bus, v: u8) {
+    pub fn set(self, b: &mut World, v: u8) {
         wr8(b, self.0, v)
     }
 }

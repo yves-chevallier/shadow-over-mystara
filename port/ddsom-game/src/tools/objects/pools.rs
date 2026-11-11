@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::pools` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -45,20 +45,20 @@ macro_rules! init_native {
 
 /// Allocation: A1 = slot found, C on failure; D6 serves as loop counter. The natives, called by
 /// address, always return the registers (never poisoned).
-fn alloc_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
+fn alloc_native(pool: &Pool, c: &mut Cpu, b: &mut World) {
     pool.alloc_regs(c, b);
     rts(c, b);
 }
 
 /// Release: A0 = object. The original leaves D0 = 0, D1.w = -1, A4 = end of the slot.
-fn free_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
+fn free_native(pool: &Pool, c: &mut Cpu, b: &mut World) {
     pool.release_regs(c, b, Obj(c.a[0]));
     rts(c, b);
 }
 
 /// Initialization of consecutive pools. Leaves D0 = 0, D1.w = D7.w = -1 and A0 = A4 = end of the
 /// last slot (A0 = collision queue array if the last pool has one).
-fn init_native(pools: &[&Pool], c: &mut Cpu, b: &mut Cps2Bus) {
+fn init_native(pools: &[&Pool], c: &mut Cpu, b: &mut World) {
     for pool in pools {
         pool.reset(b);
     }
@@ -77,14 +77,14 @@ impl Pool {
     /// slot if the counter is zero, the end of the pool if no slot is free), D6 = loop counter,
     /// carry = failure. For the callers not yet freed from registers (`docs/guide-refactorisation.md`).
     #[track_caller]
-    pub(crate) fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+    pub(crate) fn alloc_68k(&self, c: &mut Cpu, b: &mut World) -> Option<Obj> {
         let (r, _) = self.alloc_regs(c, b);
         crate::tools::diag::dead_regs(c, "alloc", REGS_ALLOC);
         r
     }
 
     /// Allocation of the original, registers included: also returns the A1 left behind.
-    fn alloc_regs(&self, c: &mut Cpu, b: &mut Cps2Bus) -> (Option<Obj>, Obj) {
+    fn alloc_regs(&self, c: &mut Cpu, b: &mut World) -> (Option<Obj>, Obj) {
         let r = match self.scan(b) {
             Scan::NoneLeft => {
                 c.a[1] = A5 + self.first;
@@ -115,13 +115,13 @@ impl Pool {
 
     /// `alloc_unchecked` with the original's registers (see `alloc_68k`).
     #[track_caller]
-    pub(crate) fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
+    pub(crate) fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut World) -> Obj {
         let (_, a1) = self.alloc_regs(c, b);
         crate::tools::diag::dead_regs(c, "alloc", REGS_ALLOC);
         a1
     }
 
-    fn release_regs(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+    fn release_regs(&self, c: &mut Cpu, b: &mut World, obj: Obj) {
         if self.listed {
             lists::unlink(b, obj);
         }

@@ -103,7 +103,7 @@ fn push(x: &mut Ctx, next: impl Into<super::table::Next>) {
 
 /// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero (the registers of the original loop,
 /// D0 = 0, D6.w = -1, A0 = end of the area, are reread by nobody).
-pub fn clear_variables(b: &mut cps2::Cps2Bus) {
+pub fn clear_variables(b: &mut crate::world::World) {
     for i in 0..16 {
         wr32(b, A5 + var::PHASE + 4 * i, 0);
     }

@@ -11,8 +11,8 @@ fn main() {
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     ddsom_game::player::cov::enable();
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {

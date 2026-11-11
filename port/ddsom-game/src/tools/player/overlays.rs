@@ -7,7 +7,7 @@ use crate::player::overlays::*;
 use crate::tools::frames::*;
 use crate::Native;
 
-fn update_native(c: &mut Cpu, b: &mut cps2::Cps2Bus) {
+fn update_native(c: &mut Cpu, b: &mut crate::world::World) {
     super::on_bench(c, b, update);
     rts(c, b);
 }

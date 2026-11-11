@@ -1,7 +1,7 @@
 //! Drawing of the character choice and the player name: selection letters, names, ranking items,
 //! portrait of the chosen character.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::draw::{
     character_name, character_palettes, choice_palette, clear_row, face, narrow, player_attr, zone, zone_brush,
@@ -12,7 +12,7 @@ use crate::screens::tables::{self, Rom};
 
 /// Byte `+0x15d` of the player: selection family (2: none); its letter-table entry says
 /// whether the character has its own image (zero byte: attribute 0xc).
-fn selection_row(b: &mut Cps2Bus, s: Slot) -> Option<u8> {
+fn selection_row(b: &mut World, s: Slot) -> Option<u8> {
     let kind = s.g8(b, player::SELECTION_KIND);
     if kind == 2 {
         return None;
@@ -27,7 +27,7 @@ const SELECTION_LETTERS: [Rom; 2] = [Rom::at(0x16220), Rom::at(0x164d8)];
 
 /// 0x16790: the selection letter strip (16 cells in a row), empty if the player has no selection
 /// (`+0x15c` zero) or if the table entry is negative.
-pub fn selection_letters(b: &mut Cps2Bus, s: Slot, selector: u8) {
+pub fn selection_letters(b: &mut World, s: Slot, selector: u8) {
     if s.p8(b, panel::DISPLAYED_A) == 0xfe {
         return;
     }
@@ -62,7 +62,7 @@ pub fn selection_letters(b: &mut Cps2Bus, s: Slot, selector: u8) {
 const SELECTION_NAMES: Rom = Rom::at(0x160c4);
 
 /// 0x16038: the selection name for the `selector` class (4 columns of 2 cells).
-pub fn selection_name(b: &mut Cps2Bus, s: Slot, selector: u8) {
+pub fn selection_name(b: &mut World, s: Slot, selector: u8) {
     let entry = 4 * selector as u32;
     let mut tile = SELECTION_NAMES.pc_word(b, entry);
     let mut attr = SELECTION_NAMES.pc_word(b, entry + 2);
@@ -90,7 +90,7 @@ const LETTER_TABLES: Rom = Rom::at(0x16e0a);
 
 /// 0x16dac: the eight letters of the player name (`player+0x160`), each `width` columns of three cells,
 /// starting at `at`; `shift` offsets the tiles (narrow columns). Returns the cell following the letters.
-fn name_letters(b: &mut Cps2Bus, s: Slot, at: u32, width: u32, shift: u16) -> u32 {
+fn name_letters(b: &mut World, s: Slot, at: u32, width: u32, shift: u16) -> u32 {
     let (first, second) = (s.g32(b, player::NAME), s.g32(b, player::NAME + 4));
     s.set_p32(b, panel::SHOWN_NAME, first);
     s.set_p32(b, panel::SHOWN_NAME + 4, second);
@@ -116,7 +116,7 @@ fn name_letters(b: &mut Cps2Bus, s: Slot, at: u32, width: u32, shift: u16) -> u3
 }
 
 /// 0x16d1a: the player name in multi-player layouts (not during phase 4).
-pub fn names(b: &mut Cps2Bus, s: Slot) {
+pub fn names(b: &mut World, s: Slot) {
     if var::PHASE.get(b) == 4 || var::LAYOUT.get(b) == 0 {
         return;
     }
@@ -129,7 +129,7 @@ pub fn names(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x16d5a: the player name in the selection area; players 3 and 4 clear their rows first.
-pub fn names_alt(b: &mut Cps2Bus, s: Slot) {
+pub fn names_alt(b: &mut World, s: Slot) {
     let mut at = zone_brush(b, s, zone::NAMES_ALT).at;
     let frozen = var::FROZEN.get(b) != 0;
     if s.index(b) < 2 {
@@ -157,7 +157,7 @@ const RANK_SPECIAL_TILES: Rom = Rom::at(0x16aa8);
 const RANK_BLANK: u16 = 0x94c;
 
 /// 0x16910: the player's six items in the ranking area (2x2 cells each).
-pub fn rank_items(b: &mut Cps2Bus, s: Slot) {
+pub fn rank_items(b: &mut World, s: Slot) {
     let attr = 0x13 + s.index(b) as u16;
     let codes: Vec<u8> = (0..6).map(|k| s.g8(b, player::ITEMS + k)).collect();
     let mut brush = zone_brush(b, s, zone::RANKS);
@@ -192,7 +192,7 @@ const CHOICE_PORTRAITS: [Rom; 2] = [Rom::at(0x16c26), Rom::at(0x16c56)];
 const CLASS_OF_CHARACTER: Rom = Rom::at(0x16c14);
 
 /// 0x16b8a: the chosen character `character`: its portrait, palettes, name and face.
-pub fn show_character(b: &mut Cps2Bus, s: Slot, character: u8) {
+pub fn show_character(b: &mut World, s: Slot, character: u8) {
     s.set_g8(b, player::CHARACTER, character);
     let mut offset = ((character & !1) as u32) * 2;
     let mut width = 20;

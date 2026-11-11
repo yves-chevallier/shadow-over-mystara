@@ -38,7 +38,8 @@
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use cps2::{Cps2Bus, StepCap};
+use cps2::StepCap;
+use crate::world::World;
 
 use crate::kernel::Point;
 use crate::tasks::table::{read, table};
@@ -53,7 +54,7 @@ pub fn active() -> bool {
 }
 
 /// Hooks the loop without a 68000 onto the machine (the machine's step cap is only used for its value).
-pub(crate) fn install(m: &mut cps2::Machine) {
+pub(crate) fn install(m: &mut crate::GameMachine) {
     ACTIVE.store(true, Ordering::Relaxed);
     // the line work replaces the processor: recompiled code, interpreter, `idle` and patches are no longer used
     m.line_work = Some(line);
@@ -80,7 +81,7 @@ pub fn summary() -> (u64, u64) {
 /// the interrupt, the frame is finished. The original, for its part, spins until the interrupt.
 #[derive(PartialEq)]
 struct Snapshot {
-    ram: Vec<u16>,
+    ram: Box<[u16; crate::world::RAM_WORDS]>,
     extra_ram: Vec<u16>,
     gfxram: Vec<u16>,
     objram: [Vec<u16>; 2],
@@ -91,18 +92,18 @@ struct Snapshot {
 }
 
 impl Snapshot {
-    fn take(b: &Cps2Bus) -> Self {
+    fn take(b: &World) -> Self {
         let mut ram = b.ram.clone();
         // the RAM of the original stacks does not count (changed at each point by the `stack` probe)
         ram[STACKS.0 / 2..STACKS.1 / 2].fill(0);
         Snapshot {
             ram,
-            extra_ram: b.extra_ram.clone(),
-            gfxram: b.gfxram.clone(),
-            objram: b.objram.clone(),
-            palette: b.palette.clone(),
-            qram: b.qram.clone(),
-            regs: (b.output, b.cps_a, b.cps_b, b.objram_bank, b.eeprom_out),
+            extra_ram: b.hw.extra_ram.clone(),
+            gfxram: b.hw.gfxram.clone(),
+            objram: b.hw.objram.clone(),
+            palette: b.hw.palette.clone(),
+            qram: b.hw.qram.clone(),
+            regs: (b.hw.output, b.hw.cps_a, b.hw.cps_b, b.hw.objram_bank, b.hw.eeprom_out),
             table: read(b).cloned(),
         }
     }
@@ -140,14 +141,14 @@ thread_local! {
 
 /// Processor work during a line (`cps2::Machine::line_work`). The cap on game steps is only read for
 /// its value: the count of the frame's steps is kept here ([`game_step`]).
-pub fn line(b: &mut Cps2Bus, cap: Option<&mut StepCap>) {
-    if b.irq_raster {
+pub fn line(b: &mut World, cap: Option<&mut StepCap>) {
+    if b.hw.irq_raster {
         stop(b, "raster interrupt (level 4): never armed by the game".into());
     }
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
-        if i.number != b.frame {
-            *i = Image { number: b.frame, ..Image::default() };
+        if i.number != b.hw.frame {
+            *i = Image { number: b.hw.frame, ..Image::default() };
         }
         i.cap = cap.map(|p| p.max);
     });
@@ -160,7 +161,7 @@ pub fn line(b: &mut Cps2Bus, cap: Option<&mut StepCap>) {
         if poison_stack && !point.startup() {
             poison_stacks(b);
         }
-        let level = b.irq_level();
+        let level = b.hw.irq_level();
         if point != Point::Interruption && level > mask {
             crate::kernel::interrupt(b, point);
             continue;
@@ -210,7 +211,7 @@ const STACKS: (usize, usize) = (0x166, 0xe66);
 /// Probe `DDSOM_POISON=stack`: before each scheduler or task point, the RAM of the original stacks
 /// ([`STACKS`]) is filled with a value that changes each time. If validation stays VALID, the game reads nothing there:
 /// it no longer has a 68000 stack.
-fn poison_stacks(b: &mut Cps2Bus) {
+fn poison_stacks(b: &mut World) {
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
     let pattern = (n as u16).wrapping_mul(0x9e37) ^ 0xa5c3;
@@ -221,13 +222,13 @@ fn poison_stacks(b: &mut Cps2Bus) {
 
 /// The scheduler idles, between two tasks: no task ready and no new frame, or only the freeze task
 /// is ready and its next step would do nothing (`tasks::freeze::idle_wait`).
-fn at_rest(b: &Cps2Bus, point: Point) -> bool {
+fn at_rest(b: &World, point: Point) -> bool {
     const NEW_FRAME: usize = 0x164 / 2; // FF0164 (high byte): set by VBLANK, cleared at the start of a walk
     if !point.between_two_tasks() || b.ram[NEW_FRAME] >> 8 != 0 {
         return false;
     }
     let Some(t) = read(b) else { return false };
-    t.slots.iter().all(|e| !e.state.castable()) || crate::tasks::freeze::idle_wait(t, &b.ram)
+    t.slots.iter().all(|e| !e.state.castable()) || crate::tasks::freeze::idle_wait(t, &b.ram[..])
 }
 
 /// A game step begins (`tasks::game`): true if it runs in this frame (it is counted), false if it is
@@ -253,7 +254,7 @@ fn cap_reached() -> bool {
 
 /// The frame has nothing left to do before the interrupt: active wait recognised at the start of a walk of the
 /// scheduler (same [`Snapshot`] as at the previous walk), or point cap reached.
-fn frame_done(b: &Cps2Bus, point: Point) -> bool {
+fn frame_done(b: &World, point: Point) -> bool {
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
         if i.finished {
@@ -281,7 +282,7 @@ fn frame_done(b: &Cps2Bus, point: Point) -> bool {
 
 /// Notes the native about to run (handler of a dispatch table), for diagnosing a stop (`DDSOM_SANS_TRACE=frame`:
 /// each native of the frame).
-pub(crate) fn note(b: &Cps2Bus, n: &'static Native) {
+pub(crate) fn note(b: &World, n: &'static Native) {
     LAST.with(|last| {
         let mut l = last.get();
         l.natives[l.next] = Some(n);
@@ -289,14 +290,14 @@ pub(crate) fn note(b: &Cps2Bus, n: &'static Native) {
         last.set(l);
     });
     if trace(b) {
-        eprintln!("{}:{} {:06x} {} mask={}", b.frame, b.scanline, n.entry, n.name, crate::kernel::interrupt_mask(b));
+        eprintln!("{}:{} {:06x} {} mask={}", b.hw.frame, b.hw.scanline, n.entry, n.name, crate::kernel::interrupt_mask(b));
     }
 }
 
 /// Diagnostics: `DDSOM_SANS_TRACE=n` prints each native run during frame n.
-fn trace(b: &Cps2Bus) -> bool {
+fn trace(b: &World) -> bool {
     static IMAGE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
-    *IMAGE.get_or_init(|| std::env::var("DDSOM_SANS_TRACE").ok().and_then(|v| v.parse().ok())) == Some(b.frame)
+    *IMAGE.get_or_init(|| std::env::var("DDSOM_SANS_TRACE").ok().and_then(|v| v.parse().ok())) == Some(b.hw.frame)
 }
 
 /// Start of the message of a stop (panic) of the game without a 68000.
@@ -304,8 +305,8 @@ pub const STOP: &str = "without 68000: ";
 
 /// Stops dead (panic, message starting with [`STOP`]): cause, frame and line, current task and its pending calls
 /// (frames), interrupt mask, last natives run, Rust call of original code in progress.
-fn stop(b: &mut Cps2Bus, cause: String) -> ! {
-    let mut m = format!("{cause} (frame {}, line {})", b.frame, b.scanline);
+fn stop(b: &mut World, cause: String) -> ! {
+    let mut m = format!("{cause} (frame {}, line {})", b.hw.frame, b.hw.scanline);
     if let Some(t) = read(b) {
         m += &format!(" ; point {:?}", t.point);
         let k = t.current;

@@ -1,14 +1,14 @@
 //! Tools: the natives of `crate::terrain` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::terrain::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 
-fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
+fn run(variant: Variant, c: &mut Cpu, b: &mut World) {
     Push { c, b, variant }.run();
     rts(c, b);
 }

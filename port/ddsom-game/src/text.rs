@@ -6,7 +6,7 @@
 //! codes. All these routines return `A4` positioned after the descriptor (callers
 //! chain the texts) and preserve the other registers.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::hw::video::{Cell, TEXT};
 use crate::objects::Obj;
@@ -21,7 +21,7 @@ const OBJECT_PALETTE: u32 = 0x2b;
 
 /// Sequential reader of the descriptor pointed to by A4.
 struct Script<'a> {
-    b: &'a mut Cps2Bus,
+    b: &'a mut World,
     at: u32,
 }
 
@@ -54,7 +54,7 @@ fn cell(col: u8, row: u8) -> u32 {
     LAYER + COLUMN * col as u32 + ROW * row as u32
 }
 
-fn put(b: &mut Cps2Bus, at: u32, code: u16, attr: u16) {
+fn put(b: &mut World, at: u32, code: u16, attr: u16) {
     Cell(at).put(b, code, attr);
 }
 
@@ -70,7 +70,7 @@ pub(crate) enum Kind {
 }
 
 /// Returns the end of the descriptor and the X flag left by the original.
-pub(crate) fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) {
+pub(crate) fn text(b: &mut World, descriptor: u32, kind: Kind) -> (u32, bool) {
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
     let attr = s.word();
@@ -105,17 +105,17 @@ pub(crate) fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) 
 
 /// 0x0d5e: writes the text described at `descriptor` (column, row, attributes, characters); returns the address
 /// following the descriptor (A4 of the original: callers chain the texts).
-pub fn print(b: &mut Cps2Bus, descriptor: u32) -> u32 {
+pub fn print(b: &mut World, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Text).0
 }
 
 /// 0x0d32: erases the text described at `descriptor`; returns the end of the descriptor.
-pub fn erase(b: &mut Cps2Bus, descriptor: u32) -> u32 {
+pub fn erase(b: &mut World, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Clear).0
 }
 
 /// 0x0dca: overlay text; returns the end of the descriptor.
-pub fn print_over(b: &mut Cps2Bus, descriptor: u32) -> u32 {
+pub fn print_over(b: &mut World, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Overlay).0
 }
 
@@ -146,7 +146,7 @@ fn tall_body(s: &mut Script, start: u32, attr: u16) {
 }
 
 /// 0x1136: tall text at the position of the descriptor; returns the end of the descriptor.
-pub fn print_tall(b: &mut Cps2Bus, descriptor: u32) -> u32 {
+pub fn print_tall(b: &mut World, descriptor: u32) -> u32 {
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
     let attr = s.word();
@@ -156,7 +156,7 @@ pub fn print_tall(b: &mut Cps2Bus, descriptor: u32) -> u32 {
 
 /// 0x1234: tall text at position (`col`, `row`) (D5, D6 of the original); the descriptor starts at the
 /// attributes. Returns the end of the descriptor.
-pub fn print_tall_at(b: &mut Cps2Bus, descriptor: u32, col: u8, row: u8) -> u32 {
+pub fn print_tall_at(b: &mut World, descriptor: u32, col: u8, row: u8) -> u32 {
     let mut s = Script { b, at: descriptor };
     let attr = s.word();
     tall_body(&mut s, cell(col, row), attr);
@@ -167,7 +167,7 @@ pub fn print_tall_at(b: &mut Cps2Bus, descriptor: u32, col: u8, row: u8) -> u32 
 /// empty blocks (tile 0x20). Any other word `t` draws a block: tiles `t, t+1` then `t+0x10, t+0x11`
 /// below with the attributes of the descriptor (negative: palette `+0x2b` of object A0) for 0x0f38;
 /// empty block (tile 0x2fc, attributes 0) for 0x0f4a.
-pub(crate) fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
+pub(crate) fn blocks(b: &mut World, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
     let attr = tables::word(b, descriptor + 2);
     let attr = if attr & 0x8000 != 0 { Obj(object).u8(b, OBJECT_PALETTE) as u16 } else { attr };
     let mut s = Script { b, at: descriptor };
@@ -211,19 +211,19 @@ pub(crate) fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool)
 
 /// 0x0f4a: erases 2x2-cell blocks (`object`: A0 of the original, read only if the attributes of the
 /// descriptor are negative); returns the end of the descriptor.
-pub fn clear_blocks(b: &mut Cps2Bus, descriptor: u32, object: u32) -> u32 {
+pub fn clear_blocks(b: &mut World, descriptor: u32, object: u32) -> u32 {
     blocks(b, descriptor, object, false).0
 }
 
 /// 0x0f38: draws 2x2-cell blocks (negative attributes: palette `+0x2b` of `object`); returns the end of the
 /// descriptor.
-pub fn draw_blocks(b: &mut Cps2Bus, descriptor: u32, object: u32) -> u32 {
+pub fn draw_blocks(b: &mut World, descriptor: u32, object: u32) -> u32 {
     blocks(b, descriptor, object, true).0
 }
 
 /// Erases a rectangle of the layer (column, row, width, height) with spaces. A row
 /// of at least 0x20 is brought back into the layer.
-pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
+pub fn clear_cells(b: &mut World, col: u8, row: u8, width: u8, height: u8) {
     let row = if row >= 0x20 { row - 0x20 } else { row };
     let origin = LAYER + ((col as u32) << 7) + ((row as u32) << 2);
     for x in 0..width.wrapping_sub(1) as u32 + 1 {
@@ -235,11 +235,11 @@ pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
 
 /// 0x1324: erases the rectangle described at `descriptor` (column, row, width, height) with spaces. Returns
 /// the end of the descriptor, which only advances by 3 bytes (the height is read without post-increment).
-pub fn clear_box(b: &mut Cps2Bus, descriptor: u32) -> u32 {
+pub fn clear_box(b: &mut World, descriptor: u32) -> u32 {
     clear_box_height(b, descriptor).0
 }
 
-pub(crate) fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
+pub(crate) fn clear_box_height(b: &mut World, descriptor: u32) -> (u32, u8) {
     let mut s = Script { b, at: descriptor };
     let col = s.byte();
     let row = s.byte();

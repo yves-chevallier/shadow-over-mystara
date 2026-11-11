@@ -3,7 +3,7 @@
 //! Each zone of a panel (`zone::*`) is a rectangle of cells whose origin comes from `layer::origin`.
 //! The tiles come from ROM tables; the palette attributes depend on the player (8 + number).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::layer::{clear_cell, columns, origin, Brush, COLUMN};
 use super::{panel, player, var, Slot};
@@ -39,23 +39,23 @@ pub mod zone {
 }
 
 /// Palette attribute of a player.
-pub fn player_attr(b: &mut Cps2Bus, s: Slot) -> u16 {
+pub fn player_attr(b: &mut World, s: Slot) -> u16 {
     8 + s.index(b) as u16
 }
 
 /// Narrow columns (2-column layout, `A5+0x344` odd).
-pub fn narrow(b: &mut Cps2Bus) -> bool {
+pub fn narrow(b: &mut World) -> bool {
     var::LAYOUT.get(b) & 1 != 0
 }
 
-pub(super) fn zone_brush<'a>(b: &'a mut Cps2Bus, s: Slot, zone: u16) -> Brush<'a> {
+pub(super) fn zone_brush<'a>(b: &'a mut World, s: Slot, zone: u16) -> Brush<'a> {
     let index = s.index(b);
     let at = origin(b, index, zone);
     Brush::new(b, at)
 }
 
 /// Clears a rectangle of `columns` columns and `rows` rows starting at `at`.
-fn clear_rect(b: &mut Cps2Bus, at: u32, rows: u32, columns: u32) {
+fn clear_rect(b: &mut World, at: u32, rows: u32, columns: u32) {
     for column in 0..columns {
         for row in 0..rows {
             clear_cell(b, at + column * COLUMN + row * 4);
@@ -64,7 +64,7 @@ fn clear_rect(b: &mut Cps2Bus, at: u32, rows: u32, columns: u32) {
 }
 
 /// 0x16c86: clears the two layer strips reserved for the panels (top and bottom of the screen).
-pub fn clear_panels(b: &mut Cps2Bus) {
+pub fn clear_panels(b: &mut World) {
     clear_rect(b, crate::hw::video::TEXT.at(0x8).0, 4, 48);
     clear_rect(b, crate::hw::video::TEXT.at(0x68).0, 4, 48);
 }
@@ -75,7 +75,7 @@ pub fn clear_panels(b: &mut Cps2Bus) {
 
 /// 0x17542: clears the panel banner (3 cells high: 24 columns, or twice 16 columns in the
 /// 3-player layout; the second half comes 25 rows lower).
-pub fn clear_banner(b: &mut Cps2Bus, s: Slot) {
+pub fn clear_banner(b: &mut World, s: Slot) {
     const WIDE: Rom = Rom::at(0x3f_55e2);
     const HALF: Rom = Rom::at(0x3f_6758);
     const ATTR: u16 = 0xe;
@@ -91,7 +91,7 @@ pub fn clear_banner(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x17400 / 0x17458: "PUSH START" banner (after clearing the old one), wide and narrow versions.
-pub fn start_banner(b: &mut Cps2Bus, s: Slot, tables: (Rom, Rom)) {
+pub fn start_banner(b: &mut World, s: Slot, tables: (Rom, Rom)) {
     clear_banner(b, s);
     let (table, n) = if narrow(b) { (tables.1, 12) } else { (tables.0, 17) };
     let mut brush = zone_brush(b, s, zone::START_BANNER);
@@ -103,7 +103,7 @@ pub const START_BANNER_B: (Rom, Rom) = (Rom::at(0x3f_5c6c), Rom::at(0x3f_66c8));
 
 /// One of the "INSERT COIN" banners (pointer tables in the code, a column of 3 words per entry):
 /// `source` is the address of the table pointer, `rows` the number of columns minus one.
-pub fn pointer_banner(b: &mut Cps2Bus, s: Slot, pointer: u32, columns_count: u32, attr: u16) {
+pub fn pointer_banner(b: &mut World, s: Slot, pointer: u32, columns_count: u32, attr: u16) {
     let table = tables::long(b, pointer);
     let mut brush = zone_brush(b, s, zone::START_BANNER);
     columns(&mut brush, table, columns_count, attr);
@@ -114,7 +114,7 @@ pub fn pointer_banner(b: &mut Cps2Bus, s: Slot, pointer: u32, columns_count: u32
 // ---------------------------------------------------------------------------------------------
 
 /// 0x159fc: the choice countdown (two BCD digits, one cell each).
-pub fn countdown_digits(b: &mut Cps2Bus, s: Slot) {
+pub fn countdown_digits(b: &mut World, s: Slot) {
     let value = s.p8(b, panel::COUNTDOWN);
     let attr = player_attr(b, s);
     let mut brush = zone_brush(b, s, zone::COUNTDOWN);
@@ -126,7 +126,7 @@ pub fn countdown_digits(b: &mut Cps2Bus, s: Slot) {
 
 /// 0x1749e: the two digits of the continue countdown (large: two cells high, or just one in
 /// narrow columns). The tens digit uses tiles in reverse order.
-pub fn continue_digits(b: &mut Cps2Bus, s: Slot) {
+pub fn continue_digits(b: &mut World, s: Slot) {
     let value = s.p8(b, panel::COUNTDOWN);
     let narrow = narrow(b);
     let brush = zone_brush(b, s, zone::CONTINUE_DIGITS);
@@ -170,7 +170,7 @@ impl Digits<'_> {
 }
 
 /// 0x1725e: the score (player `+0x110`, seven BCD digits); returns the cell following the last digit.
-pub fn score(b: &mut Cps2Bus, s: Slot) -> u32 {
+pub fn score(b: &mut World, s: Slot) -> u32 {
     let value = s.g32(b, player::SCORE);
     s.set_p32(b, panel::SHOWN_SCORE, value);
     let attr = player_attr(b, s);
@@ -189,7 +189,7 @@ pub fn score(b: &mut Cps2Bus, s: Slot) -> u32 {
 
 /// 0x171da: the money (player `+0x114`); in narrow columns two padding cells precede the digits.
 /// Returns the cell following the last digit.
-pub fn money(b: &mut Cps2Bus, s: Slot) -> u32 {
+pub fn money(b: &mut World, s: Slot) -> u32 {
     let value = s.g32(b, player::MONEY);
     s.set_p32(b, panel::SHOWN_MONEY, value);
     let attr = player_attr(b, s);
@@ -219,7 +219,7 @@ pub fn money(b: &mut Cps2Bus, s: Slot) -> u32 {
 const PORTRAIT_POINTERS: [Rom; 2] = [Rom::at(0x17b96), Rom::at(0x17ba6)];
 
 /// 0x17096 / 0x170e0: player portrait (3 cells high); `alt` selects the second series of images.
-pub fn portrait(b: &mut Cps2Bus, s: Slot, alt: bool) {
+pub fn portrait(b: &mut World, s: Slot, alt: bool) {
     let attr = player_attr(b, s);
     let index = s.index(b) as u32;
     let (table, n) = if narrow(b) {
@@ -235,7 +235,7 @@ pub fn portrait(b: &mut Cps2Bus, s: Slot, alt: bool) {
 const NAME_TILES: Rom = Rom::at(0x16fe2);
 
 /// 0x17012 / 0x1701c: the name of character `character` (4 cells wide, 2 high).
-pub fn character_name(b: &mut Cps2Bus, s: Slot, character: u8) {
+pub fn character_name(b: &mut World, s: Slot, character: u8) {
     let attr = 4 + s.index(b) as u16;
     let mut tile = NAME_TILES.pc_word(b, (2 * character as i8 as i32) as u32);
     let mut brush = zone_brush(b, s, zone::CHARACTER_NAME);
@@ -255,7 +255,7 @@ pub fn character_name(b: &mut Cps2Bus, s: Slot, character: u8) {
 const CLASS_ICON_TILES: Rom = Rom::at(0x1707c);
 
 /// 0x17034: class icon of the player's character (strip of 6 cells, or one cell in narrow columns).
-pub fn class_icon(b: &mut Cps2Bus, s: Slot) {
+pub fn class_icon(b: &mut World, s: Slot) {
     let character = s.g8(b, player::CHARACTER) & !1;
     let attr = player_attr(b, s);
     let narrow = narrow(b);
@@ -276,7 +276,7 @@ pub fn class_icon(b: &mut Cps2Bus, s: Slot) {
 const FACE_TILES: Rom = Rom::at(0x17136);
 
 /// 0x17106: the face of class `class` (8 to 15), two cells wide.
-pub fn face(b: &mut Cps2Bus, s: Slot, class: u8) {
+pub fn face(b: &mut World, s: Slot, class: u8) {
     let attr = player_attr(b, s);
     let tiles = 4 * (class.wrapping_sub(8) as u32);
     let mut brush = zone_brush(b, s, zone::FACE);
@@ -292,7 +292,7 @@ const ITEM_SPECIAL_TILES: Rom = Rom::at(0x171b4);
 
 /// 0x17176: the player's six items (one cell each; a special code of at least 0xf9 fills the end of the
 /// row with a text).
-pub fn items(b: &mut Cps2Bus, s: Slot) {
+pub fn items(b: &mut World, s: Slot) {
     let attr = player_attr(b, s);
     let codes: Vec<u8> = (0..6).map(|k| s.g8(b, player::ITEMS + k)).collect();
     let mut brush = zone_brush(b, s, zone::ITEMS);
@@ -320,7 +320,7 @@ pub fn items(b: &mut Cps2Bus, s: Slot) {
 // ---------------------------------------------------------------------------------------------
 
 /// 0x16f22: clears the player's large frame.
-pub fn clear_frame(b: &mut Cps2Bus, s: Slot) {
+pub fn clear_frame(b: &mut World, s: Slot) {
     let at = zone_brush(b, s, zone::FRAME).at;
     if narrow(b) {
         clear_rect(b, at, 5, 16);
@@ -335,14 +335,14 @@ pub fn clear_frame(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x16f9e: clears the item row.
-pub fn clear_items_row(b: &mut Cps2Bus, s: Slot) {
+pub fn clear_items_row(b: &mut World, s: Slot) {
     let at = zone_brush(b, s, zone::ITEMS_ROW).at;
     let width = if narrow(b) { 16 } else { 24 };
     clear_rect(b, at, 4, width);
 }
 
 /// 0x16f0a: clears a 24-column row at `at`; returns the start of the next row.
-pub(super) fn clear_row(b: &mut Cps2Bus, at: u32) -> u32 {
+pub(super) fn clear_row(b: &mut World, at: u32) -> u32 {
     for column in 0..24 {
         clear_cell(b, at + column * COLUMN);
     }
@@ -355,7 +355,7 @@ pub(super) fn clear_row(b: &mut Cps2Bus, at: u32) -> u32 {
 
 /// 0x17b56: copies 8 longs (16 colors) from the palette library at `source` to the palette `dest` keeping the
 /// brightness (high nibbles) of the first long of the destination.
-pub fn blend_palette(b: &mut Cps2Bus, source: u32, dest: u32) {
+pub fn blend_palette(b: &mut World, source: u32, dest: u32) {
     let dest = Vram(dest);
     let keep = dest.long(b) & 0xf000_f000;
     for k in 0..8 {
@@ -365,7 +365,7 @@ pub fn blend_palette(b: &mut Cps2Bus, source: u32, dest: u32) {
 }
 
 /// Player palette in the page: 32 bytes per palette.
-pub fn blend_for(b: &mut Cps2Bus, s: Slot, source: u32, dest: u32) {
+pub fn blend_for(b: &mut World, s: Slot, source: u32, dest: u32) {
     let player = s.index(b) as u32;
     let character = s.g8(b, player::CHARACTER) as u32;
     blend_palette(b, source + 32 * character, dest + 32 * player);
@@ -380,7 +380,7 @@ pub const CHARACTER_PALETTES: [(Rom, Vram); 3] = [
 ];
 
 /// 0x17b14: the three palettes of the player's character.
-pub fn character_palettes(b: &mut Cps2Bus, s: Slot) {
+pub fn character_palettes(b: &mut World, s: Slot) {
     for (source, dest) in CHARACTER_PALETTES {
         blend_for(b, s, source.addr(), dest.0);
     }
@@ -392,7 +392,7 @@ pub fn character_palettes(b: &mut Cps2Bus, s: Slot) {
 const LOBBY_SOURCE: Rom = Rom::at(0x25_c940);
 const LOBBY_PAGE: Vram = crate::hw::video::palette(1, 0);
 
-pub fn lobby_palette(b: &mut Cps2Bus, s: Slot, base: u16) {
+pub fn lobby_palette(b: &mut World, s: Slot, base: u16) {
     let character = s.g8(b, player::CHARACTER) as u16;
     let source = base.wrapping_add(character << 5) as i16 as i32;
     let number = s.g8(b, player::NUMBER) as u16;
@@ -401,13 +401,13 @@ pub fn lobby_palette(b: &mut Cps2Bus, s: Slot, base: u16) {
 }
 
 /// Closing cell after a number in narrow columns.
-pub fn closing_cell(b: &mut Cps2Bus, s: Slot, at: u32, tile: u16) {
+pub fn closing_cell(b: &mut World, s: Slot, at: u32, tile: u16) {
     let attr = player_attr(b, s);
     Cell(at).put(b, tile, attr);
 }
 
 /// 0x17aee: palette of the character currently being chosen.
-pub fn choice_palette(b: &mut Cps2Bus, s: Slot) {
+pub fn choice_palette(b: &mut World, s: Slot) {
     let player = s.index(b) as u32;
     let choice = s.p8(b, panel::CHOICE) as u32;
     blend_palette(b, CHARACTER_PALETTES[1].0.addr() + 32 * choice, CHARACTER_PALETTES[1].1.0 + 32 * player);
@@ -442,7 +442,7 @@ fn bar_cell(brush: &mut Brush, attr: u16, d0: i16, d1: i16, d2: i16) {
 }
 
 /// 0x179c2: the panel's HP gauge (one segment of 8 hit points per cell, a remainder, then empty).
-pub fn hp_bar(b: &mut Cps2Bus, s: Slot) {
+pub fn hp_bar(b: &mut World, s: Slot) {
     if s.p16(b, panel::HP_BAR) == 0 {
         return;
     }

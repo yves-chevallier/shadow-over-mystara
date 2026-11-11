@@ -147,9 +147,8 @@ impl SoundStreams {
     /// End of frame `frame`: compares the drivers' writes, then suspends or resumes the comparison. A mismatch is
     /// accepted only after the Z80, being late, reordered its work (the order differs since a frame where it was
     /// late); the comparison then waits until both drivers are in the same state again. Otherwise it is an error.
-    fn end_frame(&mut self, frame: usize, game: &mut cps2::Machine, reference: &mut cps2::Machine) -> Result<(), String> {
-        let writes = |m: &mut cps2::Machine| std::mem::take(m.sound.output.as_mut().unwrap());
-        let (a, b) = (writes(game), writes(reference));
+    fn end_frame(&mut self, frame: usize, game: &mut ddsom_game::GameMachine, reference: &mut cps2::Machine) -> Result<(), String> {
+        let (a, b) = (std::mem::take(game.sound.output.as_mut().unwrap()), std::mem::take(reference.sound.output.as_mut().unwrap()));
         let z80 = &reference.sound;
         let pending_work = z80.ram[1] | z80.ram[2] | z80.ram[3] != 0;
         if self.desynced.is_none() {
@@ -283,7 +282,7 @@ fn main() {
     ma.sound.output = Some(Vec::new());
     mb.sound.output = Some(Vec::new());
     let mut sound = SoundStreams::default();
-    ddsom_game::install_no_68k(&mut ma);
+    let mut ma = ddsom_game::install_no_68k(ma);
     ddsom_game::install_reference(&mut mb);
     // the frame is not compared (only the state): no rendering, it was the bulk of a frame's time
     ma.rendering = false;
@@ -336,29 +335,29 @@ fn main() {
             }
         }
         let ram: Vec<usize> = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).collect();
-        let gfx = ma.bus.gfxram.iter().zip(&mb.bus.gfxram).filter(|(x, y)| x != y).count();
+        let gfx = ma.bus.hw.gfxram.iter().zip(&mb.bus.gfxram).filter(|(x, y)| x != y).count();
         let word_under_test = f < STARTUP && ram.len() + gfx <= 1;
         let mut what = Vec::new();
         for &i in ram.iter().take(diff_max).filter(|_| !word_under_test) {
             what.push(format!("ram {:06x}: {:04x} instead of {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
-        if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !word_under_test) {
-            what.push(format!("gfxram {:06x}: {:04x} instead of {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
+        if let Some(i) = first_diff(&ma.bus.hw.gfxram, &mb.bus.gfxram).filter(|_| !word_under_test) {
+            what.push(format!("gfxram {:06x}: {:04x} instead of {:04x}", 0x900000 + 2 * i, ma.bus.hw.gfxram[i], mb.bus.gfxram[i]));
         }
         if let Some(i) = first_diff(&ma.obj_buffer, &mb.obj_buffer) {
             what.push(format!("sprites, mot {i}"));
         }
         // the two banks of the object RAM (the bank read by the game is that of the previous frame)
         for k in 0..2 {
-            if let Some(i) = first_diff(&ma.bus.objram[k], &mb.bus.objram[k]) {
-                what.push(format!("object RAM, bank {k}, word {i}: {:04x} instead of {:04x}", ma.bus.objram[k][i], mb.bus.objram[k][i]));
+            if let Some(i) = first_diff(&ma.bus.hw.objram[k], &mb.bus.objram[k]) {
+                what.push(format!("object RAM, bank {k}, word {i}: {:04x} instead of {:04x}", ma.bus.hw.objram[k][i], mb.bus.objram[k][i]));
             }
         }
-        if let Some(i) = first_diff(&ma.bus.palette, &mb.bus.palette) {
+        if let Some(i) = first_diff(&ma.bus.hw.palette, &mb.bus.palette) {
             what.push(format!("palette, mot {i}"));
         }
-        if let Some(i) = (0..ma.bus.qram.len()).find(|&i| i != PAN_REPORT && ma.bus.qram[i] != mb.bus.qram[i]) {
-            what.push(format!("shared RAM {i:03x}: {:02x} instead of {:02x}", ma.bus.qram[i], mb.bus.qram[i]));
+        if let Some(i) = (0..ma.bus.hw.qram.len()).find(|&i| i != PAN_REPORT && ma.bus.hw.qram[i] != mb.bus.qram[i]) {
+            what.push(format!("shared RAM {i:03x}: {:02x} instead of {:02x}", ma.bus.hw.qram[i], mb.bus.qram[i]));
         }
         if let Err(e) = sound.end_frame(f, &mut ma, &mut mb) {
             what.push(e);

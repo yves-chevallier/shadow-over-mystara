@@ -13,7 +13,7 @@
 
 use std::sync::OnceLock;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::{data, Missing};
 
@@ -80,7 +80,7 @@ fn missing(a: u32) -> Missing {
 }
 
 /// Byte of the data space.
-pub fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub fn byte(b: &mut World, a: u32) -> u8 {
     if a >= ROM_END {
         return crate::mem::rd8(b, a);
     }
@@ -91,7 +91,7 @@ pub fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word of the data space.
-pub fn word(b: &mut Cps2Bus, a: u32) -> u16 {
+pub fn word(b: &mut World, a: u32) -> u16 {
     if a >= ROM_END {
         return crate::mem::rd16(b, a);
     }
@@ -99,7 +99,7 @@ pub fn word(b: &mut Cps2Bus, a: u32) -> u16 {
 }
 
 /// Long of the data space.
-pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
+pub fn long(b: &mut World, a: u32) -> u32 {
     if a >= ROM_END {
         return crate::mem::rd32(b, a);
     }
@@ -107,7 +107,7 @@ pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
 }
 
 /// Byte of the program space (table read PC-relative).
-pub fn pc_byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub fn pc_byte(b: &mut World, a: u32) -> u8 {
     match bytes(true, a, 1) {
         Some(v) => v as u8,
         None => missing(a).byte_in(b, a, true),
@@ -115,11 +115,11 @@ pub fn pc_byte(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word of the program space.
-pub fn pc_word(b: &mut Cps2Bus, a: u32) -> u16 {
+pub fn pc_word(b: &mut World, a: u32) -> u16 {
     bytes(true, a, 2).map_or_else(|| missing(a).word_in(b, a, true), |v| v as u16)
 }
 
 /// Long of the program space.
-pub fn pc_long(b: &mut Cps2Bus, a: u32) -> u32 {
+pub fn pc_long(b: &mut World, a: u32) -> u32 {
     bytes(true, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, true))
 }

@@ -26,7 +26,7 @@ mod keys;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use cps2::Machine;
+use cps2::{Board, Machine};
 use minifb::{Scale, ScaleMode, Window, WindowOptions};
 
 const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
@@ -80,24 +80,42 @@ fn main() {
         }
     };
     // a fresh machine: at startup, and on each resume from a save (`save.rs`)
-    let machine = |eeprom: Option<&[u8]>| match &originals {
+    match originals {
         // the game: no ROM, the Rust sound driver
-        None => {
-            let mut m = Machine::game(contents.clone(), eeprom);
-            ddsom_game::install_no_68k(&mut m);
-            m
-        }
-        Some(c) => {
-            let mut m = Machine::ddsom(c.clone(), eeprom);
-            #[cfg(feature = "original")]
-            if std::env::var_os("DDSOM_ORIGINE").is_some() {
-                ddsom_rc::install(&mut m);
-            }
-            m.sound.use_rust_driver();
-            m
-        }
-    };
-    let mut m = machine(eeprom.as_deref());
+        None => play(
+            |eeprom| ddsom_game::install_no_68k(Machine::game(contents.clone(), eeprom)),
+            &mut keys,
+            eeprom.as_deref(),
+            &nvram,
+            no_68k,
+        ),
+        Some(c) => play(
+            |eeprom| {
+                let mut m = Machine::ddsom(c.clone(), eeprom);
+                #[cfg(feature = "original")]
+                if std::env::var_os("DDSOM_ORIGINE").is_some() {
+                    ddsom_rc::install(&mut m);
+                }
+                m.sound.use_rust_driver();
+                m
+            },
+            &mut keys,
+            eeprom.as_deref(),
+            &nvram,
+            no_68k,
+        ),
+    }
+}
+
+/// Plays on the machines that `machine` builds (from the starting EEPROM): the game, or the original code.
+fn play<B: Board>(
+    machine: impl Fn(Option<&[u8]>) -> Machine<B>,
+    keys: &mut keys::Keys,
+    eeprom: Option<&[u8]>,
+    nvram: &Path,
+    no_68k: bool,
+) {
+    let mut m = machine(eeprom);
 
     let mut full_screen = false;
     let mut win = window(full_screen);
@@ -149,8 +167,8 @@ fn main() {
             next = Instant::now();
             continue;
         }
-        m.bus.inputs.in0 = t.in0;
-        m.bus.inputs.in2 = t.in2;
+        m.bus.hw_mut().inputs.in0 = t.in0;
+        m.bus.hw_mut().inputs.in2 = t.in2;
         game.image(&m);
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
@@ -190,7 +208,7 @@ fn main() {
     if let Some(dir) = nvram.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    if let Err(e) = std::fs::write(&nvram, m.bus.eeprom.to_bytes()) {
+    if let Err(e) = std::fs::write(nvram, m.bus.hw().eeprom.to_bytes()) {
         eprintln!("Cannot save the EEPROM: {e}");
     }
 }

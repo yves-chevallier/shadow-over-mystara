@@ -40,7 +40,7 @@
 //! wrappers (`trap #7` is also reached by the original debug menu, 0x2c3e0, which the game does not run): they
 //! have no native. The wrappers remain natives for the calls by address and the jumps that remain.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd8, wr8};
 use crate::tasks::table::{slot, table, State, Resume, Next, SLOTS};
@@ -96,7 +96,7 @@ pub enum Point {
 
 impl Point {
     /// Address of the original code (diagnostics; a task: its current stage).
-    pub fn address(self, b: &Cps2Bus) -> u32 {
+    pub fn address(self, b: &World) -> u32 {
         match self {
             Point::Reset => 0x350,
             Point::ReleaseZ80 => 0x18cc,
@@ -132,25 +132,25 @@ impl Point {
 }
 
 /// The point the processor is at (before the table is created: power-on).
-pub fn point(b: &Cps2Bus) -> Point {
+pub fn point(b: &World) -> Point {
     crate::tasks::table::read(b).map_or(Point::Reset, |t| t.point)
 }
 
 /// Interrupt mask of the processor (level 0 to 7 of the original's SR): power-on masks everything, `boot_init`
 /// opens, the scheduler masks up to level 6 while it examines a slot, a task runs unmasked (except the TEST menu's
 /// memory test, `trap #12`).
-pub fn interrupt_mask(b: &Cps2Bus) -> u8 {
+pub fn interrupt_mask(b: &World) -> u8 {
     crate::tasks::table::read(b).map_or(MASK_ALL, |t| t.interrupt_mask)
 }
 
 /// Sets the interrupt mask (`move #…,SR`, `trap #12`).
-pub fn set_interrupt_mask(b: &mut Cps2Bus, mask: u8) {
+pub fn set_interrupt_mask(b: &mut World, mask: u8) {
     table(b).interrupt_mask = mask;
 }
 
 /// Executes scheduler point `point` and returns the next one (the startup and task points are
 /// executed by `no68k`).
-pub fn execute(b: &mut Cps2Bus, point: Point) -> Point {
+pub fn execute(b: &mut World, point: Point) -> Point {
     match point {
         Point::Start => Point::Walk,
         Point::Walk => walk(b),
@@ -165,21 +165,21 @@ pub fn execute(b: &mut Cps2Bus, point: Point) -> Point {
 // Scheduler
 
 /// 0x932: new walk of the table, from slot 0.
-fn walk(b: &mut Cps2Bus) -> Point {
+fn walk(b: &mut World) -> Point {
     wr8(b, ram::NEW_FRAME, 0);
     table(b).exam = 0;
     Point::Exam
 }
 
 /// Moves to the next slot (`dbf`), or restarts when the table is exhausted.
-fn next(b: &mut Cps2Bus) -> Point {
+fn next(b: &mut World) -> Point {
     let t = table(b);
     t.exam += 1;
     if t.exam == SLOTS { Point::Walk } else { Point::Exam }
 }
 
 /// 0x93e: examination of a slot, with interrupts masked (up to level 6).
-fn exam(b: &mut Cps2Bus) -> Point {
+fn exam(b: &mut World) -> Point {
     set_interrupt_mask(b, MASK_EXAM);
     if rd8(b, ram::NEW_FRAME) != 0 {
         return Point::Walk;
@@ -194,7 +194,7 @@ fn exam(b: &mut Cps2Bus) -> Point {
 }
 
 /// 0x952: the task ceded, the interrupt window opens and the walk continues.
-fn after_cession(b: &mut Cps2Bus) -> Point {
+fn after_cession(b: &mut World) -> Point {
     set_interrupt_mask(b, 0);
     next(b)
 }
@@ -204,7 +204,7 @@ fn after_cession(b: &mut Cps2Bus) -> Point {
 /// task does not read those that the original gives it (A1 = entry, A4 = stack, D1.w = state; probe
 /// `DDSOM_POISON=new` before the removal of the registers), and a task that resumes rereads none of the registers
 /// saved at its cession: what it rereads is in the fields of its stage (`tasks::resume_step`).
-fn launch(b: &mut Cps2Bus, k: usize) -> Point {
+fn launch(b: &mut World, k: usize) -> Point {
     let t = table(b);
     t.current = k;
     t.point = Point::Task;
@@ -227,7 +227,7 @@ fn launch(b: &mut Cps2Bus, k: usize) -> Point {
 }
 
 /// 0x984: a task ceded (or ended); the scheduler resumes at the slot following its own.
-fn scheduler_return(b: &mut Cps2Bus) -> Point {
+fn scheduler_return(b: &mut World) -> Point {
     let t = table(b);
     t.exam = t.current;
     Point::NextTask
@@ -235,14 +235,14 @@ fn scheduler_return(b: &mut Cps2Bus) -> Point {
 
 /// Hands control back to the scheduler after an operation on the current task: the Rust code still running under
 /// the cession returns without doing anything (`tasks::has_ceded`).
-fn to_scheduler(b: &mut Cps2Bus) {
+fn to_scheduler(b: &mut World) {
     table(b).point = Point::Return;
     crate::tasks::note_cession();
 }
 
 /// The current task enters an endless loop of the original (`bra.b *` at `address`): the processor will only
 /// leave it for interrupts. The Rust code in progress returns without doing anything (`tasks::has_ceded`).
-pub fn block(b: &mut Cps2Bus, address: u32) {
+pub fn block(b: &mut World, address: u32) {
     table(b).point = Point::Blocked(address);
     crate::tasks::note_cession();
 }
@@ -250,7 +250,7 @@ pub fn block(b: &mut Cps2Bus, address: u32) {
 /// The VBLANK interrupt is taken at point `point` (between two points, the mask allowing it): the kernel remembers
 /// where to return. The original pushes PC and SR on the current stack (the task's, or the supervisor's); nothing
 /// rereads them there apart from the `rte`.
-pub fn interrupt(b: &mut Cps2Bus, point: Point) {
+pub fn interrupt(b: &mut World, point: Point) {
     let t = table(b);
     assert!(t.interrupted.is_none(), "interrupt taken at point {point:?} during an interrupt");
     t.interrupted = Some(point);
@@ -258,12 +258,12 @@ pub fn interrupt(b: &mut Cps2Bus, point: Point) {
 }
 
 /// `rte`: end of the interrupt, return to the interrupted point.
-pub fn interrupt_end(b: &mut Cps2Bus) -> Point {
+pub fn interrupt_end(b: &mut World) -> Point {
     table(b).interrupted.take().expect("end of interrupt without an interrupted point")
 }
 
 /// The game step is held until the next frame (cap on steps per frame): the game task stays in progress.
-pub fn keep_step(b: &mut Cps2Bus, d4: u32) {
+pub fn keep_step(b: &mut World, d4: u32) {
     table(b).point = Point::StepKept { d4 };
 }
 
@@ -274,7 +274,7 @@ pub fn keep_step(b: &mut Cps2Bus, d4: u32) {
 
 /// Stores the resumption of the current task in the table (its step, without registers: what it will reread is in
 /// the step), then hands control back to the scheduler.
-fn cede(b: &mut Cps2Bus, state: State, count: Option<u8>, resume: Next) {
+fn cede(b: &mut World, state: State, count: Option<u8>, resume: Next) {
     let Next::Step(step) = resume else {
         unreachable!("cession to address {:x}: all resumptions are Rust steps", resume.address())
     };
@@ -288,7 +288,7 @@ fn cede(b: &mut Cps2Bus, state: State, count: Option<u8>, resume: Next) {
 /// trap 6. The wrapper 0xa40 first calls 0xb40, which according to DSW fills a GFX RAM block of the charge gauge
 /// (never, in this game: bit 0x400 of DSW). The registers that the trap leaves (D0.w = state and count, D1.w) and
 /// its flags are reread by nobody (probe `DDSOM_POISON=resume`): the task resumes at a Rust stage.
-pub fn wait(b: &mut Cps2Bus, frames: u8, resume: impl Into<Next>) {
+pub fn wait(b: &mut World, frames: u8, resume: impl Into<Next>) {
     let resume = resume.into();
     let setting = !rd16(b, ram::DSW) & 7;
     let count = frames.wrapping_add(setting as u8);
@@ -297,12 +297,12 @@ pub fn wait(b: &mut Cps2Bus, frames: u8, resume: impl Into<Next>) {
 }
 
 /// Trap 4: cedes while staying ready.
-pub fn cede_ready(b: &mut Cps2Bus, resume: impl Into<Next>) {
+pub fn cede_ready(b: &mut World, resume: impl Into<Next>) {
     cede(b, State::Ready, None, resume.into());
 }
 
 /// Trap 1: the current task ends and gives back its stack.
-pub fn finish(b: &mut Cps2Bus) {
+pub fn finish(b: &mut World) {
     let t = table(b);
     let k = t.current;
     t.free(k);
@@ -310,18 +310,18 @@ pub fn finish(b: &mut Cps2Bus) {
 }
 
 /// 0xae4 (and `trap #7`, 0xae6): the current task restarts from scratch as `task`, same stack.
-pub fn restart(b: &mut Cps2Bus, task: Task) {
+pub fn restart(b: &mut World, task: Task) {
     table(b).restart(task);
     to_scheduler(b);
 }
 
 /// Creates the task of offset `offset` in the table (`0x10 k`), which will start at the entry of `task` (wrapper
 /// `0x9b6`: no register or flag changes). A task already there gives back its stack.
-pub fn create_task(b: &mut Cps2Bus, offset: u32, task: Task) {
+pub fn create_task(b: &mut World, offset: u32, task: Task) {
     table(b).create(slot(offset), task);
 }
 
 /// Kills the task of offset `offset` (wrapper `0xa14`: no register or flag changes).
-pub fn kill_task(b: &mut Cps2Bus, offset: u32) {
+pub fn kill_task(b: &mut World, offset: u32) {
     table(b).kill(slot(offset));
 }

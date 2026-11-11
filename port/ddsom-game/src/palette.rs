@@ -4,7 +4,7 @@
 //! (`0x91c000 + 0x400 k`, 32 palettes of 16 colours) are designated by bits 0 to 3 of
 //! `PAGES`. See `docs/video.md`.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use ddsom_data::Palettes;
 
@@ -20,17 +20,17 @@ pub(crate) const PALETTES: u32 = gfx::PALETTES.0;
 pub(crate) const PAGE_SIZE: u32 = 0x400;
 
 /// Colour word at `a` (palette RAM, a work RAM copy, or a palette of the library: the engine data by address).
-fn color(b: &mut Cps2Bus, a: u32) -> u16 {
+fn color(b: &mut World, a: u32) -> u16 {
     if a & 0xff_ffff < 0x40_0000 {
         return crate::tables::engine().word(b, a);
     }
     Vram(a).get(b)
 }
-fn set_color(b: &mut Cps2Bus, a: u32, v: u16) {
+fn set_color(b: &mut World, a: u32, v: u16) {
     Vram(a).set(b, v)
 }
 
-fn for_each_color(b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
+fn for_each_color(b: &mut World, mut f: impl FnMut(u16) -> u16) {
     let pages = PAGES.get(b);
     for k in 0..4 {
         if pages & (1 << k) != 0 {
@@ -46,22 +46,22 @@ fn for_each_color(b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
 
 /// 0x168e: brightness `level` added (OR) to the colours of the checked pages (`PAGES`), or cleared if `level`
 /// is zero.
-pub fn or_brightness(b: &mut Cps2Bus, level: u16) {
+pub fn or_brightness(b: &mut World, level: u16) {
     for_each_color(b, |col| if level == 0 { col & 0x0fff } else { col | level });
 }
 
 /// 0x1686: maximum brightness.
-pub fn full_brightness(b: &mut Cps2Bus) {
+pub fn full_brightness(b: &mut World) {
     or_brightness(b, 0xf000);
 }
 
 /// 0x168c: zero brightness.
-pub fn no_brightness(b: &mut Cps2Bus) {
+pub fn no_brightness(b: &mut World) {
     or_brightness(b, 0);
 }
 
 /// 0x173c: brightness of the colours of the checked pages replaced by `level`.
-pub fn set_brightness(b: &mut Cps2Bus, level: u16) {
+pub fn set_brightness(b: &mut World, level: u16) {
     for_each_color(b, |col| (col & 0x0fff) | level);
 }
 
@@ -82,7 +82,7 @@ const BRIGHTNESS: u16 = 0xf000;
 
 /// 0x1602: adds the step (±0x1000) to the brightness of the page's 512 colours, unless the first
 /// colour is already at the end (0 going down, 0xf000 going up) or it would reach 0.
-fn fade_page(b: &mut Cps2Bus, page: u32, delta: u32) {
+fn fade_page(b: &mut World, page: u32, delta: u32) {
     let first = color(b, page) & BRIGHTNESS;
     let at_end = if (delta as i32) < 0 { first == 0 } else { first == BRIGHTNESS };
     if at_end || first.wrapping_add(delta as u16) & BRIGHTNESS == 0 {
@@ -93,7 +93,7 @@ fn fade_page(b: &mut Cps2Bus, page: u32, delta: u32) {
 
 /// 0x164e: like `fade_page` on the 48 colours at the end of the first page, without a stop test; going
 /// down, the brightness of the first colour is tested before the step.
-fn fade_partial_page(b: &mut Cps2Bus, page: u32, delta: u32) {
+fn fade_partial_page(b: &mut World, page: u32, delta: u32) {
     let mut first = color(b, page);
     if (delta as i32) >= 0 {
         first = first.wrapping_add(delta as u16);
@@ -105,7 +105,7 @@ fn fade_partial_page(b: &mut Cps2Bus, page: u32, delta: u32) {
 }
 
 /// Adds `delta` (modulo 2^16) to the `n` colours starting at `page`.
-fn add_to_colors(b: &mut Cps2Bus, page: u32, n: u32, delta: u16) {
+fn add_to_colors(b: &mut World, page: u32, n: u32, delta: u16) {
     for i in 0..n {
         let a = page + 2 * i;
         let v = color(b, a).wrapping_add(delta);
@@ -114,14 +114,14 @@ fn add_to_colors(b: &mut Cps2Bus, page: u32, n: u32, delta: u16) {
 }
 
 /// Pages checked in the fade state, with their address.
-fn selected_pages(b: &mut Cps2Bus) -> Vec<(usize, u32)> {
+fn selected_pages(b: &mut World) -> Vec<(usize, u32)> {
     let flags = PAGES.get(b);
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PAGE_POINTERS[k].get(b))).collect()
 }
 
 /// One brightness fade step (`0x158e`, or `0x15c8` if `partial`) on the pages of the fade state (`PAGES`), with
 /// step `delta` (±0x1000).
-pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partial: bool) {
+pub fn brightness_step(b: &mut World, delta: u32, partial: bool) {
     for (k, page) in selected_pages(b) {
         if partial && k == 0 {
             fade_partial_page(b, page, delta);
@@ -146,7 +146,7 @@ const FULL_RANGE: std::ops::Range<u8> = 0x45..0x5a;
 pub(crate) const PALETTE_BYTES: u32 = 32;
 
 /// Copies the 16 colours at `from` (the library, a table of the original or the RAM) to `to`.
-fn copy_palette(b: &mut Cps2Bus, from: u32, to: u32) {
+fn copy_palette(b: &mut World, from: u32, to: u32) {
     for i in 0..PALETTE_BYTES / 4 {
         let long = engine().long(b, from + 4 * i);
         Vram(to + 4 * i).set_long(b, long);
@@ -156,7 +156,7 @@ fn copy_palette(b: &mut Cps2Bus, from: u32, to: u32) {
 /// Address of the entry `n` of a table of addresses (index `n * 4` computed on 16 bits, signed word). The tables read
 /// through a PC-relative access (pages 1 to 3) are in the program space; those whose address goes through a register
 /// (`lea (d,PC),A3` then indexing) in the data space.
-fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
+fn table_entry(b: &mut World, table: u32, n: u32, program: bool) -> u32 {
     let at = table.wrapping_add((n as u16).wrapping_shl(2) as i16 as u32);
     if program {
         engine().pc_long(b, at)
@@ -205,14 +205,14 @@ pub(crate) fn stage_list(d0: u32) -> u32 {
 }
 
 /// Address of the extra palettes of the current scene, 0 if it has none.
-pub(crate) fn stage_extra(b: &mut Cps2Bus) -> u32 {
+pub(crate) fn stage_extra(b: &mut World) -> u32 {
     let current = crate::ram::SCENE.get(b) as u32;
     table_entry(b, scene_palettes().extra.rom, current, false)
 }
 
 /// 0x1a36c: palettes of scene `d0` (low byte) starting at `dst`, then the extra palettes
 /// of the current scene.
-pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, d0: u32, mut dst: u32) {
+pub(crate) fn load_stage_palettes(b: &mut World, d0: u32, mut dst: u32) {
     let mut list = stage_list(d0);
     for _ in 0..stage_count(d0 as u8) {
         let offset = engine().word(b, list);
@@ -232,18 +232,18 @@ pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, d0: u32, mut dst: u32) {
 }
 
 /// The eight longs of a palette, as `movem.l (A),{D1-D6,A1,A2}` loads them.
-pub(crate) fn palette_longs(b: &mut Cps2Bus, at: u32) -> [u32; 8] {
+pub(crate) fn palette_longs(b: &mut World, at: u32) -> [u32; 8] {
     std::array::from_fn(|i| Vram(at + 4 * i as u32).long(b))
 }
 
 /// 0x1a360: palettes of the current scene in page 0.
-pub fn load_scene_palettes(b: &mut Cps2Bus) {
+pub fn load_scene_palettes(b: &mut World) {
     let stage = crate::ram::SCENE.get(b) as u32;
     load_stage_palettes(b, stage, PALETTES);
 }
 
 /// 0x1a366: palettes of scene `scene` in page 0 (then the extras of the current scene).
-pub fn load_scene_palettes_of(b: &mut Cps2Bus, scene: u8) {
+pub fn load_scene_palettes_of(b: &mut World, scene: u8) {
     load_stage_palettes(b, scene as u32, PALETTES);
 }
 
@@ -252,7 +252,7 @@ pub(crate) const PAGE_PALETTES: u32 = 32;
 
 /// 0x1a3d4: the 32 palettes of set D0 (address in the table of the sets) in page 0. Returns the source address (0:
 /// set absent).
-pub(crate) fn load_set(b: &mut Cps2Bus, d0: u32) -> u32 {
+pub(crate) fn load_set(b: &mut World, d0: u32) -> u32 {
     let source = table_entry(b, scene_palettes().sets.rom, d0, false);
     if !(source == 0) {
         for i in 0..PAGE_PALETTES {
@@ -263,18 +263,18 @@ pub(crate) fn load_set(b: &mut Cps2Bus, d0: u32) -> u32 {
 }
 
 /// 0x1a3d4: the 32 palettes of set `n` in page 0 (nothing if the set is absent).
-pub fn load_palette_set(b: &mut Cps2Bus, n: u16) {
+pub fn load_palette_set(b: &mut World, n: u16) {
     load_set(b, n as u32);
 }
 
 /// Source of page `k + 1`: entry `d0` of the page table (the loaders: 0x1a608/0x1a60a, 0x1a678/0x1a67e,
 /// 0x1a8ac/0x1a8b2, "current scene" and "given D0" entries).
-pub(crate) fn page_source(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
+pub(crate) fn page_source(b: &mut World, k: usize, d0: u32) -> u32 {
     table_entry(b, scene_palettes().pages[k].rom, d0, true)
 }
 
 /// The 32 palettes of page `k + 1` according to the page table, entry `d0`.
-pub(crate) fn load_page(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
+pub(crate) fn load_page(b: &mut World, k: usize, d0: u32) -> u32 {
     let source = page_source(b, k, d0);
     let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
     for i in 0..PAGE_PALETTES {
@@ -285,19 +285,19 @@ pub(crate) fn load_page(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
 
 /// Palette pages 1 to 3 (0x1a608/0x1a60a, 0x1a678/0x1a67e, 0x1a8ac/0x1a8b2): the 32 palettes of entry `n`
 /// of the page table.
-pub fn load_palette_page(b: &mut Cps2Bus, page: usize, n: u16) {
+pub fn load_palette_page(b: &mut World, page: usize, n: u16) {
     assert!((1..=3).contains(&page), "palette page {page}");
     load_page(b, page - 1, n as u32);
 }
 
 /// 0x1a678, 0x1a8ac: page 2 or 3 according to the current scene (0x1a608: page 1 always takes entry 0).
-pub fn load_scene_page(b: &mut Cps2Bus, page: usize) {
+pub fn load_scene_page(b: &mut World, page: usize) {
     let n = if page == 1 { 0 } else { crate::ram::SCENE.get(b) as u16 };
     load_palette_page(b, page, n);
 }
 
 /// The D2-D5 that a page loader (0x1a608...) leaves: longs 2 to 5 of the page's last palette (`page`: 1 to 3).
-pub fn page_leftovers(b: &mut Cps2Bus, page: usize) -> [u32; 4] {
+pub fn page_leftovers(b: &mut World, page: usize) -> [u32; 4] {
     let l = palette_longs(b, PALETTES + PAGE_SIZE * page as u32 + (PAGE_PALETTES - 1) * PALETTE_BYTES);
     [l[2], l[3], l[4], l[5]]
 }
@@ -323,7 +323,7 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
 
 /// 0x1a296: all the palettes of the current scene. Returns the D0 that the original leaves: the first long of the
 /// last palette of page 3 (the configuration menu rereads it).
-pub fn load_all_palettes(b: &mut Cps2Bus) -> u32 {
+pub fn load_all_palettes(b: &mut World) -> u32 {
     let stage = crate::ram::SCENE.get(b);
     let special = special_sources(stage);
     let dst = if special.is_some() { hw::SCROLL1 } else { PALETTES };
@@ -377,44 +377,44 @@ fn brighten(color: u16) -> u16 {
     out
 }
 
-fn colors_of(b: &mut Cps2Bus, page: u32, f: impl Fn(&mut Cps2Bus, u32, u32) -> u16) -> Vec<u16> {
+fn colors_of(b: &mut World, page: u32, f: impl Fn(&mut World, u32, u32) -> u16) -> Vec<u16> {
     (0..COLORS).map(|i| f(b, page, i)).collect()
 }
 
-fn rewrite(b: &mut Cps2Bus, page: u32, results: &[u16]) {
+fn rewrite(b: &mut World, page: u32, results: &[u16]) {
     for (i, color) in results.iter().enumerate() {
         set_color(b, page + 2 * i as u32, *color);
     }
 }
 
 /// 0x1cfc8: approaches the 512 colours of page A0 to the target colours at A1.
-fn approach_page_results(b: &mut Cps2Bus, page: u32, target: u32) -> Vec<u16> {
+fn approach_page_results(b: &mut World, page: u32, target: u32) -> Vec<u16> {
     colors_of(b, page, |b, page, i| approach(color(b, page + 2 * i), color(b, target + 2 * i)))
 }
 
-pub(crate) fn approach_page(b: &mut Cps2Bus, page: u32, target: u32) {
+pub(crate) fn approach_page(b: &mut World, page: u32, target: u32) {
     let results = approach_page_results(b, page, target);
     rewrite(b, page, &results);
 }
 
 /// 0x1d042: approaches the 512 colours of page A0 to the single colour D1.
-fn approach_constant_results(b: &mut Cps2Bus, page: u32, goal: u16) -> Vec<u16> {
+fn approach_constant_results(b: &mut World, page: u32, goal: u16) -> Vec<u16> {
     colors_of(b, page, |b, page, i| approach(color(b, page + 2 * i), goal))
 }
 
-pub(crate) fn approach_constant(b: &mut Cps2Bus, page: u32, goal: u16) {
+pub(crate) fn approach_constant(b: &mut World, page: u32, goal: u16) {
     let results = approach_constant_results(b, page, goal);
     rewrite(b, page, &results);
 }
 
 /// 0x1d00e: the 512 colours of page A0 gain one step towards white.
-pub(crate) fn brighten_page(b: &mut Cps2Bus, page: u32) {
+pub(crate) fn brighten_page(b: &mut World, page: u32) {
     let results = colors_of(b, page, |b, page, i| brighten(color(b, page + 2 * i)));
     rewrite(b, page, &results);
 }
 
 /// Checked pages (`PAGES`) with their GFX RAM address.
-pub(crate) fn flagged_pages(b: &mut Cps2Bus) -> Vec<(usize, u32)> {
+pub(crate) fn flagged_pages(b: &mut World) -> Vec<(usize, u32)> {
     let flags = PAGES.get(b);
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PALETTES + PAGE_SIZE * k as u32)).collect()
 }
@@ -431,7 +431,7 @@ pub enum Target {
 }
 
 /// One per-component fade step of the checked pages (`PAGES`) towards `target`.
-pub fn component_step(b: &mut Cps2Bus, target: Target) {
+pub fn component_step(b: &mut World, target: Target) {
     for (k, page) in flagged_pages(b) {
         let source = SOURCES[k];
         match target {
@@ -449,14 +449,14 @@ pub fn component_step(b: &mut Cps2Bus, target: Target) {
 }
 
 /// `0x1cf3c`: the checked pages all white.
-pub fn white_out(b: &mut Cps2Bus) {
+pub fn white_out(b: &mut World) {
     for (_, page) in flagged_pages(b) {
         fill_page(b, page, [u32::MAX; 8]);
     }
 }
 
 /// Copies 8 longs (D0 to D6 and A1) over the whole page (32 palettes): 0x1cfb8.
-pub(crate) fn fill_page(b: &mut Cps2Bus, page: u32, values: [u32; 8]) {
+pub(crate) fn fill_page(b: &mut World, page: u32, values: [u32; 8]) {
     for row in 0..32 {
         for (i, value) in values.iter().enumerate() {
             Vram(page + 32 * row + 4 * i as u32).set_long(b, *value);
@@ -484,7 +484,7 @@ pub(crate) mod flash {
     pub const BACKUP_SPARE: u32 = BACKUP + 2 * PAGE_COLORS;
 }
 
-fn copy_words(b: &mut Cps2Bus, from: u32, to: u32, words: u32) {
+fn copy_words(b: &mut World, from: u32, to: u32, words: u32) {
     for i in 0..words {
         let v = color(b, from + 2 * i);
         set_color(b, to + 2 * i, v);
@@ -492,7 +492,7 @@ fn copy_words(b: &mut Cps2Bus, from: u32, to: u32, words: u32) {
 }
 
 /// Sets the lightning palettes aside (0x1ac24) or puts them back (0x1abe0).
-fn copy_flash_palettes(b: &mut Cps2Bus, restore: bool) {
+fn copy_flash_palettes(b: &mut World, restore: bool) {
     for (live, backup, colors) in
         [(flash::PAGE, flash::BACKUP, flash::PAGE_COLORS), (flash::SPARE, flash::BACKUP_SPARE, flash::SPARE_COLORS)]
     {
@@ -546,18 +546,18 @@ impl Flash {
 }
 
 /// 0x1ac24: sets the lightning palettes aside.
-pub fn save_flash(b: &mut Cps2Bus) {
+pub fn save_flash(b: &mut World) {
     copy_flash_palettes(b, false);
 }
 
 /// 0x1abe0: puts the lightning palettes back.
-pub fn restore_flash(b: &mut Cps2Bus) {
+pub fn restore_flash(b: &mut World) {
     copy_flash_palettes(b, true);
 }
 
 /// Lightning: sets the palettes aside then replaces them with tinted greys. Returns the last colour processed
 /// (from which the original derives its work registers).
-pub fn flash(b: &mut Cps2Bus, tint: Flash) -> u16 {
+pub fn flash(b: &mut World, tint: Flash) -> u16 {
     let (base, mask) = tint.tint();
     copy_flash_palettes(b, false);
     let mut last = 0;
@@ -573,7 +573,7 @@ pub fn flash(b: &mut Cps2Bus, tint: Flash) -> u16 {
 
 /// Colour of the screen flash (colour 14 of page 1 of the interface, `0x91c41c`): 0x1ac68 sets it to
 /// 0xff00 (`FLASH_COLOR_ON`), 0x1ac86 and 0x35288 to 0xffff (white).
-pub fn set_flash_color(b: &mut Cps2Bus, color: u16) {
+pub fn set_flash_color(b: &mut World, color: u16) {
     FLASH_COLOR.set(b, color);
 }
 
@@ -583,13 +583,13 @@ pub const FLASH_COLOR_WHITE_VALUE: u16 = 0xffff;
 
 /// 0x37882: palette of the character of object `o` (`+3`): 8 longs copied from the plain palettes (`aura_normal` of
 /// `data/rest.json`) to page 0, at the same offset (`aura_offsets`).
-pub fn character_palette(b: &mut Cps2Bus, o: crate::objects::Obj) {
+pub fn character_palette(b: &mut World, o: crate::objects::Obj) {
     let (_, from, to) = character_palette_at(b, o.0);
     copy_palette(b, from, to);
 }
 
 /// (offset, source, destination) of the palette of the character of object `o`.
-pub(crate) fn character_palette_at(b: &mut Cps2Bus, o: u32) -> (u32, u32, u32) {
+pub(crate) fn character_palette_at(b: &mut World, o: u32) -> (u32, u32, u32) {
     let character = crate::player::Player(o).character(b) as u32;
     let offset = crate::tables::engine_table!("aura_offsets").nth16(b, character) as i16 as i32 as u32;
     let plain = crate::tables::engine_table!("aura_normal").rom;

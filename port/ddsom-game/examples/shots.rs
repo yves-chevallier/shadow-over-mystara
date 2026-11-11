@@ -2,8 +2,8 @@
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
-    let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
+    let mut m = ddsom_game::install(m);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let out = std::path::Path::new(&a[4]);
     std::fs::create_dir_all(out).unwrap();

@@ -2,7 +2,7 @@
 
 use crate::credits::CoinSlot;
 use crate::screens::tables::Rom;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{choice, draw, panel, player, select, var, Slot};
 use crate::game::sbcd;
@@ -45,7 +45,7 @@ const RESUME_COUNTDOWN: u16 = 0x193c;
 const RESUME_END_FRAMES: u16 = 0x78;
 
 /// 0x1507a: forgets what is displayed in each panel (the player and the mode will be redrawn).
-pub fn forget_displayed(b: &mut Cps2Bus) {
+pub fn forget_displayed(b: &mut World) {
     for k in 0..4 {
         let s = Slot::new(k);
         s.set_p8(b, panel::PLAYER_DIRTY, 0xff);
@@ -55,7 +55,7 @@ pub fn forget_displayed(b: &mut Cps2Bus) {
 
 /// Coin counter of a slot according to the coin slot mode: own, shared, or one for two
 /// players.
-fn coin_record(b: &mut Cps2Bus, s: Slot) -> CoinSlot {
+fn coin_record(b: &mut World, s: Slot) -> CoinSlot {
     match var::COIN_MODE.get(b) {
         2 | 6 | 11 => s.coins,
         9 => CoinSlot::nth(if s.index(b) & 2 != 0 { 1 } else { 0 }),
@@ -92,7 +92,7 @@ pub fn step(x: &mut Ctx, s: Slot) {
 /// Player palette in the waiting room page (indexed by their number and their character).
 const LOBBY_PALETTES: Rom = Rom::at(0x179a2);
 
-fn mode_change(b: &mut Cps2Bus, s: Slot) {
+fn mode_change(b: &mut World, s: Slot) {
     draw::clear_banner(b, s);
     if s.g8(b, player::ACTIVE) == 0 {
         return;
@@ -135,7 +135,7 @@ fn mode_change(b: &mut Cps2Bus, s: Slot) {
 // State 0: initialization
 // ---------------------------------------------------------------------------------------------
 
-fn enter(b: &mut Cps2Bus, s: Slot) {
+fn enter(b: &mut World, s: Slot) {
     let state = s.p8(b, panel::STATE).wrapping_add(2);
     s.set_p8(b, panel::STATE, state);
     s.set_p8(b, panel::STATE + 1, 0);
@@ -143,7 +143,7 @@ fn enter(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x152a8: the displayed values are those of the player; everything will be redrawn.
-fn init_shown(b: &mut Cps2Bus, s: Slot) {
+fn init_shown(b: &mut World, s: Slot) {
     let hp = s.g16(b, player::HP);
     s.set_p16(b, panel::SHOWN_HP, hp);
     let hp_max = s.g16(b, player::HP_MAX);
@@ -173,7 +173,7 @@ fn init_shown(b: &mut Cps2Bus, s: Slot) {
 // ---------------------------------------------------------------------------------------------
 
 /// Price in credits of a game (0 in continue mode).
-fn price(b: &mut Cps2Bus) -> u8 {
+fn price(b: &mut World) -> u8 {
     if var::CONTINUE_MODE.get(b) != 0 {
         0
     } else if var::PRICE_TWO.get(b) != 0 {
@@ -183,7 +183,7 @@ fn price(b: &mut Cps2Bus) -> u8 {
     }
 }
 
-fn start_pressed(b: &mut Cps2Bus, s: Slot) -> bool {
+fn start_pressed(b: &mut World, s: Slot) -> bool {
     let pressed = !var::START_BEFORE.get(b) & var::START_NOW.get(b);
     pressed >> (s.index(b) & 7) & 1 != 0
 }
@@ -231,7 +231,7 @@ fn idle(x: &mut Ctx, s: Slot) {
 }
 
 /// 0x156fa: the player enters the game directly, without choosing their character.
-fn join_now(b: &mut Cps2Bus, s: Slot) {
+fn join_now(b: &mut World, s: Slot) {
     s.set_p32(b, panel::FRAMES, 0);
     s.set_p8(b, panel::STATE, 4);
     s.set_p8(b, panel::CHOICE, 0);
@@ -243,7 +243,7 @@ fn join_now(b: &mut Cps2Bus, s: Slot) {
 
 /// Banner of the "start" zone from a pointer table: `a2` is the table, the chosen pointer
 /// is the one for the language (`+4`) and the narrow layout (`+8`).
-fn banner_from(b: &mut Cps2Bus, s: Slot, table: Rom, attr: u16) {
+fn banner_from(b: &mut World, s: Slot, table: Rom, attr: u16) {
     let mut table = table.addr();
     if var::SETTINGS.get(b) & 0x20 != 0 {
         table += 4;
@@ -257,12 +257,12 @@ fn banner_from(b: &mut Cps2Bus, s: Slot, table: Rom, attr: u16) {
 }
 
 /// 0x155b2: pause (or warning) banner.
-fn notice_banner(b: &mut Cps2Bus, s: Slot) {
+fn notice_banner(b: &mut World, s: Slot) {
     banner_from(b, s, banners::NOTICE, 0xe);
 }
 
 /// 0x1557a: "PUSH START" (or "INSERT COIN" while waiting for a credit).
-fn idle_banner(b: &mut Cps2Bus, s: Slot) {
+fn idle_banner(b: &mut World, s: Slot) {
     if var::CONTINUE_MODE.get(b) != 0 {
         return banner_from(b, s, banners::IDLE_CONTINUE, 0xe);
     }
@@ -270,7 +270,7 @@ fn idle_banner(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x155ba: not enough credits: "INSERT COIN" with the number of missing coins.
-fn no_credit_banner(b: &mut Cps2Bus, s: Slot) {
+fn no_credit_banner(b: &mut World, s: Slot) {
     let credits = s.coins.credits(b);
     let paid = s.coins.coins(b);
     let missing = if var::PRICE_TWO.get(b) != 0 {

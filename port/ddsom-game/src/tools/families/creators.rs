@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::families::creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -14,7 +14,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 
 /// Allocates in a pool; `None` (carry set) if the pool is full.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+fn alloc(c: &mut Cpu, b: &mut World, pool: &pools::Pool) -> Option<Obj> {
     pool.alloc_68k(c, b)
 }
 
@@ -24,13 +24,13 @@ fn moved(c: &mut Cpu, v: u32, size: Size) {
 }
 
 /// 0x9ef20: ESHL shot 9 linked to enemy A0, one frame out of four (counter `A5+0x6e`).
-fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enemy_shot_9(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     enemy_shot_9_via(c, b, me);
     rts(c, b);
 }
 
-fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_13(c: &mut Cpu, b: &mut World) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 13);
@@ -41,7 +41,7 @@ fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn scene_set_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scene_set_native(c: &mut Cpu, b: &mut World) {
     let v = c.d[0] as u8;
     scene_set_via(c, b, v);
     rts(c, b);
@@ -49,7 +49,7 @@ fn scene_set_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xd981a: end of scene specific to the variant (`+3`, index table 0xd9836, routines 0xd982e: in practice always
 /// 0xd99f8, a plain return).
-fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scene_exit(c: &mut Cpu, b: &mut World) {
     let scene = Obj(c.a[0]);
     let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * prog8(b, 0xd9836 + variant) as u32;
@@ -58,19 +58,19 @@ fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn set_a_creator(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_a_creator(c: &mut Cpu, b: &mut World) {
     let (me, v) = (Obj(c.a[0]), c.d[0] as u8);
     set_a_via(c, b, v, |b| me.u8(b, Obj::VARIANT));
     rts(c, b);
 }
 
-fn set_a_player_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_a_player_native(c: &mut Cpu, b: &mut World) {
     let (me, v) = (Obj(c.a[0]), c.d[0] as u8);
     set_a_player_via(c, b, me, v);
     rts(c, b);
 }
 
-fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scene_item(c: &mut Cpu, b: &mut World) {
     let level = rd8(b, A5 - 0x5ac6);
     if (level as i8) < 0 {
         moved(c, level as u32, Size::Byte);
@@ -88,7 +88,7 @@ fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xd9778: music specific to the scene variant (`+3`, index table 0xd9798, routines 0xd978c: nothing (0xd99f8) or the
 /// music of scene 0xe0c5c). D0 = offset in the table, A1 = the routine.
-fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scene_music(c: &mut Cpu, b: &mut World) {
     let scene = Obj(c.a[0]);
     let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * prog8(b, 0xd9798 + variant) as u32;
@@ -98,12 +98,12 @@ fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xd99f8: empty routine of the scene tables.
-fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
+fn nothing(c: &mut Cpu, b: &mut World) {
     rts(c, b);
 }
 
 /// 0xce00a: SET object 15 of variant D0.
-fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_15(c: &mut Cpu, b: &mut World) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 0xf);
@@ -115,7 +115,7 @@ fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xdfe26: SOBJ object 14.
-fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
+fn sobj_14(c: &mut Cpu, b: &mut World) {
     if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0xe);
@@ -125,7 +125,7 @@ fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xdfc78: SOBJ object 12 of variant D0, zero speed; flags of D0.b.
-fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
+fn sobj_12(c: &mut Cpu, b: &mut World) {
     if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0xc);
@@ -138,7 +138,7 @@ fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xc9760: SET object 5 (variant 1), `+0x24` zero.
-fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
+fn set_5(c: &mut Cpu, b: &mut World) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 5);
@@ -150,7 +150,7 @@ fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xd6182: 44 cells of a tile column (A1, step 0x80) filled with 0x00200000 (empty tile).
-fn blank_column(c: &mut Cpu, b: &mut Cps2Bus) {
+fn blank_column(c: &mut Cpu, b: &mut World) {
     for _ in 0..0x2c {
         crate::mem::wr32(b, c.a[1], 0x20_0000);
         c.a[1] = c.a[1].wrapping_add(0x80);
@@ -162,7 +162,7 @@ fn blank_column(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xceb46: bonus sheet in A4 (guard byte, then 9 bytes): if the guard is positive, each characteristic `+0x151..` of
 /// player A0 takes the maximum; A4 passes the sheet.
-fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
+fn bonus_sheet(c: &mut Cpu, b: &mut World) {
     let guard = rd8(b, c.a[4]);
     c.a[4] = c.a[4].wrapping_add(1);
     if (guard as i8) < 0 {
@@ -185,27 +185,27 @@ fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x4b8d0: effect 0xb (variant 0).
-fn peff_b(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_b(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     peff_via(c, b, me, 0xb, Some(0));
     rts(c, b);
 }
 
 /// 0x4b518: effect 8.
-fn peff_8(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_8(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     peff_via(c, b, me, 8, None);
     rts(c, b);
 }
 
 /// 0x51bb6: effect 0x2f (no link).
-fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_2f(c: &mut Cpu, b: &mut World) {
     effect_2f_via(c, b);
     rts(c, b);
 }
 
 /// 0x4cfbc: four 0x13 effects (variant 1, `+0x2f` = 3 down to 0, `+0x5a` = 2), then the screen flash (0x1ac68).
-fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_13_x4(c: &mut Cpu, b: &mut World) {
     let me = c.a[0];
     c.d[5] = 3;
     while let Some(fx) = alloc(c, b, &pools::PEFF) {
@@ -225,7 +225,7 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn quake_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn quake_native(c: &mut Cpu, b: &mut World) {
     let (me, pair) = (Obj(c.a[0]), c.d[0] as u8 == 0);
     quake_via(c, b, me, pair);
     rts(c, b);
@@ -233,7 +233,7 @@ fn quake_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x63ae0: if more than two enemy slots remain (`A5+0x7e62`), two enemies of type 7 (variants 0 and 1) linked to the
 /// creator through `+0x46`; D0 = 1, otherwise 0 (the allocation is not checked).
-fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enemy_7_pair(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     crate::families::small::enemy_pair_kind_via(c, b, me, 7);
     rts(c, b);
@@ -241,7 +241,7 @@ fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Enemy of type `kind` (variant 5) placed at (D0, D1, D2) = (x, z, y), linked to the creator by `link`; flags of D0.b
 /// (`or.b D0b,D0b`).
-fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8)]) {
+fn enemy_at(c: &mut Cpu, b: &mut World, kind: u8, link: u32, extra: &[(u32, u8)]) {
     let (me, pos) = (Obj(c.a[0]), (c.d[0] as u16, c.d[1] as u16, c.d[2] as u16));
     let d0 = c.d[0];
     if enemy_at_via(c, b, me, kind, link, extra, pos).is_some() {
@@ -251,17 +251,17 @@ fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8
 }
 
 /// 0x5f764: enemy of type 5 at (D0, D1, D2), linked by `+0xa4`.
-fn enemy_5_at(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enemy_5_at(c: &mut Cpu, b: &mut World) {
     enemy_at(c, b, 5, 0xa4, &[]);
 }
 
 /// 0x57c8c: enemy of type 1 at (D0, D1, D2), linked by `+0xaa` (`+0xac` = 1, `+0x2f` = 0).
-fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enemy_1_at(c: &mut Cpu, b: &mut World) {
     enemy_at(c, b, 1, 0xaa, &[(0xac, 1), (0x2f, 0)]);
 }
 
 /// 0x97218: boss: `+0x67` = 1, `+0x79` = 0x31, state 0x02020400.
-fn boss_state_0202(c: &mut Cpu, b: &mut Cps2Bus) {
+fn boss_state_0202(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     me.set_u8(b, 0x67, 1);
     me.set_u8(b, 0x79, 0x31);
@@ -270,7 +270,7 @@ fn boss_state_0202(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 

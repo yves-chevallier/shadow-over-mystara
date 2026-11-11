@@ -7,7 +7,7 @@
 //! will resume (what it re-reads on resuming is in the fields of the stage, no longer in saved registers), and its
 //! calls in progress ([`Frame`]). The table also keeps where the processor is (`kernel::Point`).
 //!
-//! The table lives in the bus (`Cps2Bus::ext`): the game machine no longer writes FF0052-FF01A5 (scheduler
+//! The table belongs to the world (`World::tasks`): the game machine no longer writes FF0052-FF01A5 (scheduler
 //! stack, current task, stack heap, records), and the cession wrappers no longer save the
 //! registers on the task's stack. [`gaps`] compares the table with that of the RAM of a reference machine.
 //!
@@ -18,7 +18,7 @@
 //! bubbles). A continuation designated by an address ([`Next::Address`]) is now just a return of the 68000 stack: that
 //! of a call by address (`crate::call`, sentinel) or of a diagnostic tool that calls a native.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{Step, Task};
 
@@ -373,23 +373,22 @@ impl Table {
     }
 }
 
-/// The machine's task table (created at first access).
+/// The world's task table (created at first access).
 #[inline]
-pub fn table(b: &mut Cps2Bus) -> &mut Table {
-    let ext = b.ext.get_or_insert_with(|| Box::new(Table::default()));
-    ext.as_mut().as_any_mut().downcast_mut().expect("bus extension: task table")
+pub fn table(b: &mut World) -> &mut Table {
+    b.tasks.get_or_insert_with(Table::default)
 }
 
-/// The task table, if the machine has one (game machine; the original machine keeps its own in RAM).
+/// The task table, if the world has one (game machine; the original machine keeps its own in RAM).
 #[inline]
-pub fn read(b: &Cps2Bus) -> Option<&Table> {
-    b.ext.as_deref()?.as_any().downcast_ref()
+pub fn read(b: &World) -> Option<&Table> {
+    b.tasks.as_ref()
 }
 
-/// The task table, if the machine has one, without creating it.
+/// The task table, if the world has one, without creating it.
 #[inline]
-pub(crate) fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
-    b.ext.as_deref_mut()?.as_any_mut().downcast_mut()
+pub(crate) fn table_if(b: &mut World) -> Option<&mut Table> {
+    b.tasks.as_mut()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -397,7 +396,7 @@ pub(crate) fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
 
 /// A Rust step of the current task calls a subroutine that may cede control: when it returns, the
 /// task will continue at `next`. Nothing is pushed on the 68000 stack.
-pub fn call(b: &mut Cps2Bus, next: impl Into<Next>) {
+pub fn call(b: &mut World, next: impl Into<Next>) {
     table(b).open_frame(next.into(), None);
 }
 
@@ -410,7 +409,7 @@ pub struct Call(u32);
 /// return of the native hands control back to it ([`returned`]). If the native cedes control before, the task will
 /// resume later at
 /// `next`, the Rust function having abandoned.
-pub fn call_expected(b: &mut Cps2Bus, next: impl Into<Next>) -> Call {
+pub fn call_expected(b: &mut World, next: impl Into<Next>) -> Call {
     let t = table(b);
     t.next_call = t.next_call.wrapping_add(1);
     let id = t.next_call;
@@ -421,7 +420,7 @@ pub fn call_expected(b: &mut Cps2Bus, next: impl Into<Next>) -> Call {
 /// Has the expected call returned? If not (the task ceded, or a callee popped the call to return higher), the
 /// Rust function that was waiting for it abandons: its frame, if still there, will execute its continuation when the
 /// callee returns.
-pub fn returned(b: &mut Cps2Bus, call: Call) -> bool {
+pub fn returned(b: &mut World, call: Call) -> bool {
     let t = table(b);
     if t.returned == Some(call.0) {
         t.returned = None;
@@ -470,27 +469,27 @@ impl Table {
 }
 
 /// Return of a subroutine (`rts`): it goes back to the most recent of the calls in progress ([`Frame`]).
-pub fn ret(b: &mut Cps2Bus) -> Return {
+pub fn ret(b: &mut World) -> Return {
     table_if(b).map_or(Return::Stack68000, Table::ret)
 }
 
 /// A call by address (`crate::call`) begins; its `rts` will close it ([`ret`]). Returns the depth to
 /// return to.
-pub fn open_call(b: &mut Cps2Bus) -> usize {
+pub fn open_call(b: &mut World) -> usize {
     let t = table(b);
     t.calls.push(OutsideFrame::ByAddress);
     t.calls.len() - 1
 }
 
 /// Has the call by address opened at depth `depth` returned?
-pub fn call_returned(b: &Cps2Bus, depth: usize) -> bool {
+pub fn call_returned(b: &World, depth: usize) -> bool {
     read(b).is_some_and(|t| t.calls.len() == depth)
 }
 
 /// Tools: the original code calls a native (its return address is on the 68000 stack). Returns the depth to
 /// restore after it ([`close_calls`]) if the machine has a task table (without a table, all returns are on
 /// the 68000 stack).
-pub fn open_call_68000(b: &mut Cps2Bus) -> Option<usize> {
+pub fn open_call_68000(b: &mut World) -> Option<usize> {
     let t = table_if(b)?;
     t.calls.push(OutsideFrame::By68000);
     Some(t.calls.len() - 1)
@@ -498,7 +497,7 @@ pub fn open_call_68000(b: &mut Cps2Bus) -> Option<usize> {
 
 /// Tools: the native called by the original code is finished; if it did not return via `rts` (jump, cession),
 /// its call is closed.
-pub fn close_calls(b: &mut Cps2Bus, depth: Option<usize>) {
+pub fn close_calls(b: &mut World, depth: Option<usize>) {
     if let (Some(p), Some(t)) = (depth, table_if(b)) {
         t.calls.truncate(p);
     }
@@ -508,7 +507,7 @@ pub fn close_calls(b: &mut Cps2Bus, depth: Option<usize>) {
 /// whether it
 /// is expected or not (the Rust function that was waiting for it sees that it did not return). A cession cannot
 /// take place in a call by address.
-pub fn pop_return(b: &mut Cps2Bus) -> Next {
+pub fn pop_return(b: &mut World) -> Next {
     match table_if(b).and_then(Table::pop_most_recent) {
         Some(Err(frame)) => frame.next,
         Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
@@ -520,7 +519,7 @@ pub fn pop_return(b: &mut Cps2Bus) -> Next {
 /// returns of its callers to return higher: foreign epilogue of the bubbles); returns their continuations, from the
 /// most
 /// recent to the oldest.
-pub fn pop_calls(b: &mut Cps2Bus, n: usize) -> Vec<Next> {
+pub fn pop_calls(b: &mut World, n: usize) -> Vec<Next> {
     let frames = table(b).frames();
     (0..n)
         .map(|_| frames.pop().unwrap_or_else(|| panic!("{n} calls in progress to pop: there are not enough")).next)

@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 pub use ddsom_data::{data, GameData, RomAddr};
 
@@ -57,7 +57,7 @@ fn consult(m: Missing, a: u32, program: bool) -> u8 {
 /// `n` bytes from `a` (big-endian) for the key `m`: the bus above the ROM (some readers follow a pointer that may
 /// designate the RAM); below, an overread of the original named in the data (`GameData::overreads`), otherwise the
 /// residue, counted once per read. A word or a long is read at an even address, as on the bus.
-fn read(m: Missing, b: &mut Cps2Bus, a: u32, n: u32, program: bool) -> u32 {
+fn read(m: Missing, b: &mut World, a: u32, n: u32, program: bool) -> u32 {
     let a = a & 0xff_ffff;
     if a >= ROM_END {
         return match n {
@@ -85,47 +85,47 @@ fn read(m: Missing, b: &mut Cps2Bus, a: u32, n: u32, program: bool) -> u32 {
 
 impl Missing {
     /// Byte of the residue (data space).
-    pub fn read8(self, b: &mut Cps2Bus, a: u32) -> u8 {
+    pub fn read8(self, b: &mut World, a: u32) -> u8 {
         read(self, b, a, 1, false) as u8
     }
 
     /// Word of the residue (data space).
-    pub fn read16(self, b: &mut Cps2Bus, a: u32) -> u16 {
+    pub fn read16(self, b: &mut World, a: u32) -> u16 {
         read(self, b, a, 2, false) as u16
     }
 
     /// Long of the residue (data space).
-    pub fn read32(self, b: &mut Cps2Bus, a: u32) -> u32 {
+    pub fn read32(self, b: &mut World, a: u32) -> u32 {
         read(self, b, a, 4, false)
     }
 
     /// Byte of the residue in the program space.
-    pub fn pc_byte(self, b: &mut Cps2Bus, a: u32) -> u8 {
+    pub fn pc_byte(self, b: &mut World, a: u32) -> u8 {
         read(self, b, a, 1, true) as u8
     }
 
     /// Word of the residue in the program space.
-    pub fn pc_word(self, b: &mut Cps2Bus, a: u32) -> u16 {
+    pub fn pc_word(self, b: &mut World, a: u32) -> u16 {
         read(self, b, a, 2, true) as u16
     }
 
     /// Long of the residue in the program space (tables in the code, read PC-relative).
-    pub fn pc_long(self, b: &mut Cps2Bus, a: u32) -> u32 {
+    pub fn pc_long(self, b: &mut World, a: u32) -> u32 {
         read(self, b, a, 4, true)
     }
 
     /// Byte of the residue, in program space if `program` (tables read PC-relative), otherwise in data space.
-    pub fn byte_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u8 {
+    pub fn byte_in(self, b: &mut World, a: u32, program: bool) -> u8 {
         read(self, b, a, 1, program) as u8
     }
 
     /// Word of the residue in the space chosen by `program`.
-    pub fn word_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u16 {
+    pub fn word_in(self, b: &mut World, a: u32, program: bool) -> u16 {
         read(self, b, a, 2, program) as u16
     }
 
     /// Long of the residue in the space chosen by `program`.
-    pub fn long_in(self, b: &mut Cps2Bus, a: u32, program: bool) -> u32 {
+    pub fn long_in(self, b: &mut World, a: u32, program: bool) -> u32 {
         read(self, b, a, 4, program)
     }
 }

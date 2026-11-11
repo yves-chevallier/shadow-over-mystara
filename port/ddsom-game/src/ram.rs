@@ -9,9 +9,9 @@
 //! these same types; only the variables read by several subsystems appear here. The names come from
 //! `docs/*.md`; a guessed meaning is marked (h).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, Memory, A5};
 use crate::objects::Obj;
 
 /// Work RAM byte.
@@ -31,17 +31,17 @@ impl Byte {
     pub const fn a5(offset: u32) -> Self {
         Byte(A5 + offset)
     }
-    pub fn get(self, b: &mut Cps2Bus) -> u8 {
+    pub fn get(self, b: &mut impl Memory) -> u8 {
         rd8(b, self.0)
     }
-    pub fn get_i8(self, b: &mut Cps2Bus) -> i8 {
+    pub fn get_i8(self, b: &mut impl Memory) -> i8 {
         rd8(b, self.0) as i8
     }
-    pub fn set(self, b: &mut Cps2Bus, v: u8) {
+    pub fn set(self, b: &mut impl Memory, v: u8) {
         wr8(b, self.0, v)
     }
     /// Non-zero byte (`tst.b` followed by `bne`).
-    pub fn is_set(self, b: &mut Cps2Bus) -> bool {
+    pub fn is_set(self, b: &mut impl Memory) -> bool {
         self.get(b) != 0
     }
 }
@@ -50,13 +50,13 @@ impl Word {
     pub const fn a5(offset: u32) -> Self {
         Word(A5 + offset)
     }
-    pub fn get(self, b: &mut Cps2Bus) -> u16 {
+    pub fn get(self, b: &mut impl Memory) -> u16 {
         rd16(b, self.0)
     }
-    pub fn get_i16(self, b: &mut Cps2Bus) -> i16 {
+    pub fn get_i16(self, b: &mut impl Memory) -> i16 {
         rd16(b, self.0) as i16
     }
-    pub fn set(self, b: &mut Cps2Bus, v: u16) {
+    pub fn set(self, b: &mut impl Memory, v: u16) {
         wr16(b, self.0, v)
     }
 }
@@ -65,10 +65,10 @@ impl Long {
     pub const fn a5(offset: u32) -> Self {
         Long(A5 + offset)
     }
-    pub fn get(self, b: &mut Cps2Bus) -> u32 {
+    pub fn get(self, b: &mut impl Memory) -> u32 {
         rd32(b, self.0)
     }
-    pub fn set(self, b: &mut Cps2Bus, v: u32) {
+    pub fn set(self, b: &mut impl Memory, v: u32) {
         wr32(b, self.0, v)
     }
 }
@@ -158,7 +158,7 @@ pub const DSW: Word = Word::a5(0x7fd0);
 pub const PLAYERS: Table = Table { base: A5 + 0x5de, step: 0x200, count: 4 };
 
 /// Camera of the frame: the alternative camera if selected, otherwise the main one.
-pub fn camera(b: &mut Cps2Bus) -> (u16, u16) {
+pub fn camera(b: &mut World) -> (u16, u16) {
     if CAMERA_ALT_ACTIVE.is_set(b) {
         (CAMERA_ALT_X.get(b), CAMERA_ALT_Y.get(b))
     } else {

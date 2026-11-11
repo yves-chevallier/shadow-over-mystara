@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::scroll` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -11,19 +11,19 @@ use crate::Native;
 use crate::objects::Obj;
 
 /// `move_object` with the flags of the addition (`add.l`).
-fn move_object_68k(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
+fn move_object_68k(c: &mut Cpu, b: &mut World, field: u32, d: i32) {
     let (d, v) = move_object(b, Obj(c.a[0]), field, d);
     crate::tools::ops::add(c, d, v, Size::Long);
 }
 
 /// Natives of the two parallaxes (object A0; flags of the last addition).
-fn parallax_68k(c: &mut Cpu, b: &mut Cps2Bus, f: Parallax) {
+fn parallax_68k(c: &mut Cpu, b: &mut World, f: Parallax) {
     let (dx, dy) = parallax(b, f.0, f.1);
     move_object_68k(c, b, OBJECT_X, dx);
     move_object_68k(c, b, OBJECT_Y, dy);
 }
 
-fn creep_68k(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
+fn creep_68k(c: &mut Cpu, b: &mut World, pixels: u16) {
     let old = crate::mem::rd16(b, c.a[0] + OBJECT_X);
     let x = creep(b, Obj(c.a[0]), pixels);
     // add.w (X), then move.w (N, Z, V, C)
@@ -31,7 +31,7 @@ fn creep_68k(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
     crate::tools::ops::logic(c, x as u32, Size::Word);
 }
 
-const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: crate::regs::CCR }
 }
 
@@ -66,7 +66,7 @@ pub(crate) const CREEP_3: Native = Native {
 /// 0x31616: moves the vertical position of camera A0 to keep the living players within
 /// the window `[camera + 0x30, camera + 0x70]` (at most 6 pixels per frame). Transcribed
 /// instruction by instruction: the routines that follow reread D2, D4-D6 and the flags.
-fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
+fn follow_players_y(c: &mut Cpu, b: &mut World) {
     use crate::mem::{rd16, rd8, set_low_word, wr16, A5};
     use crate::tools::ops::cc;
     c.d[6] = 0; // maximum depth of the players
@@ -89,7 +89,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
             set_low_word(&mut c.d[5], y);
         }
     }
-    let cam_y = |c: &Cpu, b: &mut Cps2Bus| rd16(b, c.a[0] + Camera::Y) as u32;
+    let cam_y = |c: &Cpu, b: &mut World| rd16(b, c.a[0] + Camera::Y) as u32;
     // sub.w src,Dn
     let sub_to = |c: &mut Cpu, n: usize, src: u32| {
         let dst = c.d[n];
@@ -160,7 +160,7 @@ pub(crate) const FOLLOW_PLAYERS_Y: Native = Native {
 };
 
 /// `update_cameras` with the registers of the original: D4 of the scenery copies, A0 = camera 2.
-pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut World) {
     for (v, m) in update_cameras(b).into_iter().flatten() {
         c.d[4] = c.d[4] & !m | v;
     }
@@ -168,14 +168,14 @@ pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Native of 0x33e20.
-fn update_cameras_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn update_cameras_native(c: &mut Cpu, b: &mut World) {
     update_cameras_68k(c, b);
     rts(c, b);
 }
 
 /// Native of 0x33aa6: registers of the layer 1 clearing, D0 = 4 x scene, A1 = table of starts, A0 = camera
 /// 2.
-fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+fn reset_cameras(c: &mut Cpu, b: &mut World) {
     cameras_start(b);
     crate::tools::video::leftovers_clear_layer1_start(c);
     c.d[0] = 4 * crate::ram::SCENE.get(b) as u32;
@@ -193,7 +193,7 @@ pub(crate) const RESET_CAMERAS: Native = Native {
 };
 
 /// Native of 0x33b24: D0 = scene, A1 = video control table, A4 = mode table, A0 = camera 2.
-fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+fn return_cameras(c: &mut Cpu, b: &mut World) {
     cameras_return(b);
     c.d[0] = crate::ram::SCENE.get(b) as u32;
     c.a[1] = crate::tables::engine().get("camera_output").rom;

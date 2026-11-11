@@ -133,8 +133,8 @@ fn main() {
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warm.parse().unwrap() {
         script.apply(f, &mut m);
@@ -142,7 +142,8 @@ fn main() {
     }
     if std::env::var("DDSOM_PROBE").is_ok() {
         // probe: original healing (0x41656) for each level and each spell
-        let (c, b) = (&mut m.cpu, &mut m.bus);
+        let mut bus = m.bus.to_bus();
+        let (c, b) = (&mut m.cpu, &mut bus);
         let p = Player::nth(0).0;
         for kind in [0x13u8, 0x2c, 0x2d] {
             let mut out = Vec::new();
@@ -167,7 +168,8 @@ fn main() {
         .filter(|n| n.name.starts_with(who.as_str()) && only.is_none_or(|e| e == n.entry))
         .map(|n| (n.entry, n.name))
         .collect();
-    let (c, b) = (&mut m.cpu, &mut m.bus);
+    let mut bus = m.bus.to_bus();
+    let (c, b) = (&mut m.cpu, &mut bus);
     b.irq_horizon = u64::MAX;
     let seed: u64 = std::env::var("DDSOM_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ seed.wrapping_mul(0x2545_f491_4f6c_dd1d));

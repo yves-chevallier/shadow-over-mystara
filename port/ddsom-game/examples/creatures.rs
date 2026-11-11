@@ -18,7 +18,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use cps2::Cps2Bus;
 use ddsom_game::mem::{rd16, rd32, rd8};
 
 const A5: u32 = 0xff8000;
@@ -101,7 +100,7 @@ struct Frame {
     pieces: u32,
 }
 
-fn frame_at(b: &mut Cps2Bus, f: u32) -> Frame {
+fn frame_at(b: &mut ddsom_game::world::World, f: u32) -> Frame {
     Frame { count: rd16(b, f), second: rd16(b, f + 2), bank: rd8(b, f + 4), per_piece: rd8(b, f + 5) != 0, offsets: rd32(b, f + 6), pieces: f + 10 }
 }
 
@@ -113,7 +112,7 @@ fn with_palette(attr: u16, pal: Option<u8>) -> u16 {
 }
 
 /// Object RAM entries of a frame placed at (x, y); without mirror (ROM orientation).
-fn emit(b: &mut Cps2Bus, f: u32, x: u16, y: u16, palette: Option<u8>, out: &mut Vec<[u16; 4]>) {
+fn emit(b: &mut ddsom_game::world::World, f: u32, x: u16, y: u16, palette: Option<u8>, out: &mut Vec<[u16; 4]>) {
     let fr = frame_at(b, f);
     let n = if fr.per_piece { fr.second } else { fr.count };
     let common = with_palette(fr.second, palette);
@@ -130,19 +129,19 @@ fn emit(b: &mut Cps2Bus, f: u32, x: u16, y: u16, palette: Option<u8>, out: &mut 
     }
 }
 
-fn plausible(b: &mut Cps2Bus, f: u32) -> bool {
+fn plausible(b: &mut ddsom_game::world::World, f: u32) -> bool {
     (0x1000..0x400000).contains(&f) && f.is_multiple_of(2) && {
         let n = rd16(b, f);
         (1..=0x80).contains(&n) && rd32(b, f + 6) < 0x400000
     }
 }
 
-fn palette_of(b: &mut Cps2Bus, o: u32) -> Option<u8> {
+fn palette_of(b: &mut ddsom_game::world::World, o: u32) -> Option<u8> {
     (rd8(b, o + 0x2a) & 1 != 0).then(|| rd8(b, o + 0x2b))
 }
 
 /// Entries of object `o` and of its attached objects (behind, itself, in front).
-fn object_entries(b: &mut Cps2Bus, o: u32) -> Option<Vec<[u16; 4]>> {
+fn object_entries(b: &mut ddsom_game::world::World, o: u32) -> Option<Vec<[u16; 4]>> {
     let f = rd32(b, o + 0x34);
     if !plausible(b, f) {
         return None;
@@ -177,19 +176,19 @@ fn object_entries(b: &mut Cps2Bus, o: u32) -> Option<Vec<[u16; 4]>> {
 
 /// Renders the entries with the machine's palette, twice on two different backgrounds: a pixel is
 /// opaque if it is identical in both renderings.
-fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
+fn render(m: &ddsom_game::GameMachine, entries: &[[u16; 4]]) -> Option<Sprite> {
     let mut obj = vec![0u16; 0x1000];
     for (i, e) in entries.iter().take(0x3fc).enumerate() {
         obj[4 * i..4 * i + 4].copy_from_slice(e);
     }
     let end = 4 * entries.len().min(0x3fc);
     obj[end..end + 4].copy_from_slice(&[0x8000, 0x8000, 0, 0]);
-    let mut output = m.bus.output;
+    let mut output = m.bus.hw.output;
     output[2] = 0; // no layer priority
     let (cps_a, mut cps_b) = ([0u16; 32], [0u16; 32]);
     cps_b[0x30 / 2] = 0x3f; // the six palette pages
     let shot = |bg: u16| {
-        let mut pal = m.bus.palette.clone();
+        let mut pal = m.bus.hw.palette.clone();
         pal[0xbff] = bg;
         let v = cps2_gfx::VideoState { gfxram: &[], cps_a: &cps_a, cps_b: &cps_b, objram: &obj, output: &output, palette_ram: Some(&pal) };
         cps2_gfx::render(&v, &m.gfx)
@@ -218,7 +217,7 @@ fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
         }
     }
     // the anchor point is at (ANCHOR_X, line of the object of height ANCHOR_H)
-    let row0 = 0x100 - ANCHOR_H as i32 - m.bus.output[3] as i32;
+    let row0 = 0x100 - ANCHOR_H as i32 - m.bus.hw.output[3] as i32;
     Some(Sprite { w, h, ox: x0 as i32 - ANCHOR_X as i32, oy: y0 as i32 - row0, rgba })
 }
 
@@ -257,7 +256,7 @@ impl Observer {
         Observer { cache: cache.into(), label: label.into(), last: vec![0; objects.len()], objects, count: BTreeMap::new(), scenes: BTreeMap::new(), seq: 0 }
     }
 
-    fn frame(&mut self, m: &mut cps2::Machine, f: usize) {
+    fn frame(&mut self, m: &mut ddsom_game::GameMachine, f: usize) {
         let scene = rd8(&mut m.bus, STAGE);
         for i in 0..self.objects.len() {
             let (family, o) = self.objects[i];
@@ -306,11 +305,10 @@ impl Observer {
     }
 }
 
-fn load_machine(roms: &str, eeprom: &str) -> cps2::Machine {
+fn load_machine(roms: &str, eeprom: &str) -> ddsom_game::GameMachine {
     let ee = fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
-    m
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    ddsom_game::install(m)
 }
 
 /// Replays a scenario and samples the creatures after frame 600.

@@ -26,8 +26,8 @@ fn main() {
         Some(dir) => extract::install_game_assets(Path::new(&dir)).expect("assets"),
         None => extract::install_game(Path::new(roms)).expect("roms"),
     };
-    let mut m = cps2::Machine::game(contents, ee.as_deref());
-    ddsom_game::install_no_68k(&mut m);
+    let m = cps2::Machine::game(contents, ee.as_deref());
+    let mut m = ddsom_game::install_no_68k(m);
     // DDSOM_RENDU=1: the frame is computed at every frame, as in the application
     m.rendering = std::env::var_os("DDSOM_RENDU").is_some();
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
@@ -44,7 +44,8 @@ fn main() {
     }
     // FNV-1a of the final state
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    let words = m.bus.ram.iter().chain(&m.bus.gfxram).chain(&m.bus.objram[0]).chain(&m.bus.objram[1]).chain(&m.bus.palette);
+    let hw = &m.bus.hw;
+    let words = m.bus.ram.iter().chain(&hw.gfxram).chain(&hw.objram[0]).chain(&hw.objram[1]).chain(&hw.palette);
     for &w in words {
         hash = (hash ^ w as u64).wrapping_mul(0x100_0000_01b3);
     }

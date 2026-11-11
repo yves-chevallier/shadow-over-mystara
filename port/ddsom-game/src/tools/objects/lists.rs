@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::lists` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::objects::lists::*;
@@ -11,13 +11,13 @@ use crate::objects::Obj;
 
 /// `unlink_all` with the original's register: A0 = last object removed (unchanged if the lists are empty).
 #[track_caller]
-pub(crate) fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn unlink_all_68k(c: &mut Cpu, b: &mut World) -> Option<Obj> {
     let last = unlink_all_regs(c, b);
     crate::tools::diag::dead_regs(c, "lists", regs::a(0));
     last
 }
 
-fn unlink_all_regs(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+fn unlink_all_regs(c: &mut Cpu, b: &mut World) -> Option<Obj> {
     let last = unlink_all(b);
     if let Some(o) = last {
         c.a[0] = o.0 | 0xff00_0000; // movea.w: sign-extended
@@ -25,7 +25,7 @@ fn unlink_all_regs(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
     last
 }
 
-fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
+fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut World) {
     let obj = Obj(c.a[0]);
     Reinsert { c, b, obj, list }.run();
     rts(c, b);
@@ -33,13 +33,13 @@ fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x1f0be: removes object A0 from its list. The original leaves no useful register: the Rust callers
 /// call `unlink` directly.
-fn unlink_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn unlink_native(c: &mut Cpu, b: &mut World) {
     unlink(b, Obj(c.a[0]));
     rts(c, b);
 }
 
 /// 0x1f184: empties both lists.
-fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn unlink_all_native(c: &mut Cpu, b: &mut World) {
     unlink_all_regs(c, b);
     rts(c, b);
 }
@@ -83,7 +83,7 @@ pub(crate) const REGS_REINSERT: u32 =
 impl SortedList {
     /// `reinsert` with the original's registers, depending on the path followed (see `Reinsert`).
     #[track_caller]
-    pub(crate) fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+    pub(crate) fn reinsert_68k(self, c: &mut Cpu, b: &mut World, obj: Obj) {
         Reinsert { c, b, obj, list: self }.run();
         crate::tools::diag::dead_regs(c, "lists", REGS_REINSERT);
     }

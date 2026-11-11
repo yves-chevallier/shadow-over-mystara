@@ -46,8 +46,8 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
         "roms" => extract::install_game(Path::new(roms)).expect("roms"),
         _ => extract::install_game_assets(Path::new(assets)).expect("assets"),
     };
-    let mut m = cps2::Machine::game(contents, ee.as_deref());
-    ddsom_game::install_no_68k(&mut m);
+    let m = cps2::Machine::game(contents, ee.as_deref());
+    let mut m = ddsom_game::install_no_68k(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for f in 0..frames {
@@ -76,15 +76,15 @@ fn play(mode: &str, roms: &str, eeprom: &str, assets: &str, scenario: &str, fram
         }
         let b = &m.bus;
         let mut hq = Fnv(0xcbf29ce484222325);
-        hq.write(&b.qram);
+        hq.write(&b.hw.qram);
         let parts = [
             ("displayed frame", hi.finish()),
             ("audio samples", ha.finish()),
-            ("work RAM", hash_words(&b.ram)),
-            ("GFX RAM", hash_words(&b.gfxram)),
-            ("object RAM 0", hash_words(&b.objram[0])),
-            ("object RAM 1", hash_words(&b.objram[1])),
-            ("palette", hash_words(&b.palette)),
+            ("work RAM", hash_words(&b.ram[..])),
+            ("GFX RAM", hash_words(&b.hw.gfxram)),
+            ("object RAM 0", hash_words(&b.hw.objram[0])),
+            ("object RAM 1", hash_words(&b.hw.objram[1])),
+            ("palette", hash_words(&b.hw.palette)),
             ("shared RAM", hq.finish()),
         ];
         let line: Vec<String> = parts.iter().map(|(name, h)| format!("{name}={h:016x}")).collect();

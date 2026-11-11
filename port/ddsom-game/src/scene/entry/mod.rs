@@ -12,7 +12,7 @@
 //! to phase 12. See `docs/scenes.md` for the scene table.
 
 use crate::screens::vars as sv;
-use cps2::Cps2Bus;
+use crate::world::World;
 use super::fading;
 
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
@@ -148,7 +148,7 @@ fn clear_player(x: &mut Ctx, p: u32) {
 /// 0x20de6: places each player in the game in front of the camera, from the scene tables (consumed in the order
 /// of the players in the game). Returns the number of players placed: the rank of the next one (D2, that the original
 /// leaves to its callers).
-pub fn place_players(b: &mut Cps2Bus) -> u8 {
+pub fn place_players(b: &mut World) -> u8 {
     let scene = var::SCENE.get(b) as u32;
     let mut positions = scene << 4;
     let mut states = scene << 2;
@@ -227,7 +227,7 @@ fn sequence(scene: u8) -> Sequence {
 /// Phase 8: one frame. `handler`: the address of the phase handler, which the original leaves in A0 (`jsr (A0)`
 /// of the game loop, table 0x1c502, or of the demo) and which two opening sequences reread as an object (original
 /// glitch: effects 0x13 of the lightning, finale object).
-pub fn phase_8(b: &mut Cps2Bus, handler: u32) {
+pub fn phase_8(b: &mut World, handler: u32) {
     let mut x = Ctx::new(b);
     x.phase_handler = handler;
     match var::STEP.get(x.b) {

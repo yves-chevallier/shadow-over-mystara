@@ -1,7 +1,7 @@
 use super::super::set_b;
 use super::*;
 use crate::mem::{rd16, rd8, wr8, A5};
-use cps2::Cps2Bus;
+use crate::world::World;
 use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
@@ -304,12 +304,12 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     crate::mem::set_low_word(x.c.d2(), dy);
 }
 
-fn alive(b: &mut Cps2Bus, p: Obj) -> bool {
+fn alive(b: &mut World, p: Obj) -> bool {
     p.u8(b, P_ACTIVE) != 0 && p.u16(b, P_LIFE) != 0
 }
 
 /// Conditions of 0xcb2a0-0xcb2d8: does the door act on this frame?
-fn gate_active(b: &mut Cps2Bus, me: Obj) -> bool {
+fn gate_active(b: &mut World, me: Obj) -> bool {
     if me.u8(b, SetObj::PARAM) != 0 || me.u8(b, Obj::HIDDEN) != 0 {
         return false;
     }
@@ -323,7 +323,7 @@ fn gate_active(b: &mut Cps2Bus, me: Obj) -> bool {
 /// Is player `p` standing in the door's footprint, free to move, and is the door's
 /// zone present in their mask `+0x6c`? (The original tests the zone index bit
 /// in D0, whose high bits are leftovers: the zone indices are below 8.)
-fn in_reach(b: &mut Cps2Bus, me: Obj, p: Obj) -> bool {
+fn in_reach(b: &mut World, me: Obj, p: Obj) -> bool {
     if rd8(b, NEAR_BLOCK) != 0 {
         return false;
     }
@@ -348,7 +348,7 @@ fn in_reach(b: &mut Cps2Bus, me: Obj, p: Obj) -> bool {
 }
 
 /// Are all living players ready (0xcb80c-0xcb840)? `arrived`: players already counted.
-fn everyone_ready(b: &mut Cps2Bus, in_game: u8, arrived: u8) -> bool {
+fn everyone_ready(b: &mut World, in_game: u8, arrived: u8) -> bool {
     if in_game == 0 {
         return false;
     }

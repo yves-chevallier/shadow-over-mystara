@@ -1505,8 +1505,8 @@ fn main() {
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
@@ -1524,13 +1524,13 @@ fn main() {
     let mut inputs: Vec<(u32, u8)> = Vec::new();
     {
         for k in 0..23u32 {
-            let e = (m.bus.fetch16(0x39b12 + 4 * k) as u32) << 16 | m.bus.fetch16(0x39b12 + 4 * k + 2) as u32;
+            let e = (m.bus.hw.fetch16(0x39b12 + 4 * k) as u32) << 16 | m.bus.hw.fetch16(0x39b12 + 4 * k + 2) as u32;
             if ddsom_game::all_natives().any(|n| n.entry == e) && filter.is_none_or(|f| f == e) {
                 inputs.push((e, k as u8));
             }
         }
     }
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     let (mut tests, mut shown) = (0, 0);
     for _ in 0..rounds.parse::<u32>().unwrap() {
         for &(entry, kind) in &inputs {

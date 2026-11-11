@@ -10,7 +10,7 @@ use crate::player::tables::{player_data, combat, Aligned, Read, Table};
 // Parries: a player's attack crosses that of an enemy or an enemy shot
 
 /// 0x27d74: a player's hit crosses an enemy's hit.
-pub(super) fn player_attacks_clash_enemies(w: &mut World) {
+pub(super) fn player_attacks_clash_enemies(w: &mut Combat) {
     cov::hit("player_attacks_clash_enemies");
     if List::Enemies.len(w) == 0 {
         return;
@@ -33,7 +33,7 @@ pub(super) fn player_attacks_clash_enemies(w: &mut World) {
 }
 
 /// 0x27e0a: a player's hit crosses an enemy shot.
-pub(super) fn player_attacks_clash_enemy_shots(w: &mut World) {
+pub(super) fn player_attacks_clash_enemy_shots(w: &mut Combat) {
     cov::hit("player_attacks_clash_enemy_shots");
     if List::EnemyShots.len(w) == 0 {
         return;
@@ -56,7 +56,7 @@ pub(super) fn player_attacks_clash_enemy_shots(w: &mut World) {
 }
 
 /// 0x27f32: parry possible if the player attacks with box 4 facing the enemy.
-pub(super) fn clash_with_enemy(w: &mut World, p: Obj, e: Obj) {
+pub(super) fn clash_with_enemy(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("clash_with_enemy");
     if e.u8(w.b, f::HITSTOP) == 0
         && p.u8(w.b, f::ACTION) != 6
@@ -69,7 +69,7 @@ pub(super) fn clash_with_enemy(w: &mut World, p: Obj, e: Obj) {
 
 /// 0x27f5e: parry of an enemy shot, according to a table (by shot type): 0 never, 1 always,
 /// 2..5 only with weapon 0x2c..0x2f.
-pub(super) fn clash_with_enemy_shot(w: &mut World, p: Obj, s: Obj) {
+pub(super) fn clash_with_enemy_shot(w: &mut Combat, p: Obj, s: Obj) {
     cov::hit("clash_with_enemy_shot");
     if s.u8(w.b, f::HITSTOP) != 0 || p.u8(w.b, f::ACTION) == 6 || p.u8(w.b, f::ATTACK_BOX) != 4 {
         return;
@@ -88,7 +88,7 @@ pub(super) fn clash_with_enemy_shot(w: &mut World, p: Obj, s: Obj) {
 }
 
 /// 0x28026: the player parries: parry state, freeze of both sides, spark, sound (0xe75b0).
-pub(super) fn parry(w: &mut World, p: Obj, other: Obj) {
+pub(super) fn parry(w: &mut Combat, p: Obj, other: Obj) {
     cov::hit("parry");
     let a = p.u8(w.b, f::ACTION);
     p.set_u8(w.b, f::PREV_ACTION, a);
@@ -108,12 +108,12 @@ pub(super) fn parry(w: &mut World, p: Obj, other: Obj) {
 // Enemies hit the players
 
 /// Can a player take a hit (alive, body box, neither invulnerable nor dying)?
-pub(super) fn player_vulnerable(w: &mut World, p: Obj) -> bool {
+pub(super) fn player_vulnerable(w: &mut Combat, p: Obj) -> bool {
     w.is_active(p) && p.u8(w.b, f::BODY_BOX) != 0 && p.u8(w.b, f::INVULN) == 0 && (p.u16(w.b, f::DYING) as i16) <= 0
 }
 
 /// 0x272c2: enemy hits against the players.
-pub(super) fn enemies_hit_players(w: &mut World) {
+pub(super) fn enemies_hit_players(w: &mut Combat) {
     cov::hit("enemies_hit_players");
     if ram::FROZEN.get(w.b) != 0 || ram::PAUSE.get(w.b) != 0 || List::Enemies.len(w) == 0 {
         return;
@@ -137,7 +137,7 @@ pub(super) fn enemies_hit_players(w: &mut World) {
 
 /// 0x2736c: enemy shots against the players. The loop stops when the player is no longer
 /// active (just hit).
-pub(super) fn enemy_shots_hit_players(w: &mut World) {
+pub(super) fn enemy_shots_hit_players(w: &mut Combat) {
     cov::hit("enemy_shots_hit_players");
     if ram::FROZEN.get(w.b) != 0 || ram::PAUSE.get(w.b) != 0 || List::EnemyShots.len(w) == 0 {
         return;
@@ -176,7 +176,7 @@ pub(super) struct Reaction {
     power_hell: u8,
 }
 
-pub(super) fn reaction(w: &mut World, table: &Table, id: u8) -> Reaction {
+pub(super) fn reaction(w: &mut Combat, table: &Table, id: u8) -> Reaction {
     let at = 4 * id as u32;
     Reaction {
         ground: table.at8(w.b, at),
@@ -187,7 +187,7 @@ pub(super) fn reaction(w: &mut World, table: &Table, id: u8) -> Reaction {
 }
 
 /// Attack power: "hell" value beyond difficulty 5.
-pub(super) fn attack_power(w: &mut World, r: &Reaction) -> u8 {
+pub(super) fn attack_power(w: &mut Combat, r: &Reaction) -> u8 {
     if ram::DIFFICULTY.get(w.b) > 5 {
         r.power_hell
     } else {
@@ -197,7 +197,7 @@ pub(super) fn attack_power(w: &mut World, r: &Reaction) -> u8 {
 
 /// The player is hit: dying for an instant (`ACTIVE` = 2), invulnerable for 0x28 frames; the attacker
 /// freezes, ties itself to the player and notes which type of hit landed (`flag`: bit of `HIT_FLAGS`).
-pub(super) fn hurt_setup(w: &mut World, p: Obj, attacker: Obj, flag: u32) {
+pub(super) fn hurt_setup(w: &mut Combat, p: Obj, attacker: Obj, flag: u32) {
     p.set_u8(w.b, f::ACTIVE, 2);
     p.set_u8(w.b, f::HIT_MARK, 0);
     let fl = attacker.u8(w.b, f::FLIP);
@@ -211,7 +211,7 @@ pub(super) fn hurt_setup(w: &mut World, p: Obj, attacker: Obj, flag: u32) {
 }
 
 /// 0x2749e: an enemy hits a player.
-pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
+pub(super) fn enemy_hits_player(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("enemy_hits_player");
     trace!("enemy {:06x} hits {:06x}", e.0, p.0);
     hurt_setup(w, p, e, 2);
@@ -241,7 +241,7 @@ pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
 }
 
 /// 0x2756c: an enemy shot hits a player; certain equipment or states cancel it.
-pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
+pub(super) fn enemy_shot_hits_player(w: &mut Combat, p: Obj, s: Obj) {
     cov::hit("enemy_shot_hits_player");
     trace!("enemy shot {:06x} on {:06x}", s.0, p.0);
     let id = s.u8(w.b, f::ATTACK_ID_ENEMY);
@@ -280,7 +280,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
 
 /// 0x276e0: removes HP from the player (damage from 0x4002 minus armour); at 0 HP, one player
 /// fewer alive.
-pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
+pub(super) fn player_loses_hp(w: &mut Combat, p: Obj, attacker: Obj) {
     cov::hit("player_loses_hp");
     let hp = p.u16(w.b, f::HP);
     p.set_u16(w.b, f::HP_PREV, hp);
@@ -310,14 +310,14 @@ pub(super) fn player_loses_hp(w: &mut World, p: Obj, attacker: Obj) {
 // Crates and objects that hit
 
 /// Crate damage table: by crate type (`+0x60`) and phase of the counter FFFF92.
-pub(super) fn box_damage(w: &mut World, bx: Obj) -> u16 {
+pub(super) fn box_damage(w: &mut Combat, bx: Obj) -> u16 {
     let row = (bx.u8(w.b, f::HP_MAX) as u32) << 4;
     let tick = (ram::TICK.get(w.b) >> 1) & 0xf;
     player_data().crate_damage.word_at(w.b, row + 2 * tick as u32)
 }
 
 /// 0x2806a: (thrown) crates hurt the players.
-pub(super) fn boxes_hit_players(w: &mut World) {
+pub(super) fn boxes_hit_players(w: &mut Combat) {
     cov::hit("boxes_hit_players");
     if List::Boxes.len(w) == 0 {
         return;
@@ -343,7 +343,7 @@ pub(super) fn boxes_hit_players(w: &mut World) {
 }
 
 /// 0x28246: a player receives a crate.
-pub(super) fn box_hits_player(w: &mut World, p: Obj, bx: Obj) {
+pub(super) fn box_hits_player(w: &mut Combat, p: Obj, bx: Obj) {
     cov::hit("box_hits_player");
     trace!("crate {:06x} on player {:06x}", bx.0, p.0);
     p.set_u8(w.b, f::ACTIVE, 2);
@@ -369,7 +369,7 @@ pub(super) fn box_hits_player(w: &mut World, p: Obj, bx: Obj) {
 }
 
 /// 0x28116: (thrown) crates hurt the enemies.
-pub(super) fn boxes_hit_enemies(w: &mut World) {
+pub(super) fn boxes_hit_enemies(w: &mut Combat) {
     cov::hit("boxes_hit_enemies");
     if List::Boxes.len(w) == 0 || List::Enemies.len(w) == 0 {
         return;
@@ -396,7 +396,7 @@ pub(super) fn boxes_hit_enemies(w: &mut World) {
 }
 
 /// 0x28296: an enemy receives a crate (only once: `HIT_MARK` mark = 0xff).
-pub(super) fn box_hits_enemy(w: &mut World, e: Obj, bx: Obj) {
+pub(super) fn box_hits_enemy(w: &mut Combat, e: Obj, bx: Obj) {
     cov::hit("box_hits_enemy");
     trace!("crate {:06x} on enemy {:06x}", bx.0, e.0);
     if e.u8(w.b, f::HITSTOP) != 0 || e.u8(w.b, f::HIT_MARK) == 0xff {
@@ -430,14 +430,14 @@ pub(super) fn box_hits_enemy(w: &mut World, e: Obj, bx: Obj) {
 // Pushes: the players jostle enemies and crates
 
 /// 0x27792: player pushes against the enemies then against the crates.
-pub(super) fn players_push_others(w: &mut World) {
+pub(super) fn players_push_others(w: &mut Combat) {
     cov::hit("players_push_others");
     players_push_enemies(w);
     players_push_boxes(w);
 }
 
 /// 0x2779c: the players push the enemies (push boxes).
-pub(super) fn players_push_enemies(w: &mut World) {
+pub(super) fn players_push_enemies(w: &mut Combat) {
     cov::hit("players_push_enemies");
     if List::Enemies.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
         return;
@@ -460,7 +460,7 @@ pub(super) fn players_push_enemies(w: &mut World) {
 }
 
 /// 0x27834: the players push the crates.
-pub(super) fn players_push_boxes(w: &mut World) {
+pub(super) fn players_push_boxes(w: &mut Combat) {
     cov::hit("players_push_boxes");
     if List::Boxes.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
         return;
@@ -491,7 +491,7 @@ pub(super) struct Push {
     neg_x: bool,
 }
 
-pub(super) fn push_probe(w: &mut World, pair: &Pair) -> Option<Push> {
+pub(super) fn push_probe(w: &mut Combat, pair: &Pair) -> Option<Push> {
     let y = pair.probe_y(w);
     if !y.overlaps() {
         return None;
@@ -507,7 +507,7 @@ pub(super) fn push_probe(w: &mut World, pair: &Pair) -> Option<Push> {
 
 /// 0x27b84: player `p` pushes enemy `e`. Returns true (Z flag clear in the original) if the
 /// player has just chained into a notable push, which interrupts the loop.
-pub(super) fn push_enemy(w: &mut World, p: Obj, mine: HitBox, e: Obj, theirs: HitBox) -> bool {
+pub(super) fn push_enemy(w: &mut Combat, p: Obj, mine: HitBox, e: Obj, theirs: HitBox) -> bool {
     cov::hit("push_enemy");
     let pair = Pair::new(w, p, mine, e, theirs, false);
     let Some(push) = push_probe(w, &pair) else { return false };
@@ -547,7 +547,7 @@ pub(super) fn push_enemy(w: &mut World, p: Obj, mine: HitBox, e: Obj, theirs: Hi
 }
 
 /// 0x27a4c: player `p` pushes crate `bx`. Same return convention as `push_enemy`.
-pub(super) fn push_box(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: HitBox) -> bool {
+pub(super) fn push_box(w: &mut Combat, p: Obj, mine: HitBox, bx: Obj, theirs: HitBox) -> bool {
     cov::hit("push_box");
     if bx.u8(w.b, f::KIND) == 3 {
         return push_barrel(w, p, mine, bx, theirs);
@@ -590,7 +590,7 @@ pub(super) fn push_box(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: Hit
 }
 
 /// 0x27cb2: the player lifts the crate. Returns true if the Z flag is clear on return.
-pub(super) fn grab_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
+pub(super) fn grab_crate(w: &mut Combat, p: Obj, bx: Obj) -> bool {
     cov::hit("grab_crate");
     if bx.u8(w.b, f::KIND) != 0 {
         return true;
@@ -615,7 +615,7 @@ pub(super) fn grab_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
 }
 
 /// 0x27cfc: pushes / throws the crate from the other side.
-pub(super) fn shove_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
+pub(super) fn shove_crate(w: &mut Combat, p: Obj, bx: Obj) -> bool {
     cov::hit("shove_crate");
     if bx.u8(w.b, f::KIND) == 1 {
         return shove_special_crate(w, p, bx);
@@ -635,7 +635,7 @@ pub(super) fn shove_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
 }
 
 /// 0x27d3c: type 1 crate (chest): the player makes it react (byte `+0x6e` = 1).
-pub(super) fn shove_special_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
+pub(super) fn shove_special_crate(w: &mut Combat, p: Obj, bx: Obj) -> bool {
     cov::hit("shove_special_crate");
     if bx.u8(w.b, f::VARIANT) == 0 {
         if bx.u8(w.b, f::SUBSTATE) != 0 {
@@ -654,14 +654,14 @@ pub(super) fn shove_special_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
 }
 
 /// 0x278c4: the player pushes a barrel (type 3 crate).
-pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: HitBox) -> bool {
+pub(super) fn push_barrel(w: &mut Combat, p: Obj, mine: HitBox, bx: Obj, theirs: HitBox) -> bool {
     cov::hit("push_barrel");
     if bx.u8(w.b, f::CRATE_HELD) != 0 || bx.u16(w.b, f::Z) != 0 {
         return false;
     }
     let pair = Pair::new(w, p, mine, bx, theirs, false);
     let Some(push) = push_probe(w, &pair) else { return false };
-    let cmp_dir = |w: &mut World, field: u32, flip_ok: bool, bx: Obj, p: Obj| -> bool {
+    let cmp_dir = |w: &mut Combat, field: u32, flip_ok: bool, bx: Obj, p: Obj| -> bool {
         let _ = (w, field, flip_ok, bx, p);
         false
     };
@@ -717,7 +717,7 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
 }
 
 /// 0x27a04: the player throws the barrel if they can. Returns true (Z clear) when done.
-pub(super) fn barrel_kick(w: &mut World, p: Obj, bx: Obj) -> bool {
+pub(super) fn barrel_kick(w: &mut Combat, p: Obj, bx: Obj) -> bool {
     cov::hit("barrel_kick");
     if p.u8(w.b, f::VARIANT) >> 1 == 4 {
         return false;
@@ -737,7 +737,7 @@ pub(super) fn barrel_kick(w: &mut World, p: Obj, bx: Obj) -> bool {
 // Pickable objects
 
 /// 0x283d4: the players pick up the objects on the ground.
-pub(super) fn players_pick_up_items(w: &mut World) {
+pub(super) fn players_pick_up_items(w: &mut Combat) {
     cov::hit("players_pick_up_items");
     if List::Items.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
         return;
@@ -772,14 +772,14 @@ pub(super) fn players_pick_up_items(w: &mut World) {
 }
 
 /// 0x284d2: overlap of the player and the object (Y and X axes only).
-pub(super) fn item_reached(w: &mut World, p: Obj, body: HitBox, item: Obj, pickup: HitBox) -> bool {
+pub(super) fn item_reached(w: &mut Combat, p: Obj, body: HitBox, item: Obj, pickup: HitBox) -> bool {
     let pair = Pair::new(w, p, body, item, pickup, false);
     pair.probe_y(w).overlaps() && pair.probe_x(w).overlaps()
 }
 
 /// 0x2853a: pickup by button (type 8 objects: press of button 1; others: button
 /// held, player stationary). Returns true if the object is taken.
-pub(super) fn item_taken_by_button(w: &mut World, p: Obj, item: Obj) -> bool {
+pub(super) fn item_taken_by_button(w: &mut Combat, p: Obj, item: Obj) -> bool {
     cov::hit("item_taken_by_button");
     let mut keys = p.u8(w.b, f::KEYS_NEW);
     if item.u8(w.b, f::KIND) == 8 {
@@ -806,7 +806,7 @@ pub(super) fn item_taken_by_button(w: &mut World, p: Obj, item: Obj) -> bool {
 }
 
 /// 0x285b0: automatic pickup while walking (player in action 0x10, object from the table).
-pub(super) fn item_taken_by_walking(w: &mut World, p: Obj, item: Obj) {
+pub(super) fn item_taken_by_walking(w: &mut Combat, p: Obj, item: Obj) {
     cov::hit("item_taken_by_walking");
     if p.u8(w.b, f::ACTION) != 0x10 {
         return;

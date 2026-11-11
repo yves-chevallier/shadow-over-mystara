@@ -133,7 +133,7 @@ fn strike_end_quick<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// A launched shot (0x9dda8 or 0x9e062), when the key frame is reached.
-fn key_throw<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn key_throw<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);
@@ -462,7 +462,7 @@ fn claw_begin<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// End of a simple claw: impact sound, then rest and next attack.
-fn claw_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn claw_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     key_throw(x, throw);
     strike_end(x);
 }
@@ -486,7 +486,7 @@ fn claw_b<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// End of a claw in a series of `+0xab`: the last one brings it back to rest.
-fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut crate::world::World, crate::objects::Obj)) {
     key_throw(x, throw);
     if x.anim_step() {
         play_b(x, 4);

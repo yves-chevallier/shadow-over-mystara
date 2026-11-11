@@ -42,7 +42,7 @@ pub use slot::forget_displayed;
 
 use crate::credits::CoinSlot;
 use crate::screens::tables::Rom;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::A5;
 use crate::modes::Flow;
@@ -187,48 +187,48 @@ impl Slot {
     }
 
     /// Byte, word, long of the panel.
-    pub fn p8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn p8(&self, b: &mut World, off: u32) -> u8 {
         Obj(self.panel).u8(b, off)
     }
-    pub fn p16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn p16(&self, b: &mut World, off: u32) -> u16 {
         Obj(self.panel).u16(b, off)
     }
-    pub fn p32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn p32(&self, b: &mut World, off: u32) -> u32 {
         Obj(self.panel).u32(b, off)
     }
-    pub fn set_p8(&self, b: &mut Cps2Bus, off: u32, v: u8) {
+    pub fn set_p8(&self, b: &mut World, off: u32, v: u8) {
         Obj(self.panel).set_u8(b, off, v)
     }
-    pub fn set_p16(&self, b: &mut Cps2Bus, off: u32, v: u16) {
+    pub fn set_p16(&self, b: &mut World, off: u32, v: u16) {
         Obj(self.panel).set_u16(b, off, v)
     }
-    pub fn set_p32(&self, b: &mut Cps2Bus, off: u32, v: u32) {
+    pub fn set_p32(&self, b: &mut World, off: u32, v: u32) {
         Obj(self.panel).set_u32(b, off, v)
     }
 
     /// Byte, word, long of the player.
-    pub fn g8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
+    pub fn g8(&self, b: &mut World, off: u32) -> u8 {
         Obj(self.player).u8(b, off)
     }
-    pub fn g16(&self, b: &mut Cps2Bus, off: u32) -> u16 {
+    pub fn g16(&self, b: &mut World, off: u32) -> u16 {
         Obj(self.player).u16(b, off)
     }
-    pub fn g32(&self, b: &mut Cps2Bus, off: u32) -> u32 {
+    pub fn g32(&self, b: &mut World, off: u32) -> u32 {
         Obj(self.player).u32(b, off)
     }
-    pub fn set_g8(&self, b: &mut Cps2Bus, off: u32, v: u8) {
+    pub fn set_g8(&self, b: &mut World, off: u32, v: u8) {
         Obj(self.player).set_u8(b, off, v)
     }
 
     /// Player number.
-    pub fn index(&self, b: &mut Cps2Bus) -> u8 {
+    pub fn index(&self, b: &mut World) -> u8 {
         self.p8(b, panel::INDEX)
     }
 }
 
 
 /// The slots updated according to the layout: 4, 3, then always at least 2.
-fn slot_count(b: &mut Cps2Bus) -> u32 {
+fn slot_count(b: &mut World) -> u32 {
     match var::LAYOUT.get(b) as i8 {
         0 => 4,
         1 => 3,

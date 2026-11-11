@@ -5,7 +5,7 @@
 //! frame (`Frame`), made of 16x16 pieces offset from its position. A budget limits
 //! the number of pieces per frame; a shadow is added under the characters.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use ddsom_data::sprites::Piece;
 use ddsom_data::tables::GroundMark;
@@ -46,7 +46,7 @@ fn text_slot(at: u32) -> (Long, Word, Word) {
 }
 
 /// The object category byte (`Obj::CLASS`: 0 scenery; even: character or projectile, entered in a visible list).
-fn category(b: &mut Cps2Bus, o: Obj) -> u8 {
+fn category(b: &mut World, o: Obj) -> u8 {
     o.class(b)
 }
 
@@ -59,7 +59,7 @@ struct Camera {
 
 /// Writes the entries of the object table and keeps the piece budget.
 struct Painter<'a> {
-    b: &'a mut Cps2Bus,
+    b: &'a mut World,
     at: Vram,
     cam: Camera,
     /// D4 as the original leaves it (attributes of the last piece, colour of the last text...):
@@ -92,7 +92,7 @@ impl Painter<'_> {
     }
 }
 
-fn camera(b: &mut Cps2Bus) -> Camera {
+fn camera(b: &mut World) -> Camera {
     let (x, y) = crate::ram::camera(b);
     Camera { x, y }
 }
@@ -109,7 +109,7 @@ fn screen_height(p: &mut Painter, o: Obj) -> u16 {
 }
 
 /// Ground mark `i` (`sprites/tables.json`), or the words the original reads past the table (`sprites/marks_beyond`).
-fn ground_mark(b: &mut Cps2Bus, i: u8) -> [u16; 8] {
+fn ground_mark(b: &mut World, i: u8) -> [u16; 8] {
     let t = &data().sprite_tables;
     match t.marks.get(i as usize) {
         Some(m) => GroundMark::words(m),
@@ -136,7 +136,7 @@ pub struct Leftovers {
 /// of which the original sometimes replaces only the low word.
 /// Original glitch: D4 keeps the attributes of the last piece drawn, and handlers reread it later
 /// (0xad7b0 adds it to a position): callers return it to the processor (`Leftovers::d4`).
-pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
+pub fn build(b: &mut World, d4: u32) -> Option<Leftovers> {
     if var::BUILT.get(b) != 0 {
         return None;
     }
@@ -167,7 +167,7 @@ pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
 /// `build` in the game. Original glitch: the D4 that the list leaves (attributes of the last piece) is reread later
 /// (`DDSOM_POISON=call_1de96`: long_28_scenes, frame 10431): it is the leftover D4 of the game
 /// (`dispatch::Leftovers`). A4 and A6 are reread by nobody.
-pub fn build_in_game(b: &mut Cps2Bus) {
+pub fn build_in_game(b: &mut World) {
     let d4 = crate::tasks::table::table(b).leftovers.d4;
     if let Some(r) = build(b, d4) {
         crate::tasks::table::table(b).leftovers.d4 = r.d4;
@@ -351,7 +351,7 @@ struct PieceWords {
 }
 
 impl Frame {
-    fn piece(&self, b: &mut Cps2Bus, i: u32) -> PieceWords {
+    fn piece(&self, b: &mut World, i: u32) -> PieceWords {
         match self.pieces {
             Pieces::Typed(pieces) => {
                 let p = pieces[i as usize];
@@ -371,7 +371,7 @@ impl Frame {
     }
 }
 
-fn frame_at(b: &mut Cps2Bus, f: u32) -> Frame {
+fn frame_at(b: &mut World, f: u32) -> Frame {
     if let Some(fr) = data().frames.at(RomAddr(f)) {
         return Frame {
             count: fr.cost,
@@ -404,7 +404,7 @@ struct Style {
     palette: Option<u8>,
 }
 
-fn style(b: &mut Cps2Bus, o: Obj) -> Style {
+fn style(b: &mut World, o: Obj) -> Style {
     Style { flip: o.flip(b) != 0, palette: (o.own_palette(b) & 1 != 0).then(|| o.palette(b)) }
 }
 
@@ -519,7 +519,7 @@ fn draw_shadow(p: &mut Painter, o: Obj) {
 
 /// Collision box `n` of set `set` of the box table `table` (`sprites/tables.json`: 0 body, 2 attack), or the bytes the
 /// original reads at that place when the set is not a set of the table.
-fn shadow_box(b: &mut Cps2Bus, table: usize, set: usize, n: usize) -> [u8; 8] {
+fn shadow_box(b: &mut World, table: usize, set: usize, n: usize) -> [u8; 8] {
     let t = &data().sprite_tables;
     if set < t.box_tables[table].sets.len() {
         if let Some(h) = t.hit_box(table, set, n) {
@@ -588,8 +588,8 @@ fn draw_text(p: &mut Painter, slot: u32) {
     p.d4 = 0xf;
     let words = crate::ram::CABINET_PLAYERS.get(p.b) == 2;
     // the strings (`sprites/texts@…` of `data/engine.json`, or in RAM)
-    let byte = |b: &mut Cps2Bus, a: u32| crate::tables::engine().byte(b, a);
-    let word = |b: &mut Cps2Bus, a: u32| crate::tables::engine().word(b, a);
+    let byte = |b: &mut World, a: u32| crate::tables::engine().byte(b, a);
+    let word = |b: &mut World, a: u32| crate::tables::engine().word(b, a);
     let mut at = s;
     loop {
         if words {
@@ -644,7 +644,7 @@ fn draw_text(p: &mut Painter, slot: u32) {
 }
 
 /// 0x1de7c: clears the heads of the object lists, the player markers and the three texts.
-pub fn clear_lists(b: &mut Cps2Bus) {
+pub fn clear_lists(b: &mut World) {
     var::ACTORS_LONG.set(b, 0);
     var::FOREGROUND_LONG.set(b, 0);
     var::PLAYER_MARKERS.set(b, 0);

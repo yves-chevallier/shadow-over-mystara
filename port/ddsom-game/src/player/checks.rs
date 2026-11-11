@@ -416,7 +416,7 @@ fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
 }
 
 /// Signed byte extended to 16 bits.
-fn sbyte(b: &mut cps2::Cps2Bus, a: u32) -> i16 {
+fn sbyte(b: &mut crate::world::World, a: u32) -> i16 {
     byte(b, a) as i8 as i16
 }
 

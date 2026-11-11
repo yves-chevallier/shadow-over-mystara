@@ -664,7 +664,7 @@ fn table_from_original(b: &mut Cps2Bus) {
         s => s,
     };
     t.stacks = (top..0xff_01a6).step_by(4).rev().map(|a| rd32(b, a)).collect();
-    *table::table(b) = t;
+    b.ext = Some(Box::new(t));
 }
 
 /// Runs the native on state `c0`/`b0` and compares it with the original's result `o`: returns the panic message or
@@ -694,7 +694,7 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
         diffs.push(format!("pc={:06x} instead of {:06x}", c1.pc, c2.pc));
     }
     // original kernel RAM: the native keeps the task table in Rust; compared separately
-    if let Some(t) = ddsom_game::tasks::table::read(&b1) {
+    if let Some(t) = b1.ext.as_deref().and_then(|e| e.as_any().downcast_ref::<ddsom_game::tasks::table::Table>()) {
         diffs.extend(ddsom_game::tasks::table::gaps(t, &b2.ram, false));
     }
     for i in 0..0x800usize {

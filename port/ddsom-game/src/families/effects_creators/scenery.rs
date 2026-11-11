@@ -5,7 +5,7 @@ use super::*;
 // Scenery effects (type 42) linked by `+0x46`
 
 /// Scenery effect (type 42) of variant `variant` and setting `setting`, linked by `+0x46`.
-pub(crate) fn scenery_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: Option<u8>) -> Option<Obj> {
+pub(crate) fn scenery_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8, setting: Option<u8>) -> Option<Obj> {
     let o = spawn(r, b, kind::SCENERY)?;
     o.set_u8(b, Obj::VARIANT, variant);
     if let Some(s) = setting {
@@ -19,10 +19,10 @@ pub(crate) fn scenery_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, vari
 /// processor after each turn. Stops at the first `None` (pool full); returns the last object created.
 pub(super) fn repeats<R: Regs>(
     r: &mut R,
-    b: &mut Cps2Bus,
+    b: &mut World,
     dn: usize,
     last: u16,
-    mut body: impl FnMut(&mut R, &mut Cps2Bus, u16) -> Option<Obj>,
+    mut body: impl FnMut(&mut R, &mut World, u16) -> Option<Obj>,
 ) -> Option<Obj> {
     let mut n = last;
     loop {
@@ -36,13 +36,13 @@ pub(super) fn repeats<R: Regs>(
 }
 
 /// Several scenery effects: D1 counts from `last` down to 0, setting = D1 or zero.
-pub(crate) fn scenery_burst_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, last: u16, setting_counter: bool) -> Option<Obj> {
+pub(crate) fn scenery_burst_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8, last: u16, setting_counter: bool) -> Option<Obj> {
     r.d(1, last as u32);
     repeats(r, b, 1, last, |r, b, n| scenery_via(r, b, creator, variant, Some(if setting_counter { n as u8 } else { 0 })))
 }
 
 /// 0xb3df6: two brief bursts (variant 0, settings 0 and 1) placed on the creator (x and depth).
-pub(crate) fn scenery_0_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn scenery_0_pair_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let mut last = None;
     for setting in 0..2u8 {
         let o = spawn(r, b, kind::SCENERY)?;
@@ -58,7 +58,7 @@ pub(crate) fn scenery_0_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Ob
 }
 
 /// 0xb3f6a: one frame out of four (`A5+0x6e`), puff (variant 4) of randomly drawn setting; `+0x58` = bit 2 of the draw.
-pub(crate) fn scenery_4_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn scenery_4_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let frame = var::IMAGES_WORD_LOW.get(b);
     r.d_word(0, frame);
     r.d_word(1, frame);
@@ -78,7 +78,7 @@ pub(crate) fn scenery_4_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) ->
 }
 
 /// 0xb3fd4 (variant 6, one time out of sixteen) and 0xb4088 (variant 10, zero setting, one time out of four).
-pub(crate) fn scenery_by_chance_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, mask: u16, variant: u8, setting: Option<u8>) -> Option<Obj> {
+pub(crate) fn scenery_by_chance_via(r: &mut impl Regs, b: &mut World, creator: Obj, mask: u16, variant: u8, setting: Option<u8>) -> Option<Obj> {
     let rng = crate::rng::random(b);
     if and_d0(r, rng, mask) != 0 {
         return None;
@@ -90,7 +90,7 @@ pub(crate) fn scenery_by_chance_via(r: &mut impl Regs, b: &mut Cps2Bus, creator:
 // Spells of a wizard enemy (type 44) linked by `+0x5c`
 
 /// 0xb4f44: a spell effect, setting `setting` (variant left as is).
-pub(crate) fn spell_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub(crate) fn spell_via(r: &mut impl Regs, b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::SPELL)?;
     o.set_u8(b, SETTING, setting);
     link(r, b, o, link::CREATOR, creator.0);
@@ -98,7 +98,7 @@ pub(crate) fn spell_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, settin
 }
 
 /// 0xb4ef4 / 0xb4f60 / 0xb4f1c: six spell effects (variants 5 down to 0) of setting `setting`.
-pub(crate) fn spell_ring_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub(crate) fn spell_ring_via(r: &mut impl Regs, b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     r.d(1, 5);
     repeats(r, b, 1, 5, |r, b, n| {
         let o = spawn(r, b, kind::SPELL)?;
@@ -112,7 +112,7 @@ pub(crate) fn spell_ring_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, s
 /// 0xb3e4e, 0xb3ec6: cries of a boss (scene effect 42, variant `variant`): a randomly drawn sheet (`rng & 0x38`, bytes
 /// in `table`) gives the number of effects minus one, then the setting `+0x2f` of each; linked to the creator by
 /// `+0x46`. A2 follows the reading of the sheet.
-pub(crate) fn shouts_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, table: &Table) -> Option<Obj> {
+pub(crate) fn shouts_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8, table: &Table) -> Option<Obj> {
     let rng = crate::rng::random(b);
     let mut at = and_d0(r, rng, 0x38) as u32;
     let n = table.at8(b, at);
@@ -132,7 +132,7 @@ pub(crate) fn shouts_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, varia
 }
 
 /// 0xb4bcc: rain of debris (type 43) of variant `variant`, setting `setting`, linked by `+0x5c`.
-pub(crate) fn debris_rain_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub(crate) fn debris_rain_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::DEBRIS_RAIN)?;
     o.set_u8(b, Obj::VARIANT, variant);
     o.set_u8(b, SETTING, setting);
@@ -141,7 +141,7 @@ pub(crate) fn debris_rain_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, 
 }
 
 /// 0xb53f4: three effects 46 (settings 2, 1, 0) linked by `+0x46`.
-pub(crate) fn type_46_trio(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn type_46_trio(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let mut last = None;
     for setting in [2u8, 1, 0] {
         let o = spawn(r, b, kind::TYPE_46)?;
@@ -154,7 +154,7 @@ pub(crate) fn type_46_trio(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> 
 }
 
 /// 0xb59a6, 0xb59c8: effect 48 of variant `variant`, linked by `+0x46`.
-pub(crate) fn type_48(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn type_48(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::TYPE_48)?;
     o.set_u8(b, Obj::VARIANT, variant);
     o.set_u8(b, SETTING, 0);
@@ -163,7 +163,7 @@ pub(crate) fn type_48(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant:
 }
 
 /// 0xb96c0: thrown burst (type 81) of variant `variant`, linked to the player by `+0x50`.
-pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::THROWN_SHARD)?;
     put8(r, b, o, Obj::VARIANT, variant);
     link(r, b, o, link::OWNER, creator.0);
@@ -172,7 +172,7 @@ pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, var
 
 /// 0xb230e: block of 2 × 2 tiles written at `at` (tile `tile`, attribute `attr`; next row 0x80 further); returns the
 /// address after the two rows (A1) and the tile + 0x11 (D0).
-pub(crate) fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
+pub(crate) fn tile_block(b: &mut World, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
     for _ in 0..2 {
         wr16(b, at, tile);
         wr16(b, at + 2, attr);
@@ -188,7 +188,7 @@ pub(crate) fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16)
 // Scene creators
 
 /// Fish (type 30) placed on the alternate camera.
-pub(super) fn fish_at_camera(b: &mut Cps2Bus, o: Obj) {
+pub(super) fn fish_at_camera(b: &mut World, o: Obj) {
     let (x, y) = (crate::ram::CAMERA_ALT_X.get(b), crate::ram::CAMERA_ALT_Y.get(b));
     o.set_u16(b, Obj::X, x);
     o.set_u16(b, Obj::Y, y);
@@ -196,7 +196,7 @@ pub(super) fn fish_at_camera(b: &mut Cps2Bus, o: Obj) {
 
 /// 0xb1764: three fish (variant 0) that swim across, 0x20 pixels left of the alternate camera, at a height of 0x40;
 /// depth and speed (`+0x58`) read at 0xb17ae (D4: rank in the table, D5: counter).
-pub(crate) fn fish_school(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn fish_school(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     r.d(4, 0);
     r.d(5, 2);
     let mut k: u16 = 0;
@@ -220,7 +220,7 @@ pub(crate) fn fish_school(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 }
 
 /// 0xb17ba: four fish (variant 1) around the alternate camera (offsets at 0xb1808), every other one flipped.
-pub(crate) fn fish_swimmers(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn fish_swimmers(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     r.d(4, 0);
     r.d(5, 3);
     let mut k: u16 = 0;
@@ -251,10 +251,10 @@ pub(crate) fn fish_swimmers(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xb7dec: four columns (type 67, variants 3 down to 0) under each present and living player (A2: the player, D6:
 /// player counter, D5: column counter).
-pub fn pillars(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn pillars(b: &mut World) -> Option<Obj> {
     pillars_via(&mut Pure, b)
 }
-pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     r.d(6, 3);
     let mut last = None;
     for k in 0..4u16 {
@@ -279,7 +279,7 @@ pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xabb70: trails (type 9) of the scene entrance. The two places of each present player are marked in the table
 /// `A5-0x5f9a` (6 words), then one trail is created per remaining free place, `5 - A5+0x35` times.
-pub(crate) fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn trails(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     const SEATS: u32 = A5 - 0x5f9a;
     for k in 0..3 {
         wr32(b, SEATS + 4 * k, 0);
@@ -332,10 +332,10 @@ pub(crate) fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 /// 0xa8af8 (and 0xa8ae8, which takes the list in D0): creates the scenery list (SET) number `list` (pointer table
 /// 0xa8b26): entries of 4 bytes (type, setting `+0x2f`, word whose low byte is the variant), terminated by a negative
 /// type; stops at the first full pool. A4 follows the reading; D0.w = the word read.
-pub fn set_list(b: &mut Cps2Bus, list: u8) -> Option<Obj> {
+pub fn set_list(b: &mut World, list: u8) -> Option<Obj> {
     set_list_via(&mut Pure, b, list)
 }
-pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut Cps2Bus, list: u8) -> Option<Obj> {
+pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut World, list: u8) -> Option<Obj> {
     let k = (list as u16) << 2;
     r.d_word(1, k);
     // the lists are designated by their address
@@ -370,7 +370,7 @@ pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut Cps2Bus, list: u8) -> Opti
 // Enemy shots (ESHL) created by the family
 
 /// 0xa836c: hit (ESHL 0x48, variant 0) of setting `setting`, linked by `+0x5c`.
-pub(crate) fn eshl_slash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub(crate) fn eshl_slash_via(r: &mut impl Regs, b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     let o = spawn_in(r, b, &pools::ESHL, kind::ESHL_SLASH)?;
     o.set_u8(b, Obj::VARIANT, 0);
     o.set_u8(b, SETTING, setting);
@@ -380,7 +380,7 @@ pub(crate) fn eshl_slash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, s
 
 /// 0xa817c: rising column (ESHL 0x47) placed on the creator, 0x80 higher, right in front; D0 = 1, or 0 if the pool is
 /// full.
-pub(crate) fn eshl_rise_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn eshl_rise_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let Some(o) = spawn_in(r, b, &pools::ESHL, kind::ESHL_RISE) else {
         r.d(0, 0);
         r.flags(0, Size::Long);

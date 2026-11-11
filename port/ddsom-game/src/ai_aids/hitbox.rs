@@ -4,7 +4,7 @@ use super::*;
 
 /// 0xa470: draws the stance of enemy `o` (byte of the row `+0x70` of `ai/stances`, indexed by the rank), stores it
 /// at `+0x71` and returns it (the callers' `beq` tests whether it is zero).
-pub fn stance(b: &mut Cps2Bus, o: Obj) -> u8 {
+pub fn stance(b: &mut World, o: Obj) -> u8 {
     let e = Enemy(o);
     let number = e.ai_stance_row(b);
     let row = crate::tables::engine_table!("ai/stances").nth32(b, number as u32);
@@ -35,7 +35,7 @@ pub(crate) struct Leftovers {
 }
 
 /// Is object `other` in the box in front of `me`? Biased gaps compared unsigned, like the original.
-pub(super) fn in_hitbox(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> bool {
+pub(super) fn in_hitbox(b: &mut World, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> bool {
     let facing = Enemy(me).flip(b);
     let offset_x = if facing != 0 { hitbox.offset.wrapping_neg() } else { hitbox.offset };
     let other_x = other.u16(b, Obj::X);
@@ -59,12 +59,12 @@ pub(super) fn in_hitbox(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox, r:
 /// 0x7f0c (`strict`) and 0x7ef4: is an opponent (the targeted object `+0x50`) in the box in front of enemy `o`,
 /// facing it, on the ground and in state 12 (or 14 if `strict`)? If so, after a probability draw (table `+0x74`),
 /// the enemy goes to state 6 with a randomly drawn animation (table `+0x75`) and the result is true.
-pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
+pub fn in_front(b: &mut World, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
     in_front_leftovers(b, o, strict, hitbox).0
 }
 
 /// (result, leftovers, mask of the probability draw: the D2 left, reread by the caller).
-pub(super) fn in_front_leftovers(b: &mut Cps2Bus, me: Obj, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>) {
+pub(super) fn in_front_leftovers(b: &mut World, me: Obj, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>) {
     let mut r = Leftovers::default();
     let e = Enemy(me);
     let target = e.target(b);
@@ -121,11 +121,11 @@ pub enum InHitbox {
 }
 
 /// 0x7f19c: is object `other` in the box in front of object `me`?
-pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
+pub fn box_around(b: &mut World, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
     box_reach(b, me, other, hitbox, &mut Leftovers::default())
 }
 
-pub(crate) fn box_reach(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
+pub(crate) fn box_reach(b: &mut World, me: Obj, other: Obj, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
     if other.u16(b, Obj::Z) != 0 || !in_hitbox(b, me, other, hitbox, r) {
         return InHitbox::No;
     }
@@ -177,7 +177,7 @@ impl HitboxLeftovers {
 }
 
 /// 0xb5e0 (`ai::target_in_front`): is the target `+0x50` in the box in front of the object? With the leftovers reread.
-pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
+pub fn target_in_front_leftovers(b: &mut World, o: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let pointer = Enemy(o).target(b);
     let mut leftovers = Leftovers::default();
     let found = if pointer == 0 { InHitbox::No } else { box_reach(b, o, Obj::from_word(pointer), hitbox, &mut leftovers) };
@@ -185,14 +185,14 @@ pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (In
 }
 
 /// 0x7f19c (`box_around`), with the leftovers reread.
-pub fn box_around_leftovers(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
+pub fn box_around_leftovers(b: &mut World, me: Obj, other: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let mut leftovers = Leftovers::default();
     let found = box_reach(b, me, other, hitbox, &mut leftovers);
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
 /// 0x7f0c / 0x7ef4 (`in_front`), with the leftovers reread.
-pub fn in_front_with_leftovers(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> (bool, HitboxLeftovers) {
+pub fn in_front_with_leftovers(b: &mut World, o: Obj, strict: bool, hitbox: Hitbox) -> (bool, HitboxLeftovers) {
     let (yes, leftovers, mask) = in_front_leftovers(b, o, strict, hitbox);
     (yes, HitboxLeftovers { leftovers, mask })
 }

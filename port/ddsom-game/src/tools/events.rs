@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::events` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
@@ -31,20 +31,20 @@ fn fill_68k(c: &mut Cpu, end: u32, ptr: usize) {
     crate::tools::ops::logic(c, 0xffff_ffff, Size::Long);
 }
 
-fn clear_ring_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring) {
+fn clear_ring_68k(c: &mut Cpu, b: &mut World, ring: &Ring) {
     clear_ring(b, ring);
     fill_68k(c, a5(ring.cases) + 4 * 32, 0);
     rts(c, b);
 }
 
-fn clear_popups_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn clear_popups_68k(c: &mut Cpu, b: &mut World) {
     clear_popups(b);
     fill_68k(c, a5(POPUP_INPUTS) + 4 * 64, 1);
     rts(c, b);
 }
 
 /// Leaves A1 after the zone, D0 = 0, D6 = 0xFFFF.
-fn clear_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn clear_popup_68k(c: &mut Cpu, b: &mut World) {
     clear_current_popup(b);
     c.a[1] = a5(CURRENT_POPUP) + 16;
     c.d[0] = 0;
@@ -54,7 +54,7 @@ fn clear_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Registers and flags of 0x19ae6 / 0x19b08: D6 (index), A4 (start of the cells).
-fn enqueue_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring, event: u16) {
+fn enqueue_68k(c: &mut Cpu, b: &mut World, ring: &Ring, event: u16) {
     let (index, case) = write_cell(b, ring);
     let content = rd16(b, case);
     c.d[6] = index as u32;
@@ -69,18 +69,18 @@ fn enqueue_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring, event: u16) {
     }
 }
 
-fn enqueue_points_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enqueue_points_68k(c: &mut Cpu, b: &mut World) {
     enqueue_68k(c, b, &POINTS, c.d[0] as u16);
     rts(c, b);
 }
 
-fn enqueue_counter_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enqueue_counter_68k(c: &mut Cpu, b: &mut World) {
     enqueue_68k(c, b, &COUNTER, c.d[0] as u16);
     rts(c, b);
 }
 
 /// 0x19ad6: D0 = the event, D1.w = the player (bits 8-9).
-fn object_event_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn object_event_68k(c: &mut Cpu, b: &mut World) {
     let o = crate::objects::Obj(c.a[0]);
     let type_ = rd8(b, o.0 + 0x7e) as u32;
     c.d[0] = type_;
@@ -94,7 +94,7 @@ fn object_event_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// The last event that `credit` will process (index, event): the waiting cells from the read index, each emptied
 /// when it is processed (a cell met again is empty).
-fn last_credited(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
+fn last_credited(b: &mut World, k: &Credit) -> Option<(u8, u16)> {
     let mut index = rd8(b, a5(k.read));
     let mut seen = [false; 256];
     let mut last = None;
@@ -110,7 +110,7 @@ fn last_credited(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
 }
 
 /// Registers of 0x19b2a / 0x19b9c: leftovers of the last iteration, D0 = final read index.
-fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
+fn credit_68k(c: &mut Cpu, b: &mut World, k: &Credit) {
     c.d[1] = 0;
     c.d[2] = 0;
     c.a[2] = a5(k.ring.cases);
@@ -134,7 +134,7 @@ fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
 }
 
 /// Registers and flags of 0x19dce: D6 (index), A2 (entries), D0.b (header), flags of the last test.
-fn create_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+fn create_popup_68k(c: &mut Cpu, b: &mut World) {
     let p = Popup { header: c.d[0] as u16, max: c.d[1] as u16, value: c.d[2] as u16, raw: c.d[3] as u8 == 2 };
     let inhibited = rd8(b, a5(POPUP_INHIBITED));
     let (index, case) = popup_write_entry(b);

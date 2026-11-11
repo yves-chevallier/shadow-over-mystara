@@ -4,7 +4,7 @@
 //! These routines keep the contract of the originals: a result in D0 (1: yes, 0: no) and the
 //! flags of a `moveq`, which the handlers test right after the call (`beq`).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::ai::RANK;
 use crate::objects::{pools, Enemy, Obj};
@@ -42,12 +42,12 @@ pub(crate) fn set_w(r: &mut u32, v: u16) {
 }
 
 /// Screen origin in x, depending on the camera in use (`ram::CAMERA_ALT_ACTIVE`).
-fn screen_origin(b: &mut Cps2Bus) -> u16 {
+fn screen_origin(b: &mut World) -> u16 {
     if crate::ram::CAMERA_ALT_ACTIVE.is_set(b) { crate::ram::CAMERA2_X.get(b) } else { crate::ram::CAMERA1_X.get(b) }
 }
 
 /// First entry (16 bytes) of set `set` whose byte `+3` (the low byte of its flags) equals `key` under `mask`.
-fn find_animation(b: &mut Cps2Bus, set: u32, key: u8, mask: u8) -> u32 {
+fn find_animation(b: &mut World, set: u32, key: u8, mask: u8) -> u32 {
     let mut at = set;
     while crate::objects::anim::entry_flags(b, at) as u8 & mask != key & mask {
         at = at.wrapping_add(16);
@@ -56,14 +56,14 @@ fn find_animation(b: &mut Cps2Bus, set: u32, key: u8, mask: u8) -> u32 {
 }
 
 /// Copy of the animation mark (0x1046c).
-fn copy_mark(b: &mut Cps2Bus, o: Enemy) {
+fn copy_mark(b: &mut World, o: Enemy) {
     let v = o.strike_key(b);
     o.set_strike_kind(b, v);
 }
 
 /// 0x103e0: starts the animation of set `set` with the same key as the current variant (`+0x33`), keeping the duration
 /// of the current entry.
-pub fn animation_by_variant(b: &mut Cps2Bus, o: Obj, set: u32) {
+pub fn animation_by_variant(b: &mut World, o: Obj, set: u32) {
     let timer = o.anim_timer(b);
     let key = Enemy(o).key_frame(b);
     let at = find_animation(b, set, key, 0x7f);
@@ -73,7 +73,7 @@ pub fn animation_by_variant(b: &mut Cps2Bus, o: Obj, set: u32) {
 }
 
 /// 0x10428: starts the animation of set `set` with the same key as the master's variant (`+0xb2`).
-pub fn animation_of_master(b: &mut Cps2Bus, o: Obj, set: u32) {
+pub fn animation_of_master(b: &mut World, o: Obj, set: u32) {
     let master = Enemy(Obj::from_word(Enemy(o).anim_master(b)));
     let key = master.key_frame(b);
     let at = find_animation(b, set, key, 0x7f);
@@ -82,7 +82,7 @@ pub fn animation_of_master(b: &mut Cps2Bus, o: Obj, set: u32) {
 }
 
 /// 0x10450: starts the animation of set `set` whose mark (`+3`) is that of the master's current entry.
-pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
+pub fn animation_of_mark(b: &mut World, o: Obj, set: u32) {
     let master = Enemy(Obj::from_word(Enemy(o).anim_master(b)));
     let key = master.strike_key(b);
     let at = find_animation(b, set, key, 0xff);
@@ -90,13 +90,13 @@ pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
 }
 
 /// 0x10474: at least one player is alive.
-pub fn players_alive(b: &mut Cps2Bus) -> bool {
+pub fn players_alive(b: &mut World) -> bool {
     crate::ram::PLAYERS_ALIVE.get(b) != 0
 }
 
 /// 0x104a2: is `o` outside the strip `[screen + left, screen + right]` (limits excluded from the inside)? The screen
 /// is the origin of the display camera (`A5+0x5a6`, or `A5+0x5ae` in two-camera mode).
-pub fn outside_band(b: &mut Cps2Bus, o: Obj, left: u16, right: u16) -> bool {
+pub fn outside_band(b: &mut World, o: Obj, left: u16, right: u16) -> bool {
     let origin = screen_origin(b);
     let x = o.u16(b, Obj::X) as i16;
     let (low, high) = (left.wrapping_add(origin) as i16, right.wrapping_add(origin) as i16);
@@ -106,7 +106,7 @@ pub fn outside_band(b: &mut Cps2Bus, o: Obj, left: u16, right: u16) -> bool {
 /// 0x105b6: passes the next HP tier (`+0xaa` < `+0xab`) if its threshold in block `block` of `ai/hp_thresholds`
 /// (0x100 bytes per block: tier row of 128 bytes, column `+0xac`, words) reaches the HP (`+0x62`). True if a tier is
 /// passed.
-pub fn next_threshold(b: &mut Cps2Bus, o: Obj, block: u16) -> bool {
+pub fn next_threshold(b: &mut World, o: Obj, block: u16) -> bool {
     let e = Enemy(o);
     let level = e.hp_tier(b) as i8;
     if level >= e.hp_tiers(b) as i8 {
@@ -127,7 +127,7 @@ pub fn next_threshold(b: &mut Cps2Bus, o: Obj, block: u16) -> bool {
 /// whose variant is reset to zero.
 /// Original glitch: the original does not set the spark's speeds; it takes the D2 and D3 left by the
 /// routines called before (the callers pass them in the clear).
-pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
+pub fn flash_and_shake(b: &mut World, o: Obj, vx: u16, ax: u16) {
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     crate::ram::SHAKE.set(b, 8);
     if let Some(spark) = crate::families::effects_creators::impact_spark(b, o, vx, ax) {
@@ -139,7 +139,7 @@ pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
 /// 2, types 0..31; bosses afterwards) and
 /// the index read in the table, which the original leaves in D0 when jumping to the routine (A1). `None` for the
 /// types without a routine (a plain `rts`: 0x3e2aa, 0x3bb9a).
-pub fn landing_routine(b: &mut Cps2Bus, o: Obj) -> Option<(u32, u16)> {
+pub fn landing_routine(b: &mut World, o: Obj) -> Option<(u32, u16)> {
     let base: u8 = if o.u8(b, Obj::CLASS) == 2 { 0 } else { 32 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
     let routine = crate::tables::engine_table!("ai/landing_routines").at32(b, offset(index));

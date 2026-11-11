@@ -54,7 +54,7 @@ fn players() -> impl Iterator<Item = Obj> {
 /// the thirteen trampolines of the scene, SET 16 of variants 13 to 1; stops if the pool is full. Returns the D5 that
 /// the original leaves (loop counter: `moveq #12,D5`, high word zero; 0xFFFF after the last), a leftover reread by the
 /// handlers (`dispatch::Leftovers`); A1 and D6 of the allocation are reread by nobody.
-pub(crate) fn spawn_bumpers(b: &mut cps2::Cps2Bus) -> u32 {
+pub(crate) fn spawn_bumpers(b: &mut crate::world::World) -> u32 {
     crate::mem::wr16(b, A5 + vars::CAMERA_FOCUS, 0);
     for counter in (0..13u32).rev() {
         let Some(o) = pools::SET.alloc(b) else { return counter };

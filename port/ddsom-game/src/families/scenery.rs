@@ -18,7 +18,7 @@ fn set_leftovers<R: Bench>(x: &mut Cx<'_, R>, [d2, d3, d4, d5]: [u32; 4]) {
 
 /// Copies `blocks` blocks of eight longs (`movem.l` through D0-D5, A3, A4) from `from` (step 0x20) to `to` (step
 /// `step`); returns the last block, whose longs 2 to 5 stay in D2-D5.
-fn movem_blocks(b: &mut cps2::Cps2Bus, from: u32, to: u32, blocks: u32, step: u32) -> [u32; 8] {
+fn movem_blocks(b: &mut crate::world::World, from: u32, to: u32, blocks: u32, step: u32) -> [u32; 8] {
     let mut last = [0; 8];
     for k in 0..blocks {
         last = std::array::from_fn(|i| set_tables::long(b, from + 0x20 * k + 4 * i as u32));
@@ -95,7 +95,7 @@ pub(crate) fn restart_scene<R: Bench>(x: &mut Cx<'_, R>) {
     resume_scenery_lit(x, Cameras::Start);
     x.set_a5_u16(vars::OWNER_GATE, 0);
     let players = || crate::ram::PLAYERS.iter();
-    let alive = |b: &mut cps2::Cps2Bus, p: Obj| p.u8(b, Player::ACTIVE) != 0 && p.u16(b, Player::HP) != 0;
+    let alive = |b: &mut crate::world::World, p: Obj| p.u8(b, Player::ACTIVE) != 0 && p.u16(b, Player::HP) != 0;
     for p in players() {
         if !alive(x.b, p) {
             continue;

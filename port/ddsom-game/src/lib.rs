@@ -60,8 +60,12 @@ pub mod tasks;
 pub mod text;
 pub mod video;
 pub mod vblank;
+pub mod world;
 
-use cps2::Cps2Bus;
+use crate::world::World;
+
+/// The game machine: the CPS2 machine whose board is the game's [`World`] (work RAM and task table out of the bus).
+pub type GameMachine = cps2::Machine<World>;
 
 #[cfg(feature = "tools")]
 pub mod tools;
@@ -91,15 +95,15 @@ pub enum Body {
     /// Tools: on the processor, for the original code that calls it (arguments and results in the registers of the
     /// original), ending with its `rts`.
     #[cfg(feature = "tools")]
-    WithCpu(fn(&mut m68k::Cpu, &mut Cps2Bus)),
+    WithCpu(fn(&mut m68k::Cpu, &mut World)),
     /// Tools: like `WithCpu`, for a body shared by several entries: it receives the address of its own.
     #[cfg(feature = "tools")]
-    CpuIn(fn(&mut m68k::Cpu, &mut Cps2Bus, u32)),
+    CpuIn(fn(&mut m68k::Cpu, &mut World, u32)),
     /// Without registers (the target form: memory only); the return (`rts`) is done for it.
-    Memory(fn(&mut Cps2Bus)),
+    Memory(fn(&mut World)),
     /// Object handler without registers: it receives what the dispatch loop passes it (the object, the counter,
     /// the leftovers that the handlers pass to each other: `dispatch::Dispatch`); the return is done for it.
-    Handler(fn(&mut Cps2Bus, &mut dispatch::Dispatch)),
+    Handler(fn(&mut World, &mut dispatch::Dispatch)),
 }
 
 impl Native {
@@ -140,7 +144,7 @@ pub const GAME_STEP: u32 = 0x1c4b0;
 pub const MAX_STEPS_PER_FRAME: u32 = 8;
 
 /// Caps the game steps per frame (`DDSOM_STEP_CAP=n`: other value, 0 = no cap, diagnostics).
-pub(crate) fn cap_steps(m: &mut cps2::Machine) {
+pub(crate) fn cap_steps<B: cps2::Board>(m: &mut cps2::Machine<B>) {
     let max = std::env::var("DDSOM_STEP_CAP").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_STEPS_PER_FRAME);
     m.step_cap = (max > 0).then(|| cps2::StepCap::new(GAME_STEP, max));
 }
@@ -151,8 +155,8 @@ pub(crate) fn cap_steps(m: &mut cps2::Machine) {
 /// the rest, `DDSOM_HYBRIDE=1`) is removed: the tasks are Rust state machines launched by a Rust scheduler, and the
 /// pending calls are no longer on the 68000 stack; the original code could no longer take over from a native in
 /// the middle of a task. Only the reference machine (`install_reference`) still runs the 68000.
-pub fn install(m: &mut cps2::Machine) {
-    install_no_68k(m);
+pub fn install(m: cps2::Machine) -> GameMachine {
+    install_no_68k(m)
 }
 
 /// `DDSOM_HYBRIDE=1` asked for the hybrid mode, removed (see [`install`]): stop with a message.
@@ -163,11 +167,14 @@ pub fn refuse_hybrid() {
     }
 }
 
-/// Game without a 68000: Rust functions run by the kernel frame loop (`no68k`). The machine's `Cpu` is not used.
-pub fn install_no_68k(m: &mut cps2::Machine) {
-    install_data(m);
-    cap_steps(m);
-    no68k::install(m);
+/// Game without a 68000: Rust functions run by the kernel frame loop (`no68k`). The machine's `Cpu` is not used. The
+/// machine's RAM moves into the game's [`World`].
+pub fn install_no_68k(m: cps2::Machine) -> GameMachine {
+    install_data(&m);
+    let mut m = m.with_board(World::from_bus);
+    cap_steps(&mut m);
+    no68k::install(&mut m);
+    m
 }
 
 /// The game data and the residue must be installed before the game runs (`extract::install_game`,

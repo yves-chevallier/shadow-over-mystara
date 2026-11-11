@@ -4,7 +4,7 @@
 //! variant. A player cannot take another player's character.
 
 use crate::ram::Byte;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{panel, player, var, Slot};
 use crate::mem::A5;
@@ -12,7 +12,7 @@ use crate::objects::Obj;
 
 /// Characters taken (one bit per character and variant): those of the present players, or the one they
 /// have chosen if they are currently choosing (states 8 and 0xc). `except`: a player to ignore (their own).
-fn taken(b: &mut Cps2Bus, except: Option<u32>) -> u32 {
+fn taken(b: &mut World, except: Option<u32>) -> u32 {
     let count = 3u8.wrapping_sub(var::LAYOUT.get(b)) as u32 + 1;
     let mut mask = 0u32;
     for k in 0..count {
@@ -60,7 +60,7 @@ fn search(mask: u32, mut choice: u8, backward: bool) -> (u8, bool) {
 }
 
 /// The player keeps their variant if the character found is their own (`panel::CHOSEN`).
-fn keep_own_variant(b: &mut Cps2Bus, s: Slot, choice: u8) -> u8 {
+fn keep_own_variant(b: &mut World, s: Slot, choice: u8) -> u8 {
     let own = s.p8(b, panel::CHOSEN);
     if own >> 1 == choice >> 1 {
         own
@@ -70,13 +70,13 @@ fn keep_own_variant(b: &mut Cps2Bus, s: Slot, choice: u8) -> u8 {
 }
 
 /// 0x153ba: first free character from `choice` (choice when entering the game).
-pub fn free_choice(b: &mut Cps2Bus, choice: u8, backward: bool) -> u8 {
+pub fn free_choice(b: &mut World, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, None);
     search(mask, choice, backward).0
 }
 
 /// 0x15444: like `free_choice`, not counting the player's own character, which keeps its variant.
-pub fn other_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8 {
+pub fn other_choice(b: &mut World, s: Slot, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, Some(s.player));
     let (found, _) = search(mask, choice, backward);
     keep_own_variant(b, s, found)
@@ -84,7 +84,7 @@ pub fn other_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8 
 
 /// 0x154e8: like `other_choice`, but the character found is returned as is, except backwards when it is
 /// the neighboring variant (the original then exits through the end of 0x15444).
-pub fn resume_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8 {
+pub fn resume_choice(b: &mut World, s: Slot, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, Some(s.player));
     let (found, neighbour) = search(mask, choice, backward);
     if backward && neighbour {
@@ -95,7 +95,7 @@ pub fn resume_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8
 }
 
 /// 0x173ee: inputs of player `index`: current state and rising edges.
-pub fn inputs(b: &mut Cps2Bus, index: u8) -> (u8, u8) {
+pub fn inputs(b: &mut World, index: u8) -> (u8, u8) {
     (Byte::a5(var::INPUT + index as u32).get(b), Byte::a5(var::PRESSED + index as u32).get(b))
 }
 
@@ -107,10 +107,10 @@ const REPEAT_FRAMES: i8 = 0x3c;
 /// to the left: 2 or 3) on each rising edge, then every 60 frames if the direction is held. The
 /// new choice goes through the free-character search (`resolve`).
 pub fn navigate(
-    b: &mut Cps2Bus,
+    b: &mut World,
     s: Slot,
     choice: u8,
-    resolve: &dyn Fn(&mut Cps2Bus, u8, bool) -> u8,
+    resolve: &dyn Fn(&mut World, u8, bool) -> u8,
 ) -> u8 {
     let index = s.index(b);
     let (held, pressed) = inputs(b, index);

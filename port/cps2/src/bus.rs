@@ -28,6 +28,7 @@ pub trait Extension: std::any::Any + Send {
     fn clone_box(&self) -> Box<dyn Extension>;
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any>;
 }
 
 impl<T: std::any::Any + Send + Clone> Extension for T {
@@ -38,6 +39,9 @@ impl<T: std::any::Any + Send + Clone> Extension for T {
         self
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
         self
     }
 }
@@ -126,6 +130,36 @@ impl Cps2Bus {
             frame: 0,
             // the Z80 starts at power-on; the 68000 puts it in reset at boot
             z80_running: true,
+            irq_horizon: 0,
+            ext: None,
+        }
+    }
+
+    /// A bus without memory (no RAM, video memory nor palette: empty buffers, no allocation), to stand in for a bus
+    /// moved elsewhere for a moment (`std::mem::replace`).
+    pub fn detached() -> Self {
+        Cps2Bus {
+            rom: None,
+            ram: Vec::new(),
+            extra_ram: Vec::new(),
+            gfxram: Vec::new(),
+            objram: [Vec::new(), Vec::new()],
+            objram_bank: 0,
+            output: [0; 6],
+            cps_a: [0; 32],
+            cps_b: [0; 32],
+            qram: Vec::new(),
+            eeprom: Eeprom93c46::new([0xffff; 64]),
+            eeprom_out: 0,
+            inputs: Inputs::default(),
+            palette: Vec::new(),
+            irq_vblank: false,
+            irq_raster: false,
+            raster_counter: [0; 3],
+            raster_reload: [0; 3],
+            scanline: 0,
+            frame: 0,
+            z80_running: false,
             irq_horizon: 0,
             ext: None,
         }

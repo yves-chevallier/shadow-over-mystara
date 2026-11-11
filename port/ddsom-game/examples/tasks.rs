@@ -10,16 +10,16 @@ fn main() {
         m.set_overclock(16.0);
         m
     };
-    let (mut original, mut game) = (load(), load());
+    let (mut original, game) = (load(), load());
     ddsom_game::install_reference(&mut original);
-    ddsom_game::install(&mut game);
+    let mut game = ddsom_game::install(game);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     for f in 0..n {
-        for m in [&mut original, &mut game] {
-            s.apply(f, m);
-            m.run_frame();
-        }
+        s.apply(f, &mut original);
+        original.run_frame();
+        s.apply(f, &mut game);
+        game.run_frame();
     }
     println!("origine (RAM) :");
     for k in 0..16 {

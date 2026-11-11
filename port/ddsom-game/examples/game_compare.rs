@@ -13,9 +13,13 @@ fn main() {
     // NATIVES=0: recompiled code only (reference to isolate the effect of the native routines)
     if std::env::var("NATIVES").as_deref() == Ok("0") {
         ddsom_game::install_reference(&mut m);
+        compare(m, &a);
     } else {
-        ddsom_game::install(&mut m);
+        compare(ddsom_game::install(m), &a);
     }
+}
+
+fn compare<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String]) {
     ddsom_game::set_check(std::env::var("CHECK").as_deref() == Ok("1"));
     let t0 = std::time::Instant::now();
     let dump = std::fs::read(&a[3]).expect("dump MAME");
@@ -57,7 +61,8 @@ fn main() {
             // MAME only sees a value set by set_value at the next frame's port update
             if *af + 1 == f {
                 let (port, bit) = input_bit(name);
-                let reg = match port { 0 => &mut m.bus.inputs.in0, 1 => &mut m.bus.inputs.in1, _ => &mut m.bus.inputs.in2 };
+                let inputs = &mut m.bus.hw_mut().inputs;
+                let reg = match port { 0 => &mut inputs.in0, 1 => &mut inputs.in1, _ => &mut inputs.in2 };
                 if *v != 0 { *reg &= !bit } else { *reg |= bit }
             }
         }
@@ -85,7 +90,7 @@ fn main() {
             break;
         }
         let mame = &dump[k * 0x10000..(k + 1) * 0x10000];
-        let ours: Vec<u8> = m.bus.ram.iter().flat_map(|w| w.to_be_bytes()).collect();
+        let ours: Vec<u8> = m.bus.ram().iter().flat_map(|w| w.to_be_bytes()).collect();
         let ignored = |i: usize| ignore.iter().any(|&(a, b)| i >= a && i <= b);
         let diffs: Vec<usize> = (0..0x10000).filter(|&i| mame[i] != ours[i] && !ignored(i)).collect();
         for i in 0..0x10000 {

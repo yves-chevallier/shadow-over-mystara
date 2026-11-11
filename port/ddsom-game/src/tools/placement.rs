@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::placement` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::placement::*;
@@ -13,7 +13,7 @@ use crate::objects::Obj;
 /// The search of `place_on_free_ground` replayed (it reads the terrain only): the last terrain examined and the
 /// `dbf` counters D5 (shifts in x, from 4) and D6 (shifts in depth, from 9) at its end; a counter whose loop ran out
 /// has a low word of -1.
-fn search_end(b: &mut Cps2Bus, o: Obj) -> (crate::video::Terrain, u32, u32) {
+fn search_end(b: &mut World, o: Obj) -> (crate::video::Terrain, u32, u32) {
     let x0 = start_x(b, o);
     let mut last = None;
     for i in 0..5u16 {
@@ -33,7 +33,7 @@ fn search_end(b: &mut Cps2Bus, o: Obj) -> (crate::video::Terrain, u32, u32) {
 
 /// Native of 0x3668 (calls by address): leaves the registers of the original (D0, D1: height and depth
 /// found, D2-D4, A1: last terrain examined, D5, D6: search counters).
-fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn place_on_free_ground_native(c: &mut Cpu, b: &mut World) {
     let o = Obj(c.a[0]);
     let (last, d5, d6) = search_end(b, o);
     place_on_free_ground(b, o);
@@ -47,7 +47,7 @@ fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `load_effect_palette` with the registers of the original: D0-D6 and A3 hold the eight longs copied, A1 and A2 the
 /// destination and the next source, like the `movem` of the original.
-pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
+pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut World, offset: u16) {
     let (longs, next) = load_effect_palette(b, offset);
     c.d[..7].copy_from_slice(&longs[..7]);
     c.a[3] = longs[7];
@@ -55,12 +55,12 @@ pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16
     c.a[2] = next;
 }
 
-fn effect_palette_native(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
+fn effect_palette_native(c: &mut Cpu, b: &mut World, offset: u16) {
     load_effect_palette_regs(c, b, offset);
     rts(c, b);
 }
 
-const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World)) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
 }
 

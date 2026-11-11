@@ -37,14 +37,14 @@ fn main() {
         Some(dir) => extract::install_game_assets(Path::new(&dir)).expect("assets"),
         None => extract::install_game(Path::new(&a[1])).expect("roms"),
     };
-    let mut m = cps2::Machine::game(contents, ee.as_deref());
+    let m = cps2::Machine::game(contents, ee.as_deref());
     let dump = std::env::var_os("DDSOM_DUMP_VIDEO").map(std::path::PathBuf::from);
     let every: usize = std::env::var("DDSOM_DUMP_EVERY").ok().and_then(|n| n.parse().ok()).unwrap_or(10);
     let mut index = dump.as_ref().map(|d| {
         std::fs::create_dir_all(d).unwrap();
         std::io::BufWriter::new(std::fs::File::create(d.join("index.txt")).unwrap())
     });
-    ddsom_game::install_no_68k(&mut m);
+    let mut m = ddsom_game::install_no_68k(m);
     m.rendering = true;
     let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");
     let frames: usize = a[4].parse().unwrap();
@@ -82,8 +82,8 @@ fn main() {
 
 /// Video state of the frame just rendered, as little-endian words: GFX RAM, CPS-A, CPS-B, object table, object
 /// output registers, palette (the layout `cps2-gfx/examples/render_bench` reads).
-fn dump_video(path: &Path, m: &cps2::Machine, objram: &[u16], output: &[u16; 6]) {
-    let b = &m.bus;
+fn dump_video(path: &Path, m: &ddsom_game::GameMachine, objram: &[u16], output: &[u16; 6]) {
+    let b = &m.bus.hw;
     let parts: [&[u16]; 6] = [&b.gfxram, &b.cps_a, &b.cps_b, objram, output, &b.palette];
     let bytes: Vec<u8> = parts.iter().flat_map(|p| p.iter()).flat_map(|w| w.to_le_bytes()).collect();
     std::fs::write(path, bytes).unwrap();

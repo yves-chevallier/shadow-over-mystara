@@ -12,7 +12,7 @@ fn mirrored_walk_points() -> &'static Table {
 }
 
 /// "City block" gap between two points: |dx| + |dy| (words).
-pub(super) fn manhattan(b: &mut Cps2Bus, me: Obj, x: u16, depth: u16) -> u16 {
+pub(super) fn manhattan(b: &mut World, me: Obj, x: u16, depth: u16) -> u16 {
     let dx = (x.wrapping_sub(me.u16(b, Obj::X)) as i16).wrapping_abs() as u16;
     let dy = (depth.wrapping_sub(me.u16(b, Obj::Y)) as i16).wrapping_abs() as u16;
     dx.wrapping_add(dy)
@@ -30,7 +30,7 @@ pub(super) enum Pick {
 /// target's position if none). `skip`: point number skipped without reading its pair (original glitch: the following
 /// points take the shifted pair); the point retained is then noted at `+0x99`. `mirror`: x offsets
 /// flipped if the target faces left. Returns the point retained.
-pub(super) fn pick_point(b: &mut Cps2Bus, o: Obj, table: &Table, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
+pub(super) fn pick_point(b: &mut World, o: Obj, table: &Table, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
     let target = Obj::from_word(Enemy(o).target(b));
     let set = Enemy(o).ai_point_set(b) as u32;
     let mut at = table.nth32(b, set);
@@ -69,20 +69,20 @@ pub(super) fn pick_point(b: &mut Cps2Bus, o: Obj, table: &Table, pick: Pick, ski
 }
 
 /// Is `o` more than 384 pixels to the right of the left edge of the camera in service?
-pub(super) fn far_from_camera(b: &mut Cps2Bus, o: Obj) -> bool {
+pub(super) fn far_from_camera(b: &mut World, o: Obj) -> bool {
     let (camera, _) = crate::ram::camera(b);
     o.u16(b, Obj::X).wrapping_sub(camera) > 0x180
 }
 
 /// 0xf084: aims at the farthest point around the target and turns one notch towards it.
-pub fn walk_far_point(b: &mut Cps2Bus, o: Obj) {
+pub fn walk_far_point(b: &mut World, o: Obj) {
     let goal = pick_point(b, o, walk_points(), Pick::Farthest, None, false);
     crate::ai::turn_toward(b, o, goal);
 }
 
 /// 0xe76c: aims at the nearest point around the target (far from the camera: the farthest, 0xf084) and
 /// turns one notch towards it. Nothing without a target.
-pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
+pub fn approach_target(b: &mut World, o: Obj) {
     if Enemy(o).target(b) == 0 {
         return;
     }
@@ -94,7 +94,7 @@ pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
 }
 
 /// 0xeff2: like `approach_target` (without the far case), the offsets flipped according to the target's direction.
-pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
+pub fn walk_near_point(b: &mut World, o: Obj) {
     if Enemy(o).target(b) == 0 {
         return;
     }
@@ -104,7 +104,7 @@ pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
 
 /// 0xe886: retains the farthest point around the target, except the last one retained (`+0x99`); far from the
 /// camera, aims straight away at a far point (0xf084). Nothing without a target.
-pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
+pub fn choose_walk_point(b: &mut World, o: Obj) {
     if Enemy(o).target(b) == 0 {
         return;
     }
@@ -116,7 +116,7 @@ pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
 }
 
 /// 0xe914: is the targeted point reached (to within 8 pixels on each axis)? Then another is chosen (0xe886).
-pub fn walk_point_reached(b: &mut Cps2Bus, o: Obj) {
+pub fn walk_point_reached(b: &mut World, o: Obj) {
     let near = |goal: u16, here: u16| goal.wrapping_sub(here).wrapping_add(8) <= 16;
     let (gx, x) = (Enemy(o).ai_goal_x(b), o.u16(b, Obj::X));
     let (gy, y) = (Enemy(o).ai_goal_y(b), o.u16(b, Obj::Y));
@@ -127,7 +127,7 @@ pub fn walk_point_reached(b: &mut Cps2Bus, o: Obj) {
 
 /// 0xe7fa: retains the nearest point around the target and notes its number (`+0x99`, 0xff if none); far
 /// from the camera, aims at a far point (0xf084). Nothing without a target.
-pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
+pub fn choose_near_walk_point(b: &mut World, o: Obj) {
     if Enemy(o).target(b) == 0 {
         return;
     }

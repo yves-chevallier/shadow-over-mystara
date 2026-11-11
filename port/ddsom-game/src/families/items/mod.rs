@@ -7,7 +7,7 @@
 //! each type.
 
 use crate::families::shell::records::Base;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::wr32;
 use crate::objects::pools;
@@ -190,7 +190,7 @@ handler!(ITEM_9, 0xdd5a2, "item_accompagnement", escort_handler);
 // Subroutines called outside the handlers
 
 /// `0xdabba`: clears the array of collectible objects picked up (48 longs at `A5 - 0x5b88`).
-pub fn clear_picked_up(b: &mut Cps2Bus) {
+pub fn clear_picked_up(b: &mut World) {
     let start = vars::PICKED.0;
     for k in 0..48 {
         wr32(b, start + 4 * k, 0);
@@ -215,7 +215,7 @@ const RING: Door = Door { object: 0x162, hits: 0x16b, chances: 0xdb7d0 };
 
 /// The hit counter of `p` is exhausted, or the draw makes the object fall. The registers the original leaves (A4 = the
 /// chance table, D0.w = the draw, D2.w = the mask) go to `r`.
-fn falls(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door) -> bool {
+fn falls(r: &mut impl Regs, b: &mut World, o: Obj, p: &Door) -> bool {
     let n = o.u8(b, p.hits).wrapping_sub(1);
     o.set_u8(b, p.hits, n);
     if (n as i8) < 0 {
@@ -231,21 +231,21 @@ fn falls(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door) -> bool {
     mask >> bit & 1 != 0
 }
 
-fn dropped(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door, number: u8) {
+fn dropped(r: &mut impl Regs, b: &mut World, o: Obj, p: &Door, number: u8) {
     r.d_byte(0, number);
     super::creators::set_a_via(r, b, number, |b| o.u8(b, Obj::VARIANT));
     o.set_u8(b, p.object, 0xff);
     o.set_u8(b, p.hits, 0);
 }
 
-fn count_dropped(b: &mut Cps2Bus) {
+fn count_dropped(b: &mut World) {
     let n = vars::DROPPED.get(b).wrapping_add(1);
     vars::DROPPED.set(b, n);
 }
 
 /// `0xdb6c0`: equipment dropped by the hit player `o` (`player::hurt`); the registers the original leaves (D0, D2, A4)
 /// go to `r`.
-pub(crate) fn fall_equipment(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj) {
+pub(crate) fn fall_equipment(r: &mut impl Regs, b: &mut World, o: Obj) {
     vars::DROPPED.set(b, 0);
     let shield = o.u8(b, SHIELD.object);
     if shield <= 3 && falls(r, b, o, &SHIELD) {

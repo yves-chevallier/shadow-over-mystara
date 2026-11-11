@@ -9,7 +9,7 @@
 //!   (one row per character, then per level) read at run time.
 
 use crate::machine::Machine;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{wr32, A5};
@@ -68,7 +68,7 @@ pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
 }
 
 /// 0x2d9e: the four player records to zero.
-pub fn clear_all_players(b: &mut Cps2Bus) {
+pub fn clear_all_players(b: &mut World) {
     let mut g = Ctx::new(b);
     for k in 0..PLAYER_COUNT {
         clear_player(&mut g, k);
@@ -76,7 +76,7 @@ pub fn clear_all_players(b: &mut Cps2Bus) {
 }
 
 /// 0x2df8: the eight player sub-objects to zero.
-pub fn clear_sub_objects(b: &mut Cps2Bus) {
+pub fn clear_sub_objects(b: &mut World) {
     let mut g = Ctx::new(b);
     for k in 0..PLAYER_COUNT {
         clear_overlays_of(&mut g, k);
@@ -276,24 +276,24 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
 }
 
 /// The entries 0x2e58, 0x2e6e, 0x2e86, 0x2e9e: build player `k` (the original keeps its registers: `movem`).
-pub fn initialize(b: &mut Cps2Bus, k: u32) {
+pub fn initialize(b: &mut World, k: u32) {
     init_slot(&mut Ctx::new(b), Player::nth(k), k as u8);
 }
 
-fn init_p1(b: &mut Cps2Bus) {
+fn init_p1(b: &mut World) {
     initialize(b, 0)
 }
-fn init_p2(b: &mut Cps2Bus) {
+fn init_p2(b: &mut World) {
     initialize(b, 1)
 }
-fn init_p3(b: &mut Cps2Bus) {
+fn init_p3(b: &mut World) {
     initialize(b, 2)
 }
-fn init_p4(b: &mut Cps2Bus) {
+fn init_p4(b: &mut World) {
     initialize(b, 3)
 }
 
-const fn init_native(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+const fn init_native(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
     Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
@@ -319,7 +319,7 @@ pub enum Join {
 /// `0x00040800` frozen inputs, `0x00040c00` global slow walk), then all enemies and bosses receive
 /// a shock (`join_shockwave`).
 /// The entries 0x2f46.., 0x3048.., 0x3142.. (one per player `k`): the player arrives during the game.
-pub fn join_player(b: &mut Cps2Bus, k: u8, how: Join) {
+pub fn join_player(b: &mut World, k: u8, how: Join) {
     join(&mut Ctx::new(b), k, how);
 }
 
@@ -431,7 +431,7 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
     }
 }
 
-const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+const fn join_native(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
     Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 

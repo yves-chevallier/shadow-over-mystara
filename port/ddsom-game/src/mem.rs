@@ -2,24 +2,82 @@
 
 use cps2::Cps2Bus;
 
+use crate::world::World;
+
 /// Base of the work RAM addressed by A5 throughout the game.
 pub const A5: u32 = 0xff8000;
 
-pub fn rd8(b: &mut Cps2Bus, a: u32) -> u8 {
+/// A 68000 address space: the game's [`World`] (work RAM without address decoding), or the bus of a machine that
+/// runs the original code (tools).
+pub trait Memory {
+    fn read8(&mut self, a: u32) -> u8;
+    fn read16(&mut self, a: u32) -> u16;
+    fn write8(&mut self, a: u32, v: u8);
+    fn write16(&mut self, a: u32, v: u16);
+    /// Word of the program space (tools: the decrypted program of a machine with the ROMs).
+    fn fetch16(&mut self, a: u32) -> u16;
+}
+
+impl Memory for World {
+    #[inline]
+    fn read8(&mut self, a: u32) -> u8 {
+        World::read8(self, a)
+    }
+    #[inline]
+    fn read16(&mut self, a: u32) -> u16 {
+        World::read16(self, a)
+    }
+    #[inline]
+    fn write8(&mut self, a: u32, v: u8) {
+        World::write8(self, a, v)
+    }
+    #[inline]
+    fn write16(&mut self, a: u32, v: u16) {
+        World::write16(self, a, v)
+    }
+    fn fetch16(&mut self, a: u32) -> u16 {
+        self.hw.fetch16(a)
+    }
+}
+
+impl Memory for Cps2Bus {
+    fn read8(&mut self, a: u32) -> u8 {
+        Cps2Bus::read8(self, a)
+    }
+    fn read16(&mut self, a: u32) -> u16 {
+        Cps2Bus::read16(self, a)
+    }
+    fn write8(&mut self, a: u32, v: u8) {
+        Cps2Bus::write8(self, a, v)
+    }
+    fn write16(&mut self, a: u32, v: u16) {
+        Cps2Bus::write16(self, a, v)
+    }
+    fn fetch16(&mut self, a: u32) -> u16 {
+        Cps2Bus::fetch16(self, a)
+    }
+}
+
+#[inline]
+pub fn rd8(b: &mut impl Memory, a: u32) -> u8 {
     b.read8(a & 0xff_ffff)
 }
-pub fn rd16(b: &mut Cps2Bus, a: u32) -> u16 {
+#[inline]
+pub fn rd16(b: &mut impl Memory, a: u32) -> u16 {
     b.read16(a & 0xff_ffff)
 }
-pub fn rd32(b: &mut Cps2Bus, a: u32) -> u32 {
+#[inline]
+pub fn rd32(b: &mut impl Memory, a: u32) -> u32 {
     (rd16(b, a) as u32) << 16 | rd16(b, a.wrapping_add(2)) as u32
 }
-pub fn wr8(b: &mut Cps2Bus, a: u32, v: u8) {
+#[inline]
+pub fn wr8(b: &mut impl Memory, a: u32, v: u8) {
     #[cfg(feature = "watch_writes")]
     watched::write(a & 0xff_ffff, 1, v as u32);
     b.write8(a & 0xff_ffff, v)
 }
-pub fn wr16(b: &mut Cps2Bus, a: u32, v: u16) {
+#[inline]
+pub fn wr16(b: &mut impl Memory, a: u32, v: u16) {
     #[cfg(feature = "watch_writes")]
     watched::write(a & 0xff_ffff, 2, v as u32);
     b.write16(a & 0xff_ffff, v)
@@ -43,7 +101,8 @@ pub mod watched {
         }
     }
 }
-pub fn wr32(b: &mut Cps2Bus, a: u32, v: u32) {
+#[inline]
+pub fn wr32(b: &mut impl Memory, a: u32, v: u32) {
     wr16(b, a, (v >> 16) as u16);
     wr16(b, a.wrapping_add(2), v as u16);
 }
@@ -100,13 +159,13 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
 /// Word of the program space (PC-relative read: the decrypted program, not the data). Tools only: the game machine
 /// has no ROM (the natives for the original code read the ROM of the reference machine).
 #[cfg(feature = "tools")]
-pub fn prog16(b: &mut Cps2Bus, a: u32) -> u16 {
+pub fn prog16(b: &mut impl Memory, a: u32) -> u16 {
     b.fetch16(a)
 }
 
 /// Byte of the program space (see `prog16`). Tools only.
 #[cfg(feature = "tools")]
-pub fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
+pub fn prog8(b: &mut impl Memory, a: u32) -> u8 {
     let word = b.fetch16(a & !1);
     if a & 1 == 0 { (word >> 8) as u8 } else { word as u8 }
 }

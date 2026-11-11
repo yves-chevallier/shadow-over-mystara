@@ -77,7 +77,7 @@ fn principal() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
@@ -85,7 +85,7 @@ fn principal() {
     }
     ddsom_game::set_trace(trace);
     std::panic::set_hook(Box::new(|_| {}));
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     let mut rng = Rng(0x2545_f491_4f6c_dd1d);
     let natives: BTreeSet<u32> = ddsom_game::all_natives().map(|n| n.entry).collect();
     for t in 0..92u32 {

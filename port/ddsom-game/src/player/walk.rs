@@ -1,6 +1,6 @@
 //! Player movement: walking speeds, motion integration, screen limits.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, wr16, wr8};
@@ -106,7 +106,7 @@ const EDGE_HIT: u32 = 0x5a;
 /// Keeps the player within the visible area: depth stays between camera.y + 0x28 and
 /// camera.y + 0xa4, abscissa between camera.x + 0x20 and camera.x + 0x160 (the touched edge is
 /// remembered). Returns true if the abscissa was corrected.
-pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
+pub fn clamp_to_screen(b: &mut World, p: Player) -> bool {
     cov!();
     let cam = crate::objects::cull::camera(b);
     let cam_y = rd16(b, cam + 0xc) as i16;
@@ -121,7 +121,7 @@ pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
 }
 
 /// 0x35dc: only the abscissa (between camera.x + 0x20 and camera.x + 0x160). True if corrected.
-pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
+pub fn clamp_x(b: &mut World, p: Player) -> bool {
     cov!();
     let cam = crate::objects::cull::camera(b);
     let cam_x = rd16(b, cam + 8) as i16;

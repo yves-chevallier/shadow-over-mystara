@@ -59,9 +59,37 @@ impl StepCap {
     }
 }
 
-/// Processor work during a line, in place of the 68000 (see `Machine::line_work`): (bus, frame step cap). It has no
+/// Processor work during a line, in place of the 68000 (see `Machine::line_work`): (board, frame step cap). It has no
 /// duration: the line's time passes for the processor all the same.
-pub type LineWork = fn(&mut Cps2Bus, Option<&mut StepCap>);
+pub type LineWork<B> = fn(&mut B, Option<&mut StepCap>);
+
+/// What a machine holds besides its processor, sound and graphics: the hardware ([`Cps2Bus`]: video, sound link,
+/// inputs, EEPROM) and the work RAM. The reference machine runs the 68000 on the bus itself (`Cps2Bus`, RAM
+/// included); a ported game keeps its RAM and its state outside the bus (ddsom: `ddsom_game::world::World`) and
+/// works on them through `Machine::line_work`.
+pub trait Board: 'static {
+    /// The hardware.
+    fn hw(&self) -> &Cps2Bus;
+    fn hw_mut(&mut self) -> &mut Cps2Bus;
+    /// The work RAM (FF0000-FFFFFF), one word per entry.
+    fn ram(&self) -> &[u16];
+    fn ram_mut(&mut self) -> &mut [u16];
+}
+
+impl Board for Cps2Bus {
+    fn hw(&self) -> &Cps2Bus {
+        self
+    }
+    fn hw_mut(&mut self) -> &mut Cps2Bus {
+        self
+    }
+    fn ram(&self) -> &[u16] {
+        &self.ram
+    }
+    fn ram_mut(&mut self) -> &mut [u16] {
+        &mut self.ram
+    }
+}
 
 /// Fix for an undefined behavior of the original game (see `Machine::patches`).
 #[cfg(feature = "m68k")]
@@ -77,7 +105,7 @@ pub struct Patch {
 /// Callback after each interpreted instruction (diagnostic tools): (cpu, bus, pc).
 pub type StepHook = Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>;
 
-pub struct Machine {
+pub struct Machine<B: Board = Cps2Bus> {
     #[cfg(feature = "m68k")]
     /// Recompiled code (None = everything interpreted).
     pub executor: Option<BlockExecutor>,
@@ -107,7 +135,7 @@ pub struct Machine {
     /// Replaces the execution of the 68000 (executor, interpreter, `idle`, fixes): called once per line, it
     /// does the processor's work of the line; the Z80 follows as usual. `cpu` is then unused, only its cycle counter
     /// advances (game without 68000, `ddsom_game::install_no_68k`).
-    pub line_work: Option<LineWork>,
+    pub line_work: Option<LineWork<B>>,
     /// `run_frame` returns the frame (true by default). False: the frame is not computed and
     /// `run_frame` returns an empty vector.
     /// Rendering only reads the state (no side effect); tools that do not look at the frame (`validate`, `bench`)
@@ -115,7 +143,8 @@ pub struct Machine {
     pub rendering: bool,
     #[cfg(feature = "m68k")]
     pub cpu: Cpu,
-    pub bus: Cps2Bus,
+    /// The hardware and the work RAM (see [`Board`]).
+    pub bus: B,
     pub sound: sound::Sound,
     /// The graphics, as the renderer reads them.
     pub gfx: TileAtlas,
@@ -300,6 +329,42 @@ impl Machine {
         }
     }
 
+}
+
+impl<B: Board> Machine<B> {
+    /// The same machine on another board (`f` turns the bus into it: a ported game takes the RAM out of the bus).
+    /// The line work, made for the old board, is removed.
+    pub fn with_board<C: Board>(self, f: impl FnOnce(B) -> C) -> Machine<C> {
+        Machine {
+            #[cfg(feature = "m68k")]
+            executor: self.executor,
+            #[cfg(feature = "m68k")]
+            misses: self.misses,
+            #[cfg(feature = "m68k")]
+            interp_steps: self.interp_steps,
+            #[cfg(feature = "m68k")]
+            step_hook: self.step_hook,
+            #[cfg(feature = "m68k")]
+            idle: self.idle,
+            step_cap: self.step_cap,
+            #[cfg(feature = "m68k")]
+            patches: self.patches,
+            line_work: None,
+            rendering: self.rendering,
+            #[cfg(feature = "m68k")]
+            cpu: self.cpu,
+            bus: f(self.bus),
+            sound: self.sound,
+            gfx: self.gfx,
+            frame: self.frame,
+            obj_buffer: self.obj_buffer,
+            pri_ctrl_buffer: self.pri_ctrl_buffer,
+            line_cycles: self.line_cycles,
+            cycle_debt: self.cycle_debt,
+            z80_debt: self.z80_debt,
+        }
+    }
+
     /// Multiplies the 68000 frequency (1.0 = arcade). Overclocked, the game always finishes its work
     /// before the end of the frame: no more slowdowns, behavior determined frame by frame.
     pub fn set_overclock(&mut self, k: f64) {
@@ -310,7 +375,7 @@ impl Machine {
         #[cfg(feature = "m68k")]
         {
             self.cpu = Cpu::new();
-            self.cpu.reset(&mut self.bus);
+            self.cpu.reset(self.bus.hw_mut());
         }
     }
 
@@ -333,17 +398,19 @@ impl Machine {
             None => panic!("machine without 68000: no line work installed (cycle {target})"),
         }
         // then the Z80 over the same time slice (512 cycles at 8 MHz per line)
-        self.sound.set_reset(!self.bus.z80_running);
+        let hw = self.bus.hw_mut();
+        self.sound.set_reset(!hw.z80_running);
         self.z80_debt += sound::Z80_HZ / LINE_HZ;
-        self.sound.run(&mut self.bus.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
+        self.sound.run(&mut hw.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
     }
 
     /// Runs the 68000 up to cycle `target`.
     #[cfg(feature = "m68k")]
     fn run_cpu(&mut self, target: u64) {
+        let bus = self.bus.hw_mut();
         while self.cpu.cycles < target {
-            self.cpu.irq_level = self.bus.irq_level();
-            if self.idle.is_some_and(|idle| idle(&self.cpu, &self.bus)) && self.cpu.irq_level == 0 {
+            self.cpu.irq_level = bus.irq_level();
+            if self.idle.is_some_and(|idle| idle(&self.cpu, bus)) && self.cpu.irq_level == 0 {
                 self.cpu.cycles = target;
                 break;
             }
@@ -357,22 +424,22 @@ impl Machine {
                     break;
                 }
             }
-            if plain && self.patches.iter().any(|p| p.entry == self.cpu.pc && (p.apply)(&mut self.cpu, &mut self.bus)) {
+            if plain && self.patches.iter().any(|p| p.entry == self.cpu.pc && (p.apply)(&mut self.cpu, bus)) {
                 continue;
             }
             if let Some(run) = self.executor {
                 if plain {
-                    if run(self.cpu.pc, &mut self.cpu, &mut self.bus, target).is_some() {
+                    if run(self.cpu.pc, &mut self.cpu, bus, target).is_some() {
                         continue;
                     }
                     *self.misses.entry(self.cpu.pc).or_default() += 1;
                 }
             }
             let pc = self.cpu.pc;
-            self.cpu.step(&mut self.bus);
+            self.cpu.step(bus);
             self.interp_steps += 1;
             if let Some(h) = self.step_hook.as_mut() {
-                h(&self.cpu, &self.bus, pc);
+                h(&self.cpu, bus, pc);
             }
         }
     }
@@ -386,30 +453,30 @@ impl Machine {
         if let Some(cap) = self.step_cap.as_mut() {
             cap.count = 0;
         }
-        self.bus.frame = self.frame;
+        self.bus.hw_mut().frame = self.frame;
         let frame_end = (self.cycle_debt + self.line_cycles * LINES as f64) as u64;
         for i in 0..LINES {
             let line = (VBLANK_LINE + i) % LINES;
-            self.bus.scanline = line;
+            self.bus.hw_mut().scanline = line;
             self.raster_tick(line);
             // armed raster counters (reload < number of lines): an IRQ may fall on
             // every line; otherwise the next possible interrupt is the end-of-frame vblank
-            let raster = self.bus.raster_reload[..2].iter().any(|&r| (r as u32) < LINES);
-            self.bus.irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
+            let raster = self.bus.hw_mut().raster_reload[..2].iter().any(|&r| (r as u32) < LINES);
+            self.bus.hw_mut().irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
         }
         let image = if self.rendering { self.render() } else { Vec::new() };
-        let bank = self.bus.objram_bank as usize & 1;
-        self.obj_buffer.copy_from_slice(&self.bus.objram[bank]);
-        self.pri_ctrl_buffer = self.bus.output;
-        self.bus.irq_vblank = true;
+        let bank = self.bus.hw_mut().objram_bank as usize & 1;
+        self.obj_buffer.copy_from_slice(&self.bus.hw().objram[bank]);
+        self.pri_ctrl_buffer = self.bus.hw_mut().output;
+        self.bus.hw_mut().irq_vblank = true;
         self.frame += 1;
         image
     }
 
     /// CPS-B raster counters (cps_state::raster_scanline). IRQ4 is triggered without delay.
     fn raster_tick(&mut self, line: u32) {
-        let b = &mut self.bus;
+        let b = self.bus.hw_mut();
         for i in 0..2 {
             if line == 0 {
                 b.raster_counter[i] = b.raster_reload[i];
@@ -424,7 +491,7 @@ impl Machine {
     }
 
     pub fn render(&self) -> Vec<[u8; 3]> {
-        let b = &self.bus;
+        let b = self.bus.hw();
         let v = cps2_gfx::VideoState {
             gfxram: &b.gfxram,
             cps_a: &b.cps_a,

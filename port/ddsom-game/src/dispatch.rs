@@ -11,7 +11,7 @@
 //! abandoned, and the task resumes it at the step [`Step::Dispatch`] (after the current slot, with the object and
 //! the counter noted in the step), then at the continuation of the loop's caller.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::families as f;
 use crate::modes::Flow;
@@ -36,7 +36,7 @@ pub struct Class {
 #[derive(Clone, Copy)]
 pub enum Handler {
     /// A Rust handler without registers, and its native (original address and name: tools, diagnostics).
-    Rust { run: fn(&mut Cps2Bus, &mut Dispatch), native: &'static Native },
+    Rust { run: fn(&mut World, &mut Dispatch), native: &'static Native },
     /// An entry of the original table whose code no object ever runs (`docs/code-mort.md`, batch L13): its address.
     Dead { entry: u32 },
 }
@@ -86,13 +86,13 @@ impl Class {
     ///
     /// `Flow::Yield`: a handler ceded control (the task will resume at [`Step::Dispatch`], then at the continuation
     /// that the caller stored in its pending calls before the call), or returned higher up.
-    pub fn update(&self, b: &mut Cps2Bus) -> Flow {
+    pub fn update(&self, b: &mut World) -> Flow {
         self.sweep(b, self.pool.slot(0), (self.pool.slots - 1) as u16, false, &mut None)
     }
 
     /// Walk called without continuation (phase 0, screens outside the game): no handler cedes control there.
     #[track_caller]
-    pub fn update_no_next(&self, b: &mut Cps2Bus) {
+    pub fn update_no_next(&self, b: &mut World) {
         self.update_last_kind(b);
     }
 
@@ -100,7 +100,7 @@ impl Class {
     /// the original loop leaves type × 4 in D0 (`lsl.w #2`), which a caller rereads (original glitch: the end credits,
     /// `modes::ending`).
     #[track_caller]
-    pub fn update_last_kind(&self, b: &mut Cps2Bus) -> Option<u8> {
+    pub fn update_last_kind(&self, b: &mut World) -> Option<u8> {
         let mut last = None;
         let flow = self.sweep(b, self.pool.slot(0), (self.pool.slots - 1) as u16, false, &mut last);
         assert!(flow == Flow::Done, "dispatch {:x}: a handler ceded control without continuation", self.entry);
@@ -109,7 +109,7 @@ impl Class {
 
     /// Walk of the slots from `object`, `counter` slots left after it (D7.w of the original). `after_current`: resumes
     /// just after the `jsr (A1)` of the handler of the current slot, which must not be called again.
-    fn sweep(&self, b: &mut Cps2Bus, mut object: Obj, mut counter: u16, mut after_current: bool, last_kind: &mut Option<u8>) -> Flow {
+    fn sweep(&self, b: &mut World, mut object: Obj, mut counter: u16, mut after_current: bool, last_kind: &mut Option<u8>) -> Flow {
         loop {
             if !after_current && object.is_active(b) {
                 let kind = object.u8(b, Obj::KIND);
@@ -133,7 +133,7 @@ impl Class {
 
 /// Calls `handler` for `object`, then returns to the loop (its `rts`: the expected call of the loop is closed, unless
 /// the handler ceded control).
-fn run_handler(b: &mut Cps2Bus, handler: Handler, object: Obj, counter: u16) {
+fn run_handler(b: &mut World, handler: Handler, object: Obj, counter: u16) {
     let (run, native) = match handler {
         Handler::Rust { run, native } => (run, native),
         Handler::Dead { entry } => unreachable!("handler {entry:06x}: dead type of the original table"),
@@ -210,7 +210,7 @@ impl Step {
 
 /// The object that the current dispatch loop of the current task is processing (the most recent of its pending
 /// calls [`Step::Dispatch`]): that of a handler that ceded control and resumes (fireworks).
-pub fn current_object(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn current_object(b: &mut World) -> Option<Obj> {
     let frames = crate::tasks::table::table(b).frames();
     frames.iter().filter_map(|frame| match frame.next {
         crate::tasks::table::Next::Step(crate::tasks::Step::Dispatch(Step::Dispatch { object, .. })) => Some(object),
@@ -220,7 +220,7 @@ pub fn current_object(b: &mut Cps2Bus) -> Option<Obj> {
 
 /// The pending dispatch loop call of the current task (the most recent [`Step::Dispatch`]): the object being processed
 /// and the loop counter.
-fn current_call(b: &mut Cps2Bus) -> Option<(Obj, u16)> {
+fn current_call(b: &mut World) -> Option<(Obj, u16)> {
     let frames = crate::tasks::table::table(b).frames();
     frames.iter().filter_map(|frame| match frame.next {
         crate::tasks::table::Next::Step(crate::tasks::Step::Dispatch(Step::Dispatch { object, counter, .. })) => {
@@ -233,7 +233,7 @@ fn current_call(b: &mut Cps2Bus) -> Option<(Obj, u16)> {
 /// A handler that ceded control resumes (fireworks, SET doors: steps of the task): `f` runs on what the dispatch loop
 /// passes, the object being `object` (or that of the pending loop), the counter that of the pending loop, the
 /// leftovers those of the game (the original keeps them in the registers, which the cession saves and restores).
-pub fn resume_handler(b: &mut Cps2Bus, object: Option<Obj>, f: impl FnOnce(&mut Cps2Bus, &mut Dispatch)) {
+pub fn resume_handler(b: &mut World, object: Option<Obj>, f: impl FnOnce(&mut World, &mut Dispatch)) {
     let (current, counter) = current_call(b).expect("a handler resumes outside a dispatch loop");
     let leftovers = crate::tasks::table::table(b).leftovers;
     let mut a = Dispatch { object: object.unwrap_or(current), counter, leftovers };

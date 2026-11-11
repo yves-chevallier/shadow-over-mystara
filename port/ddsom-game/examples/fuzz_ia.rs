@@ -142,7 +142,7 @@ fn perturbs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, o: u32) {
 }
 
 /// Compared result: the core's, and what the original leaves (read from its registers).
-type Core = fn(&mut Cpu, &mut Bus, Obj) -> u32;
+type Core = fn(&mut Cpu, &mut ddsom_game::world::World, Obj) -> u32;
 type Read = fn(&Cpu) -> u32;
 
 fn z(c: &Cpu) -> u32 {
@@ -415,8 +415,8 @@ fn main() {
     let rounds: u32 = a[5].parse().unwrap();
     let filter: Vec<u32> = a[6..].iter().map(|e| u32::from_str_radix(e.trim_start_matches("0x"), 16).unwrap()).collect();
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
@@ -424,7 +424,7 @@ fn main() {
     }
     let seed: u64 = std::env::var("DDSOM_GRAINE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut rng = Rng(0x2545_f491_4f6c_dd1d ^ seed.wrapping_mul(0x9e37_79b9_7f4a_7c15));
-    let (c0, mut b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, mut b0) = (m.cpu.clone(), m.bus.to_bus());
     b0.irq_horizon = u64::MAX;
     let objects = actors(&mut b0);
     if objects.is_empty() {
@@ -453,7 +453,7 @@ fn main() {
                 continue;
             };
             let a0 = Obj(c.a[0]);
-            let got = (case.core)(&mut c, &mut b, a0);
+            let got = ddsom_game::world::World::lend(&mut b, |w| (case.core)(&mut c, w, a0));
             let mut diffs = Vec::new();
             if got != expected {
                 diffs.push(format!("result {got:x} instead of {expected:x}"));

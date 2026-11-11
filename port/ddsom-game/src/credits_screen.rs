@@ -11,7 +11,7 @@
 //! counters, `+0x1e` coins per credit, `+0x456` big-digit screen. In a coin slot: `+1` coins
 //! waiting, `+2` credits, `+9` two-coin credit, `+0xb` last text displayed.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::credits::{ram, write_digit, CoinSlot};
 use crate::hw::video::TEXT;
@@ -45,12 +45,12 @@ mod table {
 pub const FIRST_COIN_SLOT: CoinSlot = CoinSlot::nth(0);
 
 /// Text pointer `table[index]` (A4 of the original).
-fn text_at(b: &mut Cps2Bus, table: Rom, index: u32) -> u32 {
+fn text_at(b: &mut World, table: Rom, index: u32) -> u32 {
     table.long(b, index & 0xffff)
 }
 
 /// Writes a digit (attribute 1) through `0x14e46`; returns the cell that follows.
-fn digit(b: &mut Cps2Bus, case: u32, value: u8) -> u32 {
+fn digit(b: &mut World, case: u32, value: u8) -> u32 {
     write_digit(b, case, value, 1)
 }
 
@@ -70,13 +70,13 @@ fn modulo(value: u8, by: u8) -> u8 {
 // 0x14c1e and 0x14b74
 
 /// 0x14c1e: erases the credit text rectangle.
-pub fn clear_credit_text(b: &mut Cps2Bus) {
+pub fn clear_credit_text(b: &mut World) {
     text::clear_box(b, table::RECT.addr());
 }
 
 /// Index (in bytes) of the credit text of coin slot `m`: 4 bytes per whole credit, plus a fraction of coins
 /// when the credit is at one coin.
-fn credit_index(b: &mut Cps2Bus, m: CoinSlot) -> u32 {
+fn credit_index(b: &mut World, m: CoinSlot) -> u32 {
     let (coins, credits, per_credit) = (m.coins(b), m.credits(b), ram::COINS_PER_CREDIT.get(b));
     let mut d0: u32;
     if m.two_coins(b) != 0 {
@@ -106,7 +106,7 @@ fn credit_index(b: &mut Cps2Bus, m: CoinSlot) -> u32 {
 }
 
 /// `0x14b74`: credit text of coin slot `m` at column `col` (D5), row 0xd (D6).
-fn count_text(b: &mut Cps2Bus, m: CoinSlot, col: u8) {
+fn count_text(b: &mut World, m: CoinSlot, col: u8) {
     let index = credit_index(b, m);
     let two_coins = (m.two_coins(b) != 0) as usize;
     let variant = match ram::COIN_SLOTS.get(b) {
@@ -122,7 +122,7 @@ fn count_text(b: &mut Cps2Bus, m: CoinSlot, col: u8) {
 // 0x148be: credit text
 
 /// `0x148be`: credit text, from the first coin slot `m`.
-pub fn credit_text(b: &mut Cps2Bus, m: CoinSlot) {
+pub fn credit_text(b: &mut World, m: CoinSlot) {
     if ram::SEPARATE_MODE.get(b) != 0 {
         return credit_text_separate(b);
     }
@@ -177,7 +177,7 @@ pub fn credit_text(b: &mut Cps2Bus, m: CoinSlot) {
 }
 
 /// Intermediate text (0x14912): `d0` plus 4 bytes per coin missing for the next credit.
-fn fraction_index(b: &mut Cps2Bus, m: CoinSlot, d0: u8) -> u8 {
+fn fraction_index(b: &mut World, m: CoinSlot, d0: u8) -> u8 {
     let mut d1 = 0u8;
     let coins = m.coins(b);
     if coins != 0 {
@@ -194,7 +194,7 @@ fn fraction_index(b: &mut Cps2Bus, m: CoinSlot, d0: u8) -> u8 {
 }
 
 /// Separate counters (0x149aa): one text per player, at the columns of each configuration.
-fn credit_text_separate(b: &mut Cps2Bus) {
+fn credit_text_separate(b: &mut World) {
     clear_credit_text(b);
     const P1: CoinSlot = CoinSlot::nth(0);
     const P2: CoinSlot = CoinSlot::nth(1);
@@ -225,7 +225,7 @@ fn credit_text_separate(b: &mut Cps2Bus) {
 // 0x14652: credit and coin digits
 
 /// Variant of the player array: 0 for one coin slot, 2 for two, 5 for three and four.
-fn rank(b: &mut Cps2Bus) -> u8 {
+fn rank(b: &mut World) -> u8 {
     match ram::COIN_SLOTS.get(b) {
         1 => 0,
         2 => 2,
@@ -239,7 +239,7 @@ fn case(offset: u32) -> u32 {
 }
 
 /// `0x14652`: credit and coin digits, from the first coin slot `m`.
-pub fn digits(b: &mut Cps2Bus, m: CoinSlot) {
+pub fn digits(b: &mut World, m: CoinSlot) {
     let tall = ram::BIG_DIGITS.get(b) != 0;
     if ram::COIN_SLOTS.get(b) == 0 || ram::SEPARATE_MODE.get(b) == 0 {
         return if tall { digits_tall_single(b) } else { digits_single(b, m) };
@@ -279,7 +279,7 @@ pub fn digits(b: &mut Cps2Bus, m: CoinSlot) {
 }
 
 /// A single array (0x14700): credits of one coin slot.
-fn digits_single(b: &mut Cps2Bus, m: CoinSlot) {
+fn digits_single(b: &mut World, m: CoinSlot) {
     let two_coins = m.two_coins(b) != 0;
     let t = text_at(b, table::DIGIT_TEXT[two_coins as usize], 0x24);
     text::print(b, t);
@@ -289,7 +289,7 @@ fn digits_single(b: &mut Cps2Bus, m: CoinSlot) {
 }
 
 /// Big digits, a single array (0x1484c).
-fn digits_tall_single(b: &mut Cps2Bus) {
+fn digits_tall_single(b: &mut World) {
     let t = text_at(b, table::TALL_TEXT, 0x24);
     text::print_over(b, t);
     let credits = FIRST_COIN_SLOT.credits(b);

@@ -3,7 +3,7 @@
 
 use crate::hw::video::Cell;
 use crate::screens::tables::{self, Rom};
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::layer::{clear_cell, Brush, COLUMN};
 use super::{panel, slot, var, Slot};
@@ -33,7 +33,7 @@ pub(super) mod line {
 }
 
 /// 0x178d4: clears the status line (2x2 cells).
-fn clear_status_line(b: &mut Cps2Bus) {
+fn clear_status_line(b: &mut World) {
     for column in 0..2 {
         for row in 0..2 {
             clear_cell(b, line::AT + column * COLUMN + row * 4);
@@ -43,7 +43,7 @@ fn clear_status_line(b: &mut Cps2Bus) {
 
 /// 0x17814: the status line, two columns of two cells (icon and digit): the value `A5+0x45` in BCD,
 /// which blinks for 96 frames at each change. Returns without drawing anything when the flag is off.
-pub fn status_line(b: &mut Cps2Bus) {
+pub fn status_line(b: &mut World) {
     let on = line::ON.get(b);
     let mut shown = on; // the original draws "D0": the flag, or the value depending on the path
     let seen_on = line::SEEN_ON.get(b);
@@ -128,7 +128,7 @@ fn all_panels() -> impl Iterator<Item = Slot> {
 }
 
 /// 0x177ce: clears the message frame (30 columns of 4 cells).
-fn clear_message(b: &mut Cps2Bus) {
+fn clear_message(b: &mut World) {
     for column in 0..30 {
         for row in 0..4 {
             clear_cell(b, over::FRAME_AT + column * COLUMN + row * 4);
@@ -152,14 +152,14 @@ fn frame_columns(brush: &mut Brush, mut tile: u16, columns: u32) {
 }
 
 /// 0x176d8: frame of the countdown message ("CONTINUE ?").
-fn draw_countdown_frame(b: &mut Cps2Bus) {
+fn draw_countdown_frame(b: &mut World) {
     let mut brush = Brush::new(b, over::FRAME_AT);
     frame_columns(&mut brush, 0x700, 16);
     frame_columns(&mut brush, 0x740, 7);
 }
 
 /// 0x177f6: frame of the "GAME OVER" message.
-fn draw_game_over_frame(b: &mut Cps2Bus) {
+fn draw_game_over_frame(b: &mut World) {
     clear_message(b);
     let mut brush = Brush::new(b, over::FRAME_AT);
     frame_columns(&mut brush, 0x680, 16);
@@ -170,7 +170,7 @@ fn draw_game_over_frame(b: &mut Cps2Bus) {
 const BIG_DIGITS: Rom = Rom::at(0x17bb6);
 
 /// 0x17782: the two digits of the countdown in large size.
-fn draw_countdown_digits(b: &mut Cps2Bus) {
+fn draw_countdown_digits(b: &mut World) {
     let value = Obj(over::RECORD).u8(b, over::TIMER);
     let mut brush = Brush::new(b, over::DIGITS_AT);
     for digit in [value >> 4, value & 0xf] {
@@ -189,7 +189,7 @@ fn draw_countdown_digits(b: &mut Cps2Bus) {
 
 /// 0x17728: the longest continue countdown among the players in state 8; when none is
 /// running any more, and the one that finished was flagged (`+0x27`), the state advances.
-fn longest_countdown(b: &mut Cps2Bus) {
+fn longest_countdown(b: &mut World) {
     let record = over::RECORD;
     let mut longest = 0i16;
     let mut who = Slot::new(0);

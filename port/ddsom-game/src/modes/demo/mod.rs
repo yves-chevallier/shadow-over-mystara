@@ -19,7 +19,7 @@ use crate::hw::video::{palette, OBJECTS};
 use crate::ram::Word;
 use crate::screens::tables::{self, Rom};
 use crate::screens::vars as sv;
-use cps2::Cps2Bus;
+use crate::world::World;
 use crate::scene::fading;
 
 use super::{mode, Block, Flow, Sequence};

@@ -50,6 +50,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use cps2::Cps2Bus;
+
+use crate::world::World;
 use m68k::Cpu;
 
 pub use registry::{all_natives, game_natives, is_native};
@@ -58,7 +60,7 @@ use registry::lookup;
 use crate::{mem, no68k, regs, tasks, Body, Native};
 
 /// Long of the program space (see `mem::prog16`): tables that the natives for the original code read in the ROM.
-pub(crate) fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
+pub(crate) fn prog32(b: &mut World, a: u32) -> u32 {
     (mem::prog16(b, a) as u32) << 16 | mem::prog16(b, a + 2) as u32
 }
 
@@ -68,6 +70,11 @@ pub(crate) const NATIVE_DURATION: u64 = 100;
 impl Native {
     /// Runs the routine from the processor, return (`rts`) included.
     pub fn execute(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        World::lend(b, |w| self.execute_on(c, w))
+    }
+
+    /// [`Native::execute`] on the world of the machine.
+    pub(crate) fn execute_on(&self, c: &mut Cpu, b: &mut World) {
         match self.run {
             Body::WithCpu(f) => {
                 f(c, b);
@@ -397,9 +404,17 @@ pub(crate) fn natives() -> impl Iterator<Item = &'static Native> {
 /// `tasks::table::call` and [`call_expected`]).
 #[track_caller]
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
-    // never run by the game
-    const RETURN: u32 = 0x00_fffe;
     let site = std::panic::Location::caller();
+    World::lend(b, |w| call_at_site(c, w, addr, site))
+}
+
+/// [`call`] from a native for the original code (its world).
+#[track_caller]
+pub(crate) fn call_in(c: &mut Cpu, b: &mut World, addr: u32) {
+    call_at_site(c, b, addr, std::panic::Location::caller())
+}
+
+fn call_at_site(c: &mut Cpu, b: &mut World, addr: u32, site: &'static std::panic::Location<'static>) {
     let _site = (TRACE.get().is_some() || no68k::active()).then(|| CallSite::enter(site, addr));
     let before = (c.d, c.a, c.sr);
     if no68k::active() {
@@ -416,6 +431,15 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
         return;
     }
     // tools (machine without a Rust task table): natives and original code, until the return to a sentinel
+    b.as_bus(|b| call_68000(c, b, addr, site));
+    diag::probe_call(c, addr, &before, site);
+}
+
+/// [`call`] on a machine that runs the original code: the routine runs on the 68000 (natives included) until it
+/// returns to a sentinel address.
+fn call_68000(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, site: &std::panic::Location) {
+    // never run by the game
+    const RETURN: u32 = 0x00_fffe;
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], RETURN);
@@ -433,7 +457,6 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
         }
         one_step(c, b);
     }
-    diag::probe_call(c, addr, &before, site);
 }
 
 /// Switch point of the scheduler: a task that cedes control (0xa40, 0xa86) or ends goes through it.
@@ -499,9 +522,11 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
         if let Some(h) = hook {
             h(pc, true);
         }
-        let frame = tasks::table::open_call_68000(b);
-        exec(n, c, b);
-        tasks::table::close_calls(b, frame);
+        World::lend(b, |b| {
+            let frame = tasks::table::open_call_68000(b);
+            exec(n, c, b);
+            tasks::table::close_calls(b, frame);
+        });
         if let Some(h) = hook {
             h(pc, false);
         }
@@ -522,7 +547,7 @@ thread_local! {
 
 /// Runs a native. A top-level native (scheduler, VBLANK, native chained by a jump) starts with no
 /// cession in progress (`tasks::has_ceded`).
-fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
+fn exec(n: &Native, c: &mut Cpu, b: &mut World) {
     /// Restores the depth, even if the native panics (tools that catch panics).
     struct Level(u32);
     impl Drop for Level {
@@ -534,7 +559,7 @@ fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     if level.0 == 0 {
         tasks::forget_cession();
     }
-    n.execute(c, b);
+    n.execute_on(c, b);
 }
 
 /// Executor: native routine if available, otherwise recompiled block.
@@ -542,9 +567,11 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
         if c.cycles + NATIVE_DURATION <= limit || holds_table(n) {
-            let frame = tasks::table::open_call_68000(b);
-            execute(n, c, b, NATIVE_DURATION);
-            tasks::table::close_calls(b, frame);
+            World::lend(b, |b| {
+                let frame = tasks::table::open_call_68000(b);
+                execute(n, c, b, NATIVE_DURATION);
+                tasks::table::close_calls(b, frame);
+            });
             return Some(c.pc);
         }
     }
@@ -553,7 +580,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
 
 /// Runs native `n`, which lasts `duration` cycles, with the requested diagnostics: check against the original
 /// (`DDSOM_CHECK`), registers taken from the original (`DDSOM_ADOPT_REGS`), call counting.
-fn execute(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duration: u64) {
+fn execute(n: &Native, c: &mut Cpu, b: &mut World, duration: u64) {
     if CHECK.load(Ordering::Relaxed) && checked(n) {
         check(n, c, b);
     } else if adopt_regs(n) {
@@ -603,9 +630,11 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
     if c.cycles + NATIVE_DURATION > limit {
         return None;
     }
-    let frame = tasks::table::open_call_68000(b);
-    n.execute(c, b);
-    tasks::table::close_calls(b, frame);
+    World::lend(b, |b| {
+        let frame = tasks::table::open_call_68000(b);
+        n.execute_on(c, b);
+        tasks::table::close_calls(b, frame);
+    });
     c.cycles += NATIVE_DURATION;
     Some(c.pc)
 }
@@ -703,8 +732,8 @@ fn adopt_mask() -> u32 {
 }
 
 /// Runs the original routine on a copy of the machine until its return; returns the resulting CPU.
-fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
-    let (mut c2, mut b2) = (c.clone(), b.clone());
+fn original(n: &Native, c: &Cpu, b: &World) -> Cpu {
+    let (mut c2, mut b2) = (c.clone(), b.to_bus());
     stack_for_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
@@ -738,12 +767,12 @@ fn checked(n: &Native) -> bool {
     only.as_ref().is_none_or(|p| p.iter().any(|p| n.name.starts_with(p.as_str())))
 }
 
-fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
+fn check(n: &Native, c: &mut Cpu, b: &mut World) {
     // in the game, a native does not set a PC on return
     let by_frame = no68k::active();
-    let pre = if std::env::var("DDSOM_TRACE_ORIG").is_ok_and(|v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
+    let pre = if std::env::var("DDSOM_TRACE_ORIG").is_ok_and(|v| n.name == v) { Some((c.clone(), b.to_bus())) } else { None };
     let mut c2 = c.clone();
-    let mut b2 = b.clone();
+    let mut b2 = b.to_bus();
     stack_for_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
@@ -755,7 +784,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
         guard += 1;
         assert!(guard < 1_000_000, "{}: the original routine does not return", n.name);
     }
-    n.execute(c, b);
+    n.execute_on(c, b);
     let mut diffs = Vec::new();
     let mut reg_diffs = [false; 16];
     let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
@@ -787,7 +816,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
             }
         }
     }
-    mem::diff_bus(b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+    mem::diff_bus(&b.to_bus(), &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
     // The real duration of the original is taken. The registers outside the contract keep the values of the native
     // routine: if a caller depended on them (incomplete contract), the continuation will diverge and validation will
     // see it.
@@ -820,11 +849,11 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
         s.last = Some(diffs.join(", "));
         // the original state is kept so as not to propagate the difference; on the game machine, with the task table of
         // the native (calls in progress, leftovers), which the copy does not maintain
-        let table = if by_frame { b.ext.take() } else { None };
+        let table = if by_frame { b.tasks.take() } else { None };
         *c = c2;
-        *b = b2;
+        *b = World::from_bus(b2);
         if by_frame {
-            b.ext = table;
+            b.tasks = table;
         }
     }
 }
@@ -844,15 +873,15 @@ const CHECK_STEPS: u32 = 1_000_000;
 /// the kernel, 0x900-0xb70) or whose Rust version ceded is not compared (`skipped`).
 pub(crate) fn check_handler(
     n: &'static Native,
-    handler: fn(&mut Cps2Bus, &mut crate::dispatch::Dispatch),
-    b: &mut Cps2Bus,
+    handler: fn(&mut World, &mut crate::dispatch::Dispatch),
+    b: &mut World,
     a: &mut crate::dispatch::Dispatch,
 ) {
     if !CHECK.load(Ordering::Relaxed) || !checked(n) {
         handler(b, a);
         return;
     }
-    let mut b2 = b.clone();
+    let mut b2 = b.to_bus();
     let mut c2 = Cpu::new();
     c2.sr = 0x2700;
     c2.a[0] = a.object.0;
@@ -883,7 +912,7 @@ pub(crate) fn check_handler(
     }
     s.calls += 1;
     let mut diffs = Vec::new();
-    mem::diff_bus(b, &b2, CHECK_STACK - 0x400..CHECK_STACK, &mut diffs);
+    mem::diff_bus(&b.to_bus(), &b2, CHECK_STACK - 0x400..CHECK_STACK, &mut diffs);
     if !diffs.is_empty() {
         let d = format!("A0={:06x}: {}", a.object.0, diffs.join(", "));
         if std::env::var("DDSOM_VERBOSE").is_ok() {

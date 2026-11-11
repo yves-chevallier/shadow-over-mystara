@@ -5,7 +5,7 @@ use super::*;
 /// Push (16.16) that boss `me` applies to player `player` for an x gap `gap`: 0 if the player is too high or too far
 /// in depth. Profile by x gap / 16 (`ai/push_profile_index`), then the profile (`ai/push_profiles`: maximum height,
 /// maximum depth gap, push).
-fn push_amount_for(b: &mut Cps2Bus, me: Obj, player: Obj, gap: u16) -> u32 {
+fn push_amount_for(b: &mut World, me: Obj, player: Obj, gap: u16) -> u32 {
     if gap as i16 >= 512 {
         return 0;
     }
@@ -23,7 +23,7 @@ fn push_amount_for(b: &mut Cps2Bus, me: Obj, player: Obj, gap: u16) -> u32 {
 }
 
 /// Boss `me` pushes player `player` in x, towards the side it faces; true if pushed.
-fn push_player_once(b: &mut Cps2Bus, me: Obj, player: Obj) -> bool {
+fn push_player_once(b: &mut World, me: Obj, player: Obj) -> bool {
     let gap = (player.u16(b, Obj::X).wrapping_sub(me.u16(b, Obj::X)) as i16).wrapping_abs() as u16;
     let push = push_amount_for(b, me, player, gap);
     let facing = me.flip(b);
@@ -38,14 +38,14 @@ fn push_player_once(b: &mut Cps2Bus, me: Obj, player: Obj) -> bool {
 }
 
 /// Signed byte of the engine data at `a`.
-fn byte_signed(b: &mut Cps2Bus, a: u32) -> i16 {
+fn byte_signed(b: &mut World, a: u32) -> i16 {
     engine().byte(b, a) as i8 as i16
 }
 
 /// Is player `p` hit by the attack box at `attack` (entry address in `ai/attack_boxes`: offset and half-extent in
 /// x, z, y) of object `me`? The player must be present, visible, unprotected, neither on the ground nor dead, and
 /// have a body box (one set per character, `ai/body_box_sets`, in the collision boxes).
-fn player_hit(b: &mut Cps2Bus, me: Obj, attack: u32, p: Player) -> bool {
+fn player_hit(b: &mut World, me: Obj, attack: u32, p: Player) -> bool {
     let flags = p.active(b);
     if flags & 1 == 0 || flags & 2 != 0 || p.held(b) != 0 {
         return false;
@@ -84,7 +84,7 @@ fn player_hit(b: &mut Cps2Bus, me: Obj, attack: u32, p: Player) -> bool {
 }
 
 /// 0xfe34: object `me` is brought back into the camera's screen. Returns true if it was.
-fn keep_inside_camera(b: &mut Cps2Bus, me: Obj) -> bool {
+fn keep_inside_camera(b: &mut World, me: Obj) -> bool {
     let (left, _) = crate::ram::camera(b);
     let x = me.u16(b, Obj::X) as i16;
     if left as i16 > x {
@@ -100,13 +100,13 @@ fn keep_inside_camera(b: &mut Cps2Bus, me: Obj) -> bool {
 }
 
 /// 0xfc44: is a player hit by the attack box `attack` of `o`? Returns the first one hit.
-pub fn attack_hits_a_player(b: &mut Cps2Bus, o: Obj, attack: u8) -> Option<Obj> {
+pub fn attack_hits_a_player(b: &mut World, o: Obj, attack: u8) -> Option<Obj> {
     let boxes = crate::tables::engine_table!("ai/attack_boxes").rom.wrapping_add(offset((attack as u16) << 3));
     crate::ram::PLAYERS.iter().find(|&p| player_hit(b, o, boxes, Player::of(p)))
 }
 
 /// 0xfd64: player `player` is grabbed by `o` (grab animation `anim` of `o`).
-pub fn seize_player(b: &mut Cps2Bus, o: Obj, player: Obj, anim: u8) {
+pub fn seize_player(b: &mut World, o: Obj, player: Obj, anim: u8) {
     let p = Player::of(player);
     player.set_u32(b, Obj::STATE, 0x0204_3200);
     p.set_active(b, 2);
@@ -119,7 +119,7 @@ pub fn seize_player(b: &mut Cps2Bus, o: Obj, player: Obj, anim: u8) {
 }
 
 /// 0xfd8c: player `player` is released (action 0x34).
-pub fn release_player(b: &mut Cps2Bus, player: Obj) {
+pub fn release_player(b: &mut World, player: Obj) {
     let p = Player::of(player);
     player.set_u32(b, Obj::STATE, 0x0204_0000);
     p.set_action(b, 0x34);
@@ -128,7 +128,7 @@ pub fn release_player(b: &mut Cps2Bus, player: Obj) {
 
 /// 0xfda2: `o` is brought back into the screen, then the object it holds (`+0x50`) follows it according to the step
 /// (`+0x3e`) of the grab animation (`ai/seize_moves`: x, height, orientation, direction of `+0x12`).
-pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
+pub fn hold_seized(b: &mut World, o: Obj) {
     let e = Enemy(o);
     keep_inside_camera(b, o);
     let pointer = e.target(b);
@@ -175,7 +175,7 @@ pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
 
 /// 0x115e2: boss `o` pushes each player present in front of it, except the thief or the dwarf in their state 26
 /// (`+0x6a`), a player exiting (`+0x66`) or protected (`+0x188`).
-pub fn push_players(b: &mut Cps2Bus, o: Obj) {
+pub fn push_players(b: &mut World, o: Obj) {
     for player in crate::ram::PLAYERS.iter() {
         let p = Player::of(player);
         if p.active(b) == 0 {

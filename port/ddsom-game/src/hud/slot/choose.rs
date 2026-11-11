@@ -14,14 +14,14 @@ use crate::objects::Obj;
 // ---------------------------------------------------------------------------------------------
 
 /// Has a button (upper part of the rising edges) just been pressed?
-pub(super) fn button_pressed(b: &mut Cps2Bus, s: Slot) -> bool {
+pub(super) fn button_pressed(b: &mut World, s: Slot) -> bool {
     let index = s.index(b);
     select::inputs(b, index).1 & 0xf0 != 0
 }
 
 /// The panel's BCD countdown loses one unit and restarts for `frames` frames; true (without
 /// changing anything) if it goes below zero.
-pub(super) fn tick_countdown(b: &mut Cps2Bus, s: Slot, frames: u8) -> bool {
+pub(super) fn tick_countdown(b: &mut World, s: Slot, frames: u8) -> bool {
     let (value, _) = sbcd(s.p8(b, panel::COUNTDOWN), 1, false);
     if value & 0x80 != 0 {
         return true;
@@ -32,12 +32,12 @@ pub(super) fn tick_countdown(b: &mut Cps2Bus, s: Slot, frames: u8) -> bool {
 }
 
 /// Has the player's start button just been pressed?
-pub(super) fn start_edge(b: &mut Cps2Bus, s: Slot) -> bool {
+pub(super) fn start_edge(b: &mut World, s: Slot) -> bool {
     start_pressed(b, s)
 }
 
 /// 0x157a8: redraws the choice screen (after a pause).
-pub(super) fn redraw_choice(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn redraw_choice(b: &mut World, s: Slot) {
     draw::portrait(b, s, false);
     let choice = s.p8(b, panel::CHOICE);
     choice::show_character(b, s, choice);
@@ -160,12 +160,12 @@ pub(super) fn join_continue(x: &mut Ctx, s: Slot) {
 }
 
 /// No panel is in continue (sum of the sub-steps is zero): the player is the only one waiting.
-pub(super) fn others_free(b: &mut Cps2Bus) -> bool {
+pub(super) fn others_free(b: &mut World) -> bool {
     (0..4).fold(1u8, |free, k| free.wrapping_sub(Slot::new(k).p8(b, panel::SUBSTEP))) == 0
 }
 
 /// Coins counted for this player's continue: the partial coins of the price, or the credits.
-pub(super) fn coins_inserted(b: &mut Cps2Bus, s: Slot) -> u8 {
+pub(super) fn coins_inserted(b: &mut World, s: Slot) -> u8 {
     if var::PRICE_TWO.get(b) == 0 && var::PRICE.get(b) != 1 {
         s.coins.coins(b)
     } else {
@@ -174,7 +174,7 @@ pub(super) fn coins_inserted(b: &mut Cps2Bus, s: Slot) -> u8 {
 }
 
 /// 0x15a9c: the countdown restarts from 19 seconds, with the current coins in memory.
-pub(super) fn restart_countdown(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn restart_countdown(b: &mut World, s: Slot) {
     let coins = coins_inserted(b, s);
     s.set_p8(b, panel::SHOWN_COINS, coins);
     s.set_p16(b, panel::COUNTDOWN, RESUME_COUNTDOWN);
@@ -254,7 +254,7 @@ pub(super) fn resume(x: &mut Ctx, s: Slot) {
 
 /// 0x15c0c: the continue is refused or the time has run out: the player's game is over and their money
 /// is added to their score (capped).
-pub(super) fn resume_declined(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn resume_declined(b: &mut World, s: Slot) {
     s.set_p8(b, panel::SUBSTEP, 0);
     s.set_p8(b, panel::FLAG_27, 1);
     s.set_p16(b, panel::COUNTDOWN, 0);
@@ -276,7 +276,7 @@ pub(super) fn resume_declined(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15c50: end of the continue: the end banner is displayed, then state 0xa waits for the end of the message.
-pub fn resume_end_enter(b: &mut Cps2Bus, s: Slot) {
+pub fn resume_end_enter(b: &mut World, s: Slot) {
     s.set_p8(b, panel::FLAG_27, 0);
     draw::start_banner(b, s, draw::START_BANNER_B);
     s.set_p8(b, panel::STATE, 0xa);
@@ -285,7 +285,7 @@ pub fn resume_end_enter(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15c64: state 0xa, the end message stays displayed for 120 frames, then the panel is released.
-pub(super) fn resume_end(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn resume_end(b: &mut World, s: Slot) {
     s.set_p8(b, panel::FLAG_27, 0);
     let left = s.p16(b, panel::COUNTDOWN).wrapping_sub(1);
     s.set_p16(b, panel::COUNTDOWN, left);
@@ -301,7 +301,7 @@ pub(super) fn resume_end(b: &mut Cps2Bus, s: Slot) {
 }
 
 /// 0x15cae: redraws the continue choice screen (after a pause).
-pub(super) fn redraw_resume_choice(b: &mut Cps2Bus, s: Slot) {
+pub(super) fn redraw_resume_choice(b: &mut World, s: Slot) {
     draw::portrait(b, s, false);
     let choice = s.p8(b, panel::CHOICE);
     choice::show_character(b, s, choice);
@@ -339,7 +339,7 @@ pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
         return notice_banner(b, s);
     }
     let own = s.p8(b, panel::CHOSEN) >> 1;
-    let other = |b: &mut Cps2Bus, c: u8, back: bool| select::other_choice(b, s, c, back);
+    let other = |b: &mut World, c: u8, back: bool| select::other_choice(b, s, c, back);
     let current = s.p8(b, panel::CHOICE);
     let choice = other(b, current, false);
     let choice = select::navigate(b, s, choice, &other);

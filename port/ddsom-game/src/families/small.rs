@@ -4,7 +4,7 @@
 //! Creators' contract: A0 = the creator; on return A1 = the created object, carry raised if the pool is
 //! full. The residual registers that the original leaves (D0, D1, D2, D5, flags) are reproduced.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::cx::{handler_without, Bench, Cx};
 use super::effects_creators::leftovers::{Pure, Regs};
@@ -68,14 +68,14 @@ record! {
 }
 
 /// Starts object `o` (active) as type `kind`.
-fn start(b: &mut Cps2Bus, o: Obj, kind: u8) {
+fn start(b: &mut World, o: Obj, kind: u8) {
     o.set_active(b, 1);
     o.set_kind(b, kind);
 }
 
 
 /// Creates an object of `pool` of type `kind`, linked to the creator by word `link` (flags of that `move.w`).
-pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
+pub(crate) fn linked_via(r: &mut impl Regs, b: &mut World, creator: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
     let o = r.allocated(b, pool)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     o.set_u8(b, Obj::KIND, kind);
@@ -85,17 +85,17 @@ pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, pool:
 }
 
 /// 0x4c930 for the player module: player effect 0x10 (revival) linked to `player`.
-pub(crate) fn revive(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+pub(crate) fn revive(r: &mut impl Regs, b: &mut World, player: Obj) -> Option<Obj> {
     linked_via(r, b, player, &pools::PEFF, 0x10, Obj::TIED)
 }
 
 /// 0x4f132: player effect 0x21 (second phase of the spell quake), linked to the player by `+0x50`.
-pub fn quake_b(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+pub fn quake_b(b: &mut World, player: Obj) -> Option<Obj> {
     linked_via(&mut Pure, b, player, &pools::PEFF, 0x21, Obj::TIED)
 }
 
 /// 0x54700: shot of type 0x17 that takes over the creator's word `+0x50`.
-pub(crate) fn shot_17(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn shot_17(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let o = r.allocated(b, &pools::PSHL)?;
     start(b, o, 0x17);
     let v = me.tied(b);
@@ -106,7 +106,7 @@ pub(crate) fn shot_17(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj
 
 /// 0x54818 (variant left as is: `variant` zero), 0x54842 (variant 1) and 0x54872 (variant 2): shot of type
 /// 0x18 linked to the creator by `+0x5c`, resistances 0x10; the created shot, `None` if the PSHL pool is full.
-pub(crate) fn shot_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn shot_18(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
     let shot = r.allocated(b, &pools::PSHL)?;
     start(b, shot, 0x18);
     if variant != 0 {
@@ -121,11 +121,11 @@ pub(crate) fn shot_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) 
 
 /// 0x76ec4: if more than two ENEMY slots remain, creates two enemies of type 0x19 (variants 0 and
 /// 1) linked to the creator; true (D0 = 1) if created. The original does not test the allocations' carry.
-pub(crate) fn enemy_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> bool {
+pub(crate) fn enemy_pair_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> bool {
     enemy_pair_kind_via(r, b, creator, 0x19)
 }
 /// 0x76ec4 (type 0x19) and 0x63ae0 (type 7, `creators`): two enemies of type `kind`, variants 0 and 1.
-pub(crate) fn enemy_pair_kind_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, kind: u8) -> bool {
+pub(crate) fn enemy_pair_kind_via(r: &mut impl Regs, b: &mut World, creator: Obj, kind: u8) -> bool {
     let created = (pools::ENEMY.free_count(b) as i16) > 2;
     if created {
         for variant in 0..2 {
@@ -142,7 +142,7 @@ pub(crate) fn enemy_pair_kind_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: O
     created
 }
 /// 0x76ec4 with no registers.
-pub fn enemy_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
+pub fn enemy_pair_created(b: &mut World, creator: Obj) -> bool {
     enemy_pair_via(&mut Pure, b, creator)
 }
 
@@ -150,7 +150,7 @@ pub fn enemy_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
 /// `variant`) given by the table (`small/roar_big`, `small/roar_small`: by rank / 2), numbered from n-1 to 0 by
 /// `+0x2f`, linked by `+0x5c`.
 /// D0.w and D1.w of the original: the table index, the counter (exhausted: 0xffff, or the number of the refused shot).
-pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bool) {
+pub(crate) fn roar_via(r: &mut impl Regs, b: &mut World, creator: Obj, big: bool) {
     let (counts, variant) = if big { (crate::tables::engine_table!("small/roar_big"), 0) } else { (crate::tables::engine_table!("small/roar_small"), 1) };
     let i = crate::ai::RANK.get(b) >> 1;
     r.d_word(0, i);
@@ -173,13 +173,13 @@ pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bo
     }
 }
 /// 0xa7234 (`big`) and 0xa727c with no registers.
-pub fn roar_created(b: &mut Cps2Bus, creator: Obj, big: bool) {
+pub fn roar_created(b: &mut World, creator: Obj, big: bool) {
     roar_via(&mut Pure, b, creator, big)
 }
 
 /// Core of 0xa036e: returns the companion and the HP/4 word that the original leaves in D2 (leftover read afterwards),
 /// or, on failure, the A1 that the allocation leaves.
-pub(crate) fn harpy_companion_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Result<(Obj, u16), Obj> {
+pub(crate) fn harpy_companion_via(r: &mut impl Regs, b: &mut World, me: Obj) -> Result<(Obj, u16), Obj> {
     let o = r.alloc_or_rest(b, &pools::ESHL)?;
     let flip = me.flip(b) != 0;
     let v = me.variant(b);
@@ -217,7 +217,7 @@ pub(crate) fn harpy_companion_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -
 }
 
 /// Core of 0xa0566: `d5` = the byte placed in the creator's `+0x42`, `target` = the long A2 linked at `+0x50`.
-pub(crate) fn harpy_shot_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, d5: u8, target: u32) -> Option<Obj> {
+pub(crate) fn harpy_shot_via(r: &mut impl Regs, b: &mut World, me: Obj, d5: u8, target: u32) -> Option<Obj> {
     let o = r.allocated(b, &pools::ESHL)?;
     let (sm, so) = (Spawn(me), Spawn(o));
     sm.set_shot_flag(b, d5);
@@ -276,7 +276,7 @@ pub(crate) fn clear_scroll1_start<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x4aed0: two effects of type 5, variant 1, indices `+0x2f` 0 and 1, linked to the creator (`+0x50`).
-pub(crate) fn peff_5_pair(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn peff_5_pair(r: &mut impl Regs, b: &mut World, me: Obj) {
     for index in [0, 1] {
         let Some(o) = r.allocated(b, &pools::PEFF) else { break };
         start(b, o, 5);
@@ -290,7 +290,7 @@ pub(crate) fn peff_5_pair(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 /// 0x53746: twelve stones (shots of type 0x11, variants 0 to 11) spread around the camera in use,
 /// X, Y offsets in a table (`small/stone_offsets`), height 0x100 above their impact point, delay `+0x5c` from 0x40
 /// to 0x148 in steps of 0x18; orientation and owner of the creator.
-pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut World, me: Obj) {
     const COUNT: u16 = 12;
     // D3: variant, D4: delay, D5: `dbf` counter; left to the following handlers (`dispatch::Leftovers`)
     let (mut variant, mut delay, mut n) = (0u8, 0x40u16, COUNT - 1);
@@ -329,7 +329,7 @@ pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0x1a5e8: twelve palettes of the library (from palette 0x4a6) copied into page 1 from its colour 0x40. Core.
-pub fn palette_twelve_blocks(b: &mut Cps2Bus) {
+pub fn palette_twelve_blocks(b: &mut World) {
     let (dst, src) = (palette(1, 0x40), ddsom_data::Palettes::ROM + 32 * 0x4a6);
     for i in 0..12 * 8 {
         let v = engine().long(b, src + 4 * i);
@@ -357,7 +357,7 @@ const BACKGROUND_BLOCKS: [(u16, u32); 8] = [
 
 /// 0x2a52: background 2 on (tile blocks, bit 0 of the video control, camera 1 frozen in mode 0x80, camera 2 in
 /// service).
-pub fn background_2_on(b: &mut Cps2Bus) -> crate::video::GridEnd {
+pub fn background_2_on(b: &mut World) -> crate::video::GridEnd {
     let mut end = None;
     for (block, dst) in BACKGROUND_BLOCKS {
         end = Some(crate::video::load_grid(b, crate::video::Grid::Layer2, block, dst));
@@ -373,15 +373,15 @@ pub fn background_2_on(b: &mut Cps2Bus) -> crate::video::GridEnd {
 }
 
 /// 0x2a36: background 1 on (camera 1 in mode 0x18); 0x2a42: its timer = D0, background 1 set to 0x34.
-pub fn background_1_on(b: &mut Cps2Bus) {
+pub fn background_1_on(b: &mut World) {
     background_1_in_mode(b, 0x18);
 }
-pub(crate) fn background_1_in_mode(b: &mut Cps2Bus, mode: u16) {
+pub(crate) fn background_1_in_mode(b: &mut World, mode: u16) {
     CAMERA_1.set_step(b, 0);
     CAMERA_1.set_mode(b, mode);
 }
 /// 0x2a42: the timer of camera 1 = `value` (D0.w of the original), background 1 set to 0x34.
-pub fn background_1_lit_a(b: &mut Cps2Bus, value: u16) {
+pub fn background_1_lit_a(b: &mut World, value: u16) {
     CAMERA_1.set_timer(b, value);
     background_1_in_mode(b, 0x34);
 }
@@ -394,18 +394,18 @@ const ITEM_LOCK: Byte = Byte(0xff253c);
 const FIXED_SCREEN_STATE: Long = Long(0xff0f50);
 
 /// 0x133f6 / 0x133f0: the "startup done" indicator raised / lowered.
-pub fn startup_done(b: &mut Cps2Bus, done: bool) {
+pub fn startup_done(b: &mut World, done: bool) {
     STARTUP_DONE.set(b, done as u8);
 }
 
 /// 0xdd12c: the pickup objects' spawn lock raised.
-pub(crate) fn item_lock_clear(b: &mut Cps2Bus) {
+pub(crate) fn item_lock_clear(b: &mut World) {
     ITEM_LOCK.set(b, 0);
 }
 
 /// 0x3baea: player's `+0x1f0`, from table `small/undead_counts` indexed by the quarter of the rank. Returns the
 /// index (the D0.w that the original leaves, which a caller reads as the variant of the effect it creates).
-pub(crate) fn player_table_byte(b: &mut Cps2Bus, player: Obj) -> u16 {
+pub(crate) fn player_table_byte(b: &mut World, player: Obj) -> u16 {
     let i = crate::ai::RANK.get(b) >> 2;
     let v = crate::tables::engine_table!("small/undead_counts").at8(b, i as u32);
     Player::of(player).set_undead_left(b, v);
@@ -413,14 +413,14 @@ pub(crate) fn player_table_byte(b: &mut Cps2Bus, player: Obj) -> u16 {
 }
 
 /// 0x1c44a: the game variables from `ram::PHASE` (64 bytes, to `A5+0x6b`) set to zero.
-pub fn zero_game_variables(b: &mut Cps2Bus) {
+pub fn zero_game_variables(b: &mut World) {
     for k in 0..16 {
         Long(crate::ram::PHASE.0 + 4 * k).set(b, 0);
     }
 }
 
 /// 0x180ac: reset of the fixed screen: SET and EFFCT pools, sprites, sorted list.
-pub fn reset_fixed_screen(b: &mut Cps2Bus) {
+pub fn reset_fixed_screen(b: &mut World) {
     FIXED_SCREEN_STATE.set(b, 0);
     crate::objects::lists::unlink_all(b);
     crate::sprites::clear_lists(b);
@@ -502,6 +502,6 @@ pub const SHAKES: &[Native] = &[
     handler_without(0x65236, "enemy_shake_c", |b, a| run_shake(b, a, 0x65236)),
 ];
 
-fn run_shake(b: &mut Cps2Bus, a: &mut crate::dispatch::Dispatch, routine: u32) {
+fn run_shake(b: &mut World, a: &mut crate::dispatch::Dispatch, routine: u32) {
     own_reaction(&mut crate::families::cx::Gx::dispatch(b, a), routine);
 }

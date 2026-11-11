@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::inputs` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
@@ -14,7 +14,7 @@ fn set_nz_byte(c: &mut Cpu, v: u8) {
     c.flags_logic(v as u32, Size::Byte);
 }
 
-fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn read_inputs(c: &mut Cpu, b: &mut World) {
     let r = read_panel(b);
     for (n, v) in r.d.into_iter().enumerate() {
         set_low_byte(&mut c.d[n], v);
@@ -39,7 +39,7 @@ pub(crate) const READ_INPUTS: Native = Native {
 };
 
 /// `copy` with the registers of the original.
-pub(crate) fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn copy_68k(c: &mut Cpu, b: &mut World) {
     match copy(b) {
         // final clr.b
         InputCopy::Frozen => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
@@ -54,7 +54,7 @@ pub(crate) fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
+fn copy_inputs_to_players(c: &mut Cpu, b: &mut World) {
     copy_68k(c, b);
     rts(c, b);
 }
@@ -68,7 +68,7 @@ pub(crate) const COPY_INPUTS_TO_PLAYERS: Native = Native {
 };
 
 /// 0x2bfe: inputs of the player of object A0. Output: D0 = held, D1 = new presses.
-fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
+fn get_player_input(c: &mut Cpu, b: &mut World) {
     let player = rd8(b, c.a[0] + 2) as u32;
     c.d[2] = player;
     c.a[3] = c.a[5];
@@ -90,7 +90,7 @@ pub(crate) const GET_PLAYER_INPUT: Native = Native {
 };
 
 /// `clear_inputs`, flags of the last `clr.b`.
-fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
+fn clear_player_inputs(c: &mut Cpu, b: &mut World) {
     clear_inputs(b);
     c.sr = c.sr & !0xf | m68k::SR_Z;
     rts(c, b);

@@ -6,7 +6,7 @@
 //!
 //! Bits of a player byte: 0 right, 1 left, 2 down, 3 up, 4..7 buttons 1..4.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd8, set_low_byte, wr16, wr8, A5};
 
@@ -45,7 +45,7 @@ pub mod ram {
 const PORTS: [u32; 6] = [0x804001, 0x804000, 0x804011, 0x804010, 0x804020, 0x804021];
 
 /// 0x080c (VBLANK): panel read. Returns what the original leaves in its registers (`InputsRead`).
-pub fn read_panel(b: &mut Cps2Bus) -> InputsRead {
+pub fn read_panel(b: &mut World) -> InputsRead {
     let a5 = A5;
     let four_players = rd8(b, a5 + ram::FOUR_PLAYERS) != 0;
     let layers_on = rd8(b, a5.wrapping_add(ram::LAYERS_OFF)) == 0;
@@ -109,7 +109,7 @@ pub struct InputsRead {
 }
 
 /// 0x2aec: copies the inputs into the player records. Returns the leftovers of the original (`InputCopy`).
-pub fn copy(b: &mut Cps2Bus) -> InputCopy {
+pub fn copy(b: &mut World) -> InputCopy {
     let a5 = A5;
     let player = |k: u32| a5 + ram::PLAYER1 + ram::PLAYER_STRIDE * k;
     if rd8(b, a5 + ram::INPUT_RAW) != 0 {
@@ -156,7 +156,7 @@ pub enum InputCopy {
 /// D2-D4 are reread by a handler of the world update, which writes them into an object (`DDSOM_POISON=call_2aec`:
 /// long_elfe_objets, frame 13133, ram ffd694): they are leftovers of the game (`dispatch::Leftovers`). D0, D1 and the
 /// flags are reread by nobody.
-pub fn copy_in_game(b: &mut Cps2Bus) {
+pub fn copy_in_game(b: &mut World) {
     if let InputCopy::Masked { mask, d } = copy(b) {
         let leftovers = &mut crate::tasks::table::table(b).leftovers;
         set_low_byte(&mut leftovers.d2, d[2]);
@@ -173,13 +173,13 @@ pub struct Inputs {
 }
 
 /// 0x2bfe: inputs of the player of object `object` (its number at `+2`).
-pub fn player_inputs(b: &mut Cps2Bus, object: u32) -> Inputs {
+pub fn player_inputs(b: &mut World, object: u32) -> Inputs {
     let player = rd8(b, object + 2) as u32;
     Inputs { held: rd8(b, A5 + player), fresh: rd8(b, A5 + ram::NEW + player) }
 }
 
 /// 0x2bdc: inputs of the four players cleared (word of held keys `+0x6c`, byte `+0x6e`).
-pub fn clear_inputs(b: &mut Cps2Bus) {
+pub fn clear_inputs(b: &mut World) {
     for k in 0..4 {
         let player = 0xff85de + 0x200 * k;
         crate::mem::wr16(b, player + 0x6c, 0);

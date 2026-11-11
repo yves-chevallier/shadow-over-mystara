@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::eeprom` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
@@ -12,7 +12,7 @@ use crate::mem::{rd32, rd8};
 
 macro_rules! native_counter {
     ($fn:ident, $k:expr) => {
-        fn $fn(c: &mut Cpu, b: &mut Cps2Bus) {
+        fn $fn(c: &mut Cpu, b: &mut World) {
             count_68k(c, b, &$k);
             rts(c, b);
         }
@@ -33,36 +33,36 @@ macro_rules! native {
 
 /// Result of `moveq #0/-1,D0`: D0, N, Z, V, C; X is zero in these routines (last
 /// instruction touching X: an `addq` without carry).
-fn give_back(c: &mut Cpu, b: &mut Cps2Bus, success: Success) {
+fn give_back(c: &mut Cpu, b: &mut World, success: Success) {
     c.d[0] = if success { 0 } else { u32::MAX };
     c.flags_logic(c.d[0], Size::Long);
     c.sr &= !SR_X;
     rts(c, b);
 }
 
-fn native_read(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_read(c: &mut Cpu, b: &mut World) {
     read(b);
     rts(c, b);
 }
 
-fn native_write(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_write(c: &mut Cpu, b: &mut World) {
     let ok = write(b);
     give_back(c, b, ok);
 }
 
-fn native_write_verify(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_write_verify(c: &mut Cpu, b: &mut World) {
     let ok = write_verify(b);
     give_back(c, b, ok);
 }
 
-fn native_read_verify(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_read_verify(c: &mut Cpu, b: &mut World) {
     let ok = read_verify(b);
     give_back(c, b, ok);
 }
 
 /// `count` with the registers of the original: D0 = 0 or -1 after an EEPROM write, the new value if it was counted
 /// without a write (unchanged from its image), intact otherwise (condition false, development card).
-fn count_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Counter) {
+fn count_68k(c: &mut Cpu, b: &mut World, k: &Counter) {
     let counted = counted(b, k) && rd8(b, a5(ram::NO_ACCOUNTING)) == 0;
     match count(b, k) {
         Some(ok) => {
@@ -76,7 +76,7 @@ fn count_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Counter) {
 }
 
 /// `full_accounting` with the registers of the original (D0 of the counter, flags of the last test).
-fn full_accounting_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Full) {
+fn full_accounting_68k(c: &mut Cpu, b: &mut World, k: &Full) {
     count_68k(c, b, k.counter);
     let active = rd8(b, a5(ram::NO_ACCOUNTING)) != 0;
     c.flags_logic(active as u32, Size::Byte);
@@ -87,15 +87,15 @@ fn full_accounting_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Full) {
     rts(c, b);
 }
 
-fn native_count_coins(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_count_coins(c: &mut Cpu, b: &mut World) {
     full_accounting_68k(c, b, &FULL_COINS);
 }
 
-fn native_count_starts(c: &mut Cpu, b: &mut Cps2Bus) {
+fn native_count_starts(c: &mut Cpu, b: &mut World) {
     full_accounting_68k(c, b, &FULL_STARTS);
 }
 
-fn vblank_accounting(c: &mut Cpu, b: &mut Cps2Bus) {
+fn vblank_accounting(c: &mut Cpu, b: &mut World) {
     if let Some(word) = vblank(b) {
         c.d[0] = c.d[0] & 0xffff_0000 | word as u32;
     }
@@ -103,13 +103,13 @@ fn vblank_accounting(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// `tst.b (NO_ACCOUNTING,A5)`: returns true if the extra RAM is used (flags as in the original).
-fn has_dev_card(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+fn has_dev_card(c: &mut Cpu, b: &mut World) -> bool {
     let v = rd8(b, a5(ram::NO_ACCOUNTING));
     c.flags_logic(v as u32, Size::Byte);
     v != 0
 }
 
-fn count_games_acc(c: &mut Cpu, b: &mut Cps2Bus) {
+fn count_games_acc(c: &mut Cpu, b: &mut World) {
     let free = rd8(b, a5(FREE_PLAY)) != 0;
     if free {
         count_68k(c, b, &CONTINUES);
@@ -122,7 +122,7 @@ fn count_games_acc(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2dc9a (startup): check of the extra RAM, only on the development card.
-fn accounting_init(c: &mut Cpu, b: &mut Cps2Bus) {
+fn accounting_init(c: &mut Cpu, b: &mut World) {
     if has_dev_card(c, b) {
         dev_card::start_up(b);
     }
@@ -130,7 +130,7 @@ fn accounting_init(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2e630 (chosen character, D0): statistic of the development card RAM; on a cabinet, nothing.
-fn stat_character(c: &mut Cpu, b: &mut Cps2Bus) {
+fn stat_character(c: &mut Cpu, b: &mut World) {
     if has_dev_card(c, b) {
         dev_card::character_part(b, c.d[0] as u16);
     }
@@ -138,7 +138,7 @@ fn stat_character(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2e696 (game duration, D0, in frames): same.
-fn stat_duration(c: &mut Cpu, b: &mut Cps2Bus) {
+fn stat_duration(c: &mut Cpu, b: &mut World) {
     if has_dev_card(c, b) {
         dev_card::game_duration(b, c.d[0]);
     }

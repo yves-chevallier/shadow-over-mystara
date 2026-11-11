@@ -10,7 +10,7 @@
 //! Each frame then calls the input copy, the world update and the sprites.
 
 use crate::screens::tables::Rom;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::{scratch, var, Ctx};
 use crate::objects::Obj;
@@ -43,7 +43,7 @@ const GAME_PHASE: u32 = 0x0c00_0000;
 const STEP_BOSS_INTRO: u8 = 0;
 const STEP_SCROLL: u8 = 2;
 
-pub fn phase_24(b: &mut Cps2Bus) {
+pub fn phase_24(b: &mut World) {
     let mut x = Ctx::new(b);
     match var::STEP.get(x.b) {
         STEP_BOSS_INTRO => boss_intro(&mut x),

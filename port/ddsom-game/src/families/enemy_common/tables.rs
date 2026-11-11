@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::data::{data, Missing, RomAddr};
 pub(crate) use crate::tables::Table;
@@ -51,17 +51,17 @@ pub(crate) fn reactions(key: u32) -> &'static Table {
 }
 
 /// Byte at the address `a` that a table points to (data space).
-pub(crate) fn held8(b: &mut Cps2Bus, a: u32) -> u8 {
+pub(crate) fn held8(b: &mut World, a: u32) -> u8 {
     index().tables.byte(b, a)
 }
 
 /// Word at the address `a` that a table points to (data space).
-pub(crate) fn held16(b: &mut Cps2Bus, a: u32) -> u16 {
+pub(crate) fn held16(b: &mut World, a: u32) -> u16 {
     index().tables.word(b, a)
 }
 
 /// Long at the address `a` that a table points to (data space).
-pub(crate) fn held32(b: &mut Cps2Bus, a: u32) -> u32 {
+pub(crate) fn held32(b: &mut World, a: u32) -> u32 {
     index().tables.long(b, a)
 }
 
@@ -118,12 +118,12 @@ named! {
 const CIRCLE: RomAddr = RomAddr(0x1c94b6);
 
 /// Word at byte `off` of the circle of the whirls.
-pub(crate) fn circle(b: &mut Cps2Bus, off: u32) -> u16 {
+pub(crate) fn circle(b: &mut World, off: u32) -> u16 {
     speed16(b, CIRCLE.offset(off as i32).0)
 }
 
 /// Word at the address `a` of a speed table of `data/speeds.json` (the families keep the address of their table).
-pub(crate) fn speed16(b: &mut Cps2Bus, a: u32) -> u16 {
+pub(crate) fn speed16(b: &mut World, a: u32) -> u16 {
     match data().speeds.at(RomAddr(a)) {
         Some(v) => v,
         None => Missing { table: "speed table", key: a }.read16(b, a),

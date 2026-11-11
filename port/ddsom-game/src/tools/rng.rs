@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::rng` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
@@ -11,7 +11,7 @@ use crate::{regs, Native};
 
 /// `random` with the registers of the original (native): D0.w = new state (D0 high intact), N and Z of the word, X =
 /// carry of the byte addition.
-fn random_regs(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
+fn random_regs(c: &mut Cpu, b: &mut World) -> u16 {
     let (state, carry) = draw(b);
     c.d[0] = c.d[0] & 0xffff_0000 | state as u32;
     // final move.w: N and Z of the result; X comes from the byte addition

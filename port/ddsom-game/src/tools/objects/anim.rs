@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::objects::anim` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -30,7 +30,7 @@ macro_rules! anim_native {
 }
 
 /// 0x1a32: starts script `D0` of the animation set A4 for the object. Leaves A4 after the entry.
-fn start_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> u32 {
+fn start_regs(c: &mut Cpu, b: &mut World, obj: Obj) -> u32 {
     // add.w D0w,D0w ; move.w (A4,D0w),D0w
     let d0 = c.d[0] as u16;
     let doubled = c.addsub(false, d0 as u32, d0 as u32, false, Size::Word, false) as u16;
@@ -46,7 +46,7 @@ fn start_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> u32 {
 
 /// Animation step with full register semantics: A4 = next entry, D0.b = flags,
 /// C = end of script.
-fn step_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
+fn step_regs(c: &mut Cpu, b: &mut World, obj: Obj, long: bool) -> Step {
     let timer = obj.u16(b, Obj::ANIM_TIMER);
     let left = c.addsub(true, 1, timer as u32, false, Size::Word, false) as u16;
     obj.set_u16(b, Obj::ANIM_TIMER, left);
@@ -73,7 +73,7 @@ fn step_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
 }
 
 /// Starts animation `D6` of the set specific to the object's character (long entries), registers included.
-fn by_character_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets) -> u32 {
+fn by_character_regs(c: &mut Cpu, b: &mut World, obj: Obj, sets: &CharacterSets) -> u32 {
     if sets.weapon_offset && obj.u8(b, ARMED) == 0 {
         let v = c.addsub(false, 0x40, c.d[6], false, Size::Word, false);
         set_low_word(&mut c.d[6], v as u16);
@@ -105,7 +105,7 @@ anim_native!(ANIM_START_INDEXED, 0x1a32, "anim_start_indexed", |c, b, o| {
     start_regs(c, b, o);
 });
 
-anim_native!(ANIM_START, 0x1a3c, "anim_start", |c: &mut Cpu, b: &mut Cps2Bus, o| {
+anim_native!(ANIM_START, 0x1a3c, "anim_start", |c: &mut Cpu, b: &mut World, o| {
     let end = start_entry(b, o, c.a[4]);
     c.a[4] = end;
     c.flags_logic(end, Size::Long);

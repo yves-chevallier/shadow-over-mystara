@@ -40,9 +40,13 @@ fn main() {
     let original = a.get(5).is_some_and(|s| s == "original");
     if original {
         ddsom_game::install_reference(&mut m);
+        stuck(m, &a, original, ee.as_deref());
     } else {
-        ddsom_game::install(&mut m);
+        stuck(ddsom_game::install(m), &a, original, ee.as_deref());
     }
+}
+
+fn stuck<B: cps2::Board>(mut m: cps2::Machine<B>, a: &[String], original: bool, ee: Option<&[u8]>) {
     m.set_overclock(16.0);
     ORIGINAL.with(|o| o.set(original));
     if std::env::var("COMPTE").is_ok() {
@@ -53,7 +57,7 @@ fn main() {
     let n: usize = a[4].parse().unwrap();
     // `two`: a second machine (original code) runs in the same process, as in validate
     let mut other = a.get(6).is_some_and(|s| s == "two").then(|| {
-        let mut m2 = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
+        let mut m2 = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee).unwrap();
         m2.set_overclock(16.0);
         ddsom_game::install_reference(&mut m2);
         m2

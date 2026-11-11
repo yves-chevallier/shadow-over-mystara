@@ -23,7 +23,7 @@
 //! fails or the signature does not match the variant, the default values are rewritten,
 //! otherwise the settings read are validated; then the game variables are derived from them.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::tables::{self, engine_table};
@@ -63,17 +63,17 @@ fn a5(off: u32) -> u32 {
 struct Defaults(u32);
 
 impl Defaults {
-    fn byte(self, b: &mut Cps2Bus, offset: u32) -> u8 {
+    fn byte(self, b: &mut World, offset: u32) -> u8 {
         tables::engine().byte(b, self.0 + offset)
     }
 
-    fn word(self, b: &mut Cps2Bus, offset: u32) -> u16 {
+    fn word(self, b: &mut World, offset: u32) -> u16 {
         tables::engine().word(b, self.0 + offset)
     }
 }
 
 /// Default value block of the current variant.
-fn block_defaults(b: &mut Cps2Bus) -> Defaults {
+fn block_defaults(b: &mut World) -> Defaults {
     let index = crate::mem::rd16(b, crate::mem::A5 + ram::VARIANT);
     let displacement = engine_table!("config/variants").at16(b, index as i16 as u32);
     Defaults(TABLE_VARIANTS.wrapping_add(displacement as i16 as u32))
@@ -96,7 +96,7 @@ pub fn is_factory(x: &mut crate::scene::Ctx) -> bool {
 /// Copies the variant's default block into two copies (copy and backup), then clears the rest of the copy (the
 /// bookkeeping counters). The registers that the original leaves (A1 and A6 at the end of the zone, D0 = 0, D7 =
 /// 0xFFFF) are reread by nobody.
-fn defaults(b: &mut Cps2Bus) {
+fn defaults(b: &mut World) {
     let block = block_defaults(b);
     let mut destination = a5(ram::CONFIG);
     for _ in 0..2 {
@@ -115,7 +115,7 @@ fn defaults(b: &mut Cps2Bus) {
 // 0x2d662: validation and repair
 
 /// Replaces value `i` of the copy (and of its backup) with the default value.
-fn repair(b: &mut Cps2Bus, copy: u32, defaults: Defaults, i: u32) {
+fn repair(b: &mut World, copy: u32, defaults: Defaults, i: u32) {
     let d = defaults.byte(b, i);
     wr8(b, copy + i, d);
     wr8(b, copy + FALLBACK + i, d);
@@ -124,7 +124,7 @@ fn repair(b: &mut Cps2Bus, copy: u32, defaults: Defaults, i: u32) {
 /// Checks each setting of the RAM copy against its limits; replaces the invalid values with
 /// those of the variant's default block. The order of the tests and its quirks are those of the original: for example,
 /// byte 4 is only examined if byte 3 was invalid.
-pub fn validate(b: &mut Cps2Bus) {
+pub fn validate(b: &mut World) {
     let copy = a5(ram::CONFIG);
     // the original starts with 0x2d648: A6 = default block of the variant
     let variant = rd16(b, a5(ram::VARIANT));
@@ -212,7 +212,7 @@ pub fn validate(b: &mut Cps2Bus) {
 /// Copies the settings from the RAM copy to the game variables and derives the coin
 /// settings from them (`A5+0x1e..0x22`). The registers that the original leaves (D0 = twice the credit mode, D1 =
 /// the credit mode, A4 = the copy, flags of the last counter) are reread by nobody.
-fn variables(b: &mut Cps2Bus) {
+fn variables(b: &mut World) {
     let a4 = a5(ram::CONFIG);
     for k in [0x23, 0x25, 0x24] {
         wr8(b, a5(k), 0);
@@ -262,7 +262,7 @@ fn variables(b: &mut Cps2Bus) {
     }
 }
 
-const fn memory(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+const fn memory(entry: u32, name: &'static str, run: fn(&mut World)) -> Native {
     Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
@@ -283,7 +283,7 @@ pub const BLOCKED: u32 = 0x2d7fa;
 
 /// Does the signature of the RAM copy match that of the variant? (The registers of the original's loop are reread
 /// by nobody.)
-fn signature_ok(b: &mut Cps2Bus) -> bool {
+fn signature_ok(b: &mut World) -> bool {
     let block = block_defaults(b);
     let copy = a5(ram::CONFIG);
     (0..SIGNATURE_LEN).all(|k| block.byte(b, SIGNATURE + k) == rd8(b, copy + SIGNATURE + k))
@@ -292,7 +292,7 @@ fn signature_ok(b: &mut Cps2Bus) -> bool {
 /// 0x2d30a: EEPROM read, default settings if needed, game variables. Returns false if writing the
 /// default settings failed: the game is then blocked on "EEPROM ERROR" (the task ceded control
 /// for good).
-pub fn initialize(b: &mut Cps2Bus) -> bool {
+pub fn initialize(b: &mut World) -> bool {
     crate::eeprom::all_eeprom(b);
     let valid = crate::eeprom::read_verify(b) && signature_ok(b);
     if valid {
@@ -309,12 +309,12 @@ pub fn initialize(b: &mut Cps2Bus) -> bool {
     true
 }
 
-fn init(b: &mut Cps2Bus) {
+fn init(b: &mut World) {
     initialize(b);
 }
 
 /// 0x2d7d2: "EEPROM ERROR" and blocking (never seen: the emulated EEPROM does not refuse the write).
-fn error(b: &mut Cps2Bus) {
+fn error(b: &mut World) {
     for k in 0..12 {
         let ch = engine_table!("config/error_message").at8(b, k) as u16;
         crate::mem::wr16(b, CASE_ERROR + 0x80 * k, ch);
@@ -342,7 +342,7 @@ pub fn reset_factory(x: &mut crate::scene::Ctx) {
 /// 0x2d47c: the game variables into the two copies of the RAM copy (with the variant's
 /// signature), written to the EEPROM, then reread into the variables (0x2d358). False if the write failed:
 /// "EEPROM ERROR" is displayed and the PC is set on the original's endless loop.
-pub fn save(b: &mut Cps2Bus) -> bool {
+pub fn save(b: &mut World) -> bool {
     let block = block_defaults(b);
     for copy in [a5(ram::CONFIG), a5(ram::CONFIG) + FALLBACK] {
         for (byte, variable) in SETTINGS {

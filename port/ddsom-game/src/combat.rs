@@ -11,7 +11,7 @@
 
 use crate::objects::Enemy;
 use crate::player::Player;
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
@@ -200,8 +200,8 @@ mod rom {
 // Memory access
 
 /// The memory and the state of the hit resolution that the original keeps in registers.
-pub struct World<'a> {
-    pub b: &'a mut Cps2Bus,
+pub struct Combat<'a> {
+    pub b: &'a mut World,
     /// Value of A2 in the original: box of the hit in progress, which certain subroutines
     /// (0x19dce, 0x388a, 0xf232e) overwrite without the original restoring it in `player_hits_enemies`.
     pub a2: u32,
@@ -210,13 +210,13 @@ pub struct World<'a> {
     pub leftovers: Leftovers,
 }
 
-impl crate::machine::Machine for World<'_> {
-    fn bus(&mut self) -> &mut Cps2Bus {
+impl crate::machine::Machine for Combat<'_> {
+    fn bus(&mut self) -> &mut World {
         &mut *self.b
     }
 }
 
-impl World<'_> {
+impl Combat<'_> {
     /// bset on a byte.
     fn set_bit(&mut self, o: Obj, off: u32, bit: u32) {
         let v = o.u8(self.b, off) | 1 << bit;
@@ -302,14 +302,14 @@ impl HitBox {
 }
 
 /// Box `index` of the object's box set, in the pointer table `table`.
-fn hitbox(w: &mut World, table: u32, o: Obj, index: u8) -> HitBox {
+fn hitbox(w: &mut Combat, table: u32, o: Obj, index: u8) -> HitBox {
     let set = o.u8(w.b, f::BOX_SET) as u32;
     let base = long(w.b, table + 4 * set);
     HitBox(base + 8 * index as u32)
 }
 
 /// Object box for the index given by its field `field` (body, push or attack).
-fn object_box(w: &mut World, table: u32, o: Obj, field: u32) -> HitBox {
+fn object_box(w: &mut Combat, table: u32, o: Obj, field: u32) -> HitBox {
     let idx = o.u8(w.b, field);
     hitbox(w, table, o, idx)
 }
@@ -356,7 +356,7 @@ struct Pair {
 }
 
 /// Variant of 0x27410 (enemy attacks): only the half-depth of the attack counts.
-fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox: HitBox) -> bool {
+fn overlap3_attack(w: &mut Combat, victim: Obj, vbox: HitBox, attacker: Obj, abox: HitBox) -> bool {
     cov::hit("overlap3_attack");
     let pair = Pair::new(w, victim, vbox, attacker, abox, false);
     let (ay, ax, az) = (pair.probe_y(w), pair.probe_x(w), pair.probe_z(w));
@@ -367,13 +367,13 @@ fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox
 
 impl Pair {
     /// The pair, with the bytes of both boxes (`player::tables::box_bytes`).
-    fn new(w: &mut World, a: Obj, abox: HitBox, b: Obj, bbox: HitBox, signed: bool) -> Pair {
+    fn new(w: &mut Combat, a: Obj, abox: HitBox, b: Obj, bbox: HitBox, signed: bool) -> Pair {
         Pair { a, abox: box_bytes(w.b, abox.0), b, bbox: box_bytes(w.b, bbox.0), signed }
     }
 
     /// Gap of the centres on an axis: (box offset + position) of `a` minus that of `b`.
     /// `flip`: the offsets follow the object's orientation (X axis).
-    fn probe(&self, w: &mut World, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
+    fn probe(&self, w: &mut Combat, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
         let mut ao = self.abox[off as usize] as i8 as i16 as u16;
         let mut bo = self.bbox[off as usize] as i8 as i16 as u16;
         if flip {
@@ -389,22 +389,22 @@ impl Pair {
         let half = half_sum(self.abox[half as usize], self.bbox[half as usize], self.signed);
         Probe { delta: a.wrapping_sub(b), half }
     }
-    fn probe_y(&self, w: &mut World) -> Probe {
+    fn probe_y(&self, w: &mut Combat) -> Probe {
         self.probe(w, HitBox::Y, HitBox::HALF_Y, f::Y, false)
     }
-    fn probe_x(&self, w: &mut World) -> Probe {
+    fn probe_x(&self, w: &mut Combat) -> Probe {
         self.probe(w, HitBox::X, HitBox::HALF_X, f::X, true)
     }
-    fn probe_z(&self, w: &mut World) -> Probe {
+    fn probe_z(&self, w: &mut Combat) -> Probe {
         self.probe(w, HitBox::Z, HitBox::HALF_Z, f::Z, false)
     }
     /// Overlap on the three axes (Y, X then Z).
-    fn overlaps(&self, w: &mut World) -> bool {
+    fn overlaps(&self, w: &mut Combat) -> bool {
         self.probe_y(w).overlaps() && self.probe_x(w).overlaps() && self.probe_z(w).overlaps()
     }
 }
 
-fn overlap3(w: &mut World, a: Obj, abox: HitBox, b: Obj, bbox: HitBox) -> bool {
+fn overlap3(w: &mut Combat, a: Obj, abox: HitBox, b: Obj, bbox: HitBox) -> bool {
     Pair::new(w, a, abox, b, bbox, false).overlaps(w)
 }
 
@@ -432,7 +432,7 @@ impl List {
             List::Items => &pools::QUEUE_ITEM,
         }
     }
-    fn len(self, w: &mut World) -> u16 {
+    fn len(self, w: &mut Combat) -> u16 {
         rd16(w.b, A5 + self.queue().count)
     }
     /// First pointer (word) of the array of the queue's objects.
@@ -450,7 +450,7 @@ enum Flow {
 
 /// Walks a list like the original: loop counter kept in RAM (`counter`), pointer
 /// advanced before the body.
-fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World, Obj) -> Flow) {
+fn scan(w: &mut Combat, list: List, counter: u32, mut body: impl FnMut(&mut Combat, Obj) -> Flow) {
     let n = list.len(w);
     wr16(w.b, counter, n);
     let mut p = list.first();
@@ -477,7 +477,7 @@ fn players() -> impl Iterator<Item = Obj> {
 // Root
 
 /// 0x260ee: all the collisions of the frame.
-pub fn combat_update(w: &mut World) {
+pub fn combat_update(w: &mut Combat) {
     cov::hit("combat_update");
     if ram::PLAYERS_ALIVE.get(w.b) == 0 {
         return;
@@ -505,7 +505,7 @@ pub fn combat_update(w: &mut World) {
 // Player hits enemies / crates
 
 /// 0x26150: does a player's hit touch an enemy (attack box against body box)?
-fn player_hits_enemies(w: &mut World) {
+fn player_hits_enemies(w: &mut Combat) {
     cov::hit("player_hits_enemies");
     if List::Enemies.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
         return;
@@ -530,7 +530,7 @@ fn player_hits_enemies(w: &mut World) {
 }
 
 /// 0x261f0: does a player's hit touch a crate?
-fn player_hits_boxes(w: &mut World) {
+fn player_hits_boxes(w: &mut Combat) {
     cov::hit("player_hits_boxes");
     if List::Boxes.len(w) == 0 {
         return;
@@ -553,7 +553,7 @@ fn player_hits_boxes(w: &mut World) {
 }
 
 /// 0x2659e: a player hits a crate (the crate holds the hit and reacts).
-fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
+fn player_blow_on_box(w: &mut Combat, p: Obj, bx: Obj) {
     cov::hit("player_blow_on_box");
     if p.u8(w.b, f::ACTION) == 6 || p.u8(w.b, f::ATTACK_BOX) == 4 {
         return;
@@ -565,7 +565,7 @@ fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
 
 /// 0x2630e: a player `p` hits enemy `e`: stores the hit, computes the damage, starts the
 /// victim's reaction and the spark.
-fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
+fn player_blow_on_enemy(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("player_blow_on_enemy");
     trace!("hit {:06x} on {:06x}", p.0, e.0);
     if e.u8(w.b, f::HITSTOP) != 0 || p.u8(w.b, f::ATTACK_BOX) == 4 {
@@ -680,13 +680,13 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
 }
 
 /// HP -= damage, floor at 0 (16-bit subtraction, negative result brought back to 0).
-fn enemy_loses_hp(w: &mut World, e: Obj, dmg: u16) {
+fn enemy_loses_hp(w: &mut Combat, e: Obj, dmg: u16) {
     let hp = e.u16(w.b, f::HP).wrapping_sub(dmg);
     e.set_u16(w.b, f::HP, if (hp as i16) < 0 { 0 } else { hp });
 }
 
 /// 0x19dce: enqueues the display of the health gauge of the enemy hit (key: player, enemy type).
-fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
+fn show_enemy_hp(w: &mut Combat, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
@@ -701,7 +701,7 @@ fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
 
 /// End of 0x2630e (0x264e4): the victim goes into the "hit" reaction, the spark is created and the
 /// impact sound played (0xe662a for simple hits, 0xe823a for special ones; tail jump).
-fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
+fn enemy_reacts_to_hit(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("enemy_reacts_to_hit");
     e.set_u32(w.b, f::STATE, state::HIT);
     e.set_u8(w.b, f::FLAGS, 1);
@@ -722,7 +722,7 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
 }
 
 /// 0x26562: counts the chained special hits (byte `+0x9c` of the victim) outside class 4.
-fn count_combo(w: &mut World, p: Obj, e: Obj) {
+fn count_combo(w: &mut Combat, p: Obj, e: Obj) {
     cov::hit("count_combo");
     let class = p.u8(w.b, f::VARIANT) >> 1;
     if class == 4 {

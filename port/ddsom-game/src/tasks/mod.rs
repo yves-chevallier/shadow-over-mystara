@@ -19,7 +19,7 @@ pub mod game;
 pub mod service;
 pub mod table;
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -168,7 +168,7 @@ task_steps! {
 
 /// Executes stage `step` of the current task; if it finishes (`Flow::Done`, subroutine return), the continuation of
 /// the call in progress ([`return_to_caller`]).
-pub fn execute(step: Step, b: &mut Cps2Bus) {
+pub fn execute(step: Step, b: &mut World) {
     let mut x = Ctx::new(b);
     if step.step(&mut x) == Flow::Done {
         return_to_caller(x.b);
@@ -179,7 +179,7 @@ pub fn execute(step: Step, b: &mut Cps2Bus) {
 /// the cession; none is re-read any more (probe `DDSOM_POISON=resume`, before their removal): what was re-read is
 /// named, in the fields of the stages (object and counter of the dispatch loop, D4 of the game step, A0 of the caller
 /// of a fade...).
-pub fn resume_step(step: Step, b: &mut Cps2Bus) {
+pub fn resume_step(step: Step, b: &mut World) {
     execute(step, b);
 }
 
@@ -188,7 +188,7 @@ pub fn resume_step(step: Step, b: &mut Cps2Bus) {
 /// control (the Rust code following a cession only returns: see [`has_ceded`]). In the tools (natives called by the
 /// original code), a return to the original code: noted, the processor jumps there at the end of the native
 /// (`tools::frames`).
-pub fn return_to_caller(b: &mut Cps2Bus) {
+pub fn return_to_caller(b: &mut World) {
     if has_ceded() {
         return;
     }

@@ -4,7 +4,7 @@ use crate::families::cx::Bench;
 use crate::data::RomAddr;
 use super::*;
 use crate::objects::Obj;
-use cps2::Cps2Bus;
+use crate::world::World;
 use crate::objects::Current;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -621,7 +621,7 @@ const SHOVE_STEPS: RomAddr = RomAddr(0x1c6636);
 /// | 8, 10, 18 | pose of 0x100 frames (hit boxes 6, 8, 7) |
 /// | 12 | rises, roars (0xa7234 / 0xa727c), descends |
 /// | 14 | dives onto a player and grabs them |
-fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
+fn step_toward(b: &mut World, o: Obj, direction: u8) -> (u32, u32) {
     let a = (direction as u16 & 0x1f) * 4;
     let dy = ((tables::speed16(b, SHOVE_STEPS.0 + 2 + a as u32) as i16 as i32) << 8) as u32;
     let dx = ((tables::speed16(b, SHOVE_STEPS.0 + a as u32) as i16 as i32) << 8) as u32;

@@ -23,7 +23,7 @@ macro_rules! creator {
 /// Runs a creator for the tools (`fuzz_player`, `DDSOM_CHECK`; the game calls the Rust functions): A0 = the player,
 /// `f` reads its parameters in the data and address registers `d`, `a`; the leftovers D2-D5 pass through the bench,
 /// the other registers the original leaves (A1, flags) are not reproduced.
-fn run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, f: impl FnOnce(&[u32; 8], &[u32; 8], &mut Ctx, Player)) {
+fn run(c: &mut m68k::Cpu, b: &mut crate::world::World, f: impl FnOnce(&[u32; 8], &[u32; 8], &mut Ctx, Player)) {
     let (d, a, p) = (c.d, c.a, Player(c.a[0]));
     super::on_bench(c, b, |g| f(&d, &a, g, p));
     rts(c, b);

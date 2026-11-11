@@ -6,7 +6,7 @@
 //! `objects::Current` trait (`x.move_xz()`, `x.anim_step()`, `x.reinsert()`...), the common services through
 //! `machine::Machine` (`x.random()`).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::ram::{Byte, Long, Word};
 use crate::dispatch::{Dispatch, Leftovers};
@@ -21,7 +21,7 @@ use crate::{regs, Native};
 /// written for both (`fn f<R: Bench>(x: &mut Cx<'_, R>)`).
 pub struct Cx<'a, R> {
     pub c: R,
-    pub b: &'a mut Cps2Bus,
+    pub b: &'a mut World,
     /// The object that the dispatch has processed (A0).
     pub o: Obj,
 }
@@ -31,7 +31,7 @@ pub type Gx<'a> = Cx<'a, &'a mut Dispatch>;
 
 impl<'a> Gx<'a> {
     /// Context of the handler called by the dispatch loop.
-    pub fn dispatch(b: &'a mut Cps2Bus, a: &'a mut Dispatch) -> Self {
+    pub fn dispatch(b: &'a mut World, a: &'a mut Dispatch) -> Self {
         let o = a.object;
         Cx { c: a, b, o }
     }
@@ -43,7 +43,7 @@ impl<'a> Gx<'a> {
 }
 
 impl<R> crate::machine::Machine for Cx<'_, R> {
-    fn bus(&mut self) -> &mut Cps2Bus {
+    fn bus(&mut self) -> &mut World {
         &mut *self.b
     }
 }
@@ -52,7 +52,7 @@ impl<R> crate::machine::Machine for Cx<'_, R> {
 pub trait Bench {
     /// Re-listing (0x1ee1a / 0x1ef6c, `foreground`): without registers, the core, which leaves D2 to the next
     /// handler; on the processor (tools), the adapter leaves the original's registers.
-    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool);
+    fn relink(&mut self, b: &mut World, o: Obj, foreground: bool);
     /// The leftovers D2 to D5 (see `dispatch::Leftovers`): the processor register, or the leftover of the dispatch
     /// loop.
     fn d2(&mut self) -> &mut u32;
@@ -64,7 +64,7 @@ pub trait Bench {
 }
 
 impl Bench for &mut Dispatch {
-    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
+    fn relink(&mut self, b: &mut World, o: Obj, foreground: bool) {
         let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         // Original glitch: the re-listing leaves D2 (the link left) to the next handler
         list.reinsert_leftovers(b, o, &mut self.leftovers.d2);
@@ -231,6 +231,6 @@ macro_rules! handlers {
 pub(crate) use handlers;
 
 /// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
-pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
+pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut World, &mut Dispatch)) -> Native {
     Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }

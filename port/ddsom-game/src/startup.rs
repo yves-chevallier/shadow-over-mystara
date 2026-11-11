@@ -25,7 +25,8 @@
 //! reset (0x28cd0, after a processor exception, K4 out of scope) would not find
 //! the duration of the test again. `validate` tolerates the word under test in frames 1 to 5 (`docs/noyau.md`).
 
-use cps2::{Cps2Bus, LINES, VBLANK_LINE};
+use cps2::{LINES, VBLANK_LINE};
+use crate::world::World;
 
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::kernel::Point;
@@ -38,8 +39,8 @@ const fn beam(image: u64, line: u32) -> u64 {
     image * LINES as u64 + ((line + LINES - VBLANK_LINE) % LINES) as u64
 }
 
-fn position(b: &Cps2Bus) -> u64 {
-    beam(b.frame, b.scanline)
+fn position(b: &World) -> u64 {
+    beam(b.hw.frame, b.hw.scanline)
 }
 
 /// The original code at ×16 releases the Z80 here (0x18cc)...
@@ -50,7 +51,7 @@ const BOOT_INIT: u64 = beam(5, 173);
 /// Executes startup point `point`; returns the next one, or `None` when it waits for its time (beam position,
 /// Z80 handshake): it will retry at the next line, having changed nothing. After `boot_init`
 /// (`move #0x2000,SR`), the pending interrupt is taken before the launch.
-pub fn execute(b: &mut Cps2Bus, point: Point) -> Option<Point> {
+pub fn execute(b: &mut World, point: Point) -> Option<Point> {
     match point {
         Point::Reset => Some(reset(b)),
         Point::ReleaseZ80 => release_z80(b),
@@ -95,7 +96,7 @@ mod shared {
     pub const HITBOX: u32 = 0x619ffb;
     pub const STEREO: u32 = 0x619ffd;
     pub const HANDSHAKE: u32 = 0x619fff;
-    /// Index of CFFF in `Cps2Bus::qram`.
+    /// Index of CFFF in `World::qram`.
     pub const Z80_HANDSHAKE: usize = 0xfff;
     pub const Z80_READY: u8 = 0x77;
 }
@@ -136,7 +137,7 @@ fn a5(off: u32) -> u32 {
 }
 
 /// 0x350: reset, then the effects of the RAM test (0x182a) up to the release of the Z80.
-fn reset(b: &mut Cps2Bus) -> Point {
+fn reset(b: &mut World) -> Point {
     wr16(b, io::UNKNOWN, 0);
     for (port, v) in io::EXITS[..2].iter().copied() {
         wr16(b, port, v);
@@ -194,7 +195,7 @@ fn reset(b: &mut Cps2Bus) -> Point {
 }
 
 /// 0x18cc: at the original's time, releases the Z80 and clears its mailbox flag.
-fn release_z80(b: &mut Cps2Bus) -> Option<Point> {
+fn release_z80(b: &mut World) -> Option<Point> {
     if position(b) < Z80_RELEASE {
         return None;
     }
@@ -205,8 +206,8 @@ fn release_z80(b: &mut Cps2Bus) -> Option<Point> {
 }
 
 /// 0x18e2: waits for the Z80 handshake, then leaves the shared RAM as its test does.
-fn handshake(b: &mut Cps2Bus) -> Option<Point> {
-    if b.qram[shared::Z80_HANDSHAKE] != shared::Z80_READY {
+fn handshake(b: &mut World) -> Option<Point> {
+    if b.hw.qram[shared::Z80_HANDSHAKE] != shared::Z80_READY {
         return None;
     }
     for a in (shared::START..shared::END).step_by(2) {
@@ -216,7 +217,7 @@ fn handshake(b: &mut Cps2Bus) -> Option<Point> {
 }
 
 /// 0x492: at the original's time, Z80 mailbox, stack heap, settings, then interrupts.
-fn boot_init(b: &mut Cps2Bus) -> Option<Point> {
+fn boot_init(b: &mut World) -> Option<Point> {
     if position(b) < BOOT_INIT {
         return None;
     }
@@ -242,7 +243,7 @@ fn boot_init(b: &mut Cps2Bus) -> Option<Point> {
 }
 
 /// 0x50a: creates the startup task (slot 0) and hands control to the scheduler.
-fn launch(b: &mut Cps2Bus) -> Point {
+fn launch(b: &mut World) -> Point {
     if engine_table!(rom::HEADER).at8(b, 4) != 0 {
         let pressed = rd8(b, io::BUTTONS) & 0x10 == 0;
         wr8(b, BUTTON_AT_STARTUP, if pressed { 0xff } else { 0 });

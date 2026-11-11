@@ -68,7 +68,7 @@ pub(super) static SEQ_4: Sequence = Sequence {
     ],
 };
 pub(super) static SEQ_5: Sequence = Sequence {
-    update: World,
+    update: Update::World,
     last: 8,
     states: &[
         St::Clear { timer: Some(32) },
@@ -86,7 +86,7 @@ pub(super) static SEQ_6: Sequence = Sequence {
     ],
 };
 pub(super) static SEQ_7: Sequence = Sequence {
-    update: World,
+    update: Update::World,
     last: 8,
     states: &[
         St::Clear { timer: Some(32) },

@@ -7,7 +7,7 @@
 //! update (fade to black of the doors, fireworks): the pending calls of phase 12 and of the world update
 //! are then steps ([`Step`]), where the task will resume.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::dispatch::{self, Class};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
@@ -104,7 +104,7 @@ const ORDER_SCENE_8: Order = &[
 ];
 
 /// Update order according to the cutscene and the scene (signed comparisons on a byte).
-fn world_order(b: &mut Cps2Bus) -> Order {
+fn world_order(b: &mut World) -> Order {
     let scene = rd8(b, A5 + ram::SCENE) as i8;
     if rd8(b, A5 + ram::CINEMATIC) != 0 {
         ORDER_CINEMATIC
@@ -122,14 +122,14 @@ fn world_order(b: &mut Cps2Bus) -> Order {
 /// Updates all the objects: players, then the ten classes in the scene's order. `Flow::Yield`: an object
 /// handler made the task cede control; it will resume at the step [`Step::World`], then at the continuation that the
 /// caller stored in its pending calls before the call.
-pub fn update_world(b: &mut Cps2Bus) -> Flow {
+pub fn update_world(b: &mut World) -> Flow {
     let order = world_order(b);
     let order_index = ORDERS.iter().position(|&o| std::ptr::eq(o, order)).expect("update order") as u8;
     run_steps(b, order_index, 0)
 }
 
 /// The steps `from..` of the order `ORDERS[order_index]`.
-fn run_steps(b: &mut Cps2Bus, order_index: u8, from: usize) -> Flow {
+fn run_steps(b: &mut World, order_index: u8, from: usize) -> Flow {
     let order = ORDERS[order_index as usize];
     for (i, &(_, step)) in order.iter().enumerate().skip(from) {
         match step {
@@ -156,7 +156,7 @@ fn run_steps(b: &mut Cps2Bus, order_index: u8, from: usize) -> Flow {
 }
 
 /// The players' code `f` (`player::Ctx`), with the leftovers D2-D5 of the game, which it reads and writes by name.
-fn with_players(b: &mut Cps2Bus, f: fn(&mut crate::player::Ctx)) {
+fn with_players(b: &mut World, f: fn(&mut crate::player::Ctx)) {
     let leftovers = table::table(b).leftovers;
     let mut g = crate::player::Ctx { leftovers, ..crate::player::Ctx::new(b) };
     f(&mut g);
@@ -165,19 +165,19 @@ fn with_players(b: &mut Cps2Bus, f: fn(&mut crate::player::Ctx)) {
 }
 
 /// 0x35292: the players.
-pub fn update_players(b: &mut Cps2Bus) {
+pub fn update_players(b: &mut World) {
     with_players(b, crate::player::update::update_all);
 }
 
 /// 0x392e4: sub-objects of the players (front and back weapons).
-pub fn update_player_parts(b: &mut Cps2Bus) {
+pub fn update_player_parts(b: &mut World) {
     with_players(b, crate::player::overlays::update);
 }
 
 /// 0x260ee: the frame's collisions (`combat`), with the leftovers D2-D5 of the game.
-pub fn update_combat(b: &mut Cps2Bus) {
+pub fn update_combat(b: &mut World) {
     let leftovers = table::table(b).leftovers;
-    let mut w = crate::combat::World { b, a2: 0, leftovers };
+    let mut w = crate::combat::Combat { b, a2: 0, leftovers };
     crate::combat::combat_update(&mut w);
     let leftovers = w.leftovers;
     table::table(b).leftovers = leftovers;
@@ -239,7 +239,7 @@ const QUEUES: [&Queue; 5] =
 
 /// End of frame (`0x1c4c4`), when the phase returns (step `tasks::game::Step::FrameEnd`): the collision
 /// queues start empty again. The `rts` that follows returns to the start of the game loop (`0x1c468`).
-pub fn frame_end(b: &mut Cps2Bus) {
+pub fn frame_end(b: &mut World) {
     for queue in QUEUES {
         queue.reset(b);
     }
@@ -267,13 +267,13 @@ const PLAYER_UI_TASK: crate::tasks::Task = crate::tasks::Task::Interface;
 /// `A5` bytes reset to zero on exit: flag and score.
 const EXIT_CLEARED_BYTES: [u32; 2] = [0x37, 0x5d];
 
-fn next_step(b: &mut Cps2Bus) {
+fn next_step(b: &mut World) {
     let step = rd8(b, A5 + ram::STEP).wrapping_add(4);
     wr8(b, A5 + ram::STEP, step);
 }
 
 /// Step 0: three SET objects (palette animations), prepares the players.
-fn create_palette_objects(b: &mut Cps2Bus) {
+fn create_palette_objects(b: &mut World) {
     next_step(b);
     wr16(b, A5 + ram::TIMER, 0x40);
     wr8(b, A5 + ram::ACTIVE, 1);
@@ -295,7 +295,7 @@ fn create_palette_objects(b: &mut Cps2Bus) {
 }
 
 /// Step 4: erases the first two text rectangles (then moves to step 8).
-fn clear_text_boxes(b: &mut Cps2Bus) {
+fn clear_text_boxes(b: &mut World) {
     next_step(b);
     crate::text::clear_box(b, TEXT_BOXES[0]);
     crate::text::clear_box(b, TEXT_BOXES[1]);
@@ -305,7 +305,7 @@ fn clear_text_boxes(b: &mut Cps2Bus) {
 
 /// Start of steps 8 and 12: system objects and animated scenery, sprites, then countdown.
 /// Returns true when the countdown has elapsed.
-fn animate(b: &mut Cps2Bus) -> bool {
+fn animate(b: &mut World) -> bool {
     dispatch::SOBJ.update_no_next(b);
     dispatch::SET.update_no_next(b);
     // 0x1de96
@@ -316,7 +316,7 @@ fn animate(b: &mut Cps2Bus) -> bool {
 }
 
 /// Step 8: countdown elapsed, a SET object (type 0xc) appears and step 12 begins.
-fn wait_then_spawn(b: &mut Cps2Bus) {
+fn wait_then_spawn(b: &mut World) {
     if !animate(b) {
         return;
     }
@@ -328,7 +328,7 @@ fn wait_then_spawn(b: &mut Cps2Bus) {
 }
 
 /// Step 12: countdown elapsed, end fade and third palette animation, then step 16.
-fn wait_then_fade(b: &mut Cps2Bus) {
+fn wait_then_fade(b: &mut World) {
     if !animate(b) {
         return;
     }
@@ -339,7 +339,7 @@ fn wait_then_fade(b: &mut Cps2Bus) {
 }
 
 /// Step 16: pools made new again, then exit from the phase.
-fn reset_pools_and_leave(b: &mut Cps2Bus) {
+fn reset_pools_and_leave(b: &mut World) {
     wr8(b, A5 + ram::STEP, 0);
     // 0x1de7c
     crate::sprites::clear_lists(b);
@@ -349,7 +349,7 @@ fn reset_pools_and_leave(b: &mut Cps2Bus) {
 }
 
 /// Exit from phase 0 (also in continue mode): next phase, first level, interface task.
-fn leave(b: &mut Cps2Bus) {
+fn leave(b: &mut World) {
     let phase = rd8(b, A5 + ram::PHASE).wrapping_add(4);
     wr8(b, A5 + ram::PHASE, phase);
     wr8(b, CLEARED_B, 0);
@@ -365,7 +365,7 @@ fn leave(b: &mut Cps2Bus) {
 }
 
 /// Phase 0: one step per frame. The step (`A5+0x2d`: 0, 4, 8, 12, 16) chooses what follows.
-pub fn phase0(b: &mut Cps2Bus) {
+pub fn phase0(b: &mut World) {
     if rd8(b, A5 + ram::CONTINUE) != 0 {
         return leave(b);
     }
@@ -425,7 +425,7 @@ pub(crate) fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
 
 /// Removes a frame from the clock (frames, seconds, minutes in cascade, from 59 to 00): the cascade
 /// stops as soon as a byte stays positive. `borrow`: the X flag that the first `sbcd` takes as carry.
-fn tick_clock(b: &mut Cps2Bus, mut borrow: bool) {
+fn tick_clock(b: &mut World, mut borrow: bool) {
     for (i, offset) in [CLOCK + 2, CLOCK + 1, CLOCK].into_iter().enumerate() {
         let (value, next_borrow) = sbcd(rd8(b, A5 + offset), 1, borrow);
         borrow = next_borrow;
@@ -444,7 +444,7 @@ fn tick_clock(b: &mut Cps2Bus, mut borrow: bool) {
 }
 
 /// Debug level skip: players reset to zero, return to phase 8 (scene entry).
-fn change_scene(b: &mut Cps2Bus, forward: bool) {
+fn change_scene(b: &mut World, forward: bool) {
     for offset in PLAYER_RESET {
         wr16(b, A5 + offset, 0);
         wr16(b, A5 + offset + 2, 0);
@@ -466,7 +466,7 @@ fn change_scene(b: &mut Cps2Bus, forward: bool) {
 
 /// Phase 12: one game frame. `Flow::Yield`: an object handler made the task cede control (it
 /// will resume at [`Step::AfterWorld`] after the world update).
-pub fn phase12(b: &mut Cps2Bus) -> Flow {
+pub fn phase12(b: &mut World) -> Flow {
     // Original glitch: the carry of the clock's first `sbcd` is the X flag left by the previous code: zero after the
     // frame counter's addition, otherwise (counter at 0xFFFF, after 18 minutes of play: never in the scenarios) that
     // of the last arithmetic instruction run, which the dispatch loops leave at zero (their `lsl.w #2`): taken as
@@ -495,14 +495,14 @@ pub fn phase12(b: &mut Cps2Bus) -> Flow {
 const WORLD_RETURN: u32 = 0x1c6fc + JSR;
 
 /// End of phase 12, after the world update: [`after_world`], then the debug level skip.
-fn phase12_after_world(b: &mut Cps2Bus) {
+fn phase12_after_world(b: &mut World) {
     after_world(b);
     debug_scene_skip(b);
 }
 
 /// After the world update (game phase 12 `0x1c702` and demo `0x1fa4a`): sprites, collisions,
 /// pop-ups, spawn script, rank, game over; each preceded by its charge gauge.
-pub fn after_world(b: &mut Cps2Bus) {
+pub fn after_world(b: &mut World) {
     crate::video::gauge_in_world(b, 0x54_0000);
     // 0x1de96. Original glitch: D4 (attributes of the last piece) reread later (DDSOM_POISON=call_1de96:
     // long_28_scenes, frame 10431), see `sprites::build`: the leftover D4 of the game
@@ -522,7 +522,7 @@ pub fn after_world(b: &mut Cps2Bus) {
 
 /// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production
 /// game (bit 15 of the ROM word `0xc0`, word 0 of `startup/header`, is zero).
-pub fn debug_scene_skip(b: &mut Cps2Bus) {
+pub fn debug_scene_skip(b: &mut World) {
     if crate::tables::engine_table!("startup/header").at16(b, 0) & 0x8000 != 0 {
         let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
         if pressed & BUTTONS_NEXT == BUTTONS_NEXT {

@@ -312,7 +312,7 @@ pub(super) fn run_mode_2(x: &mut Cam, mode: u16) {
 }
 
 /// 0x32898: one step of the initialised camera 2: mode script, then scenery copy.
-pub(super) fn step_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
+pub(super) fn step_2(b: &mut World) -> crate::scroll::D4Leftovers {
     let mut x = on(b, CAMERA_2);
     x.set8(Camera::SHAKING, 0);
     let m = x.u16(Camera::MODE);

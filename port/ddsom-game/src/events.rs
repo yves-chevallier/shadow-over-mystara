@@ -17,7 +17,7 @@
 //! and `_68k` natives for the calls by address: these reproduce the registers and flags of the original,
 //! which hundreds of callers (enemy objects...) may reread.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::objects::{Enemy, Obj};
 use crate::ops;
@@ -59,37 +59,37 @@ pub(crate) const fn a5(off: u32) -> u32 {
 // Clearing
 
 /// `n` longs of 0xFFFFFFFF from `start`.
-fn fill(b: &mut Cps2Bus, start: u32, n: u32) {
+fn fill(b: &mut World, start: u32, n: u32) {
     for k in 0..n {
         Long(start + 4 * k).set(b, 0xffff_ffff);
     }
 }
 
-pub(crate) fn clear_ring(b: &mut Cps2Bus, ring: &Ring) {
+pub(crate) fn clear_ring(b: &mut World, ring: &Ring) {
     Byte::a5(ring.write).set(b, 0);
     Byte::a5(ring.write + 1).set(b, 0);
     fill(b, a5(ring.cases), 32);
 }
 
 /// 0x19aa2: clears the points ring.
-pub fn clear_points(b: &mut Cps2Bus) {
+pub fn clear_points(b: &mut World) {
     clear_ring(b, &POINTS);
 }
 
 /// 0x19abc: clears the second counter ring.
-pub fn clear_counter(b: &mut Cps2Bus) {
+pub fn clear_counter(b: &mut World) {
     clear_ring(b, &COUNTER);
 }
 
 /// 0x19db4: clears the pop-up queue.
-pub fn clear_popups(b: &mut Cps2Bus) {
+pub fn clear_popups(b: &mut World) {
     Byte::a5(POPUP_WRITE).set(b, 0);
     Byte::a5(POPUP_READ).set(b, 0);
     fill(b, a5(POPUP_INPUTS), 64);
 }
 
 /// 0x19e10: clears the current pop-up (4 longs).
-pub fn clear_current_popup(b: &mut Cps2Bus) {
+pub fn clear_current_popup(b: &mut World) {
     for k in 0..4 {
         Long(a5(CURRENT_POPUP) + 4 * k).set(b, 0);
     }
@@ -99,13 +99,13 @@ pub fn clear_current_popup(b: &mut Cps2Bus) {
 // Enqueuing a score event
 
 /// Write cell of `ring`: its index and its address.
-pub(crate) fn write_cell(b: &mut Cps2Bus, ring: &Ring) -> (u8, u32) {
+pub(crate) fn write_cell(b: &mut World, ring: &Ring) -> (u8, u32) {
     let index = Byte::a5(ring.write).get(b);
     (index, a5(ring.cases).wrapping_add(index as u32))
 }
 
 /// Enqueues `event` in the write cell if it is free; returns true if enqueued.
-pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> bool {
+pub(crate) fn enqueue(b: &mut World, ring: &Ring, event: u16) -> bool {
     let (index, case) = write_cell(b, ring);
     if Word(case).get(b) != EMPTY {
         return false;
@@ -117,23 +117,23 @@ pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> bool {
 
 /// 0x19ae6: enqueues the score event `event` (`(player << 8) | type`) if the write cell is free;
 /// returns true if enqueued.
-pub fn enqueue_points(b: &mut Cps2Bus, event: u16) -> bool {
+pub fn enqueue_points(b: &mut World, event: u16) -> bool {
     enqueue(b, &POINTS, event)
 }
 
 /// 0x19b08: same in the second counter ring.
-pub fn enqueue_counter(b: &mut Cps2Bus, event: u16) -> bool {
+pub fn enqueue_counter(b: &mut World, event: u16) -> bool {
     enqueue(b, &COUNTER, event)
 }
 
 /// Score event of object `o`: type `+0x7e`, player `+0x48` bits 8-9.
-pub fn event_of(b: &mut Cps2Bus, o: Obj) -> u16 {
+pub fn event_of(b: &mut World, o: Obj) -> u16 {
     let type_ = Enemy(o).event_kind(b) as u16;
     (o.u16(b, Enemy::HIT_BY) & 0x300).wrapping_add(type_)
 }
 
 /// 0x19ad6: enqueues the score event of object `o` in the points ring.
-pub fn object_event(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn object_event(b: &mut World, o: Obj) -> bool {
     let event = event_of(b, o);
     enqueue_points(b, event)
 }
@@ -177,7 +177,7 @@ pub(crate) fn credited(event: u16) -> (u32, u32) {
 
 /// Processes the event of cell `index`: empties the cell, adds the BCD value of the type to the player's
 /// counter, caps it, advances the read index.
-fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) {
+fn handle(b: &mut World, k: &Credit, index: u8, event: u16) {
     Word(a5(k.ring.cases).wrapping_add(index as u32)).set(b, EMPTY);
     let (player, line) = credited(event);
     let (table, counter) = (k.table + line, player + k.counter);
@@ -198,26 +198,26 @@ fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) {
 }
 
 /// Event waiting at the read index, if there is one.
-fn pending(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
+fn pending(b: &mut World, k: &Credit) -> Option<(u8, u16)> {
     let index = Byte::a5(k.read).get(b);
     let event = Word(a5(k.ring.cases).wrapping_add(index as u32)).get(b);
     (event != EMPTY).then_some((index, event))
 }
 
 /// Credits every waiting event, in order.
-pub(crate) fn credit(b: &mut Cps2Bus, k: &Credit) {
+pub(crate) fn credit(b: &mut World, k: &Credit) {
     while let Some((index, event)) = pending(b, k) {
         handle(b, k, index, event);
     }
 }
 
 /// 0x19b2a: credits the waiting events to each player's points counter.
-pub fn credit_points(b: &mut Cps2Bus) {
+pub fn credit_points(b: &mut World) {
     credit(b, &CREDIT_POINTS);
 }
 
 /// 0x19b9c: same for the second counter.
-pub fn credit_counter(b: &mut Cps2Bus) {
+pub fn credit_counter(b: &mut World) {
     credit(b, &CREDIT_COUNTER);
 }
 
@@ -237,14 +237,14 @@ pub struct Popup {
 }
 
 /// Write entry of the pop-up queue: its index and its address.
-pub(crate) fn popup_write_entry(b: &mut Cps2Bus) -> (u8, u32) {
+pub(crate) fn popup_write_entry(b: &mut World) -> (u8, u32) {
     let index = Byte::a5(POPUP_WRITE).get(b);
     (index, a5(POPUP_INPUTS).wrapping_add(index as u32))
 }
 
 /// 0x19dce: enqueues a pop-up in the write cell if it is free and pop-ups are not inhibited;
 /// returns true if enqueued.
-pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
+pub fn create_popup(b: &mut World, p: Popup) -> bool {
     if Byte::a5(POPUP_INHIBITED).is_set(b) {
         return false;
     }
@@ -263,7 +263,7 @@ pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
 
 /// Are pop-ups inhibited (`A5+0x50`)? 0x19dce then writes nothing and leaves A2 intact; otherwise it leaves
 /// A2 = [`POPUP_INPUTS_ADDR`] (reread by combat: `combat::show_enemy_hp`).
-pub fn popups_inhibited(b: &mut Cps2Bus) -> bool {
+pub fn popups_inhibited(b: &mut World) -> bool {
     Byte::a5(POPUP_INHIBITED).is_set(b)
 }
 

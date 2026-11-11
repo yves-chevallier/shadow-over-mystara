@@ -16,6 +16,7 @@
 //! returning immediately from each `jsr 0xa40`, the native by executing the task's steps until the handler
 //! returns. The final memories are compared.
 
+use ddsom_game::world::World;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 
@@ -70,8 +71,11 @@ fn original(c: &mut Cpu, b: &mut Cps2Bus, stop: u32, without_cession: bool) -> O
 
 /// The step where the current task, which has yielded, will resume (user-mode SR, like `kernel::launch`).
 fn resume(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::tasks::Step> {
-    let t = table::table(b);
-    let Resume::Step(step) = t.slots[t.current].resume else { return None };
+    let resume = World::lend(b, |w| {
+        let t = table::table(w);
+        t.slots[t.current].resume
+    });
+    let Resume::Step(step) = resume else { return None };
     c.set_sr(0);
     Some(step)
 }
@@ -108,7 +112,7 @@ fn principal() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_game::install(&mut m);
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
@@ -123,7 +127,7 @@ fn principal() {
     let mut rng = Rng(0x2545_f491_4f6c_dd1d);
     let (mut summary, mut seen_gaps, mut fadings, mut abandons) = (0u32, 0u32, 0u32, 0u32);
     for test in 0..tests.parse::<u32>().unwrap() {
-        let (mut c, mut b) = (m.cpu.clone(), m.bus.clone());
+        let (mut c, mut b) = (m.cpu.clone(), m.bus.to_bus());
         b.irq_horizon = u64::MAX;
         let door = ddsom_game::objects::pools::SET.slot(rng.next() % 32).0;
         for off in (0..0x50).step_by(2) {
@@ -237,7 +241,7 @@ fn principal() {
         }
         fadings += 1;
         // the rest of the fade: the door's step, at the return address of the original call
-        let next = table::table(&mut b).frames().top().map(|k| k.next);
+        let next = World::lend(&mut b, |w| table::table(w).frames().top().map(|k| k.next));
         if !matches!(next, Some(Next::Step(e)) if e.address() == ret) {
             println!("trial {test}: continuation {next:x?} instead of {ret:06x}");
             seen_gaps += 1;
@@ -248,8 +252,10 @@ fn principal() {
         let r = catch_unwind(AssertUnwindSafe(|| {
             for _ in 0..64 {
                 let Some(e) = step else { break };
-                ddsom_game::tasks::resume_step(e, &mut b);
-                ddsom_game::tools::frames::apply_tools_return(&mut c, &mut b);
+                World::lend(&mut b, |w| {
+                    ddsom_game::tasks::resume_step(e, w);
+                    ddsom_game::tools::frames::apply_tools_return(&mut c, w);
+                });
                 if c.pc == SENTINEL {
                     return true;
                 }

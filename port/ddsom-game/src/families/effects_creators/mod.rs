@@ -7,7 +7,7 @@
 //! leaves: A1 = the created effect, the carry set if the pool is full (callers test `bcs`), the flags of the last
 //! write, the work registers (loop counters, draws).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::families::effects::records::{Carrier, Effect};
 use crate::families::effects::tables::{tables, Read, Table};
@@ -94,43 +94,43 @@ const SETTING: u32 = 0x2f;
 const TURNED: u32 = 0x2c;
 
 /// Link `off` of `o` to `target` (`move.w An,(off,A1)`), with the flags of the `move`.
-fn link(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, target: u32) {
+fn link(r: &mut impl Regs, b: &mut World, o: Obj, off: u32, target: u32) {
     o.set_u16(b, off, target as u16);
     r.flags(target & 0xffff, Size::Word);
 }
 
 /// `move.b v,(off,A1)` with its flags.
-fn put8(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, v: u8) {
+fn put8(r: &mut impl Regs, b: &mut World, o: Obj, off: u32, v: u8) {
     o.set_u8(b, off, v);
     r.flags(v as u32, Size::Byte);
 }
 
 /// `move.w v,(off,A1)` with its flags.
-fn put16(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, v: u16) {
+fn put16(r: &mut impl Regs, b: &mut World, o: Obj, off: u32, v: u16) {
     o.set_u16(b, off, v);
     r.flags(v as u32, Size::Word);
 }
 
 /// Allocates an object and sets its activity and type (`move.b #1,(A1)`, `move.b #type,(2,A1)`).
-fn spawn_in(r: &mut impl Regs, b: &mut Cps2Bus, pool: &Pool, kind: u8) -> Option<Obj> {
+fn spawn_in(r: &mut impl Regs, b: &mut World, pool: &Pool, kind: u8) -> Option<Obj> {
     let o = r.allocated(b, pool)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     put8(r, b, o, Obj::KIND, kind);
     Some(o)
 }
 
-pub(crate) fn spawn(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
+pub(crate) fn spawn(r: &mut impl Regs, b: &mut World, kind: u8) -> Option<Obj> {
     spawn_in(r, b, &pools::EFFCT, kind)
 }
 
 /// `addq.b #1,(A1)`: the activity is incremented, not set.
-fn bump_active(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj) {
+fn bump_active(r: &mut impl Regs, b: &mut World, o: Obj) {
     let v = r.addition(1, o.u8(b, Obj::ACTIVE) as u32, Size::Byte);
     o.set_u8(b, Obj::ACTIVE, v as u8);
 }
 
 /// Copies the high words of X, Z, Y of the creator.
-fn copy_position(b: &mut Cps2Bus, to: Obj, from: Obj) {
+fn copy_position(b: &mut World, to: Obj, from: Obj) {
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = from.u16(b, off);
         to.set_u16(b, off, v);
@@ -149,19 +149,19 @@ fn and_d0(r: &mut impl Regs, v: u16, mask: u16) -> u16 {
 // Simple creators: type, variant, setting `+0x2f`, link to the creator
 
 /// 0xae776: interface element (type 17; cursors of the selection screen...).
-pub(crate) fn interface(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn interface(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     spawn(r, b, kind::INTERFACE)
 }
 
 /// 0xaf346: interface banner (type 21) of variant `variant`.
-pub(crate) fn strip(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub(crate) fn strip(r: &mut impl Regs, b: &mut World, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::STRIP)?;
     put8(r, b, o, Obj::VARIANT, variant);
     Some(o)
 }
 
 /// 0xb1a7a (end-of-scene screen, type 31), 0xafe02 (path vote, type 23): variant, setting.
-pub(crate) fn with_setting_via(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8, variant: u8, setting: u8) -> Option<Obj> {
+pub(crate) fn with_setting_via(r: &mut impl Regs, b: &mut World, kind: u8, variant: u8, setting: u8) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     o.set_u8(b, Obj::VARIANT, variant);
     put8(r, b, o, SETTING, setting);
@@ -169,10 +169,10 @@ pub(crate) fn with_setting_via(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8, var
 }
 
 /// 0xab7d8: burst of debris (type 6) of variant `variant`, linked to the creator by `+0x50`.
-pub fn debris(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub fn debris(b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     debris_via(&mut Pure, b, creator, variant)
 }
-pub(crate) fn debris_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn debris_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::DEBRIS)?;
     o.set_u8(b, Obj::VARIANT, variant);
     o.set_u8(b, Effect::TIMER, 0);
@@ -182,7 +182,7 @@ pub(crate) fn debris_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, varia
 
 /// 0xabec8 (attack effect, type 11) and 0xb378a (effects of a hit, type 40): linked to the creator by `+0x5c`, variant
 /// and setting.
-pub(crate) fn attached_via(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub(crate) fn attached_via(r: &mut impl Regs, b: &mut World, kind: u8, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     o.set_u16(b, link::CREATOR, creator.word());
     o.set_u8(b, Obj::VARIANT, variant);
@@ -191,20 +191,20 @@ pub(crate) fn attached_via(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8, creator
 }
 
 /// 0xabec8: attack effect (type 11) linked to the creator.
-pub fn attack(b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub fn attack(b: &mut World, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     attached_via(&mut Pure, b, kind::ATTACK, creator, variant, setting)
 }
 
 /// 0xb378a: stars and sparks of a hit (type 40) linked to the creator.
-pub fn blow(b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub fn blow(b: &mut World, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     attached_via(&mut Pure, b, kind::BLOW, creator, variant, setting)
 }
 
 /// 0xab708: halo (type 5) of the creator's variant, linked by `+0x50`.
-pub fn halo(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn halo(b: &mut World, creator: Obj) -> Option<Obj> {
     halo_via(&mut Pure, b, creator)
 }
-pub(crate) fn halo_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn halo_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::HALO)?;
     let v = creator.u8(b, Obj::VARIANT);
     o.set_u8(b, Obj::VARIANT, v);
@@ -213,10 +213,10 @@ pub(crate) fn halo_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Opti
 }
 
 /// 0xb1352: placed spark (type 28) of variant `variant`, linked by `+0x5c`.
-pub fn posed_spark(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub fn posed_spark(b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     posed_spark_via(&mut Pure, b, creator, variant)
 }
-pub(crate) fn posed_spark_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn posed_spark_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::POSED_SPARK)?;
     o.set_u8(b, Obj::VARIANT, variant);
     link(r, b, o, link::CREATOR, creator.0);
@@ -224,12 +224,12 @@ pub(crate) fn posed_spark_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, 
 }
 
 /// 0xb141a: impact spark (type 29, variant 1) with speeds `vx`, `ax`, linked by `+0x5c`. Core.
-pub fn impact_spark(b: &mut Cps2Bus, creator: Obj, vx: u16, ax: u16) -> Option<Obj> {
+pub fn impact_spark(b: &mut World, creator: Obj, vx: u16, ax: u16) -> Option<Obj> {
     impact(&mut Pure, b, creator, vx, ax)
 }
 
 /// 0xb141a: impact spark (type 29, variant 1) with speeds `vx`, `ax`, linked by `+0x5c`.
-pub(crate) fn impact(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, vx: u16, ax: u16) -> Option<Obj> {
+pub(crate) fn impact(r: &mut impl Regs, b: &mut World, creator: Obj, vx: u16, ax: u16) -> Option<Obj> {
     let o = spawn(r, b, kind::IMPACT)?;
     o.set_u8(b, Obj::VARIANT, 1);
     o.set_u16(b, Obj::VX, vx);
@@ -240,10 +240,10 @@ pub(crate) fn impact(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, vx: u16, 
 
 /// 0xb12c0: pickup effect (type 27) of variant `variant`, attached to the same object as the creator (`+0x50`, if it
 /// exists: negative pointer).
-pub fn pickup(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub fn pickup(b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     pickup_via(&mut Pure, b, creator, variant)
 }
-pub(crate) fn pickup_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn pickup_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let owner = creator.u16(b, link::OWNER);
     r.flags(owner as u32, Size::Word);
     if (owner as i16) >= 0 {
@@ -257,7 +257,7 @@ pub(crate) fn pickup_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, varia
 }
 
 /// Creator of a fixed-variant type, linked to the creator by `+0x5c` (types 51, 73, 74, 82, 84, 86).
-pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
+pub(crate) fn linked_via(r: &mut impl Regs, b: &mut World, creator: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     if let Some(v) = variant {
         o.set_u8(b, Obj::VARIANT, v);
@@ -267,22 +267,22 @@ pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, kind:
 }
 
 /// 0xb97a2: placed burst (type 82, variant left as is) linked to the creator.
-pub fn posed_flash(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn posed_flash(b: &mut World, creator: Obj) -> Option<Obj> {
     linked_posed_flash_via(&mut Pure, b, creator)
 }
-pub(crate) fn linked_posed_flash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn linked_posed_flash_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     linked_via(r, b, creator, kind::POSED_FLASH, None)
 }
 
 /// 0xb8956: scene timer (type 76) of variant `variant`.
-pub(crate) fn timer(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub(crate) fn timer(r: &mut impl Regs, b: &mut World, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::TIMER)?;
     put8(r, b, o, Obj::VARIANT, variant);
     Some(o)
 }
 
 /// 0xba18a: drifting dust (type 90), oriented like the creator, linked by the long `+0x46`.
-pub(crate) fn drift_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn drift_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::DRIFT)?;
     let facing = creator.u8(b, TURNED);
     o.set_u8(b, TURNED, facing);
@@ -292,7 +292,7 @@ pub(crate) fn drift_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Opt
 }
 
 /// 0xb66e4: effect of type 53; the activity is incremented.
-pub(crate) fn type_53(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn type_53(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     let o = r.allocated(b, &pools::EFFCT)?;
     bump_active(r, b, o);
     put8(r, b, o, Obj::KIND, kind::TYPE_53);
@@ -300,10 +300,10 @@ pub(crate) fn type_53(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 }
 
 /// 0xb6a5c: machine (type 55) linked to the creator by `+0x5c`; activity incremented.
-pub fn launcher(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn launcher(b: &mut World, creator: Obj) -> Option<Obj> {
     launcher_via(&mut Pure, b, creator)
 }
-pub(crate) fn launcher_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn launcher_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = r.allocated(b, &pools::EFFCT)?;
     bump_active(r, b, o);
     o.set_u8(b, Obj::KIND, kind::LAUNCHER);
@@ -312,10 +312,10 @@ pub(crate) fn launcher_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> 
 }
 
 /// 0xb6c42: burst (type 56) placed at (0xc0, 0x50) of the camera; activity incremented.
-pub fn camera_shard(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn camera_shard(b: &mut World) -> Option<Obj> {
     camera_shard_via(&mut Pure, b)
 }
-pub(crate) fn camera_shard_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn camera_shard_via(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     let o = r.allocated(b, &pools::EFFCT)?;
     bump_active(r, b, o);
     o.set_u8(b, Obj::KIND, kind::SHARDS);
@@ -330,7 +330,7 @@ pub(crate) fn camera_shard_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj
 
 /// 0xb2ef6: silhouette and reflection (type 35, variants 0 and 1) of the creator, whose transmitted frame (`+0xa0`) is
 /// reset to zero.
-pub(crate) fn mirrored_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn mirrored_pair_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     creator.set_u8(b, Carrier::SCRIPT_STEP, 0);
     let mut last = None;
     for variant in 0..2u8 {
@@ -344,7 +344,7 @@ pub(crate) fn mirrored_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj
 }
 
 /// 0xb6ba8: effect of type 57 linked to the creator by `+0x50`: variant, setting.
-pub(crate) fn type_57(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub(crate) fn type_57(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     let o = r.allocated(b, &pools::EFFCT)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     o.set_u16(b, link::OWNER, creator.word());
@@ -355,7 +355,7 @@ pub(crate) fn type_57(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant:
 }
 
 /// 0xb68b0: three effects of type 54, variants 0 (left as is), 1 and 2.
-pub(crate) fn type_54_trio(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn type_54_trio(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     let mut last = None;
     for variant in 0..3u8 {
         let o = r.allocated(b, &pools::EFFCT)?;
@@ -374,10 +374,10 @@ pub(crate) fn type_54_trio(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xae3ec: sparkle (type 15) of the creator's variant `+0x54`, placed 16 pixels higher, linked by `+0x5c`; nothing if
 /// `+0x54` is zero.
-pub fn twinkle(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn twinkle(b: &mut World, creator: Obj) -> Option<Obj> {
     twinkle_via(&mut Pure, b, creator)
 }
-pub(crate) fn twinkle_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn twinkle_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let variant = creator.u8(b, link::SECOND);
     r.flags(variant as u32, Size::Byte);
     if variant == 0 {
@@ -394,10 +394,10 @@ pub(crate) fn twinkle_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> O
 
 /// 0xb6596: character sparkle (type 52) placed right in front of the creator, raised according to its byte `+0x60`
 /// (word table 0xb65d6), linked by `+0x5c`. D0 = the rise.
-pub fn shimmer(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn shimmer(b: &mut World, creator: Obj) -> Option<Obj> {
     shimmer_via(&mut Pure, b, creator)
 }
-pub(crate) fn shimmer_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn shimmer_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::SHIMMER)?;
     copy_position(b, o, creator);
     let y = o.u16(b, Obj::Y).wrapping_sub(1);
@@ -412,7 +412,7 @@ pub(crate) fn shimmer_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> O
 }
 
 /// 0xb5730: marker (type 47) in place of the creator: setting `+0x46`, same variant.
-pub(crate) fn beacon_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn beacon_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::BEACON)?;
     let setting = creator.u8(b, Carrier::BEACON_SETTING);
     o.set_u8(b, SETTING, setting);
@@ -424,7 +424,7 @@ pub(crate) fn beacon_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Op
 }
 
 /// 0xb3c14: thrown object (type 41) from the creator, 24 pixels higher, same orientation.
-pub(crate) fn toss_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn toss_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::TOSS)?;
     let facing = creator.u8(b, TURNED);
     o.set_u8(b, TURNED, facing);
@@ -436,10 +436,10 @@ pub(crate) fn toss_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Opti
 
 /// 0xaba16: single-animation burst (type 7) of the creator: orientation, full position (longs) right in front of it,
 /// setting `+0x2f`.
-pub fn flash(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn flash(b: &mut World, creator: Obj) -> Option<Obj> {
     flash_via(&mut Pure, b, creator)
 }
-pub(crate) fn flash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn flash_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::FLASH)?;
     let facing = creator.u8(b, TURNED);
     o.set_u8(b, TURNED, facing);
@@ -455,7 +455,7 @@ pub(crate) fn flash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Opt
 }
 
 /// 0xaaa40: spark (type 4, variant `variant`) between the creator and `other`, placed at (x, z, y).
-pub(crate) fn spark_at_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, other: u32, variant: u8, (x, z, y): (u16, u16, u16)) -> Option<Obj> {
+pub(crate) fn spark_at_via(r: &mut impl Regs, b: &mut World, creator: Obj, other: u32, variant: u8, (x, z, y): (u16, u16, u16)) -> Option<Obj> {
     let o = spawn(r, b, kind::SPARK)?;
     o.set_u8(b, Obj::VARIANT, variant);
     let facing = creator.u8(b, TURNED) ^ 0x20;
@@ -477,43 +477,43 @@ pub(crate) fn spark_at_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, oth
 // the pool is full)
 
 /// 0xaaa40: spark (type 4) between the creator and `other`, placed at (x, z, y).
-pub fn spark_at(b: &mut Cps2Bus, creator: Obj, other: u32, variant: u8, pos: (u16, u16, u16)) -> Option<Obj> {
+pub fn spark_at(b: &mut World, creator: Obj, other: u32, variant: u8, pos: (u16, u16, u16)) -> Option<Obj> {
     spark_at_via(&mut Pure, b, creator, other, variant, pos)
 }
 /// 0xb3df6: two scenery effects (variant 0).
-pub fn scenery_0(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_0(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_0_pair_via(&mut Pure, b, creator)
 }
 /// 0xb3f40: scenery effects of variant 3.
-pub fn scenery_3(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_3(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_burst_via(&mut Pure, b, creator, 3, 6, true)
 }
 /// 0xb3f6a: one frame out of four, puff of variant 4.
-pub fn scenery_4(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_4(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_4_via(&mut Pure, b, creator)
 }
 /// 0xb3fb0: scenery effect of variant 5, setting `setting`.
-pub fn scenery_5(b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub fn scenery_5(b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     scenery_via(&mut Pure, b, creator, 5, Some(setting))
 }
 /// 0xb3fd4: one time out of sixteen, scenery effect of variant 6.
-pub fn scenery_6(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_6(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_by_chance_via(&mut Pure, b, creator, 0xf, 6, None)
 }
 /// 0xb4002: scenery effect of variant 7, zero setting.
-pub fn scenery_7(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_7(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_via(&mut Pure, b, creator, 7, Some(0))
 }
 /// 0xb4026: scenery effects of variant 8.
-pub fn scenery_8(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_8(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_burst_via(&mut Pure, b, creator, 8, 9, false)
 }
 /// 0xb4088: one time out of four, scenery effect of variant 10, zero setting.
-pub fn scenery_10(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn scenery_10(b: &mut World, creator: Obj) -> Option<Obj> {
     scenery_by_chance_via(&mut Pure, b, creator, 3, 10, Some(0))
 }
 /// 0xb3e4e (`second` false) and 0xb3ec6: cries of a boss.
-pub fn shouts(b: &mut Cps2Bus, creator: Obj, second: bool) -> Option<Obj> {
+pub fn shouts(b: &mut World, creator: Obj, second: bool) -> Option<Obj> {
     if second {
         shouts_via(&mut Pure, b, creator, 2, &tables().cries_b)
     } else {
@@ -521,55 +521,55 @@ pub fn shouts(b: &mut Cps2Bus, creator: Obj, second: bool) -> Option<Obj> {
     }
 }
 /// 0xb2ef6: silhouette and its reflection.
-pub fn mirrored_pair(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn mirrored_pair(b: &mut World, creator: Obj) -> Option<Obj> {
     mirrored_pair_via(&mut Pure, b, creator)
 }
 /// 0xba18a: drift.
-pub fn drift(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn drift(b: &mut World, creator: Obj) -> Option<Obj> {
     drift_via(&mut Pure, b, creator)
 }
 /// 0xb5730: marker.
-pub fn beacon(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn beacon(b: &mut World, creator: Obj) -> Option<Obj> {
     beacon_via(&mut Pure, b, creator)
 }
 /// 0xb3c14 : lance.
-pub fn toss(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn toss(b: &mut World, creator: Obj) -> Option<Obj> {
     toss_via(&mut Pure, b, creator)
 }
 /// 0xb4f44: a spell effect, setting `setting`.
-pub fn spell(b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub fn spell(b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     spell_via(&mut Pure, b, creator, setting)
 }
 /// 0xb4ef4 (setting 0), 0xb4f60 (2), 0xb4f1c (4): six spell effects.
-pub fn spell_ring(b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub fn spell_ring(b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     spell_ring_via(&mut Pure, b, creator, setting)
 }
 /// 0xa817c: shot that rises as a column.
-pub fn eshl_rise(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn eshl_rise(b: &mut World, creator: Obj) -> Option<Obj> {
     eshl_rise_via(&mut Pure, b, creator)
 }
 /// 0xa836c: shot of a hit, setting `setting`.
-pub fn eshl_slash(b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
+pub fn eshl_slash(b: &mut World, creator: Obj, setting: u8) -> Option<Obj> {
     eshl_slash_via(&mut Pure, b, creator, setting)
 }
 /// 0xb4bcc: rain of debris.
-pub fn debris_rain(b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
+pub fn debris_rain(b: &mut World, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
     debris_rain_via(&mut Pure, b, creator, variant, setting)
 }
 /// 0xb1a7a: end-of-scene screen (type 31).
-pub fn countdown(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
+pub fn countdown(b: &mut World, variant: u8, setting: u8) -> Option<Obj> {
     with_setting_via(&mut Pure, b, kind::COUNTDOWN, variant, setting)
 }
 /// 0xafe02: path vote (type 23).
-pub fn vote(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
+pub fn vote(b: &mut World, variant: u8, setting: u8) -> Option<Obj> {
     with_setting_via(&mut Pure, b, kind::VOTE, variant, setting)
 }
 /// Effect of kind `kind` linked to the creator (0xb84ae victory, 0xb85e2 bubble, 0xb9c6a/0xb9c88 embers...).
-pub fn linked(b: &mut Cps2Bus, creator: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
+pub fn linked(b: &mut World, creator: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
     linked_via(&mut Pure, b, creator, kind, variant)
 }
 /// Effect of kind `kind` without link (0xb8a0a sound fade, 0xb9942 rain...).
-pub fn spawn_kind(b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
+pub fn spawn_kind(b: &mut World, kind: u8) -> Option<Obj> {
     spawn(&mut Pure, b, kind)
 }
 
@@ -578,31 +578,31 @@ pub(crate) mod for_players {
     use super::*;
 
     /// 0xb378a: blow stars (type 40) attached to `me`, variant `variant`, setting `setting`.
-    pub(crate) fn blow(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+    pub(crate) fn blow(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
         attached_via(r, b, kind::BLOW, me, variant, setting)
     }
     /// 0xab708: halo of `me`.
-    pub(crate) fn halo(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn halo(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         halo_via(r, b, me)
     }
     /// 0xab7d8: debris spray of `me`, variant `variant`.
-    pub(crate) fn debris(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    pub(crate) fn debris(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
         debris_via(r, b, me, variant)
     }
     /// 0xb6ba8: effect of type 57 of `me`.
-    pub(crate) fn type_57(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+    pub(crate) fn type_57(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
         super::type_57(r, b, me, variant, setting)
     }
     /// 0xb97ba: posed flash (variant 1) linked to `me`.
-    pub(crate) fn posed_flash_b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn posed_flash_b(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         linked_via(r, b, me, kind::POSED_FLASH, Some(1))
     }
     /// 0xb96c0: thrown shard of variant `variant` linked to `me`.
-    pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
         super::thrown_shard(r, b, me, variant)
     }
     /// 0xb9c6a: wisp (type 86, variant 0) linked to `me`.
-    pub(crate) fn wisp(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn wisp(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         linked_via(r, b, me, kind::WISP, Some(0))
     }
 }
@@ -612,72 +612,72 @@ pub(crate) mod for_players {
 
 /// The created effect, or the A1 that the original leaves when the EFFCT pool is full (`Pool::alloc_or_leftover`, which
 /// writes nothing after a failure): for callers that do not test the carry.
-pub fn or_rest(b: &mut Cps2Bus, created: Option<Obj>) -> Obj {
+pub fn or_rest(b: &mut World, created: Option<Obj>) -> Obj {
     created.unwrap_or_else(|| pools::EFFCT.alloc_or_leftover(b).expect_err("the EFFCT pool was just found full"))
 }
 
 /// 0xae776: interface element (type 17).
-pub fn element_d_interface(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn element_d_interface(b: &mut World) -> Option<Obj> {
     interface(&mut Pure, b)
 }
 
 /// 0xaf346: interface banner (type 21) of variant `variant`.
-pub fn banner(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub fn banner(b: &mut World, variant: u8) -> Option<Obj> {
     strip(&mut Pure, b, variant)
 }
 
 /// 0xb1a7a: end screen (type 31) of variant `variant`, setting `setting`.
-pub fn end_screen(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
+pub fn end_screen(b: &mut World, variant: u8, setting: u8) -> Option<Obj> {
     with_setting_via(&mut Pure, b, kind::COUNTDOWN, variant, setting)
 }
 
 /// 0xb9aa0: finale (type 74) linked to the creator.
-pub fn finale(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn finale(b: &mut World, creator: Obj) -> Option<Obj> {
     linked(b, creator, kind::FINALE, None)
 }
 
 /// 0xb7f14: effect of type 68.
-pub fn type_68_pure(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn type_68_pure(b: &mut World) -> Option<Obj> {
     spawn(&mut Pure, b, kind::TYPE_68)
 }
 
 /// 0xb8956: scene timer (type 76) of variant `variant`.
-pub fn countdown_timer(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub fn countdown_timer(b: &mut World, variant: u8) -> Option<Obj> {
     timer(&mut Pure, b, variant)
 }
 
 /// 0xb66e4: effect of type 53 (activity incremented).
-pub fn type_53_pure(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn type_53_pure(b: &mut World) -> Option<Obj> {
     type_53(&mut Pure, b)
 }
 
 /// 0xb9942: rain (type 83).
-pub fn rain(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn rain(b: &mut World) -> Option<Obj> {
     spawn(&mut Pure, b, kind::RAIN)
 }
 
 /// 0xb1764: school of fish.
-pub fn bench(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn bench(b: &mut World) -> Option<Obj> {
     fish_school(&mut Pure, b)
 }
 
 /// 0xb17ba: swimming fish.
-pub fn swimmers(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn swimmers(b: &mut World) -> Option<Obj> {
     fish_swimmers(&mut Pure, b)
 }
 
 /// 0xabb70: trails of the players.
-pub fn trails_pure(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn trails_pure(b: &mut World) -> Option<Obj> {
     trails(&mut Pure, b)
 }
 
 /// 0xb68b0: three effects of type 54.
-pub fn types_54(b: &mut Cps2Bus) -> Option<Obj> {
+pub fn types_54(b: &mut World) -> Option<Obj> {
     type_54_trio(&mut Pure, b)
 }
 
 /// 0xa8a42: camera 1 in mode 0x60.
-pub fn camera_in_mode_60(b: &mut Cps2Bus) {
+pub fn camera_in_mode_60(b: &mut World) {
     crate::families::effects::vars::SCENE_STEP.set(b, 0);
     crate::families::effects::vars::CAMERA_MODE.set(b, 0x60);
 }

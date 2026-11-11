@@ -4,7 +4,7 @@
 //! column is 4 bytes further, the next column 0x80 bytes further. The panels are
 //! rectangles of cells whose origin depends on the player, the zone and the screen layout.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::var;
 use crate::hw::video::{Cell, TEXT};
@@ -17,18 +17,18 @@ pub const CELL: u32 = TEXT.row;
 pub const EMPTY_TILE: u16 = 0x20;
 
 /// Empties the cell at `at`.
-pub fn clear_cell(b: &mut Cps2Bus, at: u32) {
+pub fn clear_cell(b: &mut World, at: u32) {
     Cell(at).put(b, EMPTY_TILE, 0);
 }
 
 /// Brush: a write pointer that advances cell by cell, like `(A1)+` in the original.
 pub struct Brush<'a> {
-    pub b: &'a mut Cps2Bus,
+    pub b: &'a mut World,
     pub at: u32,
 }
 
 impl<'a> Brush<'a> {
-    pub fn new(b: &'a mut Cps2Bus, at: u32) -> Self {
+    pub fn new(b: &'a mut World, at: u32) -> Self {
         Brush { b, at }
     }
 
@@ -61,7 +61,7 @@ impl<'a> Brush<'a> {
 /// Origin of a panel zone for player index `player`: program ROM table (read PC-relative,
 /// hence decrypted), one row of 8 words per zone, four positions per layout; the
 /// two-column layout (`A5+0x344` odd) uses the second half of the row.
-pub fn origin(b: &mut Cps2Bus, player: u8, zone: u16) -> u32 {
+pub fn origin(b: &mut World, player: u8, zone: u16) -> u32 {
     const ORIGINS: Rom = Rom::at(0x172b4);
     let narrow = var::LAYOUT.get(b) & 1 != 0;
     let index = 2 * player as u32 + 16 * zone as u32 + if narrow { 8 } else { 0 };

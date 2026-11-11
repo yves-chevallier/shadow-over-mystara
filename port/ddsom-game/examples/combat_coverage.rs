@@ -16,8 +16,8 @@ fn main() {
     };
     let ee = std::fs::read(eeprom).ok();
     let load = || cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    let (mut ma, mut mb) = (load(), load());
-    ddsom_game::install(&mut ma);
+    let (ma, mut mb) = (load(), load());
+    let mut ma = ddsom_game::install(ma);
     ddsom_game::set_check(true);
     ddsom_game::combat::enable_coverage();
     ddsom_game::install_reference(&mut mb);

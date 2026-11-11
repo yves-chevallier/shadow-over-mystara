@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::families::small` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
@@ -13,7 +13,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 
 /// Allocates in a pool; `None` (carry raised) if the pool is full.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+fn alloc(c: &mut Cpu, b: &mut World, pool: &pools::Pool) -> Option<Obj> {
     pool.alloc_68k(c, b)
 }
 
@@ -22,31 +22,31 @@ fn moved(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);
 }
 
-fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32) {
+fn linked(c: &mut Cpu, b: &mut World, pool: &pools::Pool, kind: u8, link: u32) {
     let me = Obj(c.a[0]);
     linked_via(c, b, me, pool, kind, link);
     rts(c, b);
 }
 
-fn peff_16(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_16(c: &mut Cpu, b: &mut World) {
     linked(c, b, &pools::PEFF, 0x10, 0x50);
 }
 
-fn peff_33(c: &mut Cpu, b: &mut Cps2Bus) {
+fn peff_33(c: &mut Cpu, b: &mut World) {
     linked(c, b, &pools::PEFF, 0x21, 0x50);
 }
 
-fn sobj_7(c: &mut Cpu, b: &mut Cps2Bus) {
+fn sobj_7(c: &mut Cpu, b: &mut World) {
     linked(c, b, &pools::SOBJ, 0x7, 0x46);
 }
 
-fn sobj_10(c: &mut Cpu, b: &mut Cps2Bus) {
+fn sobj_10(c: &mut Cpu, b: &mut World) {
     linked(c, b, &pools::SOBJ, 0xa, 0x46);
 }
 
 /// Native of `shot_18`: D0 = 1 if the shot is created.
 /// Original glitch: 0x54872 (`always_zero`) returns D0 = 0 even when the shot is created.
-fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, always_zero: bool) {
+fn shot_18_native(c: &mut Cpu, b: &mut World, variant: u8, always_zero: bool) {
     let me = Obj(c.a[0]);
     let created = shot_18(c, b, me, variant).is_some();
     c.d[0] = (created && !always_zero) as u32;
@@ -54,14 +54,14 @@ fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, always_zero: bool) 
     rts(c, b);
 }
 
-fn enemy_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+fn enemy_pair(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     enemy_pair_via(c, b, me);
     rts(c, b);
 }
 
 /// 0x792f8 and 0x71e3c: `+0x53` takes over `+0x56`.
-fn copy_56_to_53(c: &mut Cpu, b: &mut Cps2Bus) {
+fn copy_56_to_53(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     let v = me.u8(b, 0x56);
     me.set_u8(b, 0x53, v);
@@ -71,7 +71,7 @@ fn copy_56_to_53(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xa66c0: creates D5 + 1 ESHL shots of type 0x3e whose variant decreases from D5 (byte of table 0xa66e2
 /// indexed by D2) to 0.
-fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
+fn eshl_volley(c: &mut Cpu, b: &mut World) {
     let row = 0xa66e2u32.wrapping_add(c.d[2] as i16 as i32 as u32);
     c.d[5] = prog8(b, row) as u32;
     while let Some(o) = alloc(c, b, &pools::ESHL) {
@@ -88,13 +88,13 @@ fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn roar_big(c: &mut Cpu, b: &mut Cps2Bus) {
+fn roar_big(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     roar_via(c, b, me, true);
     rts(c, b);
 }
 
-fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
+fn roar_small(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     roar_via(c, b, me, false);
     rts(c, b);
@@ -102,7 +102,7 @@ fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xa036e: harpy, companion creature (ESHL 0x10): copies the variant, the position offset by ±0x2f in X
 /// and by -0x78 in Z; half the creator's HP (`+0x60 / 4`) goes into the creator's `+0x58`.
-fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
+fn harpy_companion(c: &mut Cpu, b: &mut World) {
     let me = Obj(c.a[0]);
     let _ = harpy_companion_via(c, b, me);
     rts(c, b);
@@ -110,14 +110,14 @@ fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xa0566: harpy, ESHL 0x11 projectile: D5 goes into the creator's `+0x42`, A2 and the creator are the
 /// links `+0x50` and `+0x56` (longs); the creator resets `+0xa5` to zero.
-fn harpy_shot(c: &mut Cpu, b: &mut Cps2Bus) {
+fn harpy_shot(c: &mut Cpu, b: &mut World) {
     let (me, d5, a2) = (Obj(c.a[0]), c.d[5] as u8, c.a[2]);
     let _ = harpy_shot_via(c, b, me, d5, a2);
     rts(c, b);
 }
 
 /// `movem.l (addr)+,list`: loads the registers of the mask (D0-D7 then A0-A7); returns the next address.
-fn movem_load(c: &mut Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
+fn movem_load(c: &mut Cpu, b: &mut World, mask: u16, mut addr: u32) -> u32 {
     for bit in (0..16).filter(|bit| mask >> bit & 1 != 0) {
         let v = rd32(b, addr);
         if bit < 8 {
@@ -131,7 +131,7 @@ fn movem_load(c: &mut Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
 }
 
 /// `movem.l list,(addr)`: stores the registers of the mask; returns the next address.
-fn movem_store(c: &Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
+fn movem_store(c: &Cpu, b: &mut World, mask: u16, mut addr: u32) -> u32 {
     for bit in (0..16).filter(|bit| mask >> bit & 1 != 0) {
         wr32(b, addr, if bit < 8 { c.d[bit] } else { c.a[bit - 8] });
         addr += 4;
@@ -141,7 +141,7 @@ fn movem_store(c: &Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
 
 /// 0x10158: four blocks of eight colors copied into the palette (GFX RAM) with the high bit
 /// of each nibble raised (`ori.l #0xF000F000`).
-fn palette_blocks_lit(c: &mut Cpu, b: &mut Cps2Bus) {
+fn palette_blocks_lit(c: &mut Cpu, b: &mut World) {
     for (dst, src) in [(0x91c2e0, 0x2538c0), (0x91c300, 0x2538e0), (0x91c360, 0x253900), (0x91c3e0, 0x253920)] {
         movem_load(c, b, MASK_D0_D6_A3, src);
         c.a[2] = src;
@@ -160,7 +160,7 @@ fn palette_blocks_lit(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x101da: like 0x10158 for scene 0x69, without brightening: four blocks of eight colors read in sequence
 /// at 0x10218 (data space).
-fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
+fn palette_blocks(c: &mut Cpu, b: &mut World) {
     let mut src = 0x10218;
     for dst in [0x91c2e0, 0x91c300, 0x91c360, 0x91c3e0] {
         src = movem_load(c, b, MASK_D0_D6_A3, src);
@@ -172,7 +172,7 @@ fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// `palette_twelve_blocks` with the original's registers (the last block in D1-D6, A1, A2).
-fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
+fn palette_blocks_copy(c: &mut Cpu, b: &mut World) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
     let (mut dst, mut src) = (0x91c480, 0x25c4c0);
     // `moveq #0xb,D7`: only flags set (neither `movem` nor `dbf` change any)
@@ -190,7 +190,7 @@ fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x1ad6a: 32 blocks of 32 bytes read from 0x285280 are stored in turn at the same place,
 /// FF1190 (the original does not advance its destination: only the last block stays there), then eight colors of
 /// 0x1ad4a vont en FF1390.
-pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut World) {
     const MASK: u16 = 0x183f; // D0-D5, A3, A4
     let mut src = 0x285280;
     for _ in 0..32 {
@@ -205,30 +205,30 @@ pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Natives of the screen flashes (color 14 of page 1, `palette::set_flash_color`): the flags of the `move.w`.
-fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+fn flash(c: &mut Cpu, b: &mut World, v: u16) {
     crate::palette::set_flash_color(b, v);
     moved(c, v as u32, Size::Word);
     rts(c, b);
 }
 
-fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
+fn flash_off(c: &mut Cpu, b: &mut World) {
     flash(c, b, LIGHTNING_END);
 }
 
-fn flash_a(c: &mut Cpu, b: &mut Cps2Bus) {
+fn flash_a(c: &mut Cpu, b: &mut World) {
     flash(c, b, LIGHTNING_YELLOW);
 }
 
-fn flash_b(c: &mut Cpu, b: &mut Cps2Bus) {
+fn flash_b(c: &mut Cpu, b: &mut World) {
     flash(c, b, LIGHTNING_GREEN);
 }
 
-fn flash_c(c: &mut Cpu, b: &mut Cps2Bus) {
+fn flash_c(c: &mut Cpu, b: &mut World) {
     flash(c, b, LIGHTNING_BLUE);
 }
 
 /// `background_2_on`, with the original's registers: D0 and A1 of the last block (0x26d4), flags of the last `move.b`.
-fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scroll_2_on(c: &mut Cpu, b: &mut World) {
     let end = background_2_on(b);
     c.d[0] = 0xffff;
     c.a[1] = end.destination;
@@ -237,35 +237,35 @@ fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+fn scroll_1_on_with(c: &mut Cpu, b: &mut World, mode: u16) {
     background_1_in_mode(b, mode);
     moved(c, mode as u32, Size::Word);
     rts(c, b);
 }
 
-fn scroll_1_on(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scroll_1_on(c: &mut Cpu, b: &mut World) {
     scroll_1_on_with(c, b, 0x18);
 }
 
-fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut Cps2Bus) {
+fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut World) {
     background_1_lit_a(b, c.d[0] as u16);
     moved(c, 0x34, Size::Word);
     rts(c, b);
 }
 
-fn booted_set(c: &mut Cpu, b: &mut Cps2Bus) {
+fn booted_set(c: &mut Cpu, b: &mut World) {
     startup_done(b, true);
     moved(c, 1, Size::Byte);
     rts(c, b);
 }
 
-fn booted_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+fn booted_clear(c: &mut Cpu, b: &mut World) {
     startup_done(b, false);
     moved(c, 0, Size::Byte);
     rts(c, b);
 }
 
-fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+fn game_vars_clear(c: &mut Cpu, b: &mut World) {
     c.d[0] = 0;
     zero_game_variables(b);
     c.a[0] = A5 + 0x6c;
@@ -275,7 +275,7 @@ fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// `reset_fixed_screen`; A0 = the last unlinked object (0x1f184).
-fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
+fn fixed_screen_reset(c: &mut Cpu, b: &mut World) {
     wr32(b, A5 - 0x70b0, 0);
     crate::tools::objects::lists::unlink_all_68k(c, b);
     crate::sprites::clear_lists(b);
@@ -284,7 +284,7 @@ fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut World), outputs: u32) -> Native {
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 

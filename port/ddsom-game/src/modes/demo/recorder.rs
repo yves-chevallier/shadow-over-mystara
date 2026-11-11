@@ -66,7 +66,7 @@ pub(super) fn demo_inputs(x: &mut Ctx) {
 /// `0xe0538` (scene entry, outside a game): prepares the recorder. Setting bit 13: random seed and
 /// frame counters to zero, then replay active; bit 15: recording at 0x930000; otherwise replay
 /// (inactive) of the demonstration pointed to by `A5-0x5aa8`.
-pub fn reset_recorder(b: &mut Cps2Bus) {
+pub fn reset_recorder(b: &mut World) {
     reset_recorder_by(b);
 }
 
@@ -77,7 +77,7 @@ pub(crate) struct RecorderLeftovers {
     pub(crate) demo: Option<u32>,
 }
 
-pub(crate) fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
+pub(crate) fn reset_recorder_by(b: &mut World) -> RecorderLeftovers {
     const DEMO: Long = Long(0xff_2558);
     let mut leftovers = RecorderLeftovers::default();
     if var::GAME.get(b) != 0 {
@@ -114,7 +114,7 @@ pub(crate) fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
 }
 
 /// `0xe05d6`: stops the recorder.
-pub fn stop_recorder(b: &mut Cps2Bus) {
+pub fn stop_recorder(b: &mut World) {
     rec::LEFT.set(b, 0);
     for flag in [rec::RECORDING, rec::PLAYING, rec::ACTIVE] {
         flag.set(b, 0);

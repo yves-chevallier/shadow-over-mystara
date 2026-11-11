@@ -2,7 +2,7 @@
 //! the original: at a byte offset from the start of a table ([`Read`], shared with the effects). A read past the
 //! extracted bytes goes to the residue (counted, see `crate::data`).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 pub(crate) use crate::families::effects::tables::Read;
 pub(crate) use ddsom_data::objects::ObjectTables;
@@ -25,7 +25,7 @@ fn residue(a: u32) -> Missing {
 }
 
 /// Byte at the address `a` of a table (data space).
-pub(crate) fn held8(b: &mut Cps2Bus, a: u32) -> u8 {
+pub(crate) fn held8(b: &mut World, a: u32) -> u8 {
     match held(a, false) {
         Some((t, off)) => t.at8(b, off),
         None => residue(a).read8(b, a),
@@ -33,7 +33,7 @@ pub(crate) fn held8(b: &mut Cps2Bus, a: u32) -> u8 {
 }
 
 /// Word at the address `a` of a table (data space).
-pub(crate) fn held16(b: &mut Cps2Bus, a: u32) -> u16 {
+pub(crate) fn held16(b: &mut World, a: u32) -> u16 {
     match held(a, false) {
         Some((t, off)) => t.at16(b, off),
         None => residue(a).read16(b, a),
@@ -41,7 +41,7 @@ pub(crate) fn held16(b: &mut Cps2Bus, a: u32) -> u16 {
 }
 
 /// Long at the address `a` of a table (data space).
-pub(crate) fn held32(b: &mut Cps2Bus, a: u32) -> u32 {
+pub(crate) fn held32(b: &mut World, a: u32) -> u32 {
     match held(a, false) {
         Some((t, off)) => t.at32(b, off),
         None => residue(a).read32(b, a),
@@ -50,7 +50,7 @@ pub(crate) fn held32(b: &mut Cps2Bus, a: u32) -> u32 {
 
 /// Byte at the address `a` of the collision boxes (`sprites/tables.json`, `box_blocks`, data space), designated by
 /// an address the code computes (a box set plus 8 bytes per box).
-pub(crate) fn box_byte(b: &mut Cps2Bus, a: u32) -> u8 {
+pub(crate) fn box_byte(b: &mut World, a: u32) -> u8 {
     let blocks = &data().sprite_tables.box_blocks;
     let byte = blocks.partition_point(|k| k.rom <= a).checked_sub(1).and_then(|i| {
         let k = &blocks[i];

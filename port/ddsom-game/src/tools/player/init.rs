@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::player::init` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::player::init::*;
@@ -11,7 +11,7 @@ use crate::player::{Ctx, Player};
 
 /// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
 /// table, D0 = last weapon number read, doubled if it is in the table).
-fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn weapon_stats_native(c: &mut Cpu, b: &mut World) {
     let p = Player(c.a[0]);
     let mut g = Ctx::new(b);
     init_weapon_stats(&mut g, p);

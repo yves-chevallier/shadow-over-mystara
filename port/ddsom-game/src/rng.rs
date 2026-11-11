@@ -15,7 +15,7 @@
 //! A single draw for the whole game: [`random`] (core). The contexts offer it as `x.random()`
 //! (`crate::machine::Machine`); the native (calls by address) also leaves D0.w and the flags of the original.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::ram::RNG_SEED;
 
@@ -42,11 +42,11 @@ impl Rng {
 }
 
 /// One draw (0x19a88): advances the seed and returns the new state. Callers mask the result.
-pub fn random(b: &mut Cps2Bus) -> u16 {
+pub fn random(b: &mut World) -> u16 {
     draw(b).0
 }
 
-pub(crate) fn draw(b: &mut Cps2Bus) -> (u16, bool) {
+pub(crate) fn draw(b: &mut World) -> (u16, bool) {
     let mut rng = Rng(RNG_SEED.get(b));
     let r = rng.advance();
     RNG_SEED.set(b, r.0);
@@ -54,6 +54,6 @@ pub(crate) fn draw(b: &mut Cps2Bus) -> (u16, bool) {
 }
 
 /// 0x19a80: resets the seed.
-pub fn seed(b: &mut Cps2Bus) {
+pub fn seed(b: &mut World) {
     RNG_SEED.set(b, DEFAULT_SEED);
 }

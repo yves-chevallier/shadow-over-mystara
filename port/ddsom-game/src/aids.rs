@@ -2,7 +2,7 @@
 //! game over when all players are down (0x28d8, last step of phase 12) and integer
 //! division (0x17ea).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use crate::objects::{Enemy, Obj};
 use crate::player::Player;
@@ -35,7 +35,7 @@ pub(crate) struct Compute {
 /// Direction from point (D3, D4) to point (D1, D2). The differences are taken as absolute values (16 bits,
 /// positions biased by 0x8000 to compare unsigned); the octant depends on the signs and the larger
 /// difference, the step (0 to 3) on the ratio between the small and the large difference, estimated by subtractions.
-pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Compute {
+pub(crate) fn compute(b: &mut World, d1: u32, d2: u32, d3: u32, d4: u32) -> Compute {
     let mut octant = 0u8;
     let mut dx = d1.wrapping_add(0x8000);
     let (diff, borrow) = (dx as u16).overflowing_sub(d3.wrapping_add(0x8000) as u16);
@@ -89,18 +89,18 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
 }
 
 /// 0x1386: direction (0 to 31) from point `de` to point `to` (x, z).
-pub fn direction(b: &mut Cps2Bus, de: (u16, u16), to: (u16, u16)) -> u8 {
+pub fn direction(b: &mut World, de: (u16, u16), to: (u16, u16)) -> u8 {
     compute(b, to.0 as u32, to.1 as u32, de.0 as u32, de.1 as u32).direction
 }
 
 /// 0x137e: direction from object `o` (x, z) to point `to`.
-pub fn direction_from(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) -> u8 {
+pub fn direction_from(b: &mut World, o: Obj, to: (u16, u16)) -> u8 {
     let de = (o.u16(b, Obj::X), o.u16(b, Obj::Y));
     direction(b, de, to)
 }
 
 /// 0x1376: direction from object `o` to object `target`.
-pub fn direction_to(b: &mut Cps2Bus, o: Obj, target: Obj) -> u8 {
+pub fn direction_to(b: &mut World, o: Obj, target: Obj) -> u8 {
     let to = (target.u16(b, Obj::X), target.u16(b, Obj::Y));
     direction_from(b, o, to)
 }
@@ -132,7 +132,7 @@ impl NameEntry {
 }
 
 /// 0x2810: is object `o` grabbed by a player (word `+0x46`)?
-pub fn grabbed(b: &mut Cps2Bus, o: Obj) -> NameEntry {
+pub fn grabbed(b: &mut World, o: Obj) -> NameEntry {
     if PLAYERS_FROZEN.is_set(b) {
         return NameEntry::Frozen;
     }
@@ -160,7 +160,7 @@ const PHASE_END: u32 = 0x1000_0000;
 /// 0x28d8, end of phase 12: when `ram::PLAYERS_FROZEN` is non-zero (game in progress) and players are down
 /// (zero HP), they are put back in the waiting state and the game over phase starts. Nothing happens if a player
 /// is still in the air or in the waiting state.
-pub fn game_over(b: &mut Cps2Bus) {
+pub fn game_over(b: &mut World) {
     let stage = ram::SCENE.get(b);
     if STAGE_NO_END.contains(&stage) || !PLAYERS_FROZEN.is_set(b) {
         return;

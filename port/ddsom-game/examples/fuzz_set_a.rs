@@ -447,8 +447,8 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
@@ -461,13 +461,13 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
     let mut inputs: Vec<(u32, &Pool, u8)> = Vec::new();
     for (pool, table, n) in tables {
         for k in 0..n {
-            let a = (m.bus.fetch16(table + 4 * k) as u32) << 16 | m.bus.fetch16(table + 4 * k + 2) as u32;
+            let a = (m.bus.hw.fetch16(table + 4 * k) as u32) << 16 | m.bus.hw.fetch16(table + 4 * k + 2) as u32;
             if ddsom_game::all_natives().any(|nat| nat.entry == a) && filter.is_none_or(|f| f == a) {
                 inputs.push((a, pool, k as u8));
             }
         }
     }
-    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    let (c0, b0) = (m.cpu.clone(), m.bus.to_bus());
     if std::env::var("DDSOM_VERBOSE").is_ok() {
         let mut b = b0.clone();
         println!("places libres : ESHL {} SET {} SOBJ {}", rd16(&mut b, A5 + ESHL.free), rd16(&mut b, A5 + SET.free), rd16(&mut b, A5 + SOBJ.free));
@@ -691,8 +691,8 @@ fn main() {
         }
     };
     let ee = std::fs::read(eeprom).ok();
-    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let mut m = ddsom_game::install(m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse().unwrap() {
         script.apply(f, &mut m);
@@ -706,7 +706,8 @@ fn main() {
         .filter(|e| *group != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
         .filter(|e| *group != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x255a | 0x25e8 | 0x260c | 0x26d4 | 0x2766))
         .collect();
-    let (c, b) = (&mut m.cpu, &mut m.bus);
+    let mut bus = m.bus.to_bus();
+    let (c, b) = (&mut m.cpu, &mut bus);
     b.irq_horizon = u64::MAX;
     let mut shown = 0;
     for _ in 0..rounds.parse::<u32>().unwrap() {

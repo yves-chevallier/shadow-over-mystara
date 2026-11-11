@@ -4,7 +4,7 @@
 //! Common contract: A0 = the creator; on return A1 = the created object and the carry set if the pool is full (callers
 //! test `bcs`); the other flags are those of the last write.
 
-use cps2::Cps2Bus;
+use crate::world::World;
 
 use super::effects_creators::leftovers::{Pure, Regs};
 use super::small::Spawn;
@@ -22,7 +22,7 @@ fn word(o: Obj) -> u16 {
 
 /// 0x51c06: player shot (PSHL) that accompanies the weapon of player A0, if its kind `+2` (shifted by 4 when `+0x28` !=
 /// 2) is in the mask of `creators/weapon_shots`; the shot and the player link to each other through `+0x5c`.
-pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let s = Spawn(me);
     s.set_partner(b, 0);
     let shift = if me.class(b) == 2 { 0 } else { 4 };
@@ -54,7 +54,7 @@ pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option
 }
 
 /// PEFF effect of kind `kind` (to be linked to the player afterwards by `link_effect`).
-fn player_effect(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
+fn player_effect(r: &mut impl Regs, b: &mut World, kind: u8) -> Option<Obj> {
     let fx = r.allocated(b, &pools::PEFF)?;
     fx.set_u8(b, Obj::ACTIVE, 1);
     fx.set_u8(b, Obj::KIND, kind);
@@ -62,7 +62,7 @@ fn player_effect(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
 }
 
 /// Common end of an effect: `+0x5d` = step `+7` of the player, `+0x50` = the player (flags of this `move.w`).
-fn link_effect(r: &mut impl Regs, b: &mut Cps2Bus, fx: Obj, player: Obj) {
+fn link_effect(r: &mut impl Regs, b: &mut World, fx: Obj, player: Obj) {
     let step = Player::of(player).step(b);
     Spawn(fx).set_player_step(b, step);
     fx.set_tied(b, player.word());
@@ -70,11 +70,11 @@ fn link_effect(r: &mut impl Regs, b: &mut Cps2Bus, fx: Obj, player: Obj) {
 }
 
 /// 0x4b7a0: lightning of the spell (PEFF 10, variant `variant`, rank `+3` of the player in `+0x2f`).
-pub fn bolt(b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
+pub fn bolt(b: &mut World, player: Obj, variant: u8) -> Option<Obj> {
     bolt_via(&mut Pure, b, player, variant)
 }
 
-pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut World, player: Obj, variant: u8) -> Option<Obj> {
     let fx = player_effect(r, b, 10)?;
     fx.set_u8(b, Obj::VARIANT, variant);
     let rank = player.variant(b);
@@ -84,11 +84,11 @@ pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj, variant:
 }
 
 /// 0x4dc9a: two sparks of the spell (PEFF 25, the second with `+0x2f` = 1). Returns the second.
-pub fn sparks(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+pub fn sparks(b: &mut World, player: Obj) -> Option<Obj> {
     sparks_via(&mut Pure, b, player)
 }
 
-pub(crate) fn sparks_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+pub(crate) fn sparks_via(r: &mut impl Regs, b: &mut World, player: Obj) -> Option<Obj> {
     let fx = player_effect(r, b, 25)?;
     link_effect(r, b, fx, player);
     let fx = player_effect(r, b, 25)?;
@@ -97,7 +97,7 @@ pub(crate) fn sparks_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Opt
     Some(fx)
 }
 
-pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
     let phase = crate::families::enemy_common::vars::FRAME_COUNTER.get(b) & 3;
     r.d_word(0, phase);
     if phase != 0 {
@@ -115,7 +115,7 @@ pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> O
 
 /// 0xcdedc: SET object 13 of variant D0. Active object of type `kind` in `pool`, of variant `variant`. On failure it
 /// returns the A1 that the original leaves (`Pool::alloc_or_leftover`), for callers that do not test the carry.
-fn object(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Result<Obj, Obj> {
+fn object(b: &mut World, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Result<Obj, Obj> {
     let o = pool.alloc_or_leftover(b)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     o.set_u8(b, Obj::KIND, kind);
@@ -126,29 +126,29 @@ fn object(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: Option<u8>) ->
 }
 
 /// 0xcdedc: SET object of type 13, of variant `variant`.
-pub fn set_13_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
+pub fn set_13_pure(b: &mut World, variant: u8) -> Result<Obj, Obj> {
     object(b, &pools::SET, 13, Some(variant))
 }
 
 /// 0xce00a: SET object of type 15, of variant `variant`.
-pub fn set_15_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
+pub fn set_15_pure(b: &mut World, variant: u8) -> Result<Obj, Obj> {
     object(b, &pools::SET, 0xf, Some(variant))
 }
 
 /// 0xc9760: SET object of type 5, variant 1, `+0x24` zero.
-pub fn set_5_pure(b: &mut Cps2Bus) -> Result<Obj, Obj> {
+pub fn set_5_pure(b: &mut World) -> Result<Obj, Obj> {
     let set = object(b, &pools::SET, 5, Some(1))?;
     Spawn(set).set_flag_24(b, 0);
     Ok(set)
 }
 
 /// 0xdfe26: SOBJ object of type 14 (its variant is not set).
-pub fn sobj_14_pure(b: &mut Cps2Bus) -> Result<Obj, Obj> {
+pub fn sobj_14_pure(b: &mut World) -> Result<Obj, Obj> {
     object(b, &pools::SOBJ, 0xe, None)
 }
 
 /// 0xdfc78: SOBJ object of type 12, of variant `variant`, zero speed.
-pub fn sobj_12_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
+pub fn sobj_12_pure(b: &mut World, variant: u8) -> Result<Obj, Obj> {
     let o = object(b, &pools::SOBJ, 0xc, Some(variant))?;
     o.set_vx(b, 0);
     Ok(o)
@@ -156,18 +156,18 @@ pub fn sobj_12_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
 
 /// 0xc8312: SET object of variant `variant`, whose type depends on the scene (`SCENE_SETS / 2`, table
 /// `creators/scene_sets`); counts the SETs created (`SETS_CREATED`). The processor receives D0 = scene index, Z = (D0.b == 0).
-pub fn scene_set(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub fn scene_set(b: &mut World, variant: u8) -> Option<Obj> {
     scene_set_via(&mut Pure, b, variant)
 }
 
 /// `scene_set` whose failure is not tested: returns the A1 that the original leaves (`Pool::alloc_or_leftover`).
-pub fn scene_set_or_rest(b: &mut Cps2Bus, variant: u8) -> Obj {
+pub fn scene_set_or_rest(b: &mut World, variant: u8) -> Obj {
     scene_set(b, variant).unwrap_or_else(|| pools::SET.alloc_or_leftover(b).expect_err("the SET pool was just found full"))
 }
 
 /// 0x4cfbc: four 0x13 effects (variant 1, `+0x2f` = 3 down to 0, `+0x5a` = 2) linked to the creator, then the red
 /// screen flash (0x1ac68).
-pub fn effects_13(b: &mut Cps2Bus, creator: Obj) {
+pub fn effects_13(b: &mut World, creator: Obj) {
     for rank in (0..4u8).rev() {
         let Some(fx) = pools::PEFF.alloc(b) else { break };
         fx.set_active(b, 1);
@@ -180,7 +180,7 @@ pub fn effects_13(b: &mut Cps2Bus, creator: Obj) {
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
 }
 
-pub(crate) fn scene_set_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub(crate) fn scene_set_via(r: &mut impl Regs, b: &mut World, variant: u8) -> Option<Obj> {
     let set = r.allocated(b, &pools::SET)?;
     for count in SETS_CREATED {
         let n = count.get(b).wrapping_add(1);
@@ -211,7 +211,7 @@ const SET_A_BLOCKED: Byte = Byte(0xff2042);
 /// 0xcc352 / 0xcc38e: SET object 0xa of variant `variant` (effect of a used item, wand), which holds the class `class`
 /// (`+0x2f`); refused (the processor receives the carry alone, `move #1,CCR`) if one already exists, during
 /// `SET_A_BLOCKED` or if the pool is full. The class is read after the allocation.
-pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: impl FnOnce(&mut Cps2Bus) -> u8) -> Option<Obj> {
+pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut World, variant: u8, class: impl FnOnce(&mut World) -> u8) -> Option<Obj> {
     let created = (SET_A_ACTIVE.get(b) == 0 && SET_A_BLOCKED.get(b) == 0).then(|| r.allocated(b, &pools::SET)).flatten();
     let Some(set) = created else {
         r.carry_only();
@@ -228,12 +228,12 @@ pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: 
 }
 
 /// 0xcc352: the class is that of the creator.
-pub fn set_a(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub fn set_a(b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     set_a_via(&mut Pure, b, variant, |b| creator.u8(b, Obj::VARIANT))
 }
 
 /// 0xcc38e: the class is that of the player linked to the creator (`+0x50`, left in A4).
-pub(crate) fn set_a_player_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub(crate) fn set_a_player_via(r: &mut impl Regs, b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     let mut player = None;
     let created = set_a_via(r, b, variant, |b| {
         let p = Obj(creator.tied(b) as i16 as i32 as u32);
@@ -247,14 +247,14 @@ pub(crate) fn set_a_player_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj,
 }
 
 /// 0xcc38e: `set_a`, the class being that of the player linked to the creator (`+0x50`, left in A4).
-pub fn set_a_player(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
+pub fn set_a_player(b: &mut World, creator: Obj, variant: u8) -> Option<Obj> {
     set_a_player_via(&mut Pure, b, creator, variant)
 }
 
 /// 0xdc5fe: ITEM 6 object (scene object) of variant D0, except when `A5-0x5ac6` is negative (the N flag of the test
 /// then stays set); carry if the pool is full. 0xdc5fe: pickup object of the scene (ITEM 6) of variant `variant`,
 /// except when the object level (`A5-0x5ac6`) is negative.
-pub fn scene_object(b: &mut Cps2Bus, variant: u8) {
+pub fn scene_object(b: &mut World, variant: u8) {
     if (OBJECT_LEVEL.get(b) as i8) < 0 {
         return;
     }
@@ -271,7 +271,7 @@ const OBJECT_LEVEL: Byte = Byte(0xff253a);
 
 /// 0xd9778 without registers: the music of the variant of scene object `scene` (nothing, 0xe0d8c or 0xe0c5c: the
 /// routine of `creators/music_routines` chosen by `creators/music_of_variant`).
-pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
+pub fn play_scene_music(b: &mut World, scene: Obj) {
     let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * crate::tables::engine_table!("creators/music_of_variant").at8(b, variant) as u32;
     let routine = crate::tables::engine_table!("creators/music_routines").at32(b, i);
@@ -280,7 +280,7 @@ pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
 
 /// 0xd981a without registers: the scene exit routine of the variant of `scene` (`creators/exit_routines`, chosen by
 /// `creators/exit_of_variant`).
-pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
+pub fn run_scene_exit(b: &mut World, scene: Obj) {
     let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * crate::tables::engine_table!("creators/exit_of_variant").at8(b, variant) as u32;
     let routine = crate::tables::engine_table!("creators/exit_routines").at32(b, i);
@@ -288,7 +288,7 @@ pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
 }
 
 /// A routine of the scene tables: nothing (0xd99f8) or a music (0xe0d8c, 0xe0c5c, played on `scene`).
-fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
+fn scene_routine(b: &mut World, scene: Obj, routine: u32) {
     match routine {
         0xd99f8 => {}
         0xe0c5c | 0xe0d8c => crate::sound::play(b, crate::sound::Sound::at(routine), scene),
@@ -297,11 +297,11 @@ fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
 }
 
 /// 0xdf688: SOBJ object 8 linked to the creator (`+0x14`), variant 1 if the creator itself has a link.
-pub fn sobj_8(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn sobj_8(b: &mut World, creator: Obj) -> Option<Obj> {
     sobj_8_via(&mut Pure, b, creator)
 }
 
-pub(crate) fn sobj_8_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub(crate) fn sobj_8_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let o = r.allocated(b, &pools::SOBJ)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     o.set_u8(b, Obj::KIND, 8);
@@ -319,11 +319,11 @@ pub(crate) fn sobj_8_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Op
 const LIFE_BAR_SET: Word = Word(0xff2476);
 
 /// 0xd5f30: in game, SET object 0x14 (variant 0) linked to the creator `creator` (`+0x20`), held in `A5-0x5b8a`. Core.
-pub fn set_14(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn set_14(b: &mut World, creator: Obj) -> Option<Obj> {
     set_14_via(&mut Pure, b, creator)
 }
 
-fn set_14_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+fn set_14_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let game = crate::ram::GAME.get(b);
     r.flags(game as u32, Size::Byte);
     if game == 0 {
@@ -341,11 +341,11 @@ fn set_14_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
 
 /// 0xd6952: SET object 0x15 (variant 2) whose argument `+0x42` comes from `creators/set_15_args` according to the
 /// creator's type. Core.
-pub fn set_15_b(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+pub fn set_15_b(b: &mut World, creator: Obj) -> Option<Obj> {
     set_15_b_via(&mut Pure, b, creator)
 }
 
-fn set_15_b_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
+fn set_15_b_via(r: &mut impl Regs, b: &mut World, creator: Obj) -> Option<Obj> {
     let kind = creator.u8(b, Obj::KIND) as u32;
     let set = r.allocated(b, &pools::SET)?;
     set.set_u8(b, Obj::ACTIVE, 1);
@@ -360,7 +360,7 @@ fn set_15_b_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj>
 
 /// Player shot created: resistances `+0x45`/`+0x46` read from the table `magic_damage/<n>` of `data/players.json` (two
 /// rows of 30 bytes) according to the player's level `+0x10c`.
-fn shot_strength_core(b: &mut Cps2Bus, shot: Obj, level: u8, damage: &str) {
+fn shot_strength_core(b: &mut World, shot: Obj, level: u8, damage: &str) {
     let t = crate::player::tables::players(damage);
     let (a, d) = (t.at8(b, level as u32), t.at8(b, 0x1e + level as u32));
     Spawn(shot).set_resist_a(b, a);
@@ -368,7 +368,7 @@ fn shot_strength_core(b: &mut Cps2Bus, shot: Obj, level: u8, damage: &str) {
 }
 
 /// The player's level that the strength of its shots depends on (`+0x10c`).
-fn level(b: &mut Cps2Bus, me: Obj) -> u8 {
+fn level(b: &mut World, me: Obj) -> u8 {
     me.u8(b, Player::LEVEL)
 }
 
@@ -377,7 +377,7 @@ const BOLTS_LEFT: Word = Word(0xff204c);
 
 /// 0x53e48: lightning of player `me` (PSHL 0x13) with speeds `vx`, `vz` (D0.w, D1.w of the original), while some remain
 /// (`A5-0x5fb4`). Called by the wizard's storm (PEFF 25).
-pub(crate) fn bolt_shot(b: &mut Cps2Bus, me: Obj, vx: u16, vz: u16) {
+pub(crate) fn bolt_shot(b: &mut World, me: Obj, vx: u16, vz: u16) {
     let left = BOLTS_LEFT.get(b);
     if left == 0 {
         return;
@@ -396,7 +396,7 @@ pub(crate) fn bolt_shot(b: &mut Cps2Bus, me: Obj, vx: u16, vz: u16) {
 
 /// 0x52578: type 5 shot at the position and orientation of `me`, same player (pool full: nothing). Called by the ray
 /// impact (PEFF 10).
-pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
+pub(crate) fn shot_5(b: &mut World, me: Obj) {
     if let Some(shot) = pools::PSHL.alloc(b) {
         shot.set_active(b, 1);
         shot.set_kind(b, 5);
@@ -414,7 +414,7 @@ pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
 }
 
 /// Player effect (PEFF) of type `kind`, variant `variant`, linked to the player `me` (`+0x50`).
-pub(crate) fn peff_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
+pub(crate) fn peff_via(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let fx = r.allocated(b, &pools::PEFF)?;
     fx.set_active(b, 1);
     fx.set_kind(b, kind);
@@ -427,7 +427,7 @@ pub(crate) fn peff_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, va
 }
 
 /// 0x51bb6: effect 0x2f (no link).
-pub(crate) fn effect_2f_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn effect_2f_via(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
     let fx = r.allocated(b, &pools::PEFF)?;
     fx.set_active(b, 1);
     fx.set_kind(b, 0x2f);
@@ -440,45 +440,45 @@ pub(crate) mod for_players {
     use super::*;
 
     /// 0x4b7a0: bolt (PEFF 10) of variant `variant`.
-    pub(crate) fn bolt(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    pub(crate) fn bolt(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
         bolt_via(r, b, me, variant)
     }
     /// 0x4dc9a: two sparks (PEFF 25).
-    pub(crate) fn sparks(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn sparks(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         sparks_via(r, b, me)
     }
     /// 0x4b340: quake effects (see `quake`).
-    pub(crate) fn quake(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, pair: bool) -> Option<Obj> {
+    pub(crate) fn quake(r: &mut impl Regs, b: &mut World, me: Obj, pair: bool) -> Option<Obj> {
         quake_via(r, b, me, pair)
     }
     /// 0xcc352: SET object 0xa of variant `variant`, of the class of `me` (see `set_a`).
-    pub(crate) fn set_a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    pub(crate) fn set_a(r: &mut impl Regs, b: &mut World, me: Obj, variant: u8) -> Option<Obj> {
         set_a_via(r, b, variant, |b| me.u8(b, Obj::VARIANT))
     }
 
     /// 0x4b518: effect 8 linked to `me`.
-    pub(crate) fn effect_8(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn effect_8(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         peff_via(r, b, me, 8, None)
     }
     /// 0x51bb6: effect 0x2f (not linked).
-    pub(crate) fn effect_2f(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+    pub(crate) fn effect_2f(r: &mut impl Regs, b: &mut World) -> Option<Obj> {
         effect_2f_via(r, b)
     }
     /// 0x4b8d0: effect 0xb (variant 0).
-    pub(crate) fn whirl(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    pub(crate) fn whirl(r: &mut impl Regs, b: &mut World, me: Obj) -> Option<Obj> {
         peff_via(r, b, me, 0xb, Some(0))
     }
 }
 
 /// 0x4b340 (spell quake): `pair`, two 7 effects (variant 0, `+0x2f` = 0 and 1); otherwise one 7 effect of variant 1.
 /// The player's step `+7` is copied to `+0x5d`. Returns the last effect created.
-pub fn quake(b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
+pub fn quake(b: &mut World, player: Obj, pair: bool) -> Option<Obj> {
     quake_via(&mut Pure, b, player, pair)
 }
 
-pub(crate) fn quake_via<R: Regs>(r: &mut R, b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
+pub(crate) fn quake_via<R: Regs>(r: &mut R, b: &mut World, player: Obj, pair: bool) -> Option<Obj> {
     let step = Player::of(player).step(b);
-    let effect = |r: &mut R, b: &mut Cps2Bus, variant: u8, index: Option<u8>| {
+    let effect = |r: &mut R, b: &mut World, variant: u8, index: Option<u8>| {
         let fx = player_effect(r, b, 7)?;
         fx.set_u8(b, Obj::VARIANT, variant);
         if let Some(i) = index {
@@ -498,12 +498,12 @@ pub(crate) fn quake_via<R: Regs>(r: &mut R, b: &mut Cps2Bus, player: Obj, pair: 
 }
 
 /// 0x63ae0 without registers: true if both type 7 enemies are created.
-pub fn enemy_7_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
+pub fn enemy_7_pair_created(b: &mut World, creator: Obj) -> bool {
     super::small::enemy_pair_kind_via(&mut Pure, b, creator, 7)
 }
 
 /// Core of `enemy_at`: the enemy created at `pos` = (x, z, y).
-pub(crate) fn enemy_at_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, link: u32, extra: &[(u32, u8)], pos: (u16, u16, u16)) -> Option<Obj> {
+pub(crate) fn enemy_at_via(r: &mut impl Regs, b: &mut World, me: Obj, kind: u8, link: u32, extra: &[(u32, u8)], pos: (u16, u16, u16)) -> Option<Obj> {
     let o = r.allocated(b, &pools::ENEMY)?;
     o.set_active(b, 1);
     o.set_kind(b, kind);
@@ -519,24 +519,24 @@ pub(crate) fn enemy_at_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8
 }
 
 /// 0x5f764 without registers: enemy of type 5 at `pos` = (x, z, y), linked by `+0xa4`.
-pub(crate) fn enemy_5_at_pure(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
+pub(crate) fn enemy_5_at_pure(b: &mut World, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
     enemy_at_via(&mut Pure, b, me, 5, crate::families::enemy_ghoul::Ghoul::SPAWNER, &[], pos)
 }
 
 /// 0x57c8c without registers: enemy of type 1 at `pos` = (x, z, y), linked by `+0xaa`.
-pub(crate) fn enemy_1_at_pure(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
+pub(crate) fn enemy_1_at_pure(b: &mut World, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
     use crate::families::enemy_skeleton::Skeleton;
     enemy_at_via(&mut Pure, b, me, 1, Skeleton::SPAWNER, &[(Skeleton::SPAWNED, 1), (Obj::SETTING, 0)], pos)
 }
 
 /// 0x57c66: is object `o` in the right half of the screen (x >= camera + 0xc0)? Core.
-pub fn in_right_half(b: &mut Cps2Bus, o: Obj) -> bool {
+pub fn in_right_half(b: &mut World, o: Obj) -> bool {
     let (camera, _) = crate::ram::camera(b);
     (camera.wrapping_add(0xc0).wrapping_sub(o.u16(b, Obj::X)) as i16) <= 0
 }
 
 /// 0x5cdc6: random draw, true 10 times out of 16 (bit (random & 0xf) of mask 0x03ff). Core.
-pub fn chance_10_16(b: &mut Cps2Bus) -> bool {
+pub fn chance_10_16(b: &mut World) -> bool {
     let bit = crate::rng::random(b) & 0xf;
     0x03ff >> bit & 1 != 0
 }

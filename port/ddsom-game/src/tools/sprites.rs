@@ -1,7 +1,7 @@
 //! Tools: the natives of `crate::sprites` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
+use crate::world::World;
 use m68k::Cpu;
 
 use crate::sprites::*;
@@ -9,13 +9,13 @@ use crate::tools::frames::*;
 use crate::Native;
 
 /// `build` with the registers of the original (D4, A4, A6 when the table is built).
-pub(crate) fn build_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn build_68k(c: &mut Cpu, b: &mut World) {
     if let Some(r) = build(b, c.d[4]) {
         (c.d[4], c.a[4], c.a[6]) = (r.d4, r.end, r.camera);
     }
 }
 
-fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
+fn build_sprite_list(c: &mut Cpu, b: &mut World) {
     build_68k(c, b);
     rts(c, b);
 }
@@ -36,7 +36,7 @@ pub(crate) const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
 ];
 
 /// `rts` if `empty`.
-fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
+fn return_if(c: &mut Cpu, b: &mut cps2::Cps2Bus, empty: bool) -> bool {
     if empty {
         c.pc = crate::mem::rd32(b, c.a[7]);
         c.a[7] = c.a[7].wrapping_add(4);
