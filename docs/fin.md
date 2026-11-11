@@ -1545,7 +1545,7 @@ preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adr
     `ddsom-rc`.
   * Aucun code mort de l'original nouveau.
 
-**L18. Documentation finale** (petit à moyen)
+**L18. Documentation finale** (petit à moyen) — **fait** (branche `wt-l18-docs`, voir « Résultat »)
 * `README.md` réécrit pour le joueur :
   * installer Rust ;
   * extraire ses assets (`extract <roms> <assets>`, avec les fichiers ROM attendus) ;
