@@ -11,15 +11,15 @@
 
 use super::{Flow, Sequence};
 use crate::screens::scene::fading;
-use crate::services::effects_aids::scenery_6;
+use crate::actors::effects_aids::scenery_6;
 use crate::actors::families::creators::set_15_pure;
 use crate::actors::families::effects_creators::end_screen;
 use crate::services::palette::{load_palette_set, load_palette_page};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::hw::video::{regs, Vram, PALETTES, SCROLL1, SCROLL3};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{Long, Word};
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
 use crate::screens::scene::Ctx;
 use crate::Native;
@@ -97,7 +97,7 @@ crate::steps! {
             Flow::Done
         },
         S04Fade = 0xfb8a8 => |x| {
-            crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_2C);
+            crate::services::sound::play_global(x.b, crate::services::sound::CMD_2C);
             fade_settings(x, 3, 4);
             x.subroutine(crate::core::tasks::fading::rise, Step::S04Timer)
         },
@@ -190,7 +190,7 @@ crate::steps! {
                 sv::fade_source(k as u32).set(x.b, source);
             }
             crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::FROM_WHITE);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_33);
+            crate::services::sound::play_global(x.b, crate::services::sound::CMD_33);
             fading::STEP.set(x.b, 1);
             s1c_wait_fade(x)
         },
@@ -309,7 +309,7 @@ crate::steps! {
             load_palette_page(x.b, 3, 84);
             fading::PAGES.set(x.b, 12);
             crate::services::palette::no_brightness(x.b);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
             // present players and players "ready to leave" (byte +0x192)
             let mut present = 0u8;
             let mut ready = 0u8;
@@ -395,7 +395,7 @@ crate::steps! {
             }
             crate::core::game::update_players(x.b);
             var::PHASE.set(x.b, 20);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+            crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             // `jmp 0x133f6`: the scored startup done, then the return to the caller
             crate::actors::families::small::startup_done(x.b, true);
             Flow::Done

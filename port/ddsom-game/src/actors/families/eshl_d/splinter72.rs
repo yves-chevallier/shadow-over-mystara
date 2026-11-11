@@ -6,8 +6,8 @@ const ANIMS: RomAddr = RomAddr(0x1718d8);
 const IMPACT_ANIMS: RomAddr = RomAddr(0x16d1d6);
 const CREATOR: u32 = 0x5c;
 const RANK: u32 = 0x2f;
-const SFX_THROW: crate::hw::sound::Sound = crate::hw::sound::CMD_32F;
-const SFX_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_330;
+const SFX_THROW: crate::services::sound::Sound = crate::services::sound::CMD_32F;
+const SFX_LAND: crate::services::sound::Sound = crate::services::sound::CMD_330;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(CREATOR) == 0 {
@@ -27,7 +27,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                         x.add8(Base::SUB_STATE, 2);
                         x.set8(Base::BOX_SET, 7);
                         x.set8(Shot::ATTACK_ID, 0x37);
-                        crate::hw::sound::play(x.b, SFX_THROW, x.o);
+                        crate::services::sound::play(x.b, SFX_THROW, x.o);
                         x.anim_start(ANIMS.0, 1);
                     }
                 }
@@ -41,7 +41,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                         x.set8(Base::BOX_SET, 7);
                         x.set8(Shot::ATTACK_ID, 0x1c);
                         x.anim_start(IMPACT_ANIMS.0, 0);
-                        crate::hw::sound::play(x.b, SFX_LAND, x.o);
+                        crate::services::sound::play(x.b, SFX_LAND, x.o);
                     }
                 }
                 _ => {

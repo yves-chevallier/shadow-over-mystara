@@ -101,7 +101,7 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x69528: jump — effect 0xecfe4 and animation 3.
 fn launch<R: Bench>(x: &mut Cx<'_, R>) {
-    lib::sound(x, crate::hw::sound::CMD_335_435);
+    lib::sound(x, crate::services::sound::CMD_335_435);
     body(x, 3);
 }
 

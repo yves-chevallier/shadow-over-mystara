@@ -33,7 +33,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         return x.free_eshl();
     }
     x.move_xyz();
-    if crate::services::ai_aids::outside_band(x.b, x.o, neg(0x50), 0x1d0) {
+    if crate::actors::ai_aids::outside_band(x.b, x.o, neg(0x50), 0x1d0) {
         x.free_eshl();
     }
 }

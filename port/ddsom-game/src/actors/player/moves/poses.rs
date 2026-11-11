@@ -1,7 +1,7 @@
 //! Guard, slow end, rare poses (actions 0x26, 0x2c, 0x30), hop, fall-in, push and spell fizzle.
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{player_data, pc16, Aligned};
 
@@ -121,9 +121,9 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             let height = pc16(g.b, row + 6);
             let (variant, setting, vx) = (pc16(g.b, row) as u8, pc16(g.b, row + 2), pc16(g.b, row + 4));
             // the speeds and the height stay in D2-D4 (leftovers of the original)
-            crate::world::mem::set_low_word(&mut g.leftovers.d2, vx);
+            crate::hw::mem::set_low_word(&mut g.leftovers.d2, vx);
             g.leftovers.d4 = height as u32;
-            crate::world::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+            crate::hw::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
             // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry clear) the
             // height is written through the A1 left by the code before. That A1 is not known here (no scenario plays
             // it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu, partie 6").
@@ -318,7 +318,7 @@ pub(super) fn push_dust(g: &mut Ctx, p: Player) {
     let (d0, d1, d2, d3) = (t.word_at(g.b, at), t.word_at(g.b, at + 2), t.word_at(g.b, at + 4), t.word_at(g.b, at + 6));
     // D4.w: the offset of the row (leftover of the original)
     let row_offset = 8 * p.class(g) as u16;
-    crate::world::mem::set_low_word(&mut g.leftovers.d4, row_offset);
+    crate::hw::mem::set_low_word(&mut g.leftovers.d4, row_offset);
     dust(g, p, d0, d1, d2, d3);
 }
 

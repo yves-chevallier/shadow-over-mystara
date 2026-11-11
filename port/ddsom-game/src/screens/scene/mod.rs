@@ -14,6 +14,7 @@
 //! sub-step (`A5+0x2e`, step of 2); it lives in work RAM, never on the stack, so
 //! that each phase takes one step per frame and returns (no yield to the scheduler).
 
+pub mod black_screen;
 pub mod blackout;
 pub mod bonus;
 pub mod characters;
@@ -29,7 +30,7 @@ pub mod transition;
 
 use crate::world::World;
 
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::ram::{Byte, Long, Word};
 use crate::world::objects::{pools, Obj};
 use crate::Native;
@@ -183,13 +184,13 @@ impl<'a> Ctx<'a> {
 
     /// System object of type 6, of variant `variant` (0xddeaa).
     pub fn sobj_6(&mut self, variant: u8) {
-        let _ = crate::services::effects_aids::scenery_6(self.b, variant);
+        let _ = crate::actors::effects_aids::scenery_6(self.b, variant);
     }
 
     /// Copy of the inputs to the players (0x2aec). Original glitch: the D2-D4 it leaves are re-read by
     /// handlers of the world update (`inputs::copy_in_game`).
     pub fn inputs(&mut self) {
-        crate::hw::inputs::copy_in_game(self.b);
+        crate::services::inputs::copy_in_game(self.b);
     }
 
     // --- timers ------------------------------------------------------------------------------
@@ -277,4 +278,10 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(blackout::NATIVES)
         .chain(screen::NATIVES)
         .chain(transition::natives())
+}
+
+impl crate::world::machine::Machine for Ctx<'_> {
+    fn bus(&mut self) -> &mut World {
+        &mut *self.b
+    }
 }

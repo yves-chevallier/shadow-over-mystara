@@ -13,7 +13,7 @@
 use crate::world::objects::Obj;
 use super::moves::{combo, Combo};
 use super::{ram, Ctx, Player};
-use crate::world::mem::{wr8, A5};
+use crate::hw::mem::{wr8, A5};
 use crate::actors::player::tables::{pc32, byte, word};
 
 /// Action gates: nine bytes (one per triggerable action) followed by three others, read from
@@ -59,7 +59,7 @@ fn set_gates(g: &mut Ctx, variant: u32) {
     cov!();
     for k in 0..3 {
         let v = pc32(g.b, variant + 0x16 + 4 * k);
-        crate::world::mem::wr32(g.b, GATES + 4 * k, v);
+        crate::hw::mem::wr32(g.b, GATES + 4 * k, v);
     }
 }
 
@@ -67,13 +67,13 @@ fn set_gates(g: &mut Ctx, variant: u32) {
 fn clear_gates(g: &mut Ctx) {
     cov!();
     for k in 0..3 {
-        crate::world::mem::wr32(g.b, GATES + 4 * k, 0);
+        crate::hw::mem::wr32(g.b, GATES + 4 * k, 0);
     }
 }
 
 fn gate(g: &mut Ctx, n: u32) -> bool {
     cov!();
-    crate::world::mem::rd8(g.b, GATES + n) != 0
+    crate::hw::mem::rd8(g.b, GATES + n) != 0
 }
 
 /// 0xf18fa: clears all the recognizers.
@@ -99,13 +99,13 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     cov!();
     let mut held = p.u8(g, Player::KEYS_HELD);
     let mut prev = p.u8(g, Player::KEYS_PREV);
-    let timer = crate::world::mem::rd8(g.b, p.at(state + 1)).wrapping_add(1);
+    let timer = crate::hw::mem::rd8(g.b, p.at(state + 1)).wrapping_add(1);
     wr8(g.b, p.at(state + 1), timer);
     if (timeout as i8) < (timer as i8) {
-        crate::world::mem::wr16(g.b, p.at(state), 0);
+        crate::hw::mem::wr16(g.b, p.at(state), 0);
         wr8(g.b, p.at(rec + 4), 0);
     }
-    let at = crate::world::mem::rd8(g.b, p.at(state)) as u32;
+    let at = crate::hw::mem::rd8(g.b, p.at(state)) as u32;
     let mask = byte(g.b, table + at);
     held &= mask;
     prev &= mask;
@@ -129,7 +129,7 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
         wr8(g.b, p.at(rec + 4), 1);
         return true;
     }
-    let idx = crate::world::mem::rd8(g.b, p.at(state)).wrapping_add(2);
+    let idx = crate::hw::mem::rd8(g.b, p.at(state)).wrapping_add(2);
     wr8(g.b, p.at(state), idx);
     wr8(g.b, p.at(state + 1), 0);
     false

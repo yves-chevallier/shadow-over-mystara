@@ -7,7 +7,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
@@ -550,13 +550,13 @@ mod ring1 {
         let mut src = last - 1;
         for _ in 0..n {
             let (a, b) = (byte(x.b, src), byte(x.b, src + 8));
-            crate::world::mem::wr8(x.b, dst, a);
-            crate::world::mem::wr8(x.b, dst + 8, b);
+            crate::hw::mem::wr8(x.b, dst, a);
+            crate::hw::mem::wr8(x.b, dst + 8, b);
             src = src.wrapping_sub(1);
             dst = dst.wrapping_sub(1);
         }
-        crate::world::mem::wr8(x.b, base, keep);
-        crate::world::mem::wr8(x.b, base + 8, keep_count);
+        crate::hw::mem::wr8(x.b, base, keep);
+        crate::hw::mem::wr8(x.b, base + 8, keep_count);
     }
 
     fn child<R: Bench>(x: &mut Cx<'_, R>) {

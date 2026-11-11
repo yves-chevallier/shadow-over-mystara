@@ -10,7 +10,7 @@
 use crate::actors::families::cx::Bench;
 use crate::world::machine::Machine;
 use crate::actors::families::cx::{handlers, Cx};
-use crate::world::mem::{rd16, rd8, wr16, wr8};
+use crate::hw::mem::{rd16, rd8, wr16, wr8};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -158,7 +158,7 @@ fn victory_screen<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(Obj::VZ, 0xf000);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_333, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_333, x.o);
             x.anim_start(anims::INTERFACE.0, 0);
         }
         state::ACTIVE => victory_active(x),
@@ -187,7 +187,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_332, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_332, x.o);
             x.anim_start(anims::INTERFACE.0, 1);
         }
         4 => {
@@ -197,7 +197,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_337, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_337, x.o);
             x.anim_start(anims::INTERFACE.0, 2);
         }
         6 => {
@@ -310,7 +310,7 @@ fn menu_button<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn menu_step<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
-    crate::world::mem::rd8(x.b, MENU_STEP)
+    crate::hw::mem::rd8(x.b, MENU_STEP)
 }
 
 fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -333,7 +333,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if x.anim_step() {
                 advance(x, 5);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_331, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_331, x.o);
             } else if x.u8(Effect::ANIM_EVENT) != 0 {
                 x.set8(Effect::ANIM_EVENT, 0);
                 // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
@@ -355,7 +355,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
                 x.anim_start(anims::MENU.0, 6);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_331, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_331, x.o);
             }
         }
         8 => {
@@ -366,7 +366,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if menu_step(x) == 28 {
                 advance(x, 5);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_331, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_331, x.o);
             } else {
                 x.anim_step();
             }

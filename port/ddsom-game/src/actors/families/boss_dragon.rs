@@ -23,7 +23,7 @@ use crate::world::objects::Obj;
 use crate::world::record::record;
 use super::boss_common::*;
 use super::cx::handlers;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// Dragon animation set.
 const ANIMS: RomAddr = RomAddr(0x17d7d2);
@@ -227,7 +227,7 @@ fn wait_stop<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(bubble) = crate::actors::families::creators::scene_set(x.b, 0xe) {
             x.set16(Dragon::MESSAGE, bubble.word());
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::SCENE_MUSIC_OR_STOP);
+            lib::sound(x, crate::services::sound::SCENE_MUSIC_OR_STOP);
             x.set8(Dragon::TALKING, 1);
             x.set_bit(Dragon::CUTSCENE, 0, false);
         }
@@ -257,7 +257,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
         return leave_now(x);
     }
     if let Some(lead) = leader(x) {
-        let dx = crate::actors::player::Player::of(lead).step_x(x.b);
+        let dx = crate::world::objects::player::Player::of(lead).step_x(x.b);
         x.add16(Obj::X, dx);
         let reach = scroll_x(x).wrapping_add(0x50);
         if x.in_arena(reach) {
@@ -308,7 +308,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let left = scroll_x(x).wrapping_sub(0x80);
     if x.u16(Obj::X).wrapping_sub(left) >= 0x200 {
-        lib::sound(x, crate::hw::sound::SCENE_MUSIC);
+        lib::sound(x, crate::services::sound::SCENE_MUSIC);
         x.set8(Dragon::TALKING, 0);
         x.set_bit(Dragon::HOLD, 0, false);
         x.set8(Dragon::SLOW, 0);
@@ -320,7 +320,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     } else if x.u8(Dragon::SLOW) != 0 {
         -8
     } else {
-        (crate::actors::player::Player::of(lead).step_x(x.b) as i16).wrapping_sub(var::PLAYERS_ALIVE.get(x.b) as i16)
+        (crate::world::objects::player::Player::of(lead).step_x(x.b) as i16).wrapping_sub(var::PLAYERS_ALIVE.get(x.b) as i16)
     };
     x.set16(Enemy::VX, vx as u16);
     let y = lead.u16(x.b, Obj::Y).wrapping_sub(0x10);
@@ -336,7 +336,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let y = lead.u16(x.b, Obj::Y).wrapping_sub(0x10);
     x.set16(Obj::Y, y);
-    let mut dx = crate::actors::player::Player::of(lead).step_x(x.b);
+    let mut dx = crate::world::objects::player::Player::of(lead).step_x(x.b);
     let lx = lead.u16(x.b, Obj::X);
     let mine = x.u16(Obj::X);
     if (lx.wrapping_sub(0x80).wrapping_sub(mine) as i16) >= 0 {

@@ -52,10 +52,10 @@ pub fn fade_to_black<R: Bench>(x: &mut Cx<'_, R>, next: fn(Obj) -> Step) {
     // go to the game's state for it, and come back (an empty fade returns at once and runs `next`, which resumes
     // the door through `dispatch::resume_handler`).
     let door = x.o;
-    let leftovers = crate::core::dispatch::Leftovers { d2: *x.c.d2(), d3: *x.c.d3(), d4: *x.c.d4(), d5: *x.c.d5() };
-    crate::core::tasks::table::table(x.b).leftovers = leftovers;
+    let leftovers = crate::world::Leftovers { d2: *x.c.d2(), d3: *x.c.d3(), d4: *x.c.d4(), d5: *x.c.d5() };
+    x.b.leftovers = leftovers;
     let mut s = crate::screens::scene::Ctx::new(&mut *x.b);
     s.subroutine(crate::core::tasks::fading::descent, next(door));
-    let l = crate::core::tasks::table::table(x.b).leftovers;
+    let l = x.b.leftovers;
     (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (l.d2, l.d3, l.d4, l.d5);
 }

@@ -5,7 +5,7 @@ use crate::actors::families::cx::Bench;
 use super::*;
 use crate::world::objects::Current;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// End of a move: if nobody is alive any more the creature withdraws, otherwise it sets off again at random.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
@@ -20,7 +20,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        lib::sound(x, crate::hw::sound::CMD_361);
+        lib::sound(x, crate::services::sound::CMD_361);
     }
 }
 
@@ -147,7 +147,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x40);
-            lib::sound(x, crate::hw::sound::CMD_363_363);
+            lib::sound(x, crate::services::sound::CMD_363_363);
         }
         4 => {
             if !count_down(x, Gargoyle::TIMER2) {
@@ -422,7 +422,7 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     }
     // 0x17ea: height / number of frames. Original glitch: the division leaves its remainder in D2 and its counter in D3
     // (leftovers).
-    let (q, r) = crate::services::aids::divide(x.u16(Obj::Z) as u32, frames as u32);
+    let (q, r) = crate::actors::aids::divide(x.u16(Obj::Z) as u32, frames as u32);
     *x.c.d2() = r;
     *x.c.d3() = 0xffff;
     let mut d0 = (q.rotate_left(16) as i32 >> 8) as i16;
@@ -433,7 +433,7 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AX, 0);
     x.set16(Obj::AZ, 0);
     x.set16(Obj::AY, 0);
-    lib::sound(x, crate::hw::sound::CMD_373_473);
+    lib::sound(x, crate::services::sound::CMD_373_473);
     x.set16(Gargoyle::TIMER, 0x5a);
     strike(x, 0xe);
 }
@@ -516,7 +516,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
             *x.c.d3() = d3 as u32;
             *x.c.d4() = d4 as u32;
             crate::actors::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, (d2, d3, d4));
-            lib::sound(x, crate::hw::sound::CMD_341_441);
+            lib::sound(x, crate::services::sound::CMD_341_441);
             let victim = x.linked(f::TARGET);
             let hp = victim.u16(x.b, f::HP).wrapping_sub(4);
             victim.set_u16(x.b, f::HP, hp);
@@ -539,7 +539,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x650a6: the victim is released (`+0x6f` raised) and the creature goes into circular flight.
 fn dismount<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    victim.set_u8(x.b, crate::actors::player::Player::TIMER_6F, 1);
+    victim.set_u8(x.b, crate::world::objects::player::Player::TIMER_6F, 1);
     lib::release_player(x, victim);
     go::circle(x);
 }

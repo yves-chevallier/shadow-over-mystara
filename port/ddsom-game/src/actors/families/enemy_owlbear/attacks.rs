@@ -205,8 +205,8 @@ fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// End of a jump with ground impact (0x5e238): dust and recoil.
 fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xz().gt() {
-        lib::sound(x, crate::hw::sound::CMD_326_426_B);
-        lib::sound(x, crate::hw::sound::CMD_329_429);
+        lib::sound(x, crate::services::sound::CMD_326_426_B);
+        lib::sound(x, crate::services::sound::CMD_329_429);
         x.set32(Obj::Z, 0);
         x.add8(Enemy::SUB_STEP, 2);
         x.set16(Obj::ANIM_TIMER, 1);
@@ -305,7 +305,7 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
         6 | 10 => leap_wait(x),
         8 => {
             if !x.move_xz().gt() {
-                lib::sound(x, crate::hw::sound::CMD_326_426_B);
+                lib::sound(x, crate::services::sound::CMD_326_426_B);
                 dust(x, -0x18);
                 x.set32(Obj::Z, 0);
                 x.add8(Enemy::SUB_STEP, 2);
@@ -465,8 +465,8 @@ fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5e6a2: landing of the small leap, always followed by the slide.
 fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
-    lib::sound(x, crate::hw::sound::CMD_326_426_B);
-    lib::sound(x, crate::hw::sound::CMD_329_429);
+    lib::sound(x, crate::services::sound::CMD_326_426_B);
+    lib::sound(x, crate::services::sound::CMD_329_429);
     x.set32(Obj::Z, 0);
     x.add8(Enemy::SUB_STEP, 2);
     x.set16(Obj::ANIM_TIMER, 1);

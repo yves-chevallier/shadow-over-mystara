@@ -12,7 +12,7 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 return finish(x, 13);
             }
             next(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_C);
+            crate::services::sound::play_global(x.b, ext::MUSIC_C);
             set_camera(x, a5::CAM1_X, 288);
             let end = tiles(x, TB, 0x214, crate::hw::video::SCROLL2.offset(0x3400).0);
             tiles(x, TB, 0x215, end);
@@ -93,7 +93,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8e9e) {
         0 => {
             next(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_D);
+            crate::services::sound::play_global(x.b, ext::MUSIC_D);
             let end = tiles(x, TB2, 0x154, SCROLL_3);
             tiles(x, TB2, 0x155, end);
             s13_object(x)

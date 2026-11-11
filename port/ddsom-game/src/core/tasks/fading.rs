@@ -17,8 +17,8 @@
 //! [`to_colours`], [`to_palettes`]) that the steps call directly (the SET doors too:
 //! `families::set::exit_fading`).
 
-use crate::core::dispatch::Leftovers;
-use crate::world::mem::{rd16, rd8, wr32, wr8, A5};
+use crate::world::Leftovers;
+use crate::hw::mem::{rd16, rd8, wr32, wr8, A5};
 use crate::screens::modes::Flow;
 use crate::services::palette::{brightness_step, component_step, white_out, Target};
 use crate::screens::scene::Ctx;
@@ -26,7 +26,7 @@ use crate::Native;
 
 /// State of the brightness fade (`A4` in the original).
 mod state {
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
     pub const BASE: u32 = A5 + 0x48e;
     /// Pages concerned (bit k: page k), reset to zero at the end of the fade.
     pub const PAGES: u32 = BASE;
@@ -297,7 +297,7 @@ impl Component {
     /// `0x1cf12` does not: `whiten`). Of the registers that the original saves (`movem.l D0-D7/A0-A6,-(SP)`) and
     /// restores at the end, only the leftovers D2-D5 are reread after.
     fn start(self, x: &mut Ctx, whiten: bool) -> Flow {
-        let saved = super::table::table(x.b).leftovers;
+        let saved = x.b.leftovers;
         if whiten {
             white_out(x.b);
         }
@@ -316,7 +316,7 @@ impl Component {
         }
         wr8(x.b, state::PAGES, 0);
         wr8(x.b, CURRENT_COMPONENT, 0);
-        super::table::table(x.b).leftovers = saved;
+        x.b.leftovers = saved;
         if self.task {
             super::finish(x)
         } else {

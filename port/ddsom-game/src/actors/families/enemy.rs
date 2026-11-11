@@ -7,7 +7,7 @@
 use crate::actors::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
-use crate::world::mem::wr16;
+use crate::hw::mem::wr16;
 use crate::world::ram::PLAYERS;
 use crate::world::data::RomAddr;
 use crate::world::objects::Obj;
@@ -90,7 +90,7 @@ mod man_scorpion {
         lib::set_immunities(x);
         x.anim_start(ANIMS.0, 0);
         lib::initial_hp(x);
-        lib::sound(x, crate::hw::sound::CMD_92_D);
+        lib::sound(x, crate::services::sound::CMD_92_D);
     }
 
     /// Creates the parts; `flame_kind` is the variant of the flames; variant 1 also creates the arms.
@@ -396,7 +396,7 @@ mod man_scorpion {
             parent.set_parent_deaths(x.b, v);
             parent.set_parent_wait(x.b, 0);
         }
-        lib::sound(x, crate::hw::sound::CMD_131_231);
+        lib::sound(x, crate::services::sound::CMD_131_231);
         for off in [p::LIMBS, p::LIMBS + 2, p::SHADOW] {
             let o = x.linked(off);
             o.set_u32(x.b, f::STATE, st::DEAD_LONG);
@@ -442,7 +442,7 @@ mod man_scorpion {
 
     fn death_start_b<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
-        lib::sound(x, crate::hw::sound::CMD_131_231);
+        lib::sound(x, crate::services::sound::CMD_131_231);
         let parent = Enemy(x.linked(f::OWNER));
         let v = parent.parent_deaths(x.b).wrapping_add(1);
         parent.set_parent_deaths(x.b, v);
@@ -588,7 +588,7 @@ mod nagpa {
         if !player_near(x) {
             return;
         }
-        lib::sound(x, crate::hw::sound::CMD_34C_44C);
+        lib::sound(x, crate::services::sound::CMD_34C_44C);
         mark_visible(x, true);
         x.add8(f::SUB, 2);
         x.set_bit(Enemy::DISPLAY, 1, false);
@@ -607,7 +607,7 @@ mod nagpa {
             return;
         }
         x.add8(f::SUB, 2);
-        lib::sound(x, crate::hw::sound::CMD_34C_44C);
+        lib::sound(x, crate::services::sound::CMD_34C_44C);
         mark_visible(x, false);
         let n = 2 + (x.u8(Enemy::VARIANT) != 0) as u32;
         x.anim_start(ANIMS.0, n as u16);

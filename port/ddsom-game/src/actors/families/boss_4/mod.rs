@@ -210,7 +210,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_double(x, 0x18, None, Boss4::DOUBLE_C);
     if var::GAME_ON.get(x.b) != 0 {
         body(x, 0);
-        lib::sound(x, crate::hw::sound::CMD_20);
+        lib::sound(x, crate::services::sound::CMD_20);
     } else {
         x.set8(Enemy::ACTIVE, 1);
         x.set_bit(Enemy::DISPLAY, 1, false);

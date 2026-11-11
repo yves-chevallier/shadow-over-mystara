@@ -29,7 +29,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
 const RAM: u32 = 0x66_0000;
 /// Gap between two copies of a zone.

@@ -2,7 +2,7 @@ use super::*;
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set_b::fields::DoorObj;
 use crate::actors::families::set_b::fields::PlayerMarker;
 
@@ -16,7 +16,7 @@ const CHECK_FRAMES: i8 = 0x18;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let me = x.o;
-    crate::services::effects_aids::living_players(x.b, me);
+    crate::actors::effects_aids::living_players(x.b, me);
     if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(vars::PAUSED) != 0 {
         return;
     }
@@ -129,7 +129,7 @@ fn enter<R: Bench>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
 
 /// All the players concerned are at the door: the passage begins.
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff06 { lock: 0xff, line: 4 });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff06 { lock: 0xff, line: 4 });
     x.set_a5_u8(vars::SCENES, 1);
     let level = x.u8(DoorObj::NEXT_SCENE);
     x.set_a5_u8(vars::SCENE, level);
@@ -140,7 +140,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     crate::services::text::clear_box(x.b, SCRIPT);
     x.set_a5_u32(vars::TEXT_SLOTS, 0);
     // 0xdd12c: the pickup objects' appearance lock lifted
-    crate::world::mem::wr8(x.b, A5 - 0x5ac4, 0);
+    crate::hw::mem::wr8(x.b, A5 - 0x5ac4, 0);
     x.set_a5_u16(GATE_LOCK, 0);
     match x.u8(DoorObj::MODE) as i8 {
         1 => exit_zone(x),
@@ -195,7 +195,7 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     // following handlers (`dispatch::Leftovers`)
     let d4 = x.u16(DoorObj::MUSIC);
     *x.c.d4() = (*x.c.d4() & 0xffff_0000) | d4 as u32;
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff06 { lock: 0x90, line: 0 });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff06 { lock: 0x90, line: 0 });
     for p in players() {
         if p.u8(x.b, pl::ACTIVE) != 0 {
             place(x, p);

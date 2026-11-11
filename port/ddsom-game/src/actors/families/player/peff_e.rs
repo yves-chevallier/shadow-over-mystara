@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -45,7 +45,7 @@ mod ice {
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1b6350);
     const OFFSETS: u32 = 0x4bd0e;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_165_265;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_165_265;
     const CROWN_A: u32 = 0x4c140;
     const CROWN_B: u32 = 0x4c158;
 
@@ -206,7 +206,7 @@ mod ice {
         match x.state(0x4bf16) {
             0 => {
                 x.add8(Obj::STATE, 2);
-                crate::hw::sound::play(x.b, SFX, x.o);
+                crate::services::sound::play(x.b, SFX, x.o);
                 x.set16(TIMER, 0x168);
                 let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, Player::SPECIAL_KIND) != 0x1a {
@@ -242,7 +242,7 @@ mod ice {
             }
         }
         if t & 0x3f == 0 {
-            crate::hw::sound::play(x.b, SFX, x.o);
+            crate::services::sound::play(x.b, SFX, x.o);
         }
     }
 
@@ -265,7 +265,7 @@ mod ice {
                 // Original glitch: the leftovers of 0x24b0 (D2 = the terrain) are re-read by the bounce of a following
                 // handler
                 let (px, py) = (x.u16(Obj::X), x.u16(Obj::Y));
-                let t = crate::services::video::terrain(x.b, px, py);
+                let t = crate::world::terrain::terrain(x.b, px, py);
                 leftovers_terrain(x, &t);
                 if t.number != 0 {
                     x.set8(Obj::STATE, 4);
@@ -395,7 +395,7 @@ mod banish {
     const TARGET: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1b67f2);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_18E;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_18E;
     const POWER_TABLE: u32 = 0x1042e2;
     const POWER_TABLE_BOSS: u32 = 0x104300;
 
@@ -455,7 +455,7 @@ mod banish {
         let n = anim;
         x.anim_start(ANIMS.0, n);
         if k == 0 {
-            crate::hw::sound::play(x.b, SFX, x.o);
+            crate::services::sound::play(x.b, SFX, x.o);
         }
     }
 

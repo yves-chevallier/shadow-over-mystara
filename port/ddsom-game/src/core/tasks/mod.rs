@@ -136,7 +136,7 @@ task_steps! {
     Interface(crate::screens::hud::Step),
     Credits(crate::screens::credits_task::Step),
     Fading(fading::Step),
-    BlackScreen(crate::services::video::black_screen::Step),
+    BlackScreen(crate::screens::scene::black_screen::Step),
     // mode machine (task 0 outside the game): its loop, then its screens
     Modes(crate::screens::modes::Step),
     Boot(crate::screens::modes::boot::Step),

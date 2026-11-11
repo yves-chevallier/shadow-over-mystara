@@ -164,10 +164,10 @@ fn aim_at<R: Bench>(x: &mut Cx<'_, R>, target: Obj) {
         dx = dx.wrapping_neg();
     }
     let far = if (dx as i32) < (dy as i32) { dy } else { dx } >> 3;
-    let quotient = crate::services::aids::divide(x.u32(Obj::Z), far).0 << 7;
+    let quotient = crate::actors::aids::divide(x.u32(Obj::Z), far).0 << 7;
     let slope = (quotient as u16).wrapping_add(((far >> 16) as u16) << 2);
     x.set16(Obj::VZ, slope.wrapping_neg());
-    let angle = crate::services::aids::direction_to(x.b, x.o, target) & 0x1f;
+    let angle = crate::actors::aids::direction_to(x.b, x.o, target) & 0x1f;
     let idx = angle.wrapping_sub(8) as u32;
     let v = tables().shot17_aim_b.at8(x.b, idx);
     x.set8(Obj::SPEED_INDEX, v);
@@ -187,7 +187,7 @@ fn aim_flat<R: Bench>(x: &mut Cx<'_, R>) {
         }
         let to = (target.u16(x.b, Obj::X), 0);
         let de = (x.u16(Obj::X), x.u16(Obj::Z));
-        let angle = crate::services::aids::direction(x.b, de, to) & 0x1f;
+        let angle = crate::actors::aids::direction(x.b, de, to) & 0x1f;
         let v = tables().shot17_aim_a.at8(x.b, angle.wrapping_sub(8) as u32);
         x.set8(Obj::SPEED_INDEX, v);
         speed_table(x, 0x44);
@@ -234,7 +234,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>, mover: fn(&mut Cx<'_, R>), clear_state: boo
     }
     x.set32(Obj::Z, 0);
     x.anim_start(ANIMS.0, 2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_36E, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_36E, x.o);
 }
 
 /// Fall of mode > 0: movement in X, Y and Z.
@@ -248,7 +248,7 @@ fn land_xyz<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Base::OWN_PALETTE, 0);
     x.set32(Obj::Z, 0);
     x.anim_start(ANIMS.0, 2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_36E, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_36E, x.o);
 }
 
 view! {

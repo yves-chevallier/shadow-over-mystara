@@ -30,9 +30,9 @@ fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32
         if let Some(n) = m.borrow_mut().get_mut(&pc) {
             *n += 1;
             let o = c.a[0];
-            let k = (pc, ddsom_game::world::mem::rd8(b, o + 3), ddsom_game::world::mem::rd8(b, o + 4), ddsom_game::world::mem::rd8(b, o + 5), ddsom_game::world::mem::rd8(b, o + 6));
+            let k = (pc, ddsom_game::hw::mem::rd8(b, o + 3), ddsom_game::hw::mem::rd8(b, o + 4), ddsom_game::hw::mem::rd8(b, o + 5), ddsom_game::hw::mem::rd8(b, o + 6));
             STATES.with(|e| *e.borrow_mut().entry(k).or_insert(0) += 1);
-            let scene = ddsom_game::world::mem::rd8(b, 0xff8034);
+            let scene = ddsom_game::hw::mem::rd8(b, 0xff8034);
             SCENES.with(|s| *s.borrow_mut().entry(pc).or_default().entry(scene).or_insert(0) += 1);
             FIRST.with(|p| { p.borrow_mut().entry(pc).or_insert(IMAGE.with(|i| *i.borrow())); });
         }

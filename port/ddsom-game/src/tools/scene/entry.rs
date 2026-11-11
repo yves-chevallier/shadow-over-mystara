@@ -5,7 +5,7 @@
 use crate::screens::scene::entry::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::world::mem::{rd16, rd8, A5};
+use crate::hw::mem::{rd16, rd8, A5};
 use crate::screens::scene::{player, var, PLAYERS, PLAYER_STRIDE};
 use m68k::decode::Size;
 

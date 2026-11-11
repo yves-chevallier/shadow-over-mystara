@@ -4,7 +4,7 @@ use crate::world::World;
 
 use crate::hw::video;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{camera, Word};
 use crate::world::tables::engine;
 
@@ -32,7 +32,7 @@ pub(crate) fn start_y(b: &mut World, o: Obj) -> u16 {
 }
 
 /// Can a player be placed on terrain `t`?
-pub(crate) fn is_free(t: &crate::services::video::Terrain) -> bool {
+pub(crate) fn is_free(t: &crate::world::terrain::Terrain) -> bool {
     t.number < FREE_TERRAIN
 }
 
@@ -50,7 +50,7 @@ pub fn place_on_free_ground(b: &mut World, o: Obj) {
         let y0 = start_y(b, o);
         LAST_Y.set(b, y0);
         for j in 0..10 {
-            let t = crate::services::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
+            let t = crate::world::terrain::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
             if is_free(&t) {
                 found = Some((t.x, t.y));
                 break 'search;

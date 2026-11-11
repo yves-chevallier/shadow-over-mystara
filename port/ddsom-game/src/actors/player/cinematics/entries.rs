@@ -1,7 +1,7 @@
 //! Scene entries of the players (state `+4` = 0, `+5` = 4): common tools and routines 0x23ac8 to 0x253a0.
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{pc16, pc32};
 
@@ -223,8 +223,8 @@ pub(super) const INTRO_24FE2: Steps = &[
         p.set_u8(g, ARMED, 1);
         animation::start(g, p, 51);
         if p.u8(g, RANK) == 0 {
-            g.sound(crate::hw::sound::CMD_90, p);
-            g.sound(crate::hw::sound::SCENE_MUSIC, p);
+            g.sound(crate::services::sound::CMD_90, p);
+            g.sound(crate::services::sound::SCENE_MUSIC, p);
         }
     }),
     (0x2509a, |g, p| {
@@ -349,7 +349,7 @@ pub(super) const INTRO_252AC: Steps = &[
         let index = 2 * p.u8(g, Player::INDEX) as u32;
         let dx = pc16(g.b, 0x25348 + index);
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
-        if crate::world::mem::rd8(g.b, focus + 5) == 0 {
+        if crate::hw::mem::rd8(g.b, focus + 5) == 0 {
             anim_step(g, p);
             return;
         }

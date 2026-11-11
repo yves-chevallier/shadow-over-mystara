@@ -21,7 +21,7 @@ use crate::actors::families::cx::Bench;
 use crate::world::objects::Obj;
 use crate::world::record::record;
 use crate::world::data::RomAddr;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -387,7 +387,7 @@ fn set_palette<R: Bench>(x: &mut Cx<'_, R>) {
         0xf333, 0xfdef, 0xfaed, 0xf9b9, 0xf575, 0xf244, 0xffff, 0xfddd, 0xfa9a, 0xf656, 0xf5cb, 0xf397, 0xf075, 0xf053, 0xf031,
     ];
     for (i, c) in COLORS.iter().enumerate() {
-        crate::world::mem::wr16(x.b, 0x91c340 + 2 * i as u32, *c);
+        crate::hw::mem::wr16(x.b, 0x91c340 + 2 * i as u32, *c);
     }
     x.set8(Enemy::PALETTE, 0x1a);
 }

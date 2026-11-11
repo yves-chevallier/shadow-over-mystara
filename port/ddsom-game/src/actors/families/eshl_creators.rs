@@ -11,7 +11,7 @@ use crate::actors::families::shell::records::view;
 use crate::world::World;
 
 use super::effects_creators::leftovers::Regs;
-use crate::world::mem::{rd16, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, wr16, wr32, wr8};
 use super::shell::tables::{held8, tables, Read};
 use super::shell::vars;
 use ddsom_data::effects::Table;
@@ -459,7 +459,7 @@ pub(crate) fn four_1c(r: &mut impl Regs, b: &mut World, me: Obj) {
         o.set_u16(b, f::LINK, link);
         r.d_word(5, 2u16.wrapping_sub(k));
     }
-    crate::hw::sound::play(b, crate::hw::sound::CMD_13D_23D, me);
+    crate::services::sound::play(b, crate::services::sound::CMD_13D_23D, me);
 }
 
 /// 0xa31c2: three objects of type 0x28.
@@ -542,7 +542,7 @@ pub(crate) fn single_18(r: &mut impl Regs, b: &mut World, me: Obj) {
         o.set_u16(b, f::LINK, link);
         r.flags(link as u32, Size::Word);
     }
-    crate::hw::sound::play(b, crate::hw::sound::CMD_34B_44B, me);
+    crate::services::sound::play(b, crate::services::sound::CMD_34B_44B, me);
 }
 
 /// 0xa1a40: an object of type 0x1b; the creator keeps `kind` in `+0x56`, the object takes its `+0x5c` and its target

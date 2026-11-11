@@ -5,7 +5,7 @@ use crate::actors::families::shell::tables::{tables, Read};
 const ANIMS: RomAddr = RomAddr(0x17b9d6);
 const RANK: u32 = 0x2f;
 const TIMER: u32 = 0x42;
-const SFX_BOUNCE: crate::hw::sound::Sound = crate::hw::sound::CMD_385_485;
+const SFX_BOUNCE: crate::services::sound::Sound = crate::services::sound::CMD_385_485;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
@@ -42,7 +42,7 @@ fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::VZ, 0x800);
     x.set16(Obj::AZ, 0xff80);
     x.set32(Obj::VY, 0);
-    crate::hw::sound::play(x.b, SFX_BOUNCE, x.o);
+    crate::services::sound::play(x.b, SFX_BOUNCE, x.o);
 }
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {

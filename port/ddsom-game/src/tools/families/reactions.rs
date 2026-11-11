@@ -4,7 +4,7 @@
 
 use crate::tools::frames::*;
 use crate::Native;
-use crate::world::mem::{rd16, rd32, rd8};
+use crate::hw::mem::{rd16, rd32, rd8};
 use crate::world::objects::anim::load_entry;
 use crate::world::objects::Obj;
 

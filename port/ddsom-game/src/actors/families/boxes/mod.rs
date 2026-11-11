@@ -85,7 +85,7 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
 mod barrier {
     pub const ANIMATIONS_0: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bed06);
     pub const ANIMATIONS_1: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1712d4);
-    pub const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_37C_47C;
+    pub const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_37C_47C;
     pub const HITTER: u32 = 0x6c;
     pub const SET_CREATED: u32 = 0x7c;
 }
@@ -177,7 +177,7 @@ fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 add_u8(ctx, o, field::SUB_STATE, 0xfa);
             }
             o.set_u8(ctx.b, field::HIT_B, 0);
-            crate::hw::sound::play(ctx.b, barrier::SOUND, ctx.obj());
+            crate::services::sound::play(ctx.b, barrier::SOUND, ctx.obj());
         }
         _ => crate::actors::families::effects::bad_index(sub_state as u32),
     }

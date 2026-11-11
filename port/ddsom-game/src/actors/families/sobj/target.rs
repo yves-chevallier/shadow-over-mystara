@@ -1,11 +1,11 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::ram;
 use crate::actors::families::shell::records::{Base, view};
 use crate::actors::families::shell::tables::{tables, Read};
 
 const HITS_TO_BREAK: u8 = 3;
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_135_235;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_135_235;
 const SHOOTER_CODE: u32 = 0xff_2ab2;
 const FLAG_A: u32 = 0xff_2ac0;
 const FLAG_B: u32 = 0xff_2ac1;
@@ -97,7 +97,7 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     if n < HITS_TO_BREAK {
         return;
     }
-    crate::hw::sound::play(x.b, SOUND, x.o);
+    crate::services::sound::play(x.b, SOUND, x.o);
     let flag = if x.u8(Obj::VARIANT) == VARIANT_A { FLAG_A } else { FLAG_B };
     wr8(x.b, flag, 1);
     x.add8(Obj::STATE, 2);

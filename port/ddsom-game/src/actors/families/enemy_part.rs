@@ -232,9 +232,9 @@ mod tentacle {
         }
         x.set8(Enemy::KEY_FRAME, 0);
         if x.u8(Enemy::KIND) == TROLL {
-            lib::sound(x, crate::hw::sound::CMD_311_411_B);
+            lib::sound(x, crate::services::sound::CMD_311_411_B);
         } else {
-            lib::sound(x, crate::hw::sound::CMD_311_411);
+            lib::sound(x, crate::services::sound::CMD_311_411);
         }
     }
 
@@ -280,7 +280,7 @@ mod tentacle {
                 x.set16(Tentacle::IDLE_TIMER, 0x168);
                 start(x, MID, 2);
                 if var::GAME_ON.get(x.b) != 0 {
-                    lib::sound(x, crate::hw::sound::CMD_377_377);
+                    lib::sound(x, crate::services::sound::CMD_377_377);
                 }
             }
             4 => {
@@ -332,8 +332,8 @@ mod tentacle {
                 x.set16(Tentacle::IDLE_TIMER, 0x168);
                 start(x, MID, 10);
                 crate::actors::families::eshl_creators::pair_9(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
-                lib::sound(x, crate::hw::sound::CMD_379);
-                lib::sound(x, crate::hw::sound::CMD_311_411);
+                lib::sound(x, crate::services::sound::CMD_379);
+                lib::sound(x, crate::services::sound::CMD_311_411);
             }
             4 => {
                 let n = (x.u16(Tentacle::IDLE_TIMER) as i16).wrapping_sub(1);

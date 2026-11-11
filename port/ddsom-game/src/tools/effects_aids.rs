@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::services::effects_aids` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::effects_aids` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::services::effects_aids::*;
+use crate::actors::effects_aids::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd16, rd8, wr16, A5};
+use crate::hw::mem::{rd16, rd8, wr16, A5};
 use crate::world::objects::{pools, Obj};
 
 macro_rules! leaf {
@@ -89,7 +89,7 @@ fn place_scripted_player(c: &mut Cpu, b: &mut World) {
     wr16(b, me + 0x10, depth);
     wr16(b, me + 0x0c, 0);
     let index = 2 * rd8(b, me + 2) as u32;
-    let shift = crate::world::mem::prog16(b, OFFSETS + index);
+    let shift = crate::hw::mem::prog16(b, OFFSETS + index);
     c.d[0] = shift as u32;
     let x = rd16(b, me + 0x08).wrapping_add(shift);
     wr16(b, me + 0x08, x);

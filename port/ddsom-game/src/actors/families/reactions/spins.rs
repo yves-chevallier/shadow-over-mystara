@@ -129,7 +129,7 @@ pub(super) fn spin_drop<R: Bench>(x: &mut Cx<'_, R>) {
     orient_speeds(x);
     defer_link(x);
     anim(x, 17);
-    lib::sound(x, crate::hw::sound::CMD_31E_41E_B);
+    lib::sound(x, crate::services::sound::CMD_31E_41E_B);
 }
 /// 0x3dada: variant: animation 17 and stars 0xabec8(8).
 pub(super) fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
@@ -142,7 +142,7 @@ pub(super) fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(E::GRAVITY, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    lib::sound(x, crate::hw::sound::CMD_31E_41E_B);
+    lib::sound(x, crate::services::sound::CMD_31E_41E_B);
     effect(x, 8, 0);
 }
 /// 0x3dbb4: animation; fall to the ground, then wait for the counter to end.

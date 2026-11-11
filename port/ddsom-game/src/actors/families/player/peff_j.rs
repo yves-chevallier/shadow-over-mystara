@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -73,7 +73,7 @@ mod swap {
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bc6b0);
     const OFFSETS_A: u32 = 0x4fdd4;
     const OFFSETS_B: u32 = 0x4fdec;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::VOICE_BY_D4;
+    const SFX: crate::services::sound::Sound = crate::services::sound::VOICE_BY_D4;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fd58) {
@@ -91,7 +91,7 @@ mod swap {
                 x.add16(Obj::Z, dz);
                 x.anim(ANIMS.0, 0);
                 let voice = owner.u8(x.b, Player::WEAPON_A) as u32;
-                crate::hw::sound::play_with(x.b, SFX, crate::hw::sound::Source { object: Some(x.o), a1: None, d4: Some(voice) });
+                crate::services::sound::play_with(x.b, SFX, crate::services::sound::Source { object: Some(x.o), a1: None, d4: Some(voice) });
                 x.reinsert();
             }
             2 => {

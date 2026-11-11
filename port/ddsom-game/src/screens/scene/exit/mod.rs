@@ -29,7 +29,7 @@ use super::fading;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::core::dispatch;
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::screens::modes::Sequence as _;
 use crate::world::objects::Obj;
 use crate::core::tasks::table::Next;
@@ -55,8 +55,8 @@ mod blk {
 }
 
 /// ROM tables: sequence number per scene (bytes) and branches (words, relative to the table).
-const SEQUENCE_OF_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf3170);
-const SEQUENCE_JUMPS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf31ea);
+const SEQUENCE_OF_SCENE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf3170);
+const SEQUENCE_JUMPS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf31ea);
 
 /// Dispatch loops of the object classes, in the order of the reduced update (without the bosses).
 const CLASSES: [&dispatch::Class; 9] = [
@@ -185,14 +185,14 @@ impl<'a> Ex<'a> {
         // Original glitch: the rank count left in D5 is re-read by the handlers of the next frame (leftover D5 of the
         // game); A1 and D6 of the loop by nobody
         if rank {
-            crate::core::tasks::table::table(self.x.b).leftovers.d5 = n as u32;
+            self.x.b.leftovers.d5 = n as u32;
         }
     }
     /// Start of the exit: the pause is lifted, the buttons released, the players walk out.
     fn start_walk_out(&mut self, rank: bool) {
         PAUSE.set(self.x.b, 0);
         var::INPUT_LOCK.set(self.x.b, 0);
-        crate::hw::inputs::clear_inputs(self.x.b);
+        crate::services::inputs::clear_inputs(self.x.b);
         self.release_players(rank);
     }
     /// Are all players in the game and alive in state `state` (byte `+6`)?
@@ -293,7 +293,7 @@ pub(crate) struct Leave {
     next_scene: NextScene,
     phase: u32,
     /// Sound played before the yield.
-    extra_sound: Option<crate::hw::sound::Sound>,
+    extra_sound: Option<crate::services::sound::Sound>,
     frames: u32,
     tail: Tail,
 }
@@ -614,7 +614,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
     }
     ex.x.set_v32(var::PHASE, leave.phase);
     if let Some(sound) = leave.extra_sound {
-        crate::hw::sound::play_global(ex.x.b, sound);
+        crate::services::sound::play_global(ex.x.b, sound);
     }
     let resume = match leave.tail {
         Tail::Both => Some(Step::Both),
@@ -682,10 +682,10 @@ impl Step {
             Step::DispatchTail(index) => dispatch_tail(x, index),
             Step::Both => {
                 crate::services::video::black_screen(x.b);
-                crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+                crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             }
             Step::Sound => crate::services::video::black_screen(x.b),
-            Step::Command | Step::TwiceEnd => crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop),
+            Step::Command | Step::TwiceEnd => crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop),
             Step::Twice => {
                 crate::services::video::black_screen(x.b);
                 crate::core::kernel::wait(x.b, 2, Step::TwiceEnd);

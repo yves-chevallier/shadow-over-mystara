@@ -2,7 +2,7 @@
 //! frame.
 
 use super::*;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::ram::Word;
 
 /// Scenes 33 and 36: simple fade, one waiting frame.
@@ -13,7 +13,7 @@ pub(super) fn plain_fade(x: &mut Ctx) {
             begin(x);
             Word(TIMER).set(x.b, 1);
             x.fade_in();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -34,7 +34,7 @@ pub(super) fn title_card_music(x: &mut Ctx) {
             Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -55,7 +55,7 @@ pub(super) fn title_card_timed(x: &mut Ctx) {
             Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -119,12 +119,12 @@ pub(super) fn wait_players_6(x: &mut Ctx) {
             Word(TIMER).set(x.b, 1);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(6) {
                 if var::SCENE.get(x.b) == 41 {
-                    let _ = crate::services::effects_aids::scenery_11(x.b, 0, 0);
+                    let _ = crate::actors::effects_aids::scenery_11(x.b, 0, 0);
                 }
                 x.end_scene();
             }
@@ -159,7 +159,7 @@ pub(super) fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, 
         0 => {
             begin(x);
             x.fade_in();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(4) {
@@ -204,7 +204,7 @@ pub(super) fn scene_44(x: &mut Ctx) {
             if x.v8(0x30) == 0 {
                 x.sobj_6(23);
             }
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             x.next_sub();
@@ -243,7 +243,7 @@ pub(super) fn scene_47(x: &mut Ctx) {
             Word(TIMER).set(x.b, 1);
             x.fade_in_stepped();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if fading::STEP.get(x.b) == 0 {
@@ -270,7 +270,7 @@ pub(super) fn scene_54(x: &mut Ctx) {
                 let boss = x.spawn(&pools::BOSS, 0x11);
                 boss.set_u8(x.b, Obj::VARIANT, 2);
             }
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(4) {
@@ -303,7 +303,7 @@ pub(super) fn scene_58(x: &mut Ctx) {
             x.fade_in();
             x.spawn(&pools::BOSS, 5);
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(4) {
@@ -343,7 +343,7 @@ pub(super) fn scene_64(x: &mut Ctx) {
             x.fade_in();
             x.spawn(&pools::EFFCT, 75);
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(4) {
@@ -375,7 +375,7 @@ pub(super) fn scene_65(x: &mut Ctx) {
             begin(x);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(6) {
@@ -388,7 +388,7 @@ pub(super) fn scene_65(x: &mut Ctx) {
                 x.leave_phase();
                 x.set_v8(0x42, 1);
                 var::HOLD.set(x.b, 0);
-                crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_4D);
+                crate::services::sound::play_global(x.b, crate::services::sound::CMD_4D);
             }
         }
         _ => {}
@@ -432,7 +432,7 @@ pub(super) fn scene_66(x: &mut Ctx) {
                 x.end_scene();
             }
             if Word(TIMER).get(x.b) == 0x80 {
-                crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_21);
+                crate::services::sound::play_global(x.b, crate::services::sound::CMD_21);
             }
         }
         8 => final_effects(x),
@@ -440,7 +440,7 @@ pub(super) fn scene_66(x: &mut Ctx) {
             if x.v16(0x51e) != 0 {
                 x.next_sub();
                 Word(TIMER).set(x.b, 48);
-                crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_2D);
+                crate::services::sound::play_global(x.b, crate::services::sound::CMD_2D);
             }
         }
         12 => {
@@ -475,7 +475,7 @@ pub(super) fn final_effects(x: &mut Ctx) {
         let effect = x.spawn(&pools::EFFCT, 0x50);
         effect.set_u8(x.b, Obj::VARIANT, variant);
     }
-    crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+    crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
 }
 
 /// Scene 105: an effect 0x24, dialogues 86 and 87, two possible endings (depending on `A5+0x5c`), dialogue 42.
@@ -490,7 +490,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
             x.fade_in();
             let effect = x.spawn(&pools::EFFCT, 0x24);
             effect.set_u8(x.b, Obj::VARIANT, 2);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -505,7 +505,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
                     Word(TIMER).set(x.b, 0x40);
                     let finale = finale(x);
                     Word(BOSS).set(x.b, finale.0 as u16);
-                    crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_8B);
+                    crate::services::sound::play_global(x.b, crate::services::sound::CMD_8B);
                 } else {
                     x.next_sub();
                     x.message(87, MESSAGE);
@@ -517,7 +517,7 @@ pub(super) fn scene_105(x: &mut Ctx) {
         6 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_8B);
+                crate::services::sound::play_global(x.b, crate::services::sound::CMD_8B);
             }
         }
         8 => {

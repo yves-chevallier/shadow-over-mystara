@@ -331,8 +331,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_313_413);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_313_413);
         }
         2 => {
             x.move_xz();
@@ -403,9 +403,9 @@ fn death_green<R: Bench>(x: &mut Cx<'_, R>) {
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_313_413_B);
-            lib::sound(x, crate::hw::sound::CMD_FF);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_313_413_B);
+            lib::sound(x, crate::services::sound::CMD_FF);
             green_fall(x);
         }
         2 => green_fall(x),
@@ -454,7 +454,7 @@ fn death_pet<R: Bench>(x: &mut Cx<'_, R>) {
             lib::object_event(x);
             rest(x);
             lib::drop_rewards(x);
-            lib::sound(x, crate::hw::sound::CMD_313_413);
+            lib::sound(x, crate::services::sound::CMD_313_413);
         }
         2 => {
             x.set_bit(Enemy::DISPLAY, 1, true);

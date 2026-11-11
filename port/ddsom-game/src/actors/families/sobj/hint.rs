@@ -8,7 +8,7 @@ const PALETTE_DST: u32 = 0x91c380;
 const FIRST_ADVICE: u32 = 0x118;
 const LAST_ADVICE: u16 = 0x136;
 const ADVICE_FRAMES: u8 = 0x50;
-const LEAVE_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_137_237;
+const LEAVE_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_137_237;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(Hint::OWNER);
@@ -56,7 +56,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let owner = x.linked(Hint::OWNER);
     if owner.u8(x.b, Hint::OWNER_FLAGS) & 2 != 0 {
-        crate::hw::sound::play(x.b, LEAVE_SOUND, x.o);
+        crate::services::sound::play(x.b, LEAVE_SOUND, x.o);
         // 0xdf896: SOBJ 0xa linked through `+0x46`
         crate::actors::families::small::linked_via(&mut Pure, x.b, x.o, &pools::SOBJ, 0xa, 0x46);
         let owner = x.linked(Hint::OWNER);

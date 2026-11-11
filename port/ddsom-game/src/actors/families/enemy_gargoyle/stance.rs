@@ -304,7 +304,7 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            lib::sound(x, crate::hw::sound::CMD_373_473);
+            lib::sound(x, crate::services::sound::CMD_373_473);
             fly(x, 5);
         }
         6 => {

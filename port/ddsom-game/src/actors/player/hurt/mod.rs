@@ -13,7 +13,7 @@ use crate::world::machine::Machine;
 use super::actions::to_stand;
 use super::walk::{clamp_to_screen, move_x, move_xyz, move_xz};
 use super::{animation, ram, Ctx, Player};
-use crate::world::mem::{wr16, wr8};
+use crate::hw::mem::{wr16, wr8};
 use crate::world::objects::anim::{load_entry, script_of};
 use crate::world::objects::lists::ACTORS;
 use crate::world::objects::Obj;
@@ -28,12 +28,12 @@ type Handler = fn(&mut Ctx, Player);
 
 /// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
-    pub const BEFORE_HURT_A: crate::hw::sound::Sound = crate::hw::sound::CMD_A3_BY_CHARACTER;
+    pub const BEFORE_HURT_A: crate::services::sound::Sound = crate::services::sound::CMD_A3_BY_CHARACTER;
     /// Death effects (sound, points).
-    pub const DEATH_EFFECT: crate::hw::sound::Sound = crate::hw::sound::CMD_A4_BY_CHARACTER;
+    pub const DEATH_EFFECT: crate::services::sound::Sound = crate::services::sound::CMD_A4_BY_CHARACTER;
     /// Get-up sounds.
-    pub const GET_UP_SOUND_A: crate::hw::sound::Sound = crate::hw::sound::GET_UP_A;
-    pub const GET_UP_SOUND_B: crate::hw::sound::Sound = crate::hw::sound::GET_UP_B;
+    pub const GET_UP_SOUND_A: crate::services::sound::Sound = crate::services::sound::GET_UP_A;
+    pub const GET_UP_SOUND_B: crate::services::sound::Sound = crate::services::sound::GET_UP_B;
 }
 
 /// Step tables (words: offsets relative to the table, indexed by `+7`).
@@ -269,7 +269,7 @@ const HANDLERS: &[(u32, Handler)] = &[
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.sound(crate::hw::sound::LANDING_EFFECT, p);
+                g.sound(crate::services::sound::LANDING_EFFECT, p);
                 return;
             }
         }
@@ -385,7 +385,7 @@ fn rehit(g: &mut Ctx, p: Player, action: u8, reaction: u32) -> bool {
 /// original.
 fn shock_dust(g: &mut Ctx, p: Player) {
     g.leftovers.d2 = 0;
-    crate::world::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+    crate::hw::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
     g.shock(p, 0, 0, 0, 0xffff);
 }
 

@@ -4,8 +4,8 @@ use crate::world::objects::Obj;
 use crate::actors::families::set::fields::SetObj;
 use crate::actors::families::set_b::fields::LevelClockObj;
 
-const ON: crate::hw::sound::Sound = crate::hw::sound::CMD_9A_B;
-const OFF: crate::hw::sound::Sound = crate::hw::sound::CMD_9B_B;
+const ON: crate::services::sound::Sound = crate::services::sound::CMD_9A_B;
+const OFF: crate::services::sound::Sound = crate::services::sound::CMD_9B_B;
 const TIME: u32 = 0x42;
 const CUE: u32 = 0x1a;
 const TICK: u32 = 0x1c;
@@ -41,7 +41,7 @@ fn countdown<R: Bench>(x: &mut Cx<'_, R>, reset: u16, kind: u32) {
     let n = x.u16(CUE).wrapping_sub(1);
     x.set16(CUE, n);
     if n == 0 {
-        crate::hw::sound::play(x.b, OFF, x.o);
+        crate::services::sound::play(x.b, OFF, x.o);
     }
 }
 
@@ -68,7 +68,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             speech(x, 0);
             x.set16(CUE, 0x28);
             crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x28);
-            crate::hw::sound::play(x.b, ON, x.o);
+            crate::services::sound::play(x.b, ON, x.o);
         }
         2 => {
             countdown(x, 0x50, 0);
@@ -91,7 +91,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             speech(x, 2);
             x.set16(CUE, 0x78);
             crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x78);
-            crate::hw::sound::play(x.b, ON, x.o);
+            crate::services::sound::play(x.b, ON, x.o);
         }
         6 => {
             let n = x.u16(CUE).wrapping_sub(1);
@@ -101,7 +101,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(Obj::STATE, 2);
             x.set_a5_u8(vars::FROZEN, 1);
-            crate::hw::sound::play(x.b, OFF, x.o);
+            crate::services::sound::play(x.b, OFF, x.o);
         }
         _ => {}
     }

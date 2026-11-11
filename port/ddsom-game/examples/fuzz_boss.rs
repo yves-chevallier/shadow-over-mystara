@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use ddsom_game::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use ddsom_game::world::objects::pools::{BOSS, ENEMY, POOLS};
 
 struct Rng(u64);
@@ -1598,7 +1598,7 @@ fn main() {
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
-                    ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    ddsom_game::hw::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                     for _ in 0..20_000 {
                         if c2.pc == 0xfffe {
                             break;
@@ -1638,7 +1638,7 @@ fn main() {
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
                         c2.pc = entry;
                         c2.a[7] = cs.a[7].wrapping_sub(4);
-                        ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        ddsom_game::hw::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                         for _ in 0..200_000 {
                             if c2.pc == 0xfffe {
                                 break;

@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ddsom_game::world::mem::{rd16, rd8, wr16, wr8, A5};
+use ddsom_game::hw::mem::{rd16, rd8, wr16, wr8, A5};
 use ddsom_game::world::objects::pools::{ENEMY, EFFCT};
 
 /// Code zone of the EFFCT handlers.

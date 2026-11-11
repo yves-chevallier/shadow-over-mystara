@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -444,7 +444,7 @@ pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             }
             let gauge_inactive = vars::SHAKE.get(ctx.b) != 0;
             if !gauge_inactive {
-                crate::world::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
+                crate::hw::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
             bubble_reads(ctx, o, &tables().bubble_table_object_a, class as u16);
             bubble_next(ctx, o);
@@ -458,7 +458,7 @@ pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             }
             let gauge_inactive = vars::SHAKE.get(ctx.b) != 0;
             if !gauge_inactive {
-                crate::world::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
+                crate::hw::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
             bubble_reads(ctx, o, &tables().bubble_table_object_b, class as u16);
             bubble_next(ctx, o);
@@ -471,7 +471,7 @@ pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if gauge {
                 player.set_u8(ctx.b, Player::MARK, 0);
                 o.set_u8(ctx.b, field::MODE, 1);
-                crate::world::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xff00);
+                crate::hw::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xff00);
                 return bubble_shown(ctx, o, 0x24);
             }
             bubble_shown(ctx, o, 0x10);
@@ -588,7 +588,7 @@ pub(super) fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
     }
     let address = crate::world::ram::SCROLL_Y_PLANE1.0;
-    crate::world::mem::wr16(ctx.b, address, value);
+    crate::hw::mem::wr16(ctx.b, address, value);
     ctx.reinsert();
 }
 
@@ -598,7 +598,7 @@ pub(super) fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if !(modified == 0) {
         let gauge = vars::SHAKE.get(ctx.b) != 0;
         if !gauge {
-            crate::world::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xffff);
+            crate::hw::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xffff);
         }
     }
     ctx.free(&pools::EFFCT);

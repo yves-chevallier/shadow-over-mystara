@@ -5,8 +5,8 @@ use crate::actors::families::shell::records::{Spawner, view};
 use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x16eec2);
-const SOUND_START: crate::hw::sound::Sound = crate::hw::sound::CMD_32D;
-const SOUND_END: crate::hw::sound::Sound = crate::hw::sound::CMD_337;
+const SOUND_START: crate::services::sound::Sound = crate::services::sound::CMD_32D;
+const SOUND_END: crate::services::sound::Sound = crate::services::sound::CMD_337;
 const SOURCE_ARMED: u32 = 0xaf;
 const WAIT: u8 = 0;
 const HOLD: u8 = 2;
@@ -50,7 +50,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// End: the creator is dead or in state 0x20a.
 fn stop<R: Bench>(x: &mut Cx<'_, R>) {
-    crate::hw::sound::play(x.b, SOUND_END, x.o);
+    crate::services::sound::play(x.b, SOUND_END, x.o);
     x.add8(Obj::STATE, 2);
 }
 
@@ -79,7 +79,7 @@ fn centre<R: Bench>(x: &mut Cx<'_, R>) {
         WAIT => {
             let source = x.linked(Shot29::SOURCE);
             if source.u8(x.b, SOURCE_ARMED) != 0 {
-                crate::hw::sound::play(x.b, SOUND_START, x.o);
+                crate::services::sound::play(x.b, SOUND_START, x.o);
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Shot29::TIMER, 0x50);
                 let px = source.u16(x.b, Obj::X);

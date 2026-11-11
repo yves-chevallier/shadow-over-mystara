@@ -1,7 +1,7 @@
 //! Parries, enemy attacks, crates, pushes and pickable items.
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::machine::Machine;
 use crate::actors::player::tables::{player_data, combat, Aligned, Read, Table};
@@ -101,7 +101,7 @@ pub(super) fn parry(w: &mut Combat, p: Obj, other: Obj) {
     w.set_bit(p, f::HIT_MARK, 5);
     w.set_bit(other, f::HIT_FLAGS, 5);
     w.spark(Spark::Linked, p, other, 0);
-    crate::hw::sound::play(w.b, crate::hw::sound::CMD_128_228, p);
+    crate::services::sound::play(w.b, crate::services::sound::CMD_128_228, p);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -237,7 +237,7 @@ pub(super) fn enemy_hits_player(w: &mut Combat, p: Obj, e: Obj) {
         }
     }
     w.spark(Spark::Between { owner_first: true }, p, e, 2);
-    crate::hw::sound::play_with(w.b, crate::hw::sound::CONTACT_ENEMY, crate::hw::sound::Source { object: Some(p), a1: Some(e.0), d4: None });
+    crate::services::sound::play_with(w.b, crate::services::sound::CONTACT_ENEMY, crate::services::sound::Source { object: Some(p), a1: Some(e.0), d4: None });
 }
 
 /// 0x2756c: an enemy shot hits a player; certain equipment or states cancel it.
@@ -275,7 +275,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut Combat, p: Obj, s: Obj) {
     p.set_u8(w.b, f::ACTION, action);
     player_loses_hp(w, p, s);
     w.spark(Spark::Between { owner_first: true }, p, s, 5);
-    crate::hw::sound::play_with(w.b, crate::hw::sound::CONTACT_OBJECT, crate::hw::sound::Source { object: Some(p), a1: Some(s.0), d4: None });
+    crate::services::sound::play_with(w.b, crate::services::sound::CONTACT_OBJECT, crate::services::sound::Source { object: Some(p), a1: Some(s.0), d4: None });
 }
 
 /// 0x276e0: removes HP from the player (damage from 0x4002 minus armour); at 0 HP, one player

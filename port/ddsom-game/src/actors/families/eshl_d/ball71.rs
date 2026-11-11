@@ -6,7 +6,7 @@ const OWNER: u32 = 0x46;
 const RELEASE: u32 = 0x58;
 const HIT: u32 = 0x33;
 const SPEED_TABLE: u32 = 33;
-const SFX_THROW: crate::hw::sound::Sound = crate::hw::sound::CMD_32F;
+const SFX_THROW: crate::services::sound::Sound = crate::services::sound::CMD_32F;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -64,7 +64,7 @@ fn held<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(RELEASE) != 0 {
         x.add8(Base::SUB_STATE, 2);
-        crate::hw::sound::play(x.b, SFX_THROW, x.o);
+        crate::services::sound::play(x.b, SFX_THROW, x.o);
     }
     crate::actors::families::enemy_lib::step(x);
 }
@@ -77,7 +77,7 @@ fn rolling<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set8(HIT, 0);
-    if crate::services::ai_aids::outside_band(x.b, x.o, 0xfff0, 400) {
+    if crate::actors::ai_aids::outside_band(x.b, x.o, 0xfff0, 400) {
         return;
     }
     let Some(ball) = x.alloc(&pools::ESHL) else { return };

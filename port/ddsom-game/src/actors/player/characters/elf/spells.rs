@@ -1,7 +1,7 @@
 //! Special attack of the elf and its spells (wards, beam, sparks, bolt, frost, quake, moonlight).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{player_data, pc16, Read};
 
@@ -86,7 +86,7 @@ pub(super) fn timed_throw(g: &mut Ctx, p: Player) {
 
 
 /// Plays ROM sounds.
-pub(super) fn sounds(g: &mut Ctx, p: Player, list: &[crate::hw::sound::Sound]) {
+pub(super) fn sounds(g: &mut Ctx, p: Player, list: &[crate::services::sound::Sound]) {
     for &sound in list {
         g.sound(sound, p);
     }

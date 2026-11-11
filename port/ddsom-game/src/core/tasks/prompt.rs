@@ -7,7 +7,7 @@
 //! `0xe03e4` launches it.
 
 use super::{cede, Wait};
-use crate::world::mem::{rd32, wr32, A5};
+use crate::hw::mem::{rd32, wr32, A5};
 use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
 use crate::Native;

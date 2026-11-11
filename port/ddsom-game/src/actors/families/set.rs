@@ -29,7 +29,7 @@ mod scene_spawner;
 /// Helpers shared by the types of the SET class.
 mod util {
     use super::*;
-    use crate::world::mem::{rd16, wr16};
+    use crate::hw::mem::{rd16, wr16};
 
     /// First player record, four players spaced 0x200 bytes apart.
     pub const PLAYERS: u32 = crate::world::ram::PLAYERS.base;

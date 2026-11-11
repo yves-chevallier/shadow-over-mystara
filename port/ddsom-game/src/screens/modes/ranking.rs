@@ -17,7 +17,7 @@ use super::{Flow, Sequence};
 use crate::actors::families::effects_creators::{end_screen, or_rest};
 use crate::hw::video::{palette, regs, Vram, SCROLL2};
 use crate::screens::scene::fading;
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 use crate::screens::vars as sv;
 use crate::world::objects::pools;
 use crate::screens::scene::Ctx;
@@ -118,7 +118,7 @@ crate::steps! {
             Flow::Done
         },
         SaFaded = 0xfc8a8 => |x| {
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+            crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             reset_objects(x);
             x.wait(1, Step::SaVideo)
         },
@@ -200,7 +200,7 @@ fn scroll(x: &mut Ctx) -> Speed {
 fn s0_prepare(x: &mut Ctx) -> Flow {
     next_step(x);
     Obj(STATE).set_u16(x.b, f::TIMER, 300);
-    crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_27_B);
+    crate::services::sound::play_global(x.b, crate::services::sound::CMD_27_B);
     reset_objects(x);
     x.wait(1, Step::S0Video)
 }
@@ -225,7 +225,7 @@ fn s2_scroll(x: &mut Ctx) -> Flow {
         // 0x517ba: a ranking line (variant = counter), its setting is the next byte of the text, which
         // only advances if the effect is created
         let setting = tables::byte(x.b, a4);
-        if crate::services::effects_aids::effect_44(x.b, counter, setting).is_some() {
+        if crate::actors::effects_aids::effect_44(x.b, counter, setting).is_some() {
             a4 += 1;
         }
     }
@@ -322,7 +322,7 @@ fn sa_leave(x: &mut Ctx) -> Flow {
         render(x);
         return Flow::Done;
     }
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     fading::PAGES.set(x.b, 0xf);
     fading::DELAY.set(x.b, 3);
     x.subroutine(crate::core::tasks::fading::descent, Step::SaFaded)

@@ -5,7 +5,5 @@
 //! The buffers keep the CPS2 format, since that is what `validate` compares with the original frame by frame.
 
 pub mod io;
+pub mod mem;
 pub mod video;
-pub mod eeprom;
-pub mod inputs;
-pub mod sound;

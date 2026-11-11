@@ -131,8 +131,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             var::BOSS_FIGHT.set(x.b, 0);
             record_defeat(x, 3);
             lib::drop_rewards(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
             lib::flash_and_shake(x);
             x.set8(Enemy::ACTIVE, 2);
             let f = x.u8(Enemy::STUN);
@@ -175,6 +175,6 @@ fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Enemy::VZ_LONG, 0);
     next6(x);
     x.anim_start(SET_DEATH.0, 0x10);
-    lib::sound(x, crate::hw::sound::CMD_AA);
+    lib::sound(x, crate::services::sound::CMD_AA);
 }
 

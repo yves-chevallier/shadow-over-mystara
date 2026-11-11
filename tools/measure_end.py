@@ -71,7 +71,7 @@ def code_lines(text: str):
 
 
 # Layers of ddsom-game since L15 (docs/fin.md, section 2), from the bottom: each one should only call those below.
-LAYERS = ["world", "hw", "services", "actors", "screens", "core"]
+LAYERS = ["hw", "world", "services", "actors", "screens", "core"]
 
 
 def zone_of(rel: str) -> str:

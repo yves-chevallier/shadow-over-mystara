@@ -26,7 +26,7 @@ pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
-    lib::sound(x, crate::hw::sound::CMD_20);
+    lib::sound(x, crate::services::sound::CMD_20);
     lib::create_set_15(x);
     let r = x.random() as u32;
     x.set8(Boss22::EFFECT_COUNT, r as u8);
@@ -151,7 +151,7 @@ pub(super) fn land<R: Bench>(x: &mut Cx<'_, R>) {
         return step_anim(x);
     }
     lib::shake_54(x, 0x1e);
-    lib::sound(x, crate::hw::sound::CMD_372);
+    lib::sound(x, crate::services::sound::CMD_372);
     x.set32(Obj::Z, 0);
     dust_line(x);
     next7(x);

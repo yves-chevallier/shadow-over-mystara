@@ -9,7 +9,7 @@
 
 use crate::actors::families::cx::Bench;
 use super::*;
-use crate::world::mem::{rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd8, wr16, wr32, wr8};
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
 use crate::actors::families::set::fields::SetObj;
@@ -79,7 +79,7 @@ fn open<R: Bench>(x: &mut Cx<'_, R>) {
     let frame = set_tables::pc_byte(x.b, FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
     x.set_a5_u16(BOX_TOP, 0xb8u16.wrapping_sub(0x18 * frame as u16));
     // 0xddeaa: scenery 6 of variant 0xd, which keeps the frame
-    if let Ok(scenery) = crate::services::effects_aids::scenery_6(x.b, 0xd) {
+    if let Ok(scenery) = crate::actors::effects_aids::scenery_6(x.b, 0xd) {
         scenery.set_u8(x.b, SetObj::PARAM, frame);
     }
     draw_frame(x, frame);
@@ -184,7 +184,7 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
         wr8(x.b, player + 0x10d, new);
     }
     // 0x3552: the player's weapon power is recomputed (its output registers, D0 and A4, are not read)
-    crate::actors::player::init::init_weapon_stats(&mut crate::actors::player::Ctx::new(x.b), crate::actors::player::Player(player));
+    crate::actors::player::init::init_weapon_stats(&mut crate::actors::player::Ctx::new(x.b), crate::world::objects::player::Player(player));
 }
 
 /// Window palette and text header (0xce88a): copies three palette blocks, sets the text buffer and composes the

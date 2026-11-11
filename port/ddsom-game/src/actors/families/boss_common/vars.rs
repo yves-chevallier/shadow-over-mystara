@@ -2,7 +2,7 @@
 //! `enemy_common::vars`, re-exported here, and those of the whole game in `crate::world::ram`). A meaning guessed from the code
 //! alone is marked (h).
 
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::ram::{Byte, Word};
 pub use crate::world::ram::{SHAKE, STAGE_CLOCK};
 

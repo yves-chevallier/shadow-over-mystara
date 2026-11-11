@@ -10,7 +10,7 @@ use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::world::objects::lists;
 use crate::world::objects::Obj;
-use crate::world::mem::{wr16, wr8, A5};
+use crate::hw::mem::{wr16, wr8, A5};
 
 macro_rules! pool_natives {
     ($pool:ident, $alloc:ident, $alloc_name:expr, $free:ident, $free_name:expr) => {

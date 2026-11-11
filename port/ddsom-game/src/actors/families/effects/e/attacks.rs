@@ -5,7 +5,7 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod attack_fx {
-    pub const SOUND_FLASH: crate::hw::sound::Sound = crate::hw::sound::CMD_18F;
+    pub const SOUND_FLASH: crate::services::sound::Sound = crate::services::sound::CMD_18F;
     /// Attacker's action (`+0x49`), noted by variant 5 in `+0x42`.
     pub const ACTION: u32 = 0x49;
     pub const NOTED_ACTION: u32 = 0x42;
@@ -89,7 +89,7 @@ pub(super) fn attack_fx_flash<R: Bench>(x: &mut Cx<'_, R>) {
             let rng = x.random();
             let anim = rng as u32 & 3;
             x.anim_start(attack_fx::ANIM_A.0, anim as u16);
-            crate::hw::sound::play(x.b, attack_fx::SOUND_FLASH, x.o);
+            crate::services::sound::play(x.b, attack_fx::SOUND_FLASH, x.o);
         }
         2 => attack_fx_anim_or_leave(x),
         _ => free(x),

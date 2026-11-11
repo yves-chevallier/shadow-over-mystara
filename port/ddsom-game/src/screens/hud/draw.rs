@@ -8,7 +8,7 @@ use crate::world::World;
 use super::layer::{clear_cell, columns, origin, Brush, COLUMN};
 use super::{panel, player, var, Slot};
 use crate::hw::video::{Cell, Vram};
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 
 /// Zones of a panel (row index into the origins table).
 pub mod zone {

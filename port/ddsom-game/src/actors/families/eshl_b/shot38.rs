@@ -65,7 +65,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         let target = Obj(angle as i16 as i32 as u32 & 0xff_ffff);
         let to = (target.u16(x.b, Obj::X), target.u16(x.b, Obj::Z).wrapping_add(0x30));
         let de = (x.u16(Obj::X), x.u16(Obj::Z));
-        angle = crate::services::aids::direction(x.b, de, to) as u16;
+        angle = crate::actors::aids::direction(x.b, de, to) as u16;
     }
     let flipped = flip != 0;
     let mapped = |a: u16| if flipped { mirror(a) } else { a };

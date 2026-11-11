@@ -57,7 +57,7 @@ use m68k::Cpu;
 pub use registry::{all_natives, game_natives, is_native};
 use registry::lookup;
 
-use crate::{world::mem, core::frame, regs, core::tasks, Body, Native};
+use crate::{hw::mem, core::frame, regs, core::tasks, Body, Native};
 
 /// Long of the program space (see `mem::prog16`): tables that the natives for the original code read in the ROM.
 pub(crate) fn prog32(b: &mut World, a: u32) -> u32 {
@@ -90,15 +90,15 @@ impl Native {
             }
             Body::Handler(f) => {
                 // called from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5) come from the
-                // registers and the leftovers return there; on the game machine they are also those of the task
-                // table. No table is created on a machine without one (the original's returns stay on its stack).
+                // registers and the leftovers return there; on a machine with a task table (the game's) they are also
+                // those of the world.
                 let mut a = crate::core::dispatch::Dispatch::from_cpu(c);
-                if let Some(t) = tasks::table::table_if(b) {
-                    t.leftovers = a.leftovers;
+                if b.tasks.is_some() {
+                    b.leftovers = a.leftovers;
                 }
                 f(b, &mut a);
-                if let Some(t) = tasks::table::table_if(b) {
-                    t.leftovers = a.leftovers;
+                if b.tasks.is_some() {
+                    b.leftovers = a.leftovers;
                 }
                 a.give_back(c);
                 frames::rts(c, b);
@@ -663,7 +663,7 @@ pub fn install_reference(m: &mut cps2::Machine) {
 
 /// Reference machine: the original scheduler (0x932-0x95e) idles: no task ready (table FF0064)
 /// and no new frame, or only the freeze task is ready and its next step would do nothing
-/// (`tasks::freeze::idle_wait_original`). The game has its own criterion (`no68k`).
+/// (`tasks::freeze::idle_wait_original`). The game has its own criterion (`frame`).
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
     const NEW_FRAME: usize = 0x164 / 2; // FF0164 (high byte): set by VBLANK, cleared at the start of a walk
     const TASKS: usize = 0x64 / 2; // FF0064: 16 tasks of 16 bytes, state in the high byte
@@ -849,11 +849,11 @@ fn check(n: &Native, c: &mut Cpu, b: &mut World) {
         s.last = Some(diffs.join(", "));
         // the original state is kept so as not to propagate the difference; on the game machine, with the task table of
         // the native (calls in progress, leftovers), which the copy does not maintain
-        let table = if by_frame { b.tasks.take() } else { None };
+        let kept = by_frame.then(|| (b.tasks.take(), b.leftovers));
         *c = c2;
         *b = World::from_bus(b2);
-        if by_frame {
-            b.tasks = table;
+        if let Some((tasks, leftovers)) = kept {
+            (b.tasks, b.leftovers) = (tasks, leftovers);
         }
     }
 }

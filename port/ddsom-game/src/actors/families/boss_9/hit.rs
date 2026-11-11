@@ -38,7 +38,7 @@ fn shaken<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8b4c2: the hit: damage, freeze; out of HP: destroyed; otherwise shake and knockback away from the attacker.
 fn struck<R: Bench>(x: &mut Cx<'_, R>) {
-    lib::sound(x, crate::hw::sound::CMD_94);
+    lib::sound(x, crate::services::sound::CMD_94);
     damage_bits(x);
     let f = x.u8(Enemy::STUN);
     x.set8(f::FREEZE, f);
@@ -161,7 +161,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Enemy::VX, (-0x500i16) as u16);
                 x.set8(f::FLIP, 0);
                 x.set8(Enemy::HEADING, 0x18);
-                lib::sound(x, crate::hw::sound::CMD_92_B);
+                lib::sound(x, crate::services::sound::CMD_92_B);
             }
             roll(x);
         }
@@ -174,8 +174,8 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                 if (pools::ENEMY.free_count(x.b) as i16) >= 4 {
                     next6(x);
                     refill_crew(x, true);
-                    lib::sound(x, crate::hw::sound::CMD_94);
-                    lib::sound(x, crate::hw::sound::CMD_20);
+                    lib::sound(x, crate::services::sound::CMD_94);
+                    lib::sound(x, crate::services::sound::CMD_20);
                 }
             }
             roll(x);
@@ -189,7 +189,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VX, 0x800);
             x.set16(Enemy::AX, 0);
             x.set8(Boss9::GAIT, 1);
-            lib::sound(x, crate::hw::sound::CMD_92_C);
+            lib::sound(x, crate::services::sound::CMD_92_C);
         }
         12 => {
             jolt(x);
@@ -245,7 +245,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                     x.set16(Enemy::VZ, (-0x600i16) as u16);
                     x.set16(Enemy::GRAVITY, (-0x10i16) as u16);
                     x.set8(Boss9::GAIT, 2);
-                    lib::sound(x, crate::hw::sound::CMD_95);
+                    lib::sound(x, crate::services::sound::CMD_95);
                     for off in [Boss9::DRIVER, Boss9::CREW, Boss9::CREW + 2, Boss9::CREW + 4, Boss9::CREW + 6] {
                         if x.u16(off) != 0 {
                             let m = x.linked(off);
@@ -289,10 +289,10 @@ fn leaving<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FLIP) == 0 {
         next6(x);
         negate(x, 0x14);
-        lib::sound(x, crate::hw::sound::CMD_92_B);
+        lib::sound(x, crate::services::sound::CMD_92_B);
     } else {
-        lib::sound(x, crate::hw::sound::CMD_92);
-        lib::sound(x, crate::hw::sound::CMD_92_D);
+        lib::sound(x, crate::services::sound::CMD_92);
+        lib::sound(x, crate::services::sound::CMD_92_D);
     }
     roll(x)
 }

@@ -8,7 +8,7 @@ use crate::world::World;
 
 use super::var;
 use crate::hw::video::{Cell, TEXT};
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 
 pub const LAYER: u32 = TEXT.base;
 pub const COLUMN: u32 = TEXT.column;

@@ -48,7 +48,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             look(x, 0x1e);
-            lib::sound(x, crate::hw::sound::CMD_34F_44F);
+            lib::sound(x, crate::services::sound::CMD_34F_44F);
             x.set16(Obj::VX, 0x300);
             x.set16(Obj::AX, -0x28i16 as u16);
             let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;

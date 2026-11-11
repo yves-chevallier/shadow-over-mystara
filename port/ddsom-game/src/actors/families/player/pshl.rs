@@ -7,18 +7,18 @@
 use crate::world::objects::Enemy;
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::{rd16, wr16};
+use crate::hw::mem::{rd16, wr16};
 use crate::world::objects::pools;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, word, Aligned, Read};
 
-const SFX_HIT_WALL: crate::hw::sound::Sound = crate::hw::sound::CMD_122_222;
-const SFX_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_123_223;
+const SFX_HIT_WALL: crate::services::sound::Sound = crate::services::sound::CMD_122_222;
+const SFX_LAND: crate::services::sound::Sound = crate::services::sound::CMD_123_223;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -28,7 +28,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     // Original glitch: the leftovers of 0x24a8 (D3 = cell index) are re-read by a following handler (batch C:
     // `boss11_scene42_mort`, frame 4447)
-    let t = crate::services::video::terrain_of(x.b, x.o);
+    let t = crate::world::terrain::terrain_of(x.b, x.o);
     leftovers_terrain(x, &t);
     let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
@@ -101,7 +101,7 @@ mod thrown {
 
     const ANIMS_A: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15ae8a);
     const ANIMS_B: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c552);
-    const SFX_START: crate::hw::sound::Sound = crate::hw::sound::CMD_11C_21C;
+    const SFX_START: crate::services::sound::Sound = crate::services::sound::CMD_11C_21C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51db4) {
@@ -123,12 +123,12 @@ mod thrown {
                 x.add16(Obj::X, dx);
                 x.add16(Obj::Z, dz);
                 pose(x);
-                crate::hw::sound::play(x.b, SFX_START, x.o);
+                crate::services::sound::play(x.b, SFX_START, x.o);
                 x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
-                    crate::hw::sound::play(x.b, SFX_HIT_WALL, x.o);
+                    crate::services::sound::play(x.b, SFX_HIT_WALL, x.o);
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
@@ -145,7 +145,7 @@ mod thrown {
                     x.set16(Obj::VX, 0x100u16.wrapping_neg());
                 }
                 pose(x);
-                crate::hw::sound::play(x.b, SFX_LAND, x.o);
+                crate::services::sound::play(x.b, SFX_LAND, x.o);
             }
             4 => {
                 if x.u8(Shot::SUB_STATE) == 0 {
@@ -193,7 +193,7 @@ mod thrown {
 mod flung {
     use super::*;
 
-    const SFX_START: crate::hw::sound::Sound = crate::hw::sound::CMD_11B_21B;
+    const SFX_START: crate::services::sound::Sound = crate::services::sound::CMD_11B_21B;
 
     fn set<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
         match x.u8(Obj::KIND) {
@@ -228,12 +228,12 @@ mod flung {
                 x.add16(Obj::Z, dz);
                 let a = set(x);
                 x.anim(a, 0);
-                crate::hw::sound::play(x.b, SFX_START, x.o);
+                crate::services::sound::play(x.b, SFX_START, x.o);
                 x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
-                    crate::hw::sound::play(x.b, SFX_HIT_WALL, x.o);
+                    crate::services::sound::play(x.b, SFX_HIT_WALL, x.o);
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
@@ -246,7 +246,7 @@ mod flung {
                 x.set8(Shot::OWNER, 4);
                 let a = set(x);
                 x.anim(a, 1);
-                crate::hw::sound::play(x.b, SFX_LAND, x.o);
+                crate::services::sound::play(x.b, SFX_LAND, x.o);
             }
             4 => {
                 match x.u8(Shot::SUB_STATE) {
@@ -289,8 +289,8 @@ mod arc {
     const TIMER: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15af62);
-    const SFX_BURST: crate::hw::sound::Sound = crate::hw::sound::CMD_125_225;
-    const SFX_MID: crate::hw::sound::Sound = crate::hw::sound::CMD_12E_22E;
+    const SFX_BURST: crate::services::sound::Sound = crate::services::sound::CMD_125_225;
+    const SFX_MID: crate::services::sound::Sound = crate::services::sound::CMD_12E_22E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x52242) {
@@ -336,11 +336,11 @@ mod arc {
                 x.set32(Obj::Z, 0);
                 x.set16(TIMER, 0x50);
                 x.anim(ANIMS.0, 1);
-                crate::hw::sound::play(x.b, SFX_BURST, x.o);
+                crate::services::sound::play(x.b, SFX_BURST, x.o);
             }
             2 => {
                 if x.u16(TIMER) == 0x48 {
-                    crate::hw::sound::play(x.b, SFX_MID, x.o);
+                    crate::services::sound::play(x.b, SFX_MID, x.o);
                 }
                 x.add16(TIMER, 0xffff);
                 if x.u16(TIMER) == 0 {
@@ -379,7 +379,7 @@ mod bouncer {
     const FRONT_TIMER: u32 = 0x5e;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15b0a2);
-    const SFX_START: crate::hw::sound::Sound = crate::hw::sound::CMD_11D_21D;
+    const SFX_START: crate::services::sound::Sound = crate::services::sound::CMD_11D_21D;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x523d2) {
@@ -432,7 +432,7 @@ mod bouncer {
         let hit = x.u8(Shot::HIT_FLAGS) & 2 != 0;
         let mut bounce = hit;
         if !hit {
-            let terrain = crate::services::video::terrain_of(x.b, x.o).number as u32;
+            let terrain = crate::world::terrain::terrain_of(x.b, x.o).number as u32;
             let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
             if !ground || terrain & 0x40 != 0 {
                 if (x.u16(Obj::Z) as i16) > 0 {
@@ -466,7 +466,7 @@ mod bouncer {
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(Shot::ANIM_EVENT) != 0 {
             x.set8(Shot::ANIM_EVENT, 0);
-            crate::hw::sound::play(x.b, SFX_START, x.o);
+            crate::services::sound::play(x.b, SFX_START, x.o);
         }
     }
 
@@ -500,9 +500,9 @@ mod burst {
     const FLASH_TIMER: u32 = 0x5e;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15b13c);
-    const SFX_RIGHT: crate::hw::sound::Sound = crate::hw::sound::CMD_168_B;
-    const SFX_LEFT: crate::hw::sound::Sound = crate::hw::sound::CMD_168_C;
-    const SFX_FLAME: crate::hw::sound::Sound = crate::hw::sound::CMD_169;
+    const SFX_RIGHT: crate::services::sound::Sound = crate::services::sound::CMD_168_B;
+    const SFX_LEFT: crate::services::sound::Sound = crate::services::sound::CMD_168_C;
+    const SFX_FLAME: crate::services::sound::Sound = crate::services::sound::CMD_169;
     /// Counter of the flames alive (`A5-0x5fbc`, absolute address).
     const FLAMES: u32 = 0xff2044;
 
@@ -521,9 +521,9 @@ mod burst {
                 }
                 x.anim(ANIMS.0, 0);
                 if (x.u16(Obj::VX) as i16) < 0 {
-                    crate::hw::sound::play(x.b, SFX_LEFT, x.o);
+                    crate::services::sound::play(x.b, SFX_LEFT, x.o);
                 } else {
-                    crate::hw::sound::play(x.b, SFX_RIGHT, x.o);
+                    crate::services::sound::play(x.b, SFX_RIGHT, x.o);
                 }
             }
             0 => flame_init(x),
@@ -575,7 +575,7 @@ mod burst {
         crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_RED);
         crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x20);
         x.anim(ANIMS.0, 1);
-        crate::hw::sound::play(x.b, SFX_FLAME, x.o);
+        crate::services::sound::play(x.b, SFX_FLAME, x.o);
         x.reinsert();
     }
 

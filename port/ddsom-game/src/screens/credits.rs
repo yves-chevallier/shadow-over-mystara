@@ -128,7 +128,7 @@ const DEBOUNCE_MIN: u8 = 2;
 const CREDITS_MAX: u8 = 9;
 
 /// Coin insertion sound (sound wrapper).
-const COIN_NOISE: crate::hw::sound::Sound = crate::hw::sound::CMD_4F;
+const COIN_NOISE: crate::services::sound::Sound = crate::services::sound::CMD_4F;
 
 /// One coin slot line: record index and mask in `IN2`.
 #[derive(Clone, Copy)]
@@ -199,10 +199,10 @@ fn handle_line(b: &mut World, separate: bool, l: Line, level: u8) {
     // coin sound if a game is in progress or if the sound flag is raised
     let sum = ram::GAME.get(b).wrapping_add(ram::COIN_SOUND.get(b));
     if !(sum == 0) {
-        crate::hw::sound::play_global(b, COIN_NOISE);
+        crate::services::sound::play_global(b, COIN_NOISE);
     }
     // 0x2e448: bookkeeping
-    crate::hw::eeprom::count_coin(b);
+    crate::services::eeprom::count_coin(b);
     a0.set_debounce(b, 0);
 }
 
@@ -241,7 +241,7 @@ pub(crate) fn line_start(b: &mut World, coin_slot: CoinSlot, service: u8) {
     }
     coin_slot.set_started(b, 1);
     if first {
-        crate::hw::eeprom::count_start(b);
+        crate::services::eeprom::count_start(b);
     }
     // the credit added is byte `+7` (reread after the bookkeeping: 1)
     let credits = coin_slot.credits(b).wrapping_add(coin_slot.started(b));

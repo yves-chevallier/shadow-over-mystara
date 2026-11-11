@@ -11,7 +11,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
 /// CPS-A registers (0x804100 + offset).
 mod cps_a {
@@ -198,11 +198,11 @@ fn vblank(b: &mut World) {
     wr8(b, FAST_FORWARD, 0);
     display_regs(b);
     // the services return values that the original leaves in its registers; VBLANK restores them all
-    crate::hw::inputs::read_panel(b); // 0x80c
+    crate::services::inputs::read_panel(b); // 0x80c
     video_control(b);
-    crate::hw::sound::send(b); // 0x68c: Z80 commands
+    crate::services::sound::send(b); // 0x68c: Z80 commands
     crate::screens::credits::read_coin_slots(b); // 0x143da
-    crate::hw::eeprom::vblank(b); // 0x2dcf6: bookkeeping
+    crate::services::eeprom::vblank(b); // 0x2dcf6: bookkeeping
     wake_tasks(b);
     // the original code ends with the charge gauge (0xb3e), inactive as long as DSW has its bit 0x400
 }

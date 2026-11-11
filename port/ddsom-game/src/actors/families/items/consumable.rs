@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::data::RomAddr;
 use crate::actors::families::shell::vars;
@@ -53,7 +53,7 @@ pub(super) fn effect_food<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if !(life <= life_max) {
         player.set_u16(ctx.b, Player::HP, life_max);
     }
-    crate::hw::sound::play(ctx.b, call::END_EFFECT, ctx.obj());
+    crate::services::sound::play(ctx.b, call::END_EFFECT, ctx.obj());
 }
 
 /// Potions: the player receives a countdown of 0x2d0 frames and flags +0x180..0x184.
@@ -63,7 +63,7 @@ pub(super) fn effect_potion<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, bytes: &[(u32
     for &(off, v) in bytes {
         player.set_u8(ctx.b, off, v);
     }
-    crate::hw::sound::play(ctx.b, call::END_EFFECT, ctx.obj());
+    crate::services::sound::play(ctx.b, call::END_EFFECT, ctx.obj());
 }
 
 pub(super) fn consumable_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {

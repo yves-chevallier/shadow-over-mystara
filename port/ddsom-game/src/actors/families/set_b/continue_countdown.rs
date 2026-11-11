@@ -1,9 +1,9 @@
 use super::*;
-use crate::world::mem::{rd8, wr16, wr32};
+use crate::hw::mem::{rd8, wr16, wr32};
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::{SetObj, WeaponObj};
 use crate::actors::families::set_b::fields::ContinueObj;
 use crate::actors::families::set_b::fields::CameraFields;
@@ -249,7 +249,7 @@ fn prompt<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
     }
     x.set16(ContinueObj::DELAY, 0x100);
     let orientation = x.u8(ContinueObj::PROMPT);
-    let _ = crate::services::effects_aids::scenery_11(x.b, 0, orientation);
+    let _ = crate::actors::effects_aids::scenery_11(x.b, 0, orientation);
 }
 
 /// State 4: final inscription then return to state 0 (substate 1) after 0x80 frames.

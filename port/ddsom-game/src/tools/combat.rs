@@ -1,12 +1,12 @@
-//! Tools: the natives of `crate::services::combat` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::combat` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::services::combat::*;
+use crate::actors::combat::*;
 use crate::Native;
-use crate::core::dispatch::Leftovers;
+use crate::world::Leftovers;
 
 /// 0x260ee: the frame's collisions, for a caller still on the processor (game loop, natives for the tools): the
 /// leftovers D2-D5 go from the register bench to `Combat::leftovers` and back; nothing else is read or written there.

@@ -24,7 +24,7 @@ fn parallax_68k(c: &mut Cpu, b: &mut World, f: Parallax) {
 }
 
 fn creep_68k(c: &mut Cpu, b: &mut World, pixels: u16) {
-    let old = crate::world::mem::rd16(b, c.a[0] + OBJECT_X);
+    let old = crate::hw::mem::rd16(b, c.a[0] + OBJECT_X);
     let x = creep(b, Obj(c.a[0]), pixels);
     // add.w (X), then move.w (N, Z, V, C)
     crate::tools::ops::add(c, pixels as u32, old as u32, Size::Word);
@@ -67,7 +67,7 @@ pub(crate) const CREEP_3: Native = Native {
 /// the window `[camera + 0x30, camera + 0x70]` (at most 6 pixels per frame). Transcribed
 /// instruction by instruction: the routines that follow reread D2, D4-D6 and the flags.
 fn follow_players_y(c: &mut Cpu, b: &mut World) {
-    use crate::world::mem::{rd16, rd8, set_low_word, wr16, A5};
+    use crate::hw::mem::{rd16, rd8, set_low_word, wr16, A5};
     use crate::tools::ops::cc;
     c.d[6] = 0; // maximum depth of the players
     c.d[5] = u32::MAX; // minimum

@@ -4,7 +4,7 @@ use crate::actors::families::shell::vars;
 use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x16fbf4);
-const SOUND_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_330;
+const SOUND_LAND: crate::services::sound::Sound = crate::services::sound::CMD_330;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     guarded(x, state)
@@ -29,7 +29,7 @@ fn state<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
-                crate::hw::sound::play(x.b, SOUND_LAND, x.o);
+                crate::services::sound::play(x.b, SOUND_LAND, x.o);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x20);
                 ai_start(x, ANIMS.0, 1);
             }

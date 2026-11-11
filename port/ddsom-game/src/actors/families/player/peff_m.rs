@@ -3,17 +3,17 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::{rd16, wr16};
+use crate::hw::mem::{rd16, wr16};
 use crate::world::objects::Obj;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, byte, long, Aligned};
 
-const SFX_BITE: crate::hw::sound::Sound = crate::hw::sound::CMD_16C;
+const SFX_BITE: crate::services::sound::Sound = crate::services::sound::CMD_16C;
 const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bc346);
 const SPEEDS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1c7836);
 /// Table of collision box frames (one pointer per box set).
@@ -278,7 +278,7 @@ mod pet {
             x.set16(Obj::VZ, 0x400);
             x.set16(Obj::AZ, -0x40i16 as u16);
             let target = x.linked(TARGET);
-            let angle = crate::services::aids::direction_to(x.b, x.o, target);
+            let angle = crate::actors::aids::direction_to(x.b, x.o, target);
             x.set8(Obj::SPEED_INDEX, angle);
             flip_by_angle(x);
             x.anim(ANIMS.0, 0xa);
@@ -386,7 +386,7 @@ mod pet {
         if left == 0 {
             x.set8(TIMER, 5);
         }
-        crate::hw::sound::play(x.b, SFX_BITE, x.o);
+        crate::services::sound::play(x.b, SFX_BITE, x.o);
         let damage = x.u8(DAMAGE) as u16;
         let hp = target.u16(x.b, Enemy::HP).wrapping_sub(damage);
         target.set_u16(x.b, Enemy::HP, hp);
@@ -496,7 +496,7 @@ mod pet {
 
     /// `0x4f920`: turns one notch toward `toward` (the object the caller leaves in A1).
     fn turn<R: Bench>(x: &mut Cx<'_, R>, toward: Obj) {
-        let diff = crate::services::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(Obj::SPEED_INDEX)) & 0x1f;
+        let diff = crate::actors::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(Obj::SPEED_INDEX)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step) & 0x1f;
         x.set8(Obj::SPEED_INDEX, angle);

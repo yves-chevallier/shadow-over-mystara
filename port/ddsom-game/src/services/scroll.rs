@@ -756,7 +756,7 @@ pub fn update_cameras(b: &mut World) -> [D4Leftovers; 2] {
 /// nobody.
 pub fn update_cameras_in_game(b: &mut World) {
     for (v, m) in update_cameras(b).into_iter().flatten() {
-        let leftovers = &mut crate::core::tasks::table::table(b).leftovers;
+        let leftovers = &mut b.leftovers;
         leftovers.d4 = leftovers.d4 & !m | v;
     }
 }

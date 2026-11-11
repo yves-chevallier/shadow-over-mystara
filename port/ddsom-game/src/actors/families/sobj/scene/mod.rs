@@ -158,7 +158,7 @@ fn v1_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Z, 0xd0_0000);
     x.set32(Obj::Y, 0);
     start(x, 0xee);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_96, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_96, x.o);
 }
 
 fn v1_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -216,7 +216,7 @@ fn v3_init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set16(Element::CHILD, 0);
     start(x, 0xf1);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_97, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_97, x.o);
 }
 
 fn v3_step<R: Bench>(x: &mut Cx<'_, R>) {

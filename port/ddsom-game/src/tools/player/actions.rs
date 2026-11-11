@@ -3,7 +3,7 @@
 
 
 use crate::actors::player::actions::*;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// Address entries of `to_stand` (0x35614, called by `aids.rs`) and `start_stand` (0x35620). The
 /// registers left by the animation (D5, D6, A4) are read by nobody (`DDSOM_POISON=anim`).

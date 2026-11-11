@@ -26,9 +26,9 @@ use crate::screens::modes::{Flow, Sequence};
 use crate::screens::credits::CoinSlot;
 use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::regs;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{Long, PLAYERS};
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::objects::{pools, Obj};
 use crate::screens::scene::Ctx;
 use crate::core::tasks;
@@ -36,9 +36,9 @@ use crate::services::video::{load_grid, Grid};
 
 /// Sounds of the credits screen.
 mod sound {
-    pub const SCREEN_A: crate::hw::sound::Sound = crate::hw::sound::CMD_01;
-    pub const SCREEN_B: crate::hw::sound::Sound = crate::hw::sound::CMD_4E;
-    pub const START: crate::hw::sound::Sound = crate::hw::sound::CMD_4C;
+    pub const SCREEN_A: crate::services::sound::Sound = crate::services::sound::CMD_01;
+    pub const SCREEN_B: crate::services::sound::Sound = crate::services::sound::CMD_4E;
+    pub const START: crate::services::sound::Sound = crate::services::sound::CMD_4C;
 }
 
 /// The game task, and the TEST menu task (which the end of the teardown starts in slot 0).
@@ -170,7 +170,7 @@ impl Step {
             Step::ShutdownAfterClear => shutdown_after_clear(x),
             Step::AfterInitClear => after_init_clear(x),
             Step::Sequence(seq, k) => sequence(x, seq, k + 1),
-            Step::AfterFade => x.subroutine(crate::services::video::black_screen::start, Step::AfterFadeClear),
+            Step::AfterFade => x.subroutine(crate::screens::scene::black_screen::start, Step::AfterFadeClear),
             Step::AfterFadeClear => after_fade_clear(x),
             Step::StartAfterClear(d) => start_after_clear(x, d),
             Step::PulseAfterWait => pulse_after_wait(x),
@@ -220,13 +220,13 @@ fn shutdown(x: &mut Ctx) -> Flow {
     var::FLAGS.set(x.b, flags);
     var::SCROLL_MODE.set(x.b, 0);
     var::CLEAR_FLAG.set(x.b, 0);
-    x.subroutine(crate::services::video::black_screen::start, Step::ShutdownAfterClear)
+    x.subroutine(crate::screens::scene::black_screen::start, Step::ShutdownAfterClear)
 }
 
 /// End of the teardown: the TEST menu task takes slot 0, the task ends.
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     crate::services::palette::load_all_palettes(x.b);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+    crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
     crate::core::kernel::create_task(x.b, 0, SERVICE_TASK);
     tasks::finish(x)
 }
@@ -260,7 +260,7 @@ fn init(x: &mut Ctx) -> Flow {
     kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
     var::SCROLL_MODE.set(x.b, 0);
     clear_scrolls(x);
-    x.subroutine(crate::services::video::black_screen::start, Step::AfterInitClear)
+    x.subroutine(crate::screens::scene::black_screen::start, Step::AfterInitClear)
 }
 
 fn after_init_clear(x: &mut Ctx) -> Flow {
@@ -299,9 +299,9 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     fading::PAGES.set(x.b, 0xf);
     crate::services::palette::full_brightness(x.b);
     video_on(x);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
-    crate::hw::sound::play_global(x.b, sound::SCREEN_A);
-    crate::hw::sound::play_global(x.b, sound::SCREEN_B);
+    crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
+    crate::services::sound::play_global(x.b, sound::SCREEN_A);
+    crate::services::sound::play_global(x.b, sound::SCREEN_B);
     var::COIN_SOUND.set(x.b, 1);
     display(x)
 }
@@ -510,7 +510,7 @@ fn start_player(x: &mut Ctx, mut d: GameStart, mask: u8) -> Flow {
         d.coin_slot.set_screen_ready(x.b, 1);
         kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
         clear_scrolls(x);
-        return x.subroutine(crate::services::video::black_screen::start, Step::StartAfterClear(d));
+        return x.subroutine(crate::screens::scene::black_screen::start, Step::StartAfterClear(d));
     }
     join(x, d)
 }
@@ -530,8 +530,8 @@ fn start_after_clear(x: &mut Ctx, d: GameStart) -> Flow {
 /// `0x141a6`: the player starts: sound, credit debited, player record created, bookkeeping (`jmp`, which
 /// returns to the caller).
 fn join(x: &mut Ctx, d: GameStart) -> Flow {
-    crate::hw::sound::play_global(x.b, sound::START);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+    crate::services::sound::play_global(x.b, sound::START);
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     let credits = d.coin_slot.credits(x.b).wrapping_sub(d.cost);
     d.coin_slot.set_credits(x.b, credits);
     crate::core::tasks::game::clear_variables(x.b);
@@ -539,6 +539,6 @@ fn join(x: &mut Ctx, d: GameStart) -> Flow {
     Player(d.record).obj().set_u8(x.b, Player::INDEX, d.player);
     let started = var::STARTED.get(x.b) | 1 << (d.player & 7);
     var::STARTED.set(x.b, started);
-    crate::hw::eeprom::count_game(x.b);
+    crate::services::eeprom::count_game(x.b);
     Flow::Done
 }

@@ -127,7 +127,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Boss::ANIM_KIND, 0x20);
             x.set8(Boss::ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_126_226_B);
+            lib::sound(x, crate::services::sound::CMD_126_226_B);
             body(x, 0xb);
         }
         2 => {
@@ -295,9 +295,9 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             var::DEFEAT_BONUS.set(x.b, bar);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
-            lib::sound(x, crate::hw::sound::CMD_83_83);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
+            lib::sound(x, crate::services::sound::CMD_83_83);
             lib::drop_rewards(x);
             x.set8(Enemy::ACTIVE, 2);
             x.set8(Boss17::SLOW, 0);
@@ -343,7 +343,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
-            lib::sound(x, crate::hw::sound::CMD_AA);
+            lib::sound(x, crate::services::sound::CMD_AA);
             x.anim_start(SET_BODY.0, 0x15);
         }
         8 => {

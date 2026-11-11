@@ -2,7 +2,7 @@
 //! fallen (0x38), sitting (0x28), frozen (stepped reaction 0x3b30e), held (0x32).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---- reaction 0x34 (0x3b4c4): violent fall ------------------------------------------------------
@@ -33,7 +33,7 @@ pub(super) fn crash_landing(g: &mut Ctx, p: Player) {
     }
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.sound(crate::hw::sound::LANDING_EFFECT, p);
+    g.sound(crate::services::sound::LANDING_EFFECT, p);
 }
 
 // ---- reaction 0x3e (0x3a62a): thrown far away -------------------------------------------------------
@@ -46,7 +46,7 @@ pub(super) fn hurled_out(g: &mut Ctx, p: Player) -> bool {
         return true;
     }
     let camera = crate::world::objects::cull::camera(g.b);
-    let gap = p.u16(g, Obj::X).wrapping_sub(crate::world::mem::rd16(g.b, camera + 8)).wrapping_sub(32);
+    let gap = p.u16(g, Obj::X).wrapping_sub(crate::hw::mem::rd16(g.b, camera + 8)).wrapping_sub(32);
     gap > 320
 }
 
@@ -102,7 +102,7 @@ pub(super) fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
         next_step(g, p);
         hurt_animation(g, p, anim);
         if effect {
-            g.sound(crate::hw::sound::LANDING_EFFECT, p);
+            g.sound(crate::services::sound::LANDING_EFFECT, p);
         }
         return;
     }
@@ -153,7 +153,7 @@ pub(super) fn shock_start(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::TIMER_6F, 30);
     p.set_u8(g, Player::HITSTOP, 1);
     hurt_animation(g, p, 27);
-    g.sound(crate::hw::sound::CMD_31E_41E_B, p);
+    g.sound(crate::services::sound::CMD_31E_41E_B, p);
 }
 
 /// 0x3ae0e: falls back (without animation).
@@ -411,8 +411,8 @@ pub(super) fn struggle_out(g: &mut Ctx, p: Player) -> bool {
 
 /// Sounds of the reaction: 0xe21a0 (death), 0xe7b3c (hit); 0xb6ba8 (`effects_creators::for_players::type_57`)
 /// creates the step-end effect.
-pub(super) const FROZEN_DEATH_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_A4_BY_CHARACTER;
-pub(super) const FROZEN_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_13E_23E;
+pub(super) const FROZEN_DEATH_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_A4_BY_CHARACTER;
+pub(super) const FROZEN_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_13E_23E;
 /// Comparison bytes of the wait steps (`+0x6c`, `+0x6d`) and animation counter (`+0x1f0`).
 pub(super) const WAIT_LEFT: u32 = 0x6c;
 pub(super) const WAIT_RIGHT: u32 = 0x6d;
@@ -545,7 +545,7 @@ pub(super) fn held(g: &mut Ctx, p: Player) {
         }
     }
     let holder = p.u16(g, HOLDER) as i16 as i32 as u32;
-    if crate::world::mem::rd16(g.b, holder + 4) != HOLDING {
+    if crate::hw::mem::rd16(g.b, holder + 4) != HOLDING {
         break_free(g, p);
     }
 }

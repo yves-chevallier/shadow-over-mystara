@@ -25,7 +25,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::tables::{self, engine_table};
 use crate::Native;
 
@@ -51,7 +51,7 @@ const FALLBACK: u32 = 0x30;
 const TABLE_VARIANTS: u32 = 0x2d656;
 
 fn a5(off: u32) -> u32 {
-    crate::world::mem::A5.wrapping_add(off)
+    crate::hw::mem::A5.wrapping_add(off)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -74,7 +74,7 @@ impl Defaults {
 
 /// Default value block of the current variant.
 fn block_defaults(b: &mut World) -> Defaults {
-    let index = crate::world::mem::rd16(b, crate::world::mem::A5 + ram::VARIANT);
+    let index = crate::hw::mem::rd16(b, crate::hw::mem::A5 + ram::VARIANT);
     let displacement = engine_table!("config/variants").at16(b, index as i16 as u32);
     Defaults(TABLE_VARIANTS.wrapping_add(displacement as i16 as u32))
 }
@@ -293,14 +293,14 @@ fn signature_ok(b: &mut World) -> bool {
 /// default settings failed: the game is then blocked on "EEPROM ERROR" (the task ceded control
 /// for good).
 pub fn initialize(b: &mut World) -> bool {
-    crate::hw::eeprom::all_eeprom(b);
-    let valid = crate::hw::eeprom::read_verify(b) && signature_ok(b);
+    crate::services::eeprom::all_eeprom(b);
+    let valid = crate::services::eeprom::read_verify(b) && signature_ok(b);
     if valid {
         validate(b);
     } else {
         defaults(b);
-        crate::hw::eeprom::all_eeprom(b);
-        if !crate::hw::eeprom::write_verify(b) {
+        crate::services::eeprom::all_eeprom(b);
+        if !crate::services::eeprom::write_verify(b) {
             error(b);
             return false;
         }
@@ -317,8 +317,8 @@ fn init(b: &mut World) {
 fn error(b: &mut World) {
     for k in 0..12 {
         let ch = engine_table!("config/error_message").at8(b, k) as u16;
-        crate::world::mem::wr16(b, CASE_ERROR + 0x80 * k, ch);
-        crate::world::mem::wr16(b, CASE_ERROR + 0x80 * k + 2, 8);
+        crate::hw::mem::wr16(b, CASE_ERROR + 0x80 * k, ch);
+        crate::hw::mem::wr16(b, CASE_ERROR + 0x80 * k + 2, 8);
     }
     crate::core::kernel::block(b, BLOCKED);
 }
@@ -347,17 +347,17 @@ pub fn save(b: &mut World) -> bool {
     for copy in [a5(ram::CONFIG), a5(ram::CONFIG) + FALLBACK] {
         for (byte, variable) in SETTINGS {
             let v = rd8(b, a5(variable));
-            crate::world::mem::wr8(b, copy + byte, v);
+            crate::hw::mem::wr8(b, copy + byte, v);
         }
         for k in 0..SIGNATURE_LEN {
             let v = block.byte(b, SIGNATURE + k);
-            crate::world::mem::wr8(b, copy + SIGNATURE + k, v);
+            crate::hw::mem::wr8(b, copy + SIGNATURE + k, v);
         }
     }
     // the two copies: 0x30 words
-    crate::world::mem::wr16(b, a5(ram::WORDS), 0x2f);
-    crate::world::mem::wr16(b, a5(ram::START), 0);
-    if !crate::hw::eeprom::write_verify(b) {
+    crate::hw::mem::wr16(b, a5(ram::WORDS), 0x2f);
+    crate::hw::mem::wr16(b, a5(ram::START), 0);
+    if !crate::services::eeprom::write_verify(b) {
         error(b);
         return false;
     }

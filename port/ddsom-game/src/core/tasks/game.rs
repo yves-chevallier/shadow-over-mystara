@@ -13,11 +13,11 @@
 //! | `0x1c4b0` | game step ([`Step::Frame`]): call of the phase |
 //!
 //! The step starts at `0x1c4b0` = [`crate::GAME_STEP`], where the reference machine caps the number of steps per frame
-//! (`cps2::StepCap`, tested on the PC); the game counts its steps itself (`no68k::game_step`): a step beyond the
+//! (`cps2::StepCap`, tested on the PC); the game counts its steps itself (`frame::game_step`): a step beyond the
 //! cap is held until the start of the next frame, just after VBLANK (`kernel::Point::StepKept`).
 
 use super::{cede, Wait};
-use crate::world::mem::{rd8, wr32, wr8, A5};
+use crate::hw::mem::{rd8, wr32, wr8, A5};
 use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
 
@@ -53,7 +53,7 @@ impl Step {
             Step::Entry => entry(x),
             Step::Tour => turn(x),
             Step::Frame { d4 } => {
-                super::table::table(x.b).leftovers.d4 = d4;
+                x.b.leftovers.d4 = d4;
                 step(x)
             }
             Step::FrameEnd => {
@@ -124,7 +124,7 @@ fn turn(x: &mut Ctx) -> Flow {
         let count = rd8(x.b, SERVICE_COUNT).wrapping_add(1);
         wr8(x.b, SERVICE_COUNT, if count < SERVICE_PERIOD { count } else { 0 });
         if count >= SERVICE_PERIOD {
-            crate::hw::eeprom::dev_card::play_time(x.b);
+            crate::services::eeprom::dev_card::play_time(x.b);
         }
     }
     wait(x)
@@ -140,7 +140,7 @@ fn wait(x: &mut Ctx) -> Flow {
         return step(x);
     }
     wr8(x.b, FREE_STEPS, 0);
-    let d4 = super::table::table(x.b).leftovers.d4;
+    let d4 = x.b.leftovers.d4;
     cede(x, Wait::Images(1), Step::Frame { d4 })
 }
 
@@ -148,7 +148,7 @@ fn wait(x: &mut Ctx) -> Flow {
 /// the frame end, which returns to the start of the turn.
 fn step(x: &mut Ctx) -> Flow {
     if !crate::core::frame::game_step() {
-        let d4 = super::table::table(x.b).leftovers.d4;
+        let d4 = x.b.leftovers.d4;
         crate::core::kernel::keep_step(x.b, d4);
         return Flow::Yield;
     }

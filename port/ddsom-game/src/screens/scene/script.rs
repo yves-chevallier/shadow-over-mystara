@@ -19,7 +19,7 @@
 use crate::world::World;
 
 use crate::screens::obj;
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 use crate::screens::vars as sv;
 use crate::world::objects::{pools, Obj};
 use crate::screens::scene::var;
@@ -81,7 +81,7 @@ fn script_routine(b: &mut World, routine: u32, arg: u16) {
         0xa8ae8 => {
             effects_creators::set_list(b, arg as u8);
         }
-        0xd40e8 => crate::core::tasks::table::table(b).leftovers.d5 = set_b::spawn_bumpers(b),
+        0xd40e8 => b.leftovers.d5 = set_b::spawn_bumpers(b),
         0xdd12c => small::item_lock_clear(b),
         r => unreachable!("scene script routine {r:#x}: the ROM's scripts only call 0x2a24, 0x2a2a, 0x2a30, 0xa8ae8, 0xd40e8, 0xdd12c"),
     }

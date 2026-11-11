@@ -89,6 +89,7 @@ struct Snapshot {
     qram: Vec<u8>,
     regs: ([u16; 6], [u16; 32], [u16; 32], u16, u16),
     table: Option<crate::core::tasks::table::Table>,
+    leftovers: crate::world::Leftovers,
 }
 
 impl Snapshot {
@@ -105,6 +106,7 @@ impl Snapshot {
             qram: b.hw.qram.clone(),
             regs: (b.hw.output, b.hw.cps_a, b.hw.cps_b, b.hw.objram_bank, b.hw.eeprom_out),
             table: read(b).cloned(),
+            leftovers: b.leftovers,
         }
     }
 }

@@ -27,7 +27,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     let hit = x.u8(Shot::HIT_FLAGS);
     if hit & 0x08 != 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_122_222, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_122_222, x.o);
         return x.free_eshl();
     }
     if hit & 0x20 != 0 {

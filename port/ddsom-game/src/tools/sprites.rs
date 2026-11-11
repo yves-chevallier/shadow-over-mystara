@@ -38,7 +38,7 @@ pub(crate) const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
 /// `rts` if `empty`.
 fn return_if(c: &mut Cpu, b: &mut cps2::Cps2Bus, empty: bool) -> bool {
     if empty {
-        c.pc = crate::world::mem::rd32(b, c.a[7]);
+        c.pc = crate::hw::mem::rd32(b, c.a[7]);
         c.a[7] = c.a[7].wrapping_add(4);
     }
     empty

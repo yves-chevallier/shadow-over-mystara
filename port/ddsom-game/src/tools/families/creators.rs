@@ -8,7 +8,7 @@ use m68k::Cpu;
 use crate::actors::families::creators::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{prog8, rd8, wr8, A5};
+use crate::hw::mem::{prog8, rd8, wr8, A5};
 use crate::tools::prog32;
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
@@ -152,7 +152,7 @@ fn set_5(c: &mut Cpu, b: &mut World) {
 /// 0xd6182: 44 cells of a tile column (A1, step 0x80) filled with 0x00200000 (empty tile).
 fn blank_column(c: &mut Cpu, b: &mut World) {
     for _ in 0..0x2c {
-        crate::world::mem::wr32(b, c.a[1], 0x20_0000);
+        crate::hw::mem::wr32(b, c.a[1], 0x20_0000);
         c.a[1] = c.a[1].wrapping_add(0x80);
     }
     c.d[0] = 0xffff;

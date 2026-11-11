@@ -4,7 +4,7 @@ use crate::world::World;
 
 use crate::world::ops::Size;
 
-use crate::world::mem::{set_low_byte, set_low_word};
+use crate::hw::mem::{set_low_byte, set_low_word};
 use crate::world::objects::pools::Pool;
 use crate::world::objects::Obj;
 
@@ -64,7 +64,7 @@ impl Regs for Pure {
 }
 
 /// Register `n` among the leftovers D2-D5.
-pub(crate) fn leftover(l: &mut crate::core::dispatch::Leftovers, n: usize) -> Option<&mut u32> {
+pub(crate) fn leftover(l: &mut crate::world::Leftovers, n: usize) -> Option<&mut u32> {
     match n {
         2 => Some(&mut l.d2),
         3 => Some(&mut l.d3),
@@ -76,7 +76,7 @@ pub(crate) fn leftover(l: &mut crate::core::dispatch::Leftovers, n: usize) -> Op
 
 /// Code without a bench that keeps by name the leftovers D2-D5 that the original leaves to what follows
 /// (`player::Ctx::leftovers`); the rest is dead.
-impl Regs for crate::core::dispatch::Leftovers {
+impl Regs for crate::world::Leftovers {
     fn allocated(&mut self, b: &mut World, pool: &Pool) -> Option<Obj> {
         pool.alloc(b)
     }

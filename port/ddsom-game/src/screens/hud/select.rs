@@ -7,7 +7,7 @@ use crate::world::ram::Byte;
 use crate::world::World;
 
 use super::{panel, player, var, Slot};
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::objects::Obj;
 
 /// Characters taken (one bit per character and variant): those of the present players, or the one they

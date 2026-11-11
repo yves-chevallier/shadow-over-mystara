@@ -19,7 +19,7 @@ fn main() {
     let (ma, mut mb) = (load(), load());
     let mut ma = ddsom_game::install(ma);
     ddsom_game::set_check(true);
-    ddsom_game::services::combat::enable_coverage();
+    ddsom_game::actors::combat::enable_coverage();
     ddsom_game::install_reference(&mut mb);
     let script = ddsom_game::core::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
@@ -52,7 +52,7 @@ fn main() {
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("--- coverage of the internal routines of combat ---");
-    for (name, n) in ddsom_game::services::combat::coverage() {
+    for (name, n) in ddsom_game::actors::combat::coverage() {
         println!("  {name:34} {n:>9}");
     }
     let errors: u64 = ddsom_game::report().values().map(|s| s.mismatches).sum();

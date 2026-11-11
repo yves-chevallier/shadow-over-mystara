@@ -4,7 +4,7 @@ use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x170468);
 const HOST: u32 = 0x42;
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_35B_45B;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_35B_45B;
 const PHASE: u32 = 0x5a;
 const PHASE_TIMER: u32 = 0x5b;
 const FALL_TIMER: u32 = 0x58;
@@ -49,7 +49,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, speed: u32, dx: u16, dz: u16, vz: u16, lo
     x.add16(Obj::Z, dz);
     x.add32(Obj::Y, 2);
     x.set16(Obj::VZ, vz);
-    crate::hw::sound::play(x.b, SOUND, x.o);
+    crate::services::sound::play(x.b, SOUND, x.o);
     start_phase(x);
 }
 

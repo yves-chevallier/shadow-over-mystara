@@ -21,6 +21,7 @@ pub mod cull;
 pub mod enemy;
 pub mod lists;
 pub mod motion;
+pub mod player;
 pub mod pools;
 pub mod rank;
 
@@ -29,7 +30,7 @@ pub use enemy::Enemy;
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::record::{record, Value};
 use crate::Native;
 

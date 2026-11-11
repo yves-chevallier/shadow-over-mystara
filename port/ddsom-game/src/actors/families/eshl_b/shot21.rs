@@ -13,7 +13,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         0 => init(x),
         2 => active(x),
         _ => {
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_37A, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_37A, x.o);
             x.free_eshl()
         }
     }
@@ -30,7 +30,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Shot21::TIMER, 0x4f);
     x.set8(Shot21::ENDED, 0);
     x.anim_start(ANIMS.0, 2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_379, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_379, x.o);
 }
 
 fn burn<R: Bench>(x: &mut Cx<'_, R>) {

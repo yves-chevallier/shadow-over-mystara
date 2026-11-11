@@ -19,7 +19,7 @@
 //! here (`go`). Animations: 0x172794 (body), 0x1727d4 (attacks), 0x1727e4 (hits received).
 
 use crate::actors::families::cx::Bench;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::data::RomAddr;
 use crate::world::record::record;
 use super::boss_common::*;
@@ -190,7 +190,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(off, v);
     }
     body(x, 4);
-    lib::sound(x, crate::hw::sound::CMD_21);
+    lib::sound(x, crate::services::sound::CMD_21);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------

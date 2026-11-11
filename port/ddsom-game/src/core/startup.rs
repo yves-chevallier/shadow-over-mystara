@@ -28,7 +28,7 @@
 use cps2::{LINES, VBLANK_LINE};
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::core::kernel::Point;
 use crate::world::tables::engine_table;
 use crate::services::video::Layer;
@@ -174,10 +174,10 @@ fn reset(b: &mut World) -> Point {
     if rd16(b, io::CARD) & 0x4000 == 0 {
         wr8(b, a5(var::SPECIAL_CARD), 1);
         // 0x2dc9a (never: bit 14 of the port is set on this board)
-        crate::hw::eeprom::initialize_accounting(b);
+        crate::services::eeprom::initialize_accounting(b);
         // button combination 0x3304 (active low) of IN2 pressed at startup
         if !rd16(b, io::TEST) & 0x3304 == 0x3304 {
-            crate::hw::eeprom::reset_card(b);
+            crate::services::eeprom::reset_card(b);
         }
     }
     // 0x182a: starting palette, then empty cells in the first quarter of the tested GFX RAM

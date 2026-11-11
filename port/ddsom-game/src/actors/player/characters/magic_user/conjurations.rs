@@ -1,7 +1,7 @@
 //! Spells of the magic-user, continued: storm, rain, witch, curse, wave, portal, summon, wall, drain, sacrifice.
 
 use crate::world::objects::Enemy;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use super::*;
 use crate::actors::player::tables::{pc16};
@@ -24,14 +24,14 @@ pub(super) fn storm(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 crate::actors::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 0);
                 crate::world::placement::load_effect_palette(g.b, if step == 2 { crate::world::placement::effect_palette::LIGHT } else { crate::world::placement::effect_palette::NORMAL });
-                g.sound(crate::hw::sound::STORM, p);
-                g.sound(if step == 2 { crate::hw::sound::CMD_181 } else { crate::hw::sound::CMD_180 }, p);
+                g.sound(crate::services::sound::STORM, p);
+                g.sound(if step == 2 { crate::services::sound::CMD_181 } else { crate::services::sound::CMD_180 }, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, if step == 2 { 0xc0 } else { 0xb0 });
                 animation::start_plain(g, p, 0x2a);
-                g.sound(crate::hw::sound::CMD_74, p);
+                g.sound(crate::services::sound::CMD_74, p);
             }
         }
         4 | 0xc => {
@@ -80,13 +80,13 @@ pub(super) fn rain(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::rain_glow(g, p, 0);
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::NORMAL);
-                sounds(g, p, &[crate::hw::sound::CMD_F6, crate::hw::sound::CMD_17A_B]);
+                sounds(g, p, &[crate::services::sound::CMD_F6, crate::services::sound::CMD_17A_B]);
             }
             if countdown(g, p) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x60);
                 animation::start_plain(g, p, 0x34);
-                g.sound(crate::hw::sound::CMD_79, p);
+                g.sound(crate::services::sound::CMD_79, p);
             }
         }
         4 => {
@@ -99,7 +99,7 @@ pub(super) fn rain(g: &mut Ctx, p: Player) {
                 }
                 spawn::rain_glow(g, p, 1);
                 spawn::rain(g, p);
-                g.sound(crate::hw::sound::CMD_17C, p);
+                g.sound(crate::services::sound::CMD_17C, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -131,8 +131,8 @@ pub(super) fn witch(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Player::RECOGNIZERS + 0x34, 0);
                 p.set_u16(g, field::TIMER, 0x2c);
                 animation::start_plain(g, p, 0x18);
-                g.sound(crate::hw::sound::CMD_F6, p);
-                g.sound(crate::hw::sound::CMD_17D, p);
+                g.sound(crate::services::sound::CMD_F6, p);
+                g.sound(crate::services::sound::CMD_17D, p);
                 return;
             }
             if p.u16(g, field::TIMER) == 0x13 && !is_cancelled(g, p) {
@@ -147,8 +147,8 @@ pub(super) fn witch(g: &mut Ctx, p: Player) {
                 let (timer, anim) = if p.u8(g, Player::ACTION_COUNT) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
                 p.set_u16(g, field::TIMER, timer);
                 animation::start_plain(g, p, anim);
-                g.sound(crate::hw::sound::CMD_7A, p);
-                g.sound(crate::hw::sound::CMD_17E, p);
+                g.sound(crate::services::sound::CMD_7A, p);
+                g.sound(crate::services::sound::CMD_17E, p);
                 return;
             }
             if is_cancelled(g, p) {
@@ -199,13 +199,13 @@ pub(super) fn curse(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x30);
                 animation::start_plain(g, p, 0x2a);
-                g.sound(crate::hw::sound::CMD_7B, p);
+                g.sound(crate::services::sound::CMD_7B, p);
             }
         }
         4 => {
             animation::step(g, p);
             if p.u16(g, field::TIMER) == 0x18 {
-                g.sound(crate::hw::sound::CMD_196, p);
+                g.sound(crate::services::sound::CMD_196, p);
             }
             if countdown(g, p) {
                 let timer = by_level(g, p, CURSE_DURATIONS);
@@ -233,12 +233,12 @@ pub(super) fn wave(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x30);
                 animation::start_plain(g, p, 0x41);
-                g.sound(crate::hw::sound::CMD_76, p);
+                g.sound(crate::services::sound::CMD_76, p);
             } else if take_event(g, p) {
                 spawn::wave_bolt(g, p, false);
                 spawn::wave_bolt(g, p, true);
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::LIGHT);
-                g.sound(crate::hw::sound::CMD_179, p);
+                g.sound(crate::services::sound::CMD_179, p);
             } else {
                 animation::step(g, p);
             }
@@ -337,8 +337,8 @@ pub(super) fn portal(g: &mut Ctx, p: Player) {
             crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::NORMAL);
             spawn::portal(g, p, 2);
             animation::start_plain(g, p, 0x30);
-            g.sound(crate::hw::sound::CMD_184, p);
-            g.sound(crate::hw::sound::CMD_F6, p);
+            g.sound(crate::services::sound::CMD_184, p);
+            g.sound(crate::services::sound::CMD_F6, p);
         }
         4 => {
             if !is_cancelled(g, p) {
@@ -348,8 +348,8 @@ pub(super) fn portal(g: &mut Ctx, p: Player) {
                     spawn::portal(g, p, 1);
                     { crate::services::palette::flash(g.b, crate::services::palette::Flash::E); };
                     foes::strike_foes(g, p, &PORTAL_STRIKE);
-                    g.sound(crate::hw::sound::CMD_75, p);
-                    g.sound(crate::hw::sound::CMD_178, p);
+                    g.sound(crate::services::sound::CMD_75, p);
+                    g.sound(crate::services::sound::CMD_178, p);
                 }
             }
             if countdown(g, p) {
@@ -396,9 +396,9 @@ pub(super) fn summon(g: &mut Ctx, p: Player) {
             } else {
                 p.set_u16(g, field::TIMER, 0x168);
                 spawn::summon(g, p);
-                g.sound(crate::hw::sound::CMD_185, p);
+                g.sound(crate::services::sound::CMD_185, p);
             }
-            g.sound(crate::hw::sound::CMD_77, p);
+            g.sound(crate::services::sound::CMD_77, p);
             animation::start_plain(g, p, 0x15);
         }
         4 => {
@@ -438,7 +438,7 @@ pub(super) const WALL_STRIKE: Strike = Strike {
     random_facing: false,
     boosts: &[Boost::Held(0x20, 2), Boost::Held(0x21, 1), Boost::Armor],
     undead_die: true,
-    sound: Some(crate::hw::sound::CMD_186),
+    sound: Some(crate::services::sound::CMD_186),
 };
 
 /// 0x4822a, no. 0x23 (h): fire wall: an effect at the gesture, then fixed damage at the right moment.
@@ -451,7 +451,7 @@ pub(super) fn wall(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::wall_spark(g, p, 0);
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::LIGHT);
-                g.sound(crate::hw::sound::CMD_17A, p);
+                g.sound(crate::services::sound::CMD_17A, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -464,8 +464,8 @@ pub(super) fn wall(g: &mut Ctx, p: Player) {
                 p.set_u16(g, field::TIMER, 0x40);
                 spawn::wall_spark(g, p, 1);
                 animation::start_plain(g, p, 0x2d);
-                g.sound(crate::hw::sound::CMD_78, p);
-                g.sound(crate::hw::sound::CMD_17B, p);
+                g.sound(crate::services::sound::CMD_78, p);
+                g.sound(crate::services::sound::CMD_17B, p);
             }
         }
         4 => {
@@ -502,7 +502,7 @@ pub(super) fn drain(g: &mut Ctx, p: Player) {
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::NORMAL);
                 spawn::portal(g, p, 2);
                 animation::start_plain(g, p, 0x30);
-                g.sound(crate::hw::sound::CMD_184, p);
+                g.sound(crate::services::sound::CMD_184, p);
             }
         }
         4 => {
@@ -511,7 +511,7 @@ pub(super) fn drain(g: &mut Ctx, p: Player) {
                 spawn::portal_glow(g, p);
                 spawn::portal(g, p, 0);
                 spawn::portal_sparks(g, p);
-                g.sound(crate::hw::sound::CMD_7C, p);
+                g.sound(crate::services::sound::CMD_7C, p);
             }
             if countdown(g, p) {
                 next_step(g, p);

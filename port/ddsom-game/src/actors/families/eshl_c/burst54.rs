@@ -5,7 +5,7 @@ use crate::actors::families::shell::tables::{tables, Read};
 const ANIMS: RomAddr = RomAddr(0x1706f6);
 const LINK: u32 = 0x5c;
 const TIMER: u32 = 0x42;
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_366;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_366;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(LINK) == 0 {
@@ -13,7 +13,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
     match x.u8(Obj::STATE) {
         0 => {
-            crate::hw::sound::play(x.b, SOUND, x.o);
+            crate::services::sound::play(x.b, SOUND, x.o);
             x.add8(Obj::STATE, 2);
             x.set8(Base::BOX_SET, 7);
             x.set8(Shot::ATTACK_ID, 0x23);

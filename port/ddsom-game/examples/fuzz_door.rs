@@ -21,7 +21,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 use cps2::Cps2Bus;
-use ddsom_game::world::mem::{rd32, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd32, wr16, wr32, wr8, A5};
 use ddsom_game::core::tasks::table::{self, Resume, Next};
 use m68k::Cpu;
 
@@ -89,7 +89,7 @@ fn calls(c: &mut Cpu, b: &mut Cps2Bus, address: u32) {
 /// Differences between the two memories (outside the ignored zone), and between A0 / D7.
 fn gaps(c1: &Cpu, b1: &Cps2Bus, c2: &Cpu, b2: &Cps2Bus) -> Vec<String> {
     let mut d = Vec::new();
-    ddsom_game::world::mem::diff_bus(b1, b2, IGNORED, &mut d);
+    ddsom_game::hw::mem::diff_bus(b1, b2, IGNORED, &mut d);
     if c1.a[0] != c2.a[0] {
         d.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c2.a[0]));
     }
@@ -171,7 +171,7 @@ fn principal() {
                 wr8(&mut b, p, rng.among(&[0, 1, 1, 2]));
                 for (field, door_field, range_) in [(8u32, 8u32, 0x30u32), (0x10, 0x10, 0x20)] {
                     let gap = (rng.next() % (4 * range_)) as u16;
-                    let v = ddsom_game::world::mem::rd16(&mut b, door + door_field).wrapping_add(gap).wrapping_sub(2 * range_ as u16);
+                    let v = ddsom_game::hw::mem::rd16(&mut b, door + door_field).wrapping_add(gap).wrapping_sub(2 * range_ as u16);
                     wr16(&mut b, p + field, v);
                 }
             }
@@ -190,7 +190,7 @@ fn principal() {
         for pool in ddsom_game::world::objects::pools::POOLS {
             for i in 0..pool.slots {
                 let o = pool.slot(i).0;
-                if ddsom_game::world::mem::rd8(&mut b, o) != 0 && rng.next().is_multiple_of(3) {
+                if ddsom_game::hw::mem::rd8(&mut b, o) != 0 && rng.next().is_multiple_of(3) {
                     wr8(&mut b, o + 0x40, rng.among(&[0, 1, 2]));
                 }
             }
@@ -232,7 +232,7 @@ fn principal() {
         let step = if fading { resume(&mut c, &mut b) } else { None };
         let d = gaps(&c, &b, &c2, &b2);
         if !d.is_empty() {
-            println!("trial {test} state4={state4} variant {:02x}: before the fade {}", ddsom_game::world::mem::rd8(&mut b2, door + 3), d.join(", "));
+            println!("trial {test} state4={state4} variant {:02x}: before the fade {}", ddsom_game::hw::mem::rd8(&mut b2, door + 3), d.join(", "));
             seen_gaps += 1;
             continue;
         }
@@ -270,7 +270,7 @@ fn principal() {
         }
         let d = gaps(&c, &b, &c2, &b2);
         if !d.is_empty() {
-            println!("trial {test} state4={state4} variant {:02x}: after the fade {}", ddsom_game::world::mem::rd8(&mut b2, door + 3), d.join(", "));
+            println!("trial {test} state4={state4} variant {:02x}: after the fade {}", ddsom_game::hw::mem::rd8(&mut b2, door + 3), d.join(", "));
             seen_gaps += 1;
         }
     }

@@ -2,7 +2,7 @@ use super::*;
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set_b::fields::DoorObj;
 
 const GATE_LOCK: u32 = 0x52;
@@ -15,7 +15,7 @@ const NEAR_Y: u16 = 0x20;
 /// Stays on the processor: the exit fade (`watch`) cedes control (`set::exit_fading`).
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let me = x.o;
-    crate::services::effects_aids::living_players(x.b, me);
+    crate::actors::effects_aids::living_players(x.b, me);
     if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(vars::PAUSED) != 0 {
         return;
     }
@@ -99,7 +99,7 @@ fn enter_zone<R: Bench>(x: &mut Cx<'_, R>) {
     crate::actors::families::scenery::resume_scenery(x, crate::actors::families::scenery::Cameras::Start);
     x.set_a5_u8(vars::FADE_PAGES, 0xf);
     crate::services::palette::full_brightness(x.b);
-    crate::hw::sound::play(x.b, crate::hw::sound::SCENE_MUSIC, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::SCENE_MUSIC, x.o);
     x.set_a5_u16(GATE_LOCK, 0);
     reset_players_after_exit(x);
     crate::actors::families::scenery::place_players(x);
@@ -127,7 +127,7 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(vars::INPUT_MASK, 0xf);
     restore_camera(x);
     let music = x.u16(DoorObj::MUSIC);
-    crate::hw::sound::play_with(x.b, crate::hw::sound::FROM_D4, crate::hw::sound::Source { d4: Some(music as u32), ..Default::default() });
+    crate::services::sound::play_with(x.b, crate::services::sound::FROM_D4, crate::services::sound::Source { d4: Some(music as u32), ..Default::default() });
     for p in players() {
         if p.u8(x.b, pl::ACTIVE) != 0 {
             place(x, p);

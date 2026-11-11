@@ -3,7 +3,7 @@
 
 
 use crate::actors::player::moves::*;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// Natives of the characters' actions 0x12 (table `characters::Slot::Action12`): the Rust function receives
 /// the player (A0); the callers read no register.

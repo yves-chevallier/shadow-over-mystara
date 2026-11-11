@@ -21,7 +21,7 @@ use crate::actors::families::cx::Bench;
 use crate::world::objects::Obj;
 use crate::world::record::record;
 use crate::world::data::RomAddr;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -386,7 +386,7 @@ fn grab_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let hp = p.u16(x.b, f::HP).wrapping_sub(1);
     p.set_u16(x.b, f::HP, hp);
-    lib::sound(x, crate::hw::sound::CMD_341_441);
+    lib::sound(x, crate::services::sound::CMD_341_441);
     lib::hold_seized(x);
 }
 

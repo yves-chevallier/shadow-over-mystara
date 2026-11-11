@@ -9,11 +9,11 @@ use crate::actors::families::effects_creators::*;
 use crate::actors::families::effects_creators::leftovers::Regs;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::set_low_word;
+use crate::hw::mem::set_low_word;
 use crate::world::objects::pools::Pool;
 use crate::world::objects::Obj;
 use crate::regs::d as D;
-use crate::world::mem::set_low_byte;
+use crate::hw::mem::set_low_byte;
 
 /// Declares the natives: `address "name" |c, b, me| body, exits;` (`me` = A0, the creator); each native ends with an
 /// RTS.

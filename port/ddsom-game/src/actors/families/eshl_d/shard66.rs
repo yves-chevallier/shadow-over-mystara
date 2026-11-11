@@ -8,7 +8,7 @@ const OFFSETS: [u32; 6] = [0, 0, 0x20, 0x3c, 0x5c, 0x74];
 const CARRIER: u32 = 0x46;
 const TIMER: u32 = 0x42;
 const RANK: u32 = 0x2f;
-const SFX_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_387_487;
+const SFX_LAND: crate::services::sound::Sound = crate::services::sound::CMD_387_487;
 /// States `+4.w` of the carrier in which the burst stays held.
 const HELD_STATE: u16 = 0x204;
 
@@ -89,7 +89,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 let n = tables().shard66_land_anims.at8(x.b, v) as u32;
                 x.anim_start(ANIMS.0, n as u16);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 4);
-                crate::hw::sound::play(x.b, SFX_LAND, x.o);
+                crate::services::sound::play(x.b, SFX_LAND, x.o);
             }
             blink(x, false);
         }

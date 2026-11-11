@@ -7,7 +7,8 @@ use m68k::Cpu;
 use crate::actors::player::init::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::actors::player::{Ctx, Player};
+use crate::actors::player::Ctx;
+use crate::world::objects::player::Player;
 
 /// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
 /// table, D0 = last weapon number read, doubled if it is in the table).

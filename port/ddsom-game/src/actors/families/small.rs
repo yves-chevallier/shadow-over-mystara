@@ -12,7 +12,7 @@ use crate::hw::video::{palette, regs, Vram};
 use crate::world::objects::pools;
 use crate::world::objects::{Current, Enemy, Obj};
 use crate::world::ops::Size;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{Byte, Long};
 use crate::world::record::record;
 use crate::services::scroll::CAMERA_1;
@@ -152,7 +152,7 @@ pub fn enemy_pair_created(b: &mut World, creator: Obj) -> bool {
 /// D0.w and D1.w of the original: the table index, the counter (exhausted: 0xffff, or the number of the refused shot).
 pub(crate) fn roar_via(r: &mut impl Regs, b: &mut World, creator: Obj, big: bool) {
     let (counts, variant) = if big { (crate::world::tables::engine_table!("small/roar_big"), 0) } else { (crate::world::tables::engine_table!("small/roar_small"), 1) };
-    let i = crate::services::ai::RANK.get(b) >> 1;
+    let i = crate::world::objects::rank::RANK.get(b) >> 1;
     r.d_word(0, i);
     let total = counts.at8(b, i as u32);
     r.d(1, total as u32);
@@ -406,7 +406,7 @@ pub(crate) fn item_lock_clear(b: &mut World) {
 /// 0x3baea: player's `+0x1f0`, from table `small/undead_counts` indexed by the quarter of the rank. Returns the
 /// index (the D0.w that the original leaves, which a caller reads as the variant of the effect it creates).
 pub(crate) fn player_table_byte(b: &mut World, player: Obj) -> u16 {
-    let i = crate::services::ai::RANK.get(b) >> 2;
+    let i = crate::world::objects::rank::RANK.get(b) >> 2;
     let v = crate::world::tables::engine_table!("small/undead_counts").at8(b, i as u32);
     Player::of(player).set_undead_left(b, v);
     i

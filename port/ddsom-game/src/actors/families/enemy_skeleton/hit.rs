@@ -44,7 +44,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        lib::sound(x, crate::hw::sound::CMD_350_450);
+        lib::sound(x, crate::services::sound::CMD_350_450);
         let freeze = x.u8(Enemy::STUN) >> 1;
         x.set8(f::FREEZE, freeze);
         x.set16(Skeleton::TIMER, 0xf);

@@ -312,7 +312,7 @@ pub fn pick_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// The enemy is grabbed by a player (0x2810).
 pub fn grabbed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    !crate::services::aids::grabbed(x.b, x.o).z()
+    !crate::actors::aids::grabbed(x.b, x.o).z()
 }
 
 /// The enemy's target (player designated by `+0x50`), or `None` if it has none.

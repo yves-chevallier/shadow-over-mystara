@@ -2,7 +2,7 @@ use super::*;
 use util::*;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::WeaponObj;
 
 const PROGRESS: u32 = 0x556;

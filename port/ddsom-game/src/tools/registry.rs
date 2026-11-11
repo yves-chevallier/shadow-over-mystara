@@ -10,7 +10,7 @@ use crate::*;
 /// The natives of the game that only the original code calls (by address): memory only (`Body::Memory`).
 const MEMORY: &[Native] = &[
     services::sprites::RESET_LISTS,
-    hw::sound::SEND_TO_Z80,
+    services::sound::SEND_TO_Z80,
     screens::credits::READ_COIN_SLOTS,
     core::config::DEFAULTS,
     core::config::VALIDATE,
@@ -79,7 +79,7 @@ pub fn game_natives() -> impl Iterator<Item = &'static Native> {
         .chain(screens::scene::natives())
         .chain(screens::modes::natives())
         .chain(core::tasks::natives())
-        .chain(services::aids::NATIVES)
+        .chain(actors::aids::NATIVES)
         .chain(screens::hud::NATIVES)
 }
 

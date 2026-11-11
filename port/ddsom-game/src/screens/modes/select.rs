@@ -24,9 +24,9 @@ use crate::screens::scene::fading;
 use crate::core::dispatch;
 use crate::actors::families::effects_creators::{banner, element_d_interface};
 use crate::hw::video::{palette, SCROLL2, SCROLL3};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{Byte, Long, Word};
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::objects::{pools, Obj};
 use crate::screens::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
@@ -84,7 +84,7 @@ mod var {
 /// ROM tables: variant bytes per character (code), announcements, cursor moves (data). The
 /// initialisation routines of the four players (0x1d0f6) are those of `player::init::initialize`.
 mod table {
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
     pub const VARIANT: Rom = Rom::at(0x1d118);
     pub const BANNERS: Rom = Rom::at(0x1d3aa);
     pub const CURSOR_DOWN_DELTAS: Rom = Rom::at(0x1d6d2);
@@ -215,7 +215,7 @@ fn step_0(x: &mut Ctx) -> Flow {
         Long(var::CHOICES + off).set(x.b, 0xffff_ffff);
     }
     crate::screens::hud::forget_displayed(x.b);
-    crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_02);
+    crate::services::sound::play_global(x.b, crate::services::sound::CMD_02);
     var::COUNTDOWN.set(x.b, 0x203c);
     var::COUNTDOWN.set(x.b, COUNTDOWN_START);
     objects_0(x)
@@ -459,7 +459,7 @@ fn cursor(x: &mut Ctx, a0: Obj) {
         return;
     }
     dedupe(x, a0);
-    let d1 = crate::hw::inputs::player_inputs(x.b, a0.0).fresh;
+    let d1 = crate::services::inputs::player_inputs(x.b, a0.0).fresh;
     let mut d3 = a0.u8(x.b, Player::CHARACTER) as u32;
     let slot = a0.u8(x.b, Player::INDEX);
     let mut d0: u8 = 0;
@@ -523,7 +523,7 @@ fn cursor(x: &mut Ctx, a0: Obj) {
         // 0x2e630: character stat (development card only). Original glitch: it receives D0.w, of which only the low
         // byte is the choice; the high byte is left over from previous calls: taken as zero (the development card is
         // never there, code-mort.md)
-        crate::hw::eeprom::stat_chosen_character(x.b, (d3 & 0xff) as u16);
+        crate::services::eeprom::stat_chosen_character(x.b, (d3 & 0xff) as u16);
         d3 |= 0x80;
         var::LOCKED_FLAG.set(x.b, 1);
     }
@@ -656,7 +656,7 @@ fn step_6(x: &mut Ctx) -> Flow {
             CHARACTER_5_FLAG.set(x.b, 1);
         }
     }
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 0x1c });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0x1c });
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 0xf);
     x.subroutine(crate::core::tasks::fading::descent, Step::Step6Faded)
@@ -668,8 +668,8 @@ fn step_6(x: &mut Ctx) -> Flow {
 fn step_8(x: &mut Ctx) -> Flow {
     let s = var::STEP.get(x.b).wrapping_add(2);
     var::STEP.set(x.b, s);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff06 { lock: 0xff, line: 4 });
-    crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_2A);
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff06 { lock: 0xff, line: 4 });
+    crate::services::sound::play_global(x.b, crate::services::sound::CMD_2A);
     two_blocks(x, Grid::Layer2, 0x208, LAYER2_BLOCKS);
     two_blocks(x, Grid::Layer3, 0x14a, LAYER3_BLOCKS);
     let mut count = 0u8;
@@ -785,7 +785,7 @@ fn step_e(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 0x1c });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0x1c });
     let phase = var::PHASE.get(x.b).wrapping_add(4);
     var::PHASE.set(x.b, phase);
     var::STEP.set(x.b, 0);

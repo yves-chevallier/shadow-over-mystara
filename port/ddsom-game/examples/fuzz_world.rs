@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 

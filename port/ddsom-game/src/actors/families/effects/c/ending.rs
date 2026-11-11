@@ -150,7 +150,7 @@ pub(super) fn ending_piece<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 if vars::FROZEN.get(x.b) != 0 && rd8(x.b, floater::STEP) == 0xc {
                     x.add8(f::SUB_STATE, 2);
-                    crate::hw::sound::play(x.b, crate::hw::sound::CMD_34C_44C_B, x.o);
+                    crate::services::sound::play(x.b, crate::services::sound::CMD_34C_44C_B, x.o);
                 }
             }
             2 => {
@@ -216,9 +216,9 @@ pub(super) fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            let (delay, sound) = if v == 0 { (0x168, crate::hw::sound::CMD_9D) } else { (0x10e, crate::hw::sound::CMD_8F) };
+            let (delay, sound) = if v == 0 { (0x168, crate::services::sound::CMD_9D) } else { (0x10e, crate::services::sound::CMD_8F) };
             x.set16(SceneTimer::DELAY, delay);
-            crate::hw::sound::play(x.b, sound, x.o);
+            crate::services::sound::play(x.b, sound, x.o);
         }
         2 => {
             if countdown(x, 0x30) {
@@ -227,7 +227,7 @@ pub(super) fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
             let music = if v == 0 { 0x15 } else { 0x14 };
             // Original glitch: D4 = the music stays for the following handlers (`dispatch::Leftovers`)
             *x.c.d4() = music;
-            crate::hw::sound::play_with(x.b, crate::hw::sound::FROM_D4, crate::hw::sound::Source { object: Some(x.o), d4: Some(music), ..Default::default() });
+            crate::services::sound::play_with(x.b, crate::services::sound::FROM_D4, crate::services::sound::Source { object: Some(x.o), d4: Some(music), ..Default::default() });
             free(x);
         }
         _ => free(x),
@@ -274,7 +274,7 @@ pub(super) fn finale_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB_STATE, 4);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_8A, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_8A, x.o);
             vars::FADE_DELAY.set(x.b, 1);
             vars::FADE_PAGES.set(x.b, 8);
             vars::BLOCK_SOURCE_2_WORD.set(x.b, 0xf20);

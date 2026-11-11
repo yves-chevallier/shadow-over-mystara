@@ -12,7 +12,7 @@ use super::arrival::stand_when_done;
 use super::*;
 use crate::world::objects::Current;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// ROM table: duration and shot key of the breath flames.
 const FLAME_SCRIPT: &str = "hellhound/flame_script";
@@ -21,7 +21,7 @@ const FLAME_SCRIPT: &str = "hellhound/flame_script";
 fn bite_effect<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
     crate::actors::families::eshl_creators::shot_6(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o, kind as u8);
-    lib::sound(x, crate::hw::sound::CMD_321_421);
+    lib::sound(x, crate::services::sound::CMD_321_421);
 }
 
 /// 0x61c88: prepares the wait (look 0, animation 0).
@@ -152,7 +152,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         }
         6 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                lib::sound(x, crate::hw::sound::CMD_30F_40F);
+                lib::sound(x, crate::services::sound::CMD_30F_40F);
                 if let Some(player) = lib::attack_hits_a_player(x, 3) {
                     return lib::seize_player(x, player, 0);
                 }
@@ -326,7 +326,7 @@ fn flame_tick<R: Bench>(x: &mut Cx<'_, R>, both: bool) -> bool {
         return false;
     }
     if both {
-        lib::sound(x, crate::hw::sound::CMD_35B_45B);
+        lib::sound(x, crate::services::sound::CMD_35B_45B);
     }
     crate::actors::families::eshl_creators::sweeping_8(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
     true
@@ -752,7 +752,7 @@ fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }
-    lib::sound(x, crate::hw::sound::CMD_341_441);
+    lib::sound(x, crate::services::sound::CMD_341_441);
     let hp = victim.u16(x.b, f::HP).wrapping_sub(3);
     victim.set_u16(x.b, f::HP, hp);
     if (hp as i16) <= 0 {
@@ -764,6 +764,6 @@ fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
 
 fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    victim.set_u8(x.b, crate::actors::player::Player::TIMER_6F, 1);
+    victim.set_u8(x.b, crate::world::objects::player::Player::TIMER_6F, 1);
     lib::release_player(x, victim);
 }

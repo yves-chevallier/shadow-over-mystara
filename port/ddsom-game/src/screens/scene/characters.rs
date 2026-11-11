@@ -6,7 +6,7 @@
 //! Six sub-states (byte `+3` of the block, step of 2); several cede control to the scheduler.
 
 use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
-use crate::actors::player::Player as PlayerRecord;
+use crate::world::objects::player::Player as PlayerRecord;
 use super::bonus::{dispatch, fade};
 use crate::services::video::{clear_layer, Layer};
 use super::Ctx;
@@ -26,9 +26,9 @@ mod v {
     pub const TIMER: Byte = Byte(0xff_2a58);
 }
 
-const DISPATCH: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf64a0);
+const DISPATCH: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf64a0);
 /// Mask of the characters concerned, per scene (bytes relative to the PC).
-const MASKS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf672e);
+const MASKS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf672e);
 
 mod at {
     pub const FADED_OUT: crate::world::data::RomAddr = crate::world::data::RomAddr(0xf64d4);

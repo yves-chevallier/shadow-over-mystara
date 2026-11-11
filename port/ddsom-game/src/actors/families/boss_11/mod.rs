@@ -23,7 +23,7 @@ use crate::world::objects::Obj;
 use crate::world::record::record;
 use super::boss_common::*;
 use super::cx::handlers;
-use crate::world::mem::{rd16, rd8, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr8, A5};
 
 mod attacks;
 mod behave;
@@ -341,7 +341,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::BOX_SET, 0x2c);
     x.set8(Boss::SHOT, 0x3f);
     x.set8(Enemy::AI_ROW_8E, 3);
-    lib::sound(x, crate::hw::sound::CMD_20);
+    lib::sound(x, crate::services::sound::CMD_20);
     lib::empty_popups(x);
     lib::clear_popup(x);
     var::BOSS_FIGHT.set(x.b, 1);

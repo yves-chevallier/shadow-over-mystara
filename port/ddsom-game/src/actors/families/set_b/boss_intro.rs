@@ -47,7 +47,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             if camera_x(x) >= 0x100 {
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9A_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
                 x.add8(SetObj::SUBSTATE, 2);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x1e);
             }
@@ -73,14 +73,14 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if countdown(x) {
                 x.add8(SetObj::SUBSTATE, 2);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9B_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9B_B, x.o);
             }
         }
         12 => {
             if camera_x(x) >= 0x200 {
                 next(x, 0x32);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x32);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9A_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
             }
         }
         14 => {
@@ -94,14 +94,14 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         18 => {
             if countdown(x) {
                 x.add8(SetObj::SUBSTATE, 2);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9B_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9B_B, x.o);
             }
         }
         20 => {
             if camera_x(x) >= 0x2b0 {
                 next(x, 0x28);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x50);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9A_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
             }
         }
         22 => spawn_boss(x),
@@ -109,7 +109,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             let n = x.u8(BLAST).wrapping_sub(1);
             x.set8(BLAST, n);
             if n == 0 {
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_9B_B, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_9B_B, x.o);
             }
             let n = x.u8(STEP).wrapping_sub(1);
             x.set8(STEP, n);
@@ -127,12 +127,12 @@ fn freeze_and_show<R: Bench>(x: &mut Cx<'_, R>) {
     show_message(x, 7);
 }
 
-/// Step 16: every 20 frames a hit of crate::hw::sound::CMD_351_451; when `+0x42` is a multiple of 4 a random explosion; at 0, end.
+/// Step 16: every 20 frames a hit of crate::services::sound::CMD_351_451; when `+0x42` is a multiple of 4 a random explosion; at 0, end.
 fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(BLAST).wrapping_sub(1);
     x.set8(BLAST, n);
     if (n as i8) < 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_351_451, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_351_451, x.o);
         x.set8(BLAST, 0x14);
     }
     if x.u8(STEP) & 3 == 0 {
@@ -166,7 +166,7 @@ fn spawn_boss<R: Bench>(x: &mut Cx<'_, R>) {
     for n in (0..=0x1d).rev() {
         crate::actors::families::effects_creators::debris_rain(x.b, x.o, n, 0);
     }
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_9C, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_9C, x.o);
     x.set_a5_u8(vars::FADE_PAGES, 0xf);
     crate::services::palette::full_brightness(x.b);
     let Some(boss) = x.alloc(&pools::BOSS) else { return };

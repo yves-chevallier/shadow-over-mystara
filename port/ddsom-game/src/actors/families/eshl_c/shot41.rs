@@ -27,7 +27,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(Obj::STATE, 2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_354, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_354, x.o);
     x.set8(Base::BOX_SET, 7);
     x.set8(Shot::ATTACK_POWER, 5);
     x.set8(Shot::ATTACK_ID, 0x1f);
@@ -39,7 +39,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::Y, 0xffff);
     let t = target(x);
     let (tx, ty) = (t.u16(x.b, TARGET_X), t.u16(x.b, TARGET_Y));
-    let dir = crate::services::aids::direction_from(x.b, x.o, (tx, ty));
+    let dir = crate::actors::aids::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, dir);
     x.select_speed(&crate::world::objects::motion::SPEEDS_B, 0x41);
     let t = target(x);

@@ -2,7 +2,7 @@
 //! See `docs/families/joueur.md`.
 
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -46,7 +46,7 @@ mod beam {
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1b5ab8);
     const OFFSETS: u32 = 0x4b2dc;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_170;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_170;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -106,7 +106,7 @@ mod beam {
             x.add32(Obj::Y, 0xffff_0000);
         }
         x.anim(ANIMS.0, 1);
-        crate::hw::sound::play(x.b, SFX, x.o);
+        crate::services::sound::play(x.b, SFX, x.o);
     }
 }
 

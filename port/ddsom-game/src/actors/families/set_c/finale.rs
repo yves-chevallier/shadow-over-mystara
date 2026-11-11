@@ -9,7 +9,7 @@
 
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::Cx;
-use crate::world::mem::wr16;
+use crate::hw::mem::wr16;
 use crate::world::objects::Obj;
 
 use crate::world::objects::pools;
@@ -146,8 +146,8 @@ fn velocity(speed: u16) -> u32 {
 /// Variant 0 (0xce066): initializes two routines (0x3525c, 0x1ac86), then, from time to time (rng
 /// and frame parity), toggles `+0x43` and launches one of two sound/video routines.
 fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
-    const ON: crate::hw::sound::Sound = crate::hw::sound::CMD_1FB;
-    const OFF: crate::hw::sound::Sound = crate::hw::sound::CMD_1FD;
+    const ON: crate::services::sound::Sound = crate::services::sound::CMD_1FB;
+    const OFF: crate::services::sound::Sound = crate::services::sound::CMD_1FD;
     const FLASH: u32 = 0x4ba;
     match x.u8(Obj::STATE) {
         0 => {
@@ -172,7 +172,7 @@ fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_a5_u16(FLASH, 0x100);
             let was_on = x.bit(ScrollScreenObj::FLASH, 0);
             x.set_bit(ScrollScreenObj::FLASH, 0, !was_on);
-            crate::hw::sound::play_global(x.b, if was_on { ON } else { OFF });
+            crate::services::sound::play_global(x.b, if was_on { ON } else { OFF });
         }
         _ => free(x),
     }

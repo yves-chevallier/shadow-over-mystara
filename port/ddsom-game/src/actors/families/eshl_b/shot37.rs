@@ -68,7 +68,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Shot37::TIMER, 0x19);
                 *x.c.d2() &= 0xffff_0000;
                 *x.c.d3() &= 0xffff_0000;
-                let impact = crate::services::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
+                let impact = crate::actors::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
                 // Original glitch: the debris variant is the D1.b that the shock (0xb10c8) leaves: the high byte
                 // of its setting, or the low byte when the shock is not created (scene 41, pool full).
                 let variant = if impact.is_some() { 2 } else { 1 };

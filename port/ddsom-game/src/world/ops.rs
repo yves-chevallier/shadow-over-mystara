@@ -124,3 +124,18 @@ impl Alu for Registers {
         self.c
     }
 }
+
+/// `d - s - X` in BCD on a byte: result and carry (that of `sbcd`).
+pub(crate) fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
+    let (d, s, x) = (d as i32, s as i32, x as i32);
+    let unadjusted = d - s - x;
+    let mut adjust = 0;
+    if (d & 0x0f) - (s & 0x0f) - x < 0 {
+        adjust |= 0x06;
+    }
+    let borrow = unadjusted < 0 || unadjusted - adjust < 0;
+    if unadjusted < 0 {
+        adjust |= 0x60;
+    }
+    ((unadjusted - adjust) as u8, borrow)
+}

@@ -5,7 +5,7 @@
 use crate::world::World;
 
 use crate::world::objects::{Enemy, Obj};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{self, PLAYERS_FROZEN};
 use crate::Native;
 

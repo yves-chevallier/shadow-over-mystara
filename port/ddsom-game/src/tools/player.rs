@@ -14,7 +14,7 @@ use crate::world::World;
 use m68k::Cpu;
 
 use crate::actors::player::*;
-use crate::core::dispatch::Leftovers;
+use crate::world::Leftovers;
 
 /// Runs the players' code `f` for a caller still on the processor (game loop, natives for the tools): the leftovers
 /// D2-D5 go from the register bench to `Ctx::leftovers` and back; nothing else is read or written there.

@@ -11,7 +11,7 @@
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
-use crate::world::mem::rd32;
+use crate::hw::mem::rd32;
 use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::checks::item_curse;
@@ -26,7 +26,7 @@ use crate::actors::player::external as ext;
 /// Identifiers (original addresses) of the routines reached: player effects and sounds of the fighter.
 mod rom {
     /// Sounds.
-    pub const SOUND_SPIN_B: crate::hw::sound::Sound = crate::hw::sound::CMD_140_240;
+    pub const SOUND_SPIN_B: crate::services::sound::Sound = crate::services::sound::CMD_140_240;
 }
 
 /// Fighter table (ROM data): jump speeds (four words per jump type).

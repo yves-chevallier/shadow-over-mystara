@@ -102,7 +102,7 @@ fn green_enter_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Enemy::GRAVITY, 0);
     set_anim(x, 0, 4);
     crate::actors::families::effects_creators::scenery_3(x.b, x.o);
-    lib::sound(x, crate::hw::sound::CMD_38F_48F);
+    lib::sound(x, crate::services::sound::CMD_38F_48F);
 }
 
 fn green_descend<R: Bench>(x: &mut Cx<'_, R>) {
@@ -151,7 +151,7 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Boss19::BUBBLES, 4);
     x.set8(Boss19::BUBBLE_TICK, 0);
     open_list(x, Fade::DescentSteps);
-    lib::sound(x, crate::hw::sound::CMD_311_411_B);
+    lib::sound(x, crate::services::sound::CMD_311_411_B);
 }
 
 /// 0x8fe68: one more bubble every 15 to 78 frames.
@@ -165,7 +165,7 @@ fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let r = ((x.random() as u32) & 0x3f) as u8 + 0xf;
         x.set8(Boss19::BUBBLE_TICK, r);
         sub8(x, Boss19::BUBBLES, 1);
-        lib::sound(x, crate::hw::sound::CMD_5F);
+        lib::sound(x, crate::services::sound::CMD_5F);
     }
 }
 
@@ -175,7 +175,7 @@ fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
         t if t < 0x64 => { crate::actors::families::effects_creators::scenery_10(x.b, x.o); }
         0x64 => {
             lib::shake_58(x, 0xa0);
-            lib::sound(x, crate::hw::sound::CMD_311_411_B);
+            lib::sound(x, crate::services::sound::CMD_311_411_B);
             crate::actors::families::effects_creators::scenery_10(x.b, x.o);
         }
         _ => {}
@@ -229,7 +229,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB2, 2);
     var::SUB_STEP.set(x.b, 6);
-    lib::sound(x, crate::hw::sound::CMD_311_411_B);
+    lib::sound(x, crate::services::sound::CMD_311_411_B);
     x.set32(Enemy::VX_LONG, 0);
     x.set32(Enemy::VZ_LONG, 0);
     x.set32(Enemy::VY_LONG, 0);

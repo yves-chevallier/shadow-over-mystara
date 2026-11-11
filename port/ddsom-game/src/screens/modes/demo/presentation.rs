@@ -80,7 +80,7 @@ pub(super) fn p0_images(x: &mut Ctx) -> Flow {
     let end = crate::services::video::load_grid(x.b, crate::services::video::Grid::Layer2, first, crate::hw::video::SCROLL2.0 + 0x1000);
     crate::services::video::load_grid(x.b, crate::services::video::Grid::Layer2, second, end.destination);
     if rd_state(x, f::PRESENT_KIND) != 0 {
-        crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 0 });
+        crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0 });
         if let Ok(Obj(set)) = set_15_pure(x.b, 4) {
             let character = rd_state(x, f::PRESENT_CHARACTER);
             Obj(set).set_u8(x.b, obj::INDEX, character);

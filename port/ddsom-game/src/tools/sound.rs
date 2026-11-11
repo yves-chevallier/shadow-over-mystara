@@ -1,15 +1,15 @@
-//! Tools: the natives of `crate::hw::sound` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::sound` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
-use crate::hw::sound::*;
+use crate::services::sound::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use std::sync::OnceLock;
-use crate::world::mem::{rd16, rd32};
+use crate::hw::mem::{rd16, rd32};
 use crate::world::objects::Obj;
 
 /// Read and write heads of the sound queue.

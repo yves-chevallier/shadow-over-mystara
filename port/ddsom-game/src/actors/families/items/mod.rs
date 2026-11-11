@@ -9,7 +9,7 @@
 use crate::actors::families::shell::records::Base;
 use crate::world::World;
 
-use crate::world::mem::wr32;
+use crate::hw::mem::wr32;
 use crate::world::objects::pools;
 use crate::world::objects::Obj;
 
@@ -56,7 +56,7 @@ const SHADOWS: u8 = 0x3c;
 /// Subroutines not rewritten.
 mod call {
     /// Common end of the potion effects.
-    pub const END_EFFECT: crate::hw::sound::Sound = crate::hw::sound::CMD_132_232;
+    pub const END_EFFECT: crate::services::sound::Sound = crate::services::sound::CMD_132_232;
 }
 
 /// `0xae3ec`: sparkle (EFFCT 15) above the object, according to `SHIMMER`.
@@ -95,7 +95,7 @@ fn airborne<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
 /// Marks the collectible object `+0x5d` as picked up.
 fn mark_pickup<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let index = o.u8(ctx.b, field::INDEX) as u32;
-    crate::world::mem::wr8(ctx.b, vars::PICKED.0 + index, 1);
+    crate::hw::mem::wr8(ctx.b, vars::PICKED.0 + index, 1);
 }
 
 /// Brings the object back into the visible area: at most as high as `camera.y + 0x20`, between `camera.x + 0x18` and

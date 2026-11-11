@@ -4,8 +4,8 @@ use crate::actors::families::shell::vars;
 use crate::actors::families::shell::records::{Host, view};
 
 const ANIMS: RomAddr = RomAddr(0x16f504);
-const SOUND_SPAWN: crate::hw::sound::Sound = crate::hw::sound::CMD_334_434;
-const SOUND_HIT: crate::hw::sound::Sound = crate::hw::sound::CMD_138;
+const SOUND_SPAWN: crate::services::sound::Sound = crate::services::sound::CMD_334_434;
+const SOUND_HIT: crate::services::sound::Sound = crate::services::sound::CMD_138;
 const SEARCH: u8 = 0;
 const HUNT: u8 = 2;
 
@@ -50,7 +50,7 @@ fn fly_away<R: Bench>(x: &mut Cx<'_, R>) {
 fn animation_cue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Base::ANIM_EVENT) != 0 {
         x.set8(Base::ANIM_EVENT, 0);
-        crate::hw::sound::play(x.b, SOUND_SPAWN, x.o);
+        crate::services::sound::play(x.b, SOUND_SPAWN, x.o);
     }
 }
 
@@ -83,7 +83,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             if (x.u8(Shot31::TIMER) as i8) < 0 {
                 x.set8(Shot31::TIMER, 0xa);
                 let to = (source.u16(x.b, Obj::X), source.u16(x.b, Obj::Y));
-                let angle = crate::services::aids::direction_from(x.b, x.o, to).wrapping_add(x.u8(Shot31::TURN)) & 0x1f;
+                let angle = crate::actors::aids::direction_from(x.b, x.o, to).wrapping_add(x.u8(Shot31::TURN)) & 0x1f;
                 x.set8(Obj::SPEED_INDEX, angle);
             }
             let touching = |x: &mut Cx<'_, R>, a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x20 && vars::GAME_PAUSED.get(x.b) == 0;
@@ -91,7 +91,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             let (mx, my) = (x.u16(Obj::X), x.u16(Obj::Y));
             let hit = source.u8(x.b, Obj::STATE) != 4 && touching(x, sx, mx) && touching(x, sy, my);
             if hit {
-                crate::hw::sound::play(x.b, SOUND_HIT, x.o);
+                crate::services::sound::play(x.b, SOUND_HIT, x.o);
                 x.set8(Obj::STATE, st::FREE);
                 source.set_u8(x.b, Host::SHOT_ALIVE, 0);
             } else {

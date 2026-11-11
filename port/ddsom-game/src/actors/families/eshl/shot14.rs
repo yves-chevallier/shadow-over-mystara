@@ -219,7 +219,7 @@ fn attack<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(Base::SUB_STEP, 2);
                 x.set8(Shot::ATTACK_POWER, 8);
                 x.set8(Shot::ATTACK_ID, 0xf);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_32A_42A, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_32A_42A, x.o);
                 breath_anim(x);
             }
             _ => {
@@ -246,7 +246,7 @@ fn attack<R: Bench>(x: &mut Cx<'_, R>) {
             }
             2 => {
                 if x.u8(Base::ANIM_EVENT) != 0 {
-                    crate::hw::sound::play(x.b, crate::hw::sound::CMD_32C_42C, x.o);
+                    crate::services::sound::play(x.b, crate::services::sound::CMD_32C_42C, x.o);
                     x.add8(Base::SUB_STEP, 2);
                     let child = spawn_child(x, 0);
                     x.set16(Shot14::CHILD, child.0 as u16);

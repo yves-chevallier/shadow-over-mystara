@@ -4,7 +4,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::world::objects::Obj;
 use crate::actors::families::set::tables as set_tables;
 
@@ -67,7 +67,7 @@ fn variant_sound(b: &mut World, me: Obj, kinds: u32, routines: u32) {
     let index = (set_tables::pc_byte(b, kinds + variant) as u16).wrapping_mul(4);
     match set_tables::pc_long(b, routines + index as u32) {
         NOTHING => {}
-        sound @ (0xe0c5c | 0xe0d8c) => crate::hw::sound::play(b, crate::hw::sound::Sound::at(sound), me),
+        sound @ (0xe0c5c | 0xe0d8c) => crate::services::sound::play(b, crate::services::sound::Sound::at(sound), me),
         r => unreachable!("wave routine {r:#x}: tables 0xd98cc and 0xd996e only have 0xd99f8, 0xe0c5c, 0xe0d8c"),
     }
 }

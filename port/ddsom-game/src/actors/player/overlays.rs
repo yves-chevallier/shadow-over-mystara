@@ -15,7 +15,7 @@
 use super::checks::team_score_reached;
 use super::init::overlay;
 use super::{Ctx, Player, PLAYER_COUNT};
-use crate::world::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::world::objects::anim::load_entry;
 use crate::world::objects::Obj;
 use crate::actors::player::ram;

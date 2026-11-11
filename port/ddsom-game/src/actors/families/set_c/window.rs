@@ -17,7 +17,7 @@
 use crate::actors::families::cx::Bench;
 use crate::world::objects::Current;
 use crate::actors::families::cx::Cx;
-use crate::world::mem::{rd32, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd32, rd8, wr16, wr32, wr8, A5};
 use crate::world::objects::{pools, Obj};
 use crate::actors::families::set::tables as set_tables;
 
@@ -590,4 +590,4 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
 /// Text composition: names, titles, equipment and linked messages written into the text buffer.
 mod text;
 use text::{compose, Text};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;

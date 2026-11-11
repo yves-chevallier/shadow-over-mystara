@@ -55,7 +55,7 @@ fn spin<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn impact<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
-    crate::services::ai_aids::debris_set(x.b, x.o, kind as u16);
+    crate::actors::ai_aids::debris_set(x.b, x.o, kind as u16);
     // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Leftovers`)
     *x.c.d5() = 0xffff;
 }
@@ -73,7 +73,7 @@ fn lands<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Base::SUB_STATE) {
         0 => {
-            if crate::services::ai_aids::outside_band(x.b, x.o, 0xffc0, 448) {
+            if crate::actors::ai_aids::outside_band(x.b, x.o, 0xffc0, 448) {
                 return x.free_eshl();
             }
             if x.u8(Shot::HIT_FLAGS) & 0x28 != 0 {

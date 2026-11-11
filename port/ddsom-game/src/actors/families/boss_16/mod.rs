@@ -21,7 +21,7 @@ use crate::actors::families::cx::Bench;
 use crate::world::data::RomAddr;
 use crate::world::objects::Obj;
 use crate::world::record::record;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::shell::records::Base;
 use super::boss_common::*;
 use super::cx::handlers;
@@ -284,7 +284,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     effct_trio_2e(x);
     x.set16(Boss16::ANIM_SET, 0xffff);
     anim_a(x, 0);
-    lib::sound(x, crate::hw::sound::CMD_25);
+    lib::sound(x, crate::services::sound::CMD_25);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------

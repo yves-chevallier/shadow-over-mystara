@@ -8,7 +8,7 @@ use super::*;
 pub(super) fn title_card<R: Bench>(x: &mut Cx<'_, R>) {
     let creator = x.linked(Card::CREATOR);
     let gone = |x: &mut Cx<'_, R>| {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_337, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_337, x.o);
         free(x);
     };
     if creator.u8(x.b, f::STATE) == 4 {
@@ -17,7 +17,7 @@ pub(super) fn title_card<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_333, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_333, x.o);
             x.anim_start(0x1942b2, 0);
         }
         2 => {
@@ -56,7 +56,7 @@ pub(super) fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(Obj::VZ, 0xf000);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_333, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_333, x.o);
             x.anim_start(0x19431a, 0);
         }
         2 => {
@@ -74,7 +74,7 @@ pub(super) fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
                     if creator.u32(x.b, f::STATE) == 0x0200_0200 {
                         x.add8(f::SUB_STATE, 2);
                         blink_frames(x);
-                        crate::hw::sound::play(x.b, crate::hw::sound::CMD_332, x.o);
+                        crate::services::sound::play(x.b, crate::services::sound::CMD_332, x.o);
                         x.anim_start(0x19431a, 1);
                     } else {
                         x.anim_step();
@@ -84,7 +84,7 @@ pub(super) fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
                     blink_frames(x);
                     if creator.u32(x.b, f::STATE) == 0x0200_0600 {
                         x.add8(f::SUB_STATE, 2);
-                        crate::hw::sound::play(x.b, crate::hw::sound::CMD_337, x.o);
+                        crate::services::sound::play(x.b, crate::services::sound::CMD_337, x.o);
                         x.anim_start(0x19431a, 2);
                     } else {
                         x.anim_step();

@@ -4,7 +4,7 @@ use crate::actors::families::shell::records::{Host, view};
 use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x16ff22);
-const SOUND_IMPACT: crate::hw::sound::Sound = crate::hw::sound::CMD_327_427_C;
+const SOUND_IMPACT: crate::services::sound::Sound = crate::services::sound::CMD_327_427_C;
 const FLY: u8 = 0;
 const SETTLE: u8 = 2;
 const BURN: u8 = 4;
@@ -73,7 +73,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             x.move_z();
             if (x.u16(Obj::Z) as i16) <= 0 {
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x30);
-                crate::hw::sound::play(x.b, SOUND_IMPACT, x.o);
+                crate::services::sound::play(x.b, SOUND_IMPACT, x.o);
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
                 x.set8(Shot39::TIMER, 0x30);

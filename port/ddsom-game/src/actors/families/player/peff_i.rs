@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -36,10 +36,10 @@ mod storm {
     const PARENT: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bbe14);
-    const SFX_RUMBLE: crate::hw::sound::Sound = crate::hw::sound::CMD_188;
-    const SFX_BOLT: crate::hw::sound::Sound = crate::hw::sound::CMD_189;
-    const SFX_BEGIN: crate::hw::sound::Sound = crate::hw::sound::CMD_18A;
-    const SFX_END: crate::hw::sound::Sound = crate::hw::sound::CMD_194;
+    const SFX_RUMBLE: crate::services::sound::Sound = crate::services::sound::CMD_188;
+    const SFX_BOLT: crate::services::sound::Sound = crate::services::sound::CMD_189;
+    const SFX_BEGIN: crate::services::sound::Sound = crate::services::sound::CMD_18A;
+    const SFX_END: crate::services::sound::Sound = crate::services::sound::CMD_194;
     const KIND: u8 = 0x1e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -129,7 +129,7 @@ mod storm {
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, Player::ACTION_TIMER);
                 crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, d0);
-                crate::hw::sound::play(x.b, SFX_RUMBLE, x.o);
+                crate::services::sound::play(x.b, SFX_RUMBLE, x.o);
             }
             4 => {
                 if vars::PAUSE.get(x.b) == 0 {
@@ -143,7 +143,7 @@ mod storm {
                 }
                 x.set16(TIMER, 0x20);
                 x.add8(Shot::SUB_STATE, 4);
-                crate::hw::sound::play(x.b, SFX_BEGIN, x.o);
+                crate::services::sound::play(x.b, SFX_BEGIN, x.o);
             }
             8 => {
                 toggle(x, 0x9, 1 << 1);
@@ -180,7 +180,7 @@ mod storm {
     fn end<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
         x.anim_step();
-        crate::hw::sound::play(x.b, SFX_END, x.o);
+        crate::services::sound::play(x.b, SFX_END, x.o);
     }
 
     /// `0x4ec02`: sixteen bolts.
@@ -269,7 +269,7 @@ mod storm {
         let n = parent.u8(x.b, BOLTS).wrapping_sub(1);
         parent.set_u8(x.b, BOLTS, n);
         x.set8(Shot::SETTING, n);
-        crate::hw::sound::play(x.b, SFX_BOLT, x.o);
+        crate::services::sound::play(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
         let (dx, dz) = (player_data().storm_offsets_b.word_at(x.b, k), player_data().storm_offsets_b.word_at(x.b, k + 2));
         x.set16(Obj::X, dx);
@@ -327,8 +327,8 @@ mod whirl {
     const BLINK: u32 = 0x5d;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bbfda);
-    const SFX_START: crate::hw::sound::Sound = crate::hw::sound::CMD_187;
-    const SFX_LOOP: crate::hw::sound::Sound = crate::hw::sound::CMD_173_C;
+    const SFX_START: crate::services::sound::Sound = crate::services::sound::CMD_187;
+    const SFX_LOOP: crate::services::sound::Sound = crate::services::sound::CMD_173_C;
     const KIND: u8 = 0x1f;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -364,7 +364,7 @@ mod whirl {
         x.add16(Obj::X, dx);
         x.add16(Obj::Z, dz);
         x.add16(Obj::Y, 0xffff);
-        crate::hw::sound::play(x.b, SFX_START, x.o);
+        crate::services::sound::play(x.b, SFX_START, x.o);
     }
 
     fn init_satellite<R: Bench>(x: &mut Cx<'_, R>) {
@@ -413,7 +413,7 @@ mod whirl {
                 x.set8(BLINK, 1);
                 vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_WHITE_VALUE);
-                crate::hw::sound::play(x.b, SFX_LOOP, x.o);
+                crate::services::sound::play(x.b, SFX_LOOP, x.o);
                 x.anim(ANIMS.0, 0x20);
                 return x.reinsert();
             }

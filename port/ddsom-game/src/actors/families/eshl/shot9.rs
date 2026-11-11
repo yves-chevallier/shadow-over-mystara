@@ -47,7 +47,7 @@ fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::VZ, -0x400i16 as u16);
             x.set16(Obj::AZ, 0);
             // peculiarity of the original: read at a fixed offset of the object (A0 - 0x7f92)
-            let phase = crate::world::mem::rd16(x.b, x.o.0.wrapping_sub(0x7f92)) as u32;
+            let phase = crate::hw::mem::rd16(x.b, x.o.0.wrapping_sub(0x7f92)) as u32;
             let mut index = (phase >> 2 & 3) + 6;
             if x.u8(Base::FLIP) == 0 {
                 index += 0x10;

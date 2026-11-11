@@ -440,7 +440,7 @@ fn attack_start<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(Harpy::SHOT, shot.0);
             let n = x.u8(Harpy::KIND) as u32;
             x.anim_start(SET_ATTACK.0, n as u16);
-            return lib::sound(x, crate::hw::sound::CMD_36C);
+            return lib::sound(x, crate::services::sound::CMD_36C);
         }
     }
     set_state_long(x, 0x0204_0000);
@@ -469,7 +469,7 @@ fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
         let shot = Obj(x.u32(Harpy::SHOT) & 0xff_ffff);
         shot.set_u8(x.b, HarpyShot::RELEASE, 1);
         x.set8(Harpy::TIMER_A, 0x1e);
-        lib::sound(x, crate::hw::sound::CMD_36D);
+        lib::sound(x, crate::services::sound::CMD_36D);
     }
 }
 

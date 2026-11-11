@@ -38,7 +38,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     if target == 0 {
         return x.free_eshl();
     }
-    let dir = crate::services::aids::direction_to(x.b, x.o, obj_of(target));
+    let dir = crate::actors::aids::direction_to(x.b, x.o, obj_of(target));
     x.set8(Obj::SPEED_INDEX, dir);
     x.select_speed(&crate::world::objects::motion::SPEEDS_B, 0x24);
     let row = 2 * dir as u32;

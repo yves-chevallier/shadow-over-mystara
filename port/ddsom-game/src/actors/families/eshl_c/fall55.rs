@@ -3,7 +3,7 @@ use crate::world::data::RomAddr;
 use crate::actors::families::shell::vars;
 
 const ANIMS: RomAddr = RomAddr(0x170c3e);
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_37B_47B;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_37B_47B;
 const X_START: u32 = 0x58;
 const Y_START: u32 = 0x5a;
 const TIMER: u32 = 0x56;
@@ -13,7 +13,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             spawn(x);
             x.reinsert();
-            crate::hw::sound::play(x.b, SOUND, x.o);
+            crate::services::sound::play(x.b, SOUND, x.o);
         }
         2 => {
             if vars::GAME_PAUSED.get(x.b) == 0 {

@@ -3,7 +3,7 @@
 
 use m68k::Cpu;
 
-use crate::world::mem::rd32;
+use crate::hw::mem::rd32;
 
 /// Patch common to both machines (`lib.rs`, `patches`): the original test (`0x2cf26`, entered by
 /// `bsr`) is run until its return by the interpreter, without advancing the machine's time.

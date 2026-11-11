@@ -1,6 +1,6 @@
 //! Fields of the players' shots (PSHL) and effects (PEFF), declared once ([`record!`]): the offsets (`Shot::OWNER`)
 //! and the typed accessors (`Shot(o).owner(b)`). The fields that every object has are those of [`Obj`]; the owning
-//! player is a [`crate::actors::player::Player`]. Each type declares its own fields (`+0x42` and beyond, most of them) next to
+//! player is a [`crate::world::objects::player::Player`]. Each type declares its own fields (`+0x42` and beyond, most of them) next to
 //! its handler. A meaning guessed from the code alone is marked (h). Names from docs/familles.md and
 //! docs/familles/joueur.md.
 

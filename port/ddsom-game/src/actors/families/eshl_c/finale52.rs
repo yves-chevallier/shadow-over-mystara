@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::data::RomAddr;
 use crate::actors::families::shell::vars;
@@ -13,7 +13,7 @@ const SUBTYPE: u32 = 0x2f;
 const TIMER: u32 = 0x42;
 const LOCK_TAKEN: u8 = 0x3f;
 const LOCK_FREE: u8 = 0xff;
-const SCREEN_END_FX: crate::hw::sound::Sound = crate::hw::sound::CMD_1F9;
+const SCREEN_END_FX: crate::services::sound::Sound = crate::services::sound::CMD_1F9;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -299,7 +299,7 @@ fn variant3<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             if ram::SCENE.get(x.b) == 0x2d && s16(ram::CAMERA_X.get(x.b)) >= 0x340 {
-                crate::hw::sound::play(x.b, SCREEN_END_FX, x.o);
+                crate::services::sound::play(x.b, SCREEN_END_FX, x.o);
                 return end3(x);
             }
             if x.u8(Base::SUB_STATE) == 0 {

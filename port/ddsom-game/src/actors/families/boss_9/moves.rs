@@ -33,7 +33,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VX, 0);
             x.set16(Enemy::AX, 0x28);
             x.set8(Boss9::GAIT, 0);
-            lib::sound(x, crate::hw::sound::CMD_93);
+            lib::sound(x, crate::services::sound::CMD_93);
             let n = var::SCENE_STEP.get(x.b).wrapping_add(4);
             var::SCENE_STEP.set(x.b, n);
         }
@@ -60,7 +60,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(Enemy::VX, 0x800);
             x.set8(Boss9::GAIT, 1);
-            lib::sound(x, crate::hw::sound::CMD_92);
+            lib::sound(x, crate::services::sound::CMD_92);
         }
         16 => {
             jolt(x);
@@ -86,7 +86,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::HEADING, 0x18);
             x.set16(Enemy::VX, 0);
             x.set16(Enemy::AX, (-8i16) as u16);
-            lib::sound(x, crate::hw::sound::CMD_92_B);
+            lib::sound(x, crate::services::sound::CMD_92_B);
         }
         20 => {
             jolt(x);
@@ -94,7 +94,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             if sub16(x, Boss9::TIMER, 1).mi() {
                 next6(x);
                 x.set8(Boss9::GAIT, 2);
-                lib::sound(x, crate::hw::sound::CMD_94);
+                lib::sound(x, crate::services::sound::CMD_94);
                 lib::create_set_14(x);
             }
             roll(x);
@@ -214,7 +214,7 @@ fn pass<R: Bench>(x: &mut Cx<'_, R>) {
             return;
         }
         next7(x);
-        lib::sound(x, crate::hw::sound::CMD_92_D);
+        lib::sound(x, crate::services::sound::CMD_92_D);
         x.set8(Enemy::STRIKE_POWER, 0xa);
         x.set8(Enemy::STRIKE_KIND, 0x2d);
         count_crew(x);
@@ -297,7 +297,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             if sub8(x, Boss9::COUNT, 1).pl() {
                 return;
             }
-            lib::sound(x, crate::hw::sound::CMD_94);
+            lib::sound(x, crate::services::sound::CMD_94);
             reset_lives(x);
             reset_count(x);
             retarget(x);

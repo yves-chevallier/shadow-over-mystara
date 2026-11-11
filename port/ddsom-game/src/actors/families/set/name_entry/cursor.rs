@@ -1,7 +1,7 @@
 use super::*;
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::NameCursorObj;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {

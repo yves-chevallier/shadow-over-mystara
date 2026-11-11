@@ -62,7 +62,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::world::objects::motion::SPEEDS_B, 0x2b);
             spark(x, 1);
-            lib::sound(x, crate::hw::sound::CMD_376_476);
+            lib::sound(x, crate::services::sound::CMD_376_476);
             look(x, 0x13);
             weapon(x, 3);
         }
@@ -73,7 +73,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
                 lib::shake_54(x, 0x10);
-                lib::sound(x, crate::hw::sound::CMD_376_476);
+                lib::sound(x, crate::services::sound::CMD_376_476);
             }
             let (mut d0, mut d1) = (x.u16(WarMachine::GOAL_X), x.u16(Obj::X));
             if (x.u16(Obj::VX) as i16) < 0 {
@@ -88,8 +88,8 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(WarMachine::FLAG, 0);
             let v: i16 = if x.u8(f::FLIP) != 0 { -0x30 } else { 0x30 };
             x.set16(Obj::AX, v as u16);
-            lib::sound(x, crate::hw::sound::CMD_376_476);
-            lib::sound(x, crate::hw::sound::CMD_329_429);
+            lib::sound(x, crate::services::sound::CMD_376_476);
+            lib::sound(x, crate::services::sound::CMD_329_429);
             mv(x, 9);
         }
         4 => hop_loop(x),
@@ -161,7 +161,7 @@ fn smash<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(WarMachine::TIMER, 0x14);
             lib::shake_58(x, 0x14);
             spark(x, 2);
-            lib::sound(x, crate::hw::sound::CMD_327_427_C);
+            lib::sound(x, crate::services::sound::CMD_327_427_C);
             weapon(x, 7);
         }
         8 => {

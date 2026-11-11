@@ -13,10 +13,10 @@
 //! - 77: sound fade (two volumes that rise in steps, then stop);
 //! - 89: character who enters from the left, waits for a signal from the scene and leaves on the right.
 
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
-use crate::world::mem::{rd32, wr32};
+use crate::hw::mem::{rd32, wr32};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -82,8 +82,8 @@ mod opening {
     /// Pools emptied on arrival: 32 objects at `A5+0x62de` (except those marked `+0x58`), 18 at `A5+0x10de`.
     pub const POOL_A: u32 = 0xffe2de;
     pub const POOL_B: u32 = 0xff90de;
-    pub const SOUND_ARRIVAL: crate::hw::sound::Sound = crate::hw::sound::CMD_91;
-    pub const SOUND_SCROLL: crate::hw::sound::Sound = crate::hw::sound::CMD_9E;
+    pub const SOUND_ARRIVAL: crate::services::sound::Sound = crate::services::sound::CMD_91;
+    pub const SOUND_SCROLL: crate::services::sound::Sound = crate::services::sound::CMD_9E;
     /// Variant 3 waits for the camera to be back at this abscissa.
     pub const CAMERA_STOP: i16 = 0x5cc;
 }
@@ -100,13 +100,13 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
                     return;
                 }
                 x.add8(fields::SUB_STATE, 4);
-                crate::hw::sound::play(x.b, opening::SOUND_SCROLL, x.o);
+                crate::services::sound::play(x.b, opening::SOUND_SCROLL, x.o);
             }
             12 => {
                 if !x.anim_step() {
                     return;
                 }
-                crate::hw::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
+                crate::services::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
                 let step = vars::SCENE_STEP.get(x.b).wrapping_add(4);
                 vars::SCENE_STEP.set(x.b, step);
                 x.add8(fields::STATE, 4);
@@ -166,7 +166,7 @@ fn opening_slide<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(fields::STATE, 2);
     clear_scene(x);
-    crate::hw::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
+    crate::services::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
     crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x20);
 }
 
@@ -306,9 +306,9 @@ mod crossing {
     /// Scenery created (pointer) and its scene scenery number.
     pub const SCENERY: u32 = 0x5c;
     pub const SCENERY_KIND: u32 = 0x83;
-    pub const SOUND_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_2FF;
-    pub const SOUND_WAIT: crate::hw::sound::Sound = crate::hw::sound::CMD_2FE;
-    pub const SOUND_DONE: crate::hw::sound::Sound = crate::hw::sound::CMD_2FD;
+    pub const SOUND_LAND: crate::services::sound::Sound = crate::services::sound::CMD_2FF;
+    pub const SOUND_WAIT: crate::services::sound::Sound = crate::services::sound::CMD_2FE;
+    pub const SOUND_DONE: crate::services::sound::Sound = crate::services::sound::CMD_2FD;
 }
 
 fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
@@ -352,7 +352,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                     return;
                 }
                 x.add8(fields::SUB_STATE, 4);
-                crate::hw::sound::play(x.b, crossing::SOUND_LAND, x.o);
+                crate::services::sound::play(x.b, crossing::SOUND_LAND, x.o);
                 x.anim_start(crossing::ANIM_SET.0, 3);
                 x.reinsert();
             }
@@ -379,7 +379,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 let scenery = x.linked(crossing::SCENERY);
                 if timer_out(x) {
                     x.set16(crossing::TIMER, 0x30);
-                    crate::hw::sound::play(x.b, crossing::SOUND_WAIT, x.o);
+                    crate::services::sound::play(x.b, crossing::SOUND_WAIT, x.o);
                 }
                 if scenery.u8(x.b, Carrier::HALTED) == 0 {
                     return;
@@ -391,7 +391,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 if !x.anim_step() {
                     return;
                 }
-                crate::hw::sound::play(x.b, crossing::SOUND_DONE, x.o);
+                crate::services::sound::play(x.b, crossing::SOUND_DONE, x.o);
                 let o = x.o;
                 let launcher = crate::actors::families::effects_creators::launcher(x.b, o);
                 if launcher.is_none() {
@@ -515,8 +515,8 @@ mod launcher {
     pub const TIMER: u32 = 0x42;
     /// Object notified at departure (set to state 4).
     pub const PARTNER: u32 = 0x5c;
-    pub const SOUND_START: crate::hw::sound::Sound = crate::hw::sound::CMD_32E;
-    pub const SOUND_LAUNCH: crate::hw::sound::Sound = crate::hw::sound::CMD_9F;
+    pub const SOUND_START: crate::services::sound::Sound = crate::services::sound::CMD_32E;
+    pub const SOUND_LAUNCH: crate::services::sound::Sound = crate::services::sound::CMD_9F;
     /// Palette save (0x91c000, 33 × 32 bytes) for the fade.
     pub const PALETTE_RAM: u32 = 0x91c000;
     pub const PALETTE_COPY: u32 = 0xff1190;
@@ -528,7 +528,7 @@ fn launcher<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(fields::STATE, 2);
             x.set16(launcher::TIMER, 0x40);
-            crate::hw::sound::play(x.b, launcher::SOUND_START, x.o);
+            crate::services::sound::play(x.b, launcher::SOUND_START, x.o);
             x.set16(Obj::X, 0xa00);
             x.set16(Obj::Y, 0x17c);
             x.anim_start(launcher::ANIM_SET.0, 0);
@@ -557,8 +557,8 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
         }
         let px = p.u16(x.b, Obj::X).wrapping_add(0x310);
         p.set_u16(x.b, Obj::X, px);
-        crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-        crate::hw::sound::play(x.b, launcher::SOUND_LAUNCH, x.o);
+        crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+        crate::services::sound::play(x.b, launcher::SOUND_LAUNCH, x.o);
         // player animation 2, then the player is thrown into the air
         crate::world::objects::anim::start_by_character(x.b, p, &crate::world::objects::anim::SETS_BY_VARIANT, 2);
         p.set_u16(x.b, Obj::VX, 0);
@@ -669,9 +669,9 @@ mod sound_fade {
 /// Sound levels: service commands 0xff08 and 0xff09 (0xe0ad8, 0xe0af8), with the level as parameter.
 fn sound_fade_levels<R: Bench>(x: &mut Cx<'_, R>) {
     let a = x.u16(sound_fade::LEVEL_A);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff08(a));
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff08(a));
     let b = x.u16(sound_fade::LEVEL_B);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff09(b));
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff09(b));
 }
 
 fn sound_fade<R: Bench>(x: &mut Cx<'_, R>) {
@@ -699,7 +699,7 @@ fn sound_fade<R: Bench>(x: &mut Cx<'_, R>) {
             if (n as i16) > 0 {
                 return;
             }
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 0xc });
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0xc });
             free(x);
         }
         2 => {}
@@ -745,7 +745,7 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 2 => {
                     x.anim_step();
-                    if crate::world::mem::rd8(x.b, walker::SIGNAL) == 0x14 {
+                    if crate::hw::mem::rd8(x.b, walker::SIGNAL) == 0x14 {
                         x.add8(fields::SUB_STATE, 2);
                         x.anim_start(walker::ANIM_SET.0, 0);
                     }

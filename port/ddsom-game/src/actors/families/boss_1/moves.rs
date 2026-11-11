@@ -1,7 +1,7 @@
 //! Boss 1, active state: arrival (`+5` = 0), combat (2), attacks (4), wait (6 to 10), grab (12).
 
 use crate::actors::families::cx::Bench;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::objects::Current;
 use crate::world::objects::Obj;
@@ -69,7 +69,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set32(Enemy::VX_LONG, 0);
             x.set16(Enemy::AY, 0);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             x.set16(Enemy::VZ, 0x480);
             x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
             dust(x, 6);
@@ -104,7 +104,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(Obj::Z, 0);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             body(x, 0xe);
         }
         _ => {
@@ -291,7 +291,7 @@ fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
             next7(x);
             x.set16(Obj::Z, 0);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             hop_anim(x, 3);
         }
         8 => {
@@ -431,7 +431,7 @@ fn leap_attack<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Z, 0);
             lib::shake_54(x, 0xa);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             body(x, 0x16);
         }
         8 => {
@@ -512,8 +512,8 @@ fn backing<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(Enemy::AX, v);
             x.move_x();
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
-            lib::sound(x, crate::hw::sound::CMD_329_429);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_329_429);
             body(x, 0x18);
         }
         _ => {
@@ -554,7 +554,7 @@ pub(super) fn attacks<R: Bench>(x: &mut Cx<'_, R>) {
 fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         next7(x);
-        lib::sound(x, crate::hw::sound::CMD_30C_40C);
+        lib::sound(x, crate::services::sound::CMD_30C_40C);
         kind(x, 0x10 + k);
         return attack(x, k as u32);
     }
@@ -563,7 +563,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
             return;
         }
         x.set8(f::KEY_FRAME, 0);
-        lib::sound(x, crate::hw::sound::CMD_35C_45C);
+        lib::sound(x, crate::services::sound::CMD_35C_45C);
         return dust(x, 7);
     }
     // 0x7b7ba: end of the hit; the chain continues if the hit connected
@@ -666,7 +666,7 @@ fn split<R: Bench>(x: &mut Cx<'_, R>) {
             next7(x);
             x.set16(Obj::Z, 0);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             body(x, 0xe);
         }
         _ => {
@@ -719,7 +719,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             if !sub16(x, Boss::TIMER2, 1).gt() {
-                lib::sound(x, crate::hw::sound::CMD_341_441);
+                lib::sound(x, crate::services::sound::CMD_341_441);
                 // puff of blood at the mouth (0xaaa40)
                 let mut dx = (-0x69i16) as u16;
                 if x.u8(f::FLIP) != 0 {

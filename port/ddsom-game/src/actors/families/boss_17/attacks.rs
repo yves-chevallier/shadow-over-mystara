@@ -90,7 +90,7 @@ pub(super) fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn spark<R: Bench>(x: &mut Cx<'_, R>) {
-    lib::sound(x, crate::hw::sound::CMD_80_80);
+    lib::sound(x, crate::services::sound::CMD_80_80);
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
@@ -163,7 +163,7 @@ fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
             let (vx, vz) = if x.u8(f::FLIP) == 0 { (-0x900i16, 0x4ci16) } else { (0x900, -0x4c) };
             x.set16(Enemy::VX, vx as u16);
             x.set16(Enemy::AX, vz as u16);
-            lib::sound(x, crate::hw::sound::CMD_363_363);
+            lib::sound(x, crate::services::sound::CMD_363_363);
             x.move_x();
         }
         4 => {
@@ -180,7 +180,7 @@ fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(f::KEY_FRAME, 0);
             puff(x, 1);
-            lib::sound(x, crate::hw::sound::CMD_81_81);
+            lib::sound(x, crate::services::sound::CMD_81_81);
         }
         6 => {
             if sub16(x, Boss::TIMER, 1).le() {
@@ -251,7 +251,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             if tst16(x, Obj::Z).le() {
                 x.add8(Enemy::SUB_STEP, 2);
                 x.set16(Obj::Z, 0);
-                lib::sound(x, crate::hw::sound::CMD_362);
+                lib::sound(x, crate::services::sound::CMD_362);
                 return body(x, 0xa);
             }
             lib::step(x);
@@ -260,8 +260,8 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(f::KEY_FRAME, 0);
             puff(x, 2);
-            lib::sound(x, crate::hw::sound::CMD_361);
-            lib::sound(x, crate::hw::sound::CMD_81_81);
+            lib::sound(x, crate::services::sound::CMD_361);
+            lib::sound(x, crate::services::sound::CMD_81_81);
         }
         8 => finish(x, decide::chase),
         _ => {}
@@ -318,7 +318,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER, 0xa);
             let shot = x.linked(Boss17::CHILD);
             shot.set_u8(x.b, Shot32::ARMED, 1);
-            lib::sound(x, crate::hw::sound::CMD_84_84);
+            lib::sound(x, crate::services::sound::CMD_84_84);
             lib::step(x);
         }
         6 => {
@@ -395,7 +395,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER, 0x5a);
             let shot = x.linked(Boss17::CHILD);
             shot.set_u8(x.b, Shot33::FIRST, 1);
-            lib::sound(x, crate::hw::sound::CMD_85_85);
+            lib::sound(x, crate::services::sound::CMD_85_85);
             lib::step(x);
         }
         6 => {
@@ -467,7 +467,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
             var::INPUT_MASK.set(x.b, 0xff);
             x.set8(Boss::INVULNERABLE, 0);
             decide::spawn_by_level(x);
-            lib::sound(x, crate::hw::sound::CMD_86_86);
+            lib::sound(x, crate::services::sound::CMD_86_86);
             x.set16(Boss::TIMER, 0x3c);
             lib::step(x);
         }

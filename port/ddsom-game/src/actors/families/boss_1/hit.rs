@@ -177,7 +177,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(Obj::Z, 0);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35F_45F);
+            lib::sound(x, crate::services::sound::CMD_35F_45F);
             body(x, 0x1d);
         }
         _ => {
@@ -223,9 +223,9 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             let kind = x.u8(Enemy::KIND);
             record_defeat(x, kind);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
-            lib::sound(x, crate::hw::sound::CMD_30E_40E);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
+            lib::sound(x, crate::services::sound::CMD_30E_40E);
             lib::drop_rewards(x);
             x.set8(Enemy::ACTIVE, 2);
             x.set16(Enemy::AX, 0);
@@ -248,7 +248,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(Obj::Z, 0);
             dust(x, 6);
-            lib::sound(x, crate::hw::sound::CMD_35D);
+            lib::sound(x, crate::services::sound::CMD_35D);
             x.anim_start(SET_BODY.0, 0x1f);
         }
         4 => {

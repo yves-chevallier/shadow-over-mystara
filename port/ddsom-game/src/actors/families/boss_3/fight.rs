@@ -2,7 +2,7 @@
 //! player carried off (12), counterattack (14).
 
 use crate::actors::families::cx::Bench;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::objects::Current;
 
@@ -54,7 +54,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
                 return end_frame(x, 0x50);
             }
             next6(x);
-            lib::sound(x, crate::hw::sound::CMD_21);
+            lib::sound(x, crate::services::sound::CMD_21);
             x.set_bit(Enemy::DISPLAY, 1, false);
             descend(x);
         }

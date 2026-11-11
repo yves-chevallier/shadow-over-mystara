@@ -3,12 +3,12 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::wr32;
+use crate::hw::mem::wr32;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, Aligned};
@@ -53,14 +53,14 @@ mod meteors {
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bc790);
     const PALETTE: u32 = 0x25a780;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_191;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_191;
     const KIND: u8 = 0x28;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
         match x.state(0x50156) {
             0 if !child => {
-                crate::hw::sound::play(x.b, SFX, x.o);
+                crate::services::sound::play(x.b, SFX, x.o);
                 copy_palette(x, PALETTE);
                 x.add8(Obj::STATE, 2);
                 follow_owner(x);
@@ -120,7 +120,7 @@ mod meteors {
             x.set8(DELAY, 0x20);
             x.add8(TIMER, 0xff);
             if (x.u8(TIMER) as i8) >= 0 {
-                crate::hw::sound::play(x.b, SFX, x.o);
+                crate::services::sound::play(x.b, SFX, x.o);
             }
         }
         x.anim_step();
@@ -155,7 +155,7 @@ mod lamp {
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1be8b8);
     const PALETTE_A: u32 = 0x25b200;
     const PALETTE_B: u32 = 0x25a780;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_195;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_195;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x518c2) {
@@ -166,7 +166,7 @@ mod lamp {
                 x.add16(Obj::Z, 0x40);
                 x.add16(Obj::Y, 0xffff);
                 x.anim(ANIMS.0, 0);
-                crate::hw::sound::play(x.b, SFX, x.o);
+                crate::services::sound::play(x.b, SFX, x.o);
                 active(x);
             }
             2 => active(x),

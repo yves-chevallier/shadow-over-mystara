@@ -64,7 +64,7 @@ fn track<R: Bench>(x: &mut Cx<'_, R>, maker: Obj) {
             return approach(x);
         }
         aim = obj_of(w);
-        let dir = crate::services::aids::direction_to(x.b, x.o, aim);
+        let dir = crate::actors::aids::direction_to(x.b, x.o, aim);
         x.set8(Obj::SPEED_INDEX, dir);
     }
     let dx = aim.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(8);

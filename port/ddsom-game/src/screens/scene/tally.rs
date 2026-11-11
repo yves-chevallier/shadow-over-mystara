@@ -17,7 +17,7 @@ use crate::screens::modes::{Flow, Sequence};
 use crate::world::ops::abcd;
 use crate::world::objects::Obj;
 use crate::Native;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 use crate::screens::obj;
 
 /// Tally variables (work RAM, under A5).
@@ -69,38 +69,38 @@ mod p {
 /// ROM tables.
 mod rom {
     /// Banner: empty columns before the text (bytes, PC-relative), by variant.
-    pub const LEAD_NAME_FIRST: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6f48);
-    pub const LEAD_CLEAR_FIRST: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6f6a);
+    pub const LEAD_NAME_FIRST: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6f48);
+    pub const LEAD_CLEAR_FIRST: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6f6a);
     /// Scene names (pointers, PC-relative) and "STAGE CLEAR" text of the two variants.
-    pub const NAMES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6ed2);
+    pub const NAMES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6ed2);
     pub const CLEAR_AFTER: crate::world::data::RomAddr = crate::world::data::RomAddr(0xf7000);
-    pub const CLEAR_BEFORE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6fec);
+    pub const CLEAR_BEFORE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6fec);
     /// "TIME" and "TIME OVER" texts (descriptors of 0x1136).
-    pub const TIME_TEXT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7336);
-    pub const NO_TIME_TEXT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf734e);
+    pub const TIME_TEXT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7336);
+    pub const NO_TIME_TEXT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf734e);
     /// BCD decrement of the time bonus: ten seconds, or fifty to cross the minute.
-    pub const TEN_SECONDS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5a62);
-    pub const MINUTE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5a64);
+    pub const TEN_SECONDS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5a62);
+    pub const MINUTE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5a64);
     /// Bonus of one step of the time bonus (BCD longs, 31 values).
-    pub const TIME_BONUS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6ba0);
+    pub const TIME_BONUS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6ba0);
     /// Bonus of one second (BCD byte, high nibble).
-    pub const SECOND_BONUS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5b06);
+    pub const SECOND_BONUS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5b06);
     /// Treasure and hit bonuses, by scene (BCD longs).
-    pub const TREASURE_BONUS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x19c0e);
-    pub const HITS_BONUS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6c1c);
+    pub const TREASURE_BONUS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x19c0e);
+    pub const HITS_BONUS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6c1c);
     /// Positions (words, relative to the layer) per character and layout: bonus, label, total, payout.
-    pub const TOTAL_AT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5c08);
-    pub const LABEL_AT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5c18);
-    pub const PANEL_AT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5d82);
-    pub const PANEL_VALUE_AT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5d92);
-    pub const PAYOUT_AT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5f0a);
+    pub const TOTAL_AT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5c08);
+    pub const LABEL_AT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5c18);
+    pub const PANEL_AT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5d82);
+    pub const PANEL_VALUE_AT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5d92);
+    pub const PAYOUT_AT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5f0a);
     /// Label of a player (pairs of tiles).
-    pub const LABEL: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7320);
+    pub const LABEL: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7320);
 }
 
 /// Game subroutines.
 mod sub {
-    pub const MUSIC: crate::hw::sound::Sound = crate::hw::sound::CMD_04;
+    pub const MUSIC: crate::services::sound::Sound = crate::services::sound::CMD_04;
 }
 
 /// The banner is drawn off-screen (rows 8 and 9 of the first page of the layer, 0x910000), then copied.
@@ -195,7 +195,7 @@ pub fn run(x: &mut Ctx) -> Flow {
 fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
-    crate::hw::sound::play_global(x.b, sub::MUSIC);
+    crate::services::sound::play_global(x.b, sub::MUSIC);
     fading::STEP.set(x.b, 8);
     // 0xf68c8: the fade task (A0 kept)
     fading::DELAY.set(x.b, 1);
@@ -334,8 +334,8 @@ fn time_bonus(x: &mut Ctx) -> Flow {
     }
     // BCD subtraction on two bytes (sbcd), initial carry zero
     let dec = if t & 0xf0 != 0 { rom::TEN_SECONDS.addr() } else { rom::MINUTE.addr() };
-    let (lo, borrow) = crate::core::game::sbcd(t as u8, tables::byte(x.b, dec + 1), false);
-    let (hi, _) = crate::core::game::sbcd((t >> 8) as u8, tables::byte(x.b, dec), borrow);
+    let (lo, borrow) = crate::world::ops::sbcd(t as u8, tables::byte(x.b, dec + 1), false);
+    let (hi, _) = crate::world::ops::sbcd((t >> 8) as u8, tables::byte(x.b, dec), borrow);
     v::TIME.set(x.b, (hi as u16) << 8 | lo as u16);
     let n = v::STEPS.get(x.b).wrapping_add(1);
     v::STEPS.set(x.b, n);

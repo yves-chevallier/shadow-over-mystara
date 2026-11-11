@@ -13,7 +13,7 @@ use super::cx::{handlers, Cx};
 use super::shell::suspended;
 use super::shell::tables::Read;
 use crate::world::data::RomAddr;
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use super::effects_creators::leftovers::Pure;
@@ -176,7 +176,7 @@ pub mod arrow;
 fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     use crate::world::objects::ram::{ALT_CAMERA, CAMERA};
     let record = if ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { ALT_CAMERA } else { CAMERA };
-    (crate::world::mem::A5 + record) as u16
+    (crate::hw::mem::A5 + record) as u16
 }
 
 /// Places the object at the position of camera structure `+0x42`, offset by (`+0x14`, `+0x18`).

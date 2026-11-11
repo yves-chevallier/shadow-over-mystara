@@ -3,7 +3,7 @@
 //! The game runs 16 tasks in turn. A task yields through a *cession wrapper* (`jsr 0xa40`,
 //! `0xa86`...); the scheduler then picks the first ready task of the table. The task state is the Rust table
 //! of [`crate::core::tasks::table`]. The scheduler is a Rust state machine ([`Point`], stored in the table) that the
-//! frame loop (`no68k`) advances one point at a time, taking the VBLANK interrupt between two
+//! frame loop (`frame`) advances one point at a time, taking the VBLANK interrupt between two
 //! points when the interrupt mask allows it ([`interrupt_mask`], the level of the original's SR), like the processor
 //! between two instructions; it keeps the interrupt window between two slots, but no longer any register, record in
 //! RAM (FF0064), stack (neither A7 nor USP: FF0166-FF0E65 is no longer read, probe `DDSOM_POISON=stack`), stack heap
@@ -42,7 +42,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, wr8};
+use crate::hw::mem::{rd16, rd8, wr8};
 use crate::core::tasks::table::{slot, table, State, Resume, Next, SLOTS};
 use crate::core::tasks::Task;
 
@@ -59,7 +59,7 @@ const MASK_EXAM: u8 = 6;
 pub const MASK_ALL: u8 = 7;
 
 /// Where the processor is: a startup or scheduler point, or a task. The frame loop
-/// (`no68k::line`) executes one point at a time; the VBLANK interrupt can be taken between two, if the interrupt
+/// (`frame::line`) executes one point at a time; the VBLANK interrupt can be taken between two, if the interrupt
 /// mask allows it ([`interrupt_mask`]). Each point keeps the address of the original code it replaces (diagnostics).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Point {
@@ -149,7 +149,7 @@ pub fn set_interrupt_mask(b: &mut World, mask: u8) {
 }
 
 /// Executes scheduler point `point` and returns the next one (the startup and task points are
-/// executed by `no68k`).
+/// executed by `frame`).
 pub fn execute(b: &mut World, point: Point) -> Point {
     match point {
         Point::Start => Point::Walk,

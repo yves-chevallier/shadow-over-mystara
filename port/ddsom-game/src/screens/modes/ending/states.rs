@@ -3,7 +3,7 @@
 use super::*;
 use crate::hw::video::{palette, TEXT, SCROLL2};
 use crate::world::ram::Byte;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 
 /// Rewards of the endings: two longs per character, a second series for the other language (ROM table).
 const REWARDS: Rom = Rom::at(0xfb7bc);
@@ -253,7 +253,7 @@ pub(super) fn s1a_wait_signal(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     next_step(x);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     fading::STEP.set(x.b, 1);
     fading::DELAY.set(x.b, 4);
     fading::PAGES.set(x.b, FADE_ALL);

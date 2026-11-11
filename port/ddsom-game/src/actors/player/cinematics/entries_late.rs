@@ -1,7 +1,7 @@
 //! Scene entries of the players, continued: routines 0x2541a to 0x25f7e (walk-ins, jumps, falls).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{pc8, pc16};
 

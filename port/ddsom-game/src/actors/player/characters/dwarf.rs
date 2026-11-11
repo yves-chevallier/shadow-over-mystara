@@ -25,8 +25,8 @@ use crate::actors::player::external as ext;
 /// Identifiers (original addresses) of the routines reached: player effects and sounds of the dwarf.
 mod rom {
     /// Sounds.
-    pub const SOUND_DASH: crate::hw::sound::Sound = crate::hw::sound::CMD_118_218;
-    pub const SOUND_BOUNCE: crate::hw::sound::Sound = crate::hw::sound::CMD_142_242;
+    pub const SOUND_DASH: crate::services::sound::Sound = crate::services::sound::CMD_118_218;
+    pub const SOUND_BOUNCE: crate::services::sound::Sound = crate::services::sound::CMD_142_242;
 }
 
 /// Dwarf jump speed table (ROM data): a row of four words (vx, ax, vz, az)
@@ -108,7 +108,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, own::JUMP_ROW, row);
     common::launch_jump(g, p, JUMP_SPEEDS, row);
-    g.sound(crate::hw::sound::JUMP_VOICE, p);
+    g.sound(crate::services::sound::JUMP_VOICE, p);
 }
 
 /// Step 2: rise. A jump of profiles 0..3 ends here (landing on the ground); a forward jump moves on

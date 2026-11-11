@@ -34,7 +34,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, y);
             x.set16(Boss::TIMER, 0x14);
             if effect(x, true, 0x31, Some(2), true).is_some() {
-                lib::sound(x, crate::hw::sound::CMD_311_411);
+                lib::sound(x, crate::services::sound::CMD_311_411);
             }
             body(x, 0x16);
         }
@@ -120,7 +120,7 @@ fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VZ, 0x700);
             x.set16(Enemy::GRAVITY, 0);
             x.set32(Enemy::VX_LONG, 0);
-            lib::sound(x, crate::hw::sound::CMD_80_80);
+            lib::sound(x, crate::services::sound::CMD_80_80);
             body(x, 6);
         }
         4 => {

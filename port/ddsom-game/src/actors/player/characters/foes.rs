@@ -61,7 +61,7 @@ pub struct Strike {
     /// Monsters of type 0 and 0x13 (non-boss) die on the spot.
     pub undead_die: bool,
     /// Sound played after each life bar.
-    pub sound: Option<crate::hw::sound::Sound>,
+    pub sound: Option<crate::services::sound::Sound>,
 }
 
 /// Applies `strike` to all eligible monsters. `boss_table`/`enemy_table` replace the tables of

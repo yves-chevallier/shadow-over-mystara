@@ -4,8 +4,8 @@ use crate::actors::families::shell::vars;
 use crate::actors::families::shell::records::{Spawner, view};
 
 const ANIMS: RomAddr = RomAddr(0x16ec24);
-const SOUND_END: crate::hw::sound::Sound = crate::hw::sound::CMD_337;
-const SOUND_ROW: crate::hw::sound::Sound = crate::hw::sound::CMD_32D;
+const SOUND_END: crate::services::sound::Sound = crate::services::sound::CMD_337;
+const SOUND_ROW: crate::services::sound::Sound = crate::services::sound::CMD_32D;
 const ROW_AT: u16 = 0x50;
 const RISE: u8 = 0;
 const FADE: u8 = 2;
@@ -49,12 +49,12 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(Shot27::TIMER) == 0 {
             x.add8(Obj::STATE, 2);
             x.set8(Obj::ACTIVE, 2);
-            crate::hw::sound::play(x.b, SOUND_END, x.o);
+            crate::services::sound::play(x.b, SOUND_END, x.o);
         }
         x.anim_step();
         if x.u16(Shot27::TIMER) == ROW_AT {
             start_row(x);
-            crate::hw::sound::play(x.b, SOUND_ROW, x.o);
+            crate::services::sound::play(x.b, SOUND_ROW, x.o);
         }
         return;
     }

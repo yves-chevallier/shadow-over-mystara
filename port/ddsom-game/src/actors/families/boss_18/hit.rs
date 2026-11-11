@@ -189,7 +189,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
                 return decide::back_on_feet(x);
             }
             x.move_xy();
-            let t = crate::services::video::terrain_of(x.b, x.o);
+            let t = crate::world::terrain::terrain_of(x.b, x.o);
                 if t.number != 0 {
                 return decide::back_on_feet(x);
             }
@@ -388,9 +388,9 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             let bar = x.u8(Enemy::EVENT_KIND);
             var::DEFEAT_BONUS.set(x.b, bar);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
-            lib::sound(x, crate::hw::sound::CMD_6B_6B);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
+            lib::sound(x, crate::services::sound::CMD_6B_6B);
             lib::drop_rewards(x);
             x.set8(Enemy::ACTIVE, 2);
             x.set16(Enemy::AX, 0);
@@ -420,7 +420,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_AA);
+            lib::sound(x, crate::services::sound::CMD_AA);
         }
         _ => {}
     }

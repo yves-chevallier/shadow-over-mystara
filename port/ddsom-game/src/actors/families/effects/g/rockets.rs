@@ -23,11 +23,11 @@ pub(super) mod fireworks {
 
 /// Scene sounds.
 pub(super) mod sfx {
-    pub const LAST_ROCKET: crate::hw::sound::Sound = crate::hw::sound::CMD_5C;
-    pub const LIFT_OFF: crate::hw::sound::Sound = crate::hw::sound::CMD_80_80;
-    pub const JUMP: crate::hw::sound::Sound = crate::hw::sound::CMD_30C_40C;
-    pub const CHEER: crate::hw::sound::Sound = crate::hw::sound::CMD_311_411;
-    pub const LANDING: crate::hw::sound::Sound = crate::hw::sound::CMD_35E_45E;
+    pub const LAST_ROCKET: crate::services::sound::Sound = crate::services::sound::CMD_5C;
+    pub const LIFT_OFF: crate::services::sound::Sound = crate::services::sound::CMD_80_80;
+    pub const JUMP: crate::services::sound::Sound = crate::services::sound::CMD_30C_40C;
+    pub const CHEER: crate::services::sound::Sound = crate::services::sound::CMD_311_411;
+    pub const LANDING: crate::services::sound::Sound = crate::services::sound::CMD_35E_45E;
 }
 
 pub(super) fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
@@ -143,7 +143,7 @@ pub(super) fn fireworks_init<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn load_colours<R: Bench>(x: &mut Cx<'_, R>, from: &Table, to: u32, n: u32) {
     for k in 0..n {
         let v = from.nth16(x.b, k) | 0xf000;
-        crate::world::mem::wr16(x.b, to + 2 * k, v);
+        crate::hw::mem::wr16(x.b, to + 2 * k, v);
     }
 }
 
@@ -152,8 +152,8 @@ pub(super) fn load_colours<R: Bench>(x: &mut Cx<'_, R>, from: &Table, to: u32, n
 pub(super) fn copy_block<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     let mut last = [0u32; 8];
     for k in 0..0x100 {
-        let v = crate::world::mem::rd32(x.b, from + 4 * k);
-        crate::world::mem::wr32(x.b, to + 4 * k, v);
+        let v = crate::hw::mem::rd32(x.b, from + 4 * k);
+        crate::hw::mem::wr32(x.b, to + 4 * k, v);
         last[(k % 8) as usize] = v;
     }
     (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (last[1], last[2], last[3], last[4]);
@@ -189,7 +189,7 @@ pub(super) fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::VZ, 0x340);
                 x.set16(Obj::AZ, 0xfff0);
-                crate::hw::sound::play(x.b, sfx::JUMP, x.o);
+                crate::services::sound::play(x.b, sfx::JUMP, x.o);
                 x.anim_start(0x17788c, 7);
             }
             0 => {
@@ -207,7 +207,7 @@ pub(super) fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 if scene_go(x) {
                     x.add8(f::SUB_STATE, 2);
-                    crate::hw::sound::play(x.b, sfx::CHEER, x.o);
+                    crate::services::sound::play(x.b, sfx::CHEER, x.o);
                 }
                 x.anim_step();
             }
@@ -253,7 +253,7 @@ pub(super) fn last_actor<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.add16(Obj::Z, 0xfffa);
             if z <= 0 {
                 x.add8(f::SUB_STATE, 2);
-                crate::hw::sound::play(x.b, sfx::LANDING, x.o);
+                crate::services::sound::play(x.b, sfx::LANDING, x.o);
                 x.set16(Obj::Z, 0);
                 x.anim_start(fireworks::ANIMS_LAST.0, 5);
                 return;
@@ -361,7 +361,7 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.set16(Obj::VZ, 0x700);
             x.set16(Obj::AZ, 0);
             x.set32(Obj::VX, 0);
-            crate::hw::sound::play(x.b, sfx::LIFT_OFF, x.o);
+            crate::services::sound::play(x.b, sfx::LIFT_OFF, x.o);
             x.anim_start(fireworks::ANIMS_HERO.0, 6);
         }
         14 => hero_lift_off(x),
@@ -378,7 +378,7 @@ pub(super) fn hero_rockets<R: Bench>(x: &mut Cx<'_, R>) {
     let t = countdown(x, fireworks::TIMER);
     if t >= 0 {
         if t == 0 {
-            crate::hw::sound::play(x.b, sfx::LAST_ROCKET, x.o);
+            crate::services::sound::play(x.b, sfx::LAST_ROCKET, x.o);
         }
         return rocket(x);
     }

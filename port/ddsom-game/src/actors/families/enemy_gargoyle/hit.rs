@@ -56,7 +56,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
         let mut dismissed = true;
         if x.u8(Gargoyle::HIT_FLAGS) & 1 != 0 {
             let victim = x.linked(Enemy::HOLDER);
-            let code = victim.u8(x.b, crate::actors::player::Player::WEAPON_A) as i8;
+            let code = victim.u8(x.b, crate::world::objects::player::Player::WEAPON_A) as i8;
             dismissed = code == 0xd || (0x10..=0x13).contains(&code);
             if !dismissed {
                 return resume(x);
@@ -167,7 +167,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(Enemy::ACTIVE, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            lib::sound(x, crate::hw::sound::CMD_375_475);
+            lib::sound(x, crate::services::sound::CMD_375_475);
             lib::object_event(x);
             detach_from_host(x);
             lib::drop_rewards(x);
@@ -274,7 +274,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_373_473);
+            lib::sound(x, crate::services::sound::CMD_373_473);
             play(x, SET_FLY.0, 5);
         }
         6 => {

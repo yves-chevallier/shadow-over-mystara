@@ -52,7 +52,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.cull_offscreen();
     if (x.u16(Obj::Z) as i16) < 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_352_452, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_352_452, x.o);
         x.set16(Obj::Z, 0);
         x.add8(Base::SUB_STATE, 2);
         let (vx, ax) = (x.u16(Shot::OWNER), x.u16(Shot4::BOUNCE_VX));
@@ -73,7 +73,7 @@ fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Shot::TIMER, t);
     if (t as i8) < 0 {
         x.add8(Base::SUB_STATE, 2);
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_321_421, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_321_421, x.o);
         x.anim_start(ANIMS.0, 1);
     }
 }

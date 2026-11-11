@@ -2,7 +2,7 @@ use super::*;
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::SetObj;
 use crate::actors::families::set_b::fields::{DialogObj, WindowEffect};
 
@@ -289,7 +289,7 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
         17 => build_16(x, &mut o, a6),
         18 => {
             build(x, 1);
-            if let Ok(child) = crate::services::effects_aids::scenery_6(x.b, 0x13) {
+            if let Ok(child) = crate::actors::effects_aids::scenery_6(x.b, 0x13) {
                 child.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
                 let v = x.u8(DialogObj::SETTING);
                 child.set_u8(x.b, SetObj::PARAM, v);

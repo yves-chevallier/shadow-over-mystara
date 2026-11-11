@@ -7,7 +7,7 @@ use crate::actors::families::shell::vars;
 use crate::actors::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::*;
-use crate::world::mem::wr32;
+use crate::hw::mem::wr32;
 use crate::world::objects::Obj;
 
 use crate::world::objects::pools;

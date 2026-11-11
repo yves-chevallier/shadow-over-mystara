@@ -371,7 +371,7 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB, 2);
-            lib::sound(x, crate::hw::sound::CMD_380);
+            lib::sound(x, crate::services::sound::CMD_380);
             x.set16(Enemy::VY, 0);
             x.set16(Enemy::AY, 0);
             x.set16(Enemy::VZ, (-0x180i16) as u16);
@@ -498,7 +498,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(Warrior::OFFSET_X, 0);
             x.set32(Warrior::OFFSET_Z, 0); // with the high word of `OFFSET_Y`
             x.set32(Warrior::OFFSET_Y, 0);
-            lib::sound(x, crate::hw::sound::CMD_38C_48C);
+            lib::sound(x, crate::services::sound::CMD_38C_48C);
             x.set16(Warrior::SCRIPT_LEFT, 0);
             body(x, 6);
         }
@@ -522,7 +522,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return finale(x);
             }
             crate::actors::families::eshl_creators::single_40(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
-            lib::sound(x, crate::hw::sound::CMD_385_485);
+            lib::sound(x, crate::services::sound::CMD_385_485);
             rise_script_two(x);
         }
         6 => rise_script_two(x),

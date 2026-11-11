@@ -48,7 +48,7 @@ pub fn suspended<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// Terrain under the shot: true when the shot must stop (terrains 5 to 8 without bit 6 of the attribute).
 pub fn blocked_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let t = crate::services::video::terrain_of(x.b, x.o);
+    let t = crate::world::terrain::terrain_of(x.b, x.o);
     let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }

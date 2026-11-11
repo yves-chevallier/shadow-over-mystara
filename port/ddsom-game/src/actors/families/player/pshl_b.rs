@@ -2,7 +2,7 @@
 //! See `docs/families/joueur.md`.
 
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -28,8 +28,8 @@ mod ground {
     const ACTIVE_HIT: u32 = 0x5e;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15b5fe);
-    const SFX_RIGHT: crate::hw::sound::Sound = crate::hw::sound::CMD_164_B;
-    const SFX_LEFT: crate::hw::sound::Sound = crate::hw::sound::CMD_164_C;
+    const SFX_RIGHT: crate::services::sound::Sound = crate::services::sound::CMD_164_B;
+    const SFX_LEFT: crate::services::sound::Sound = crate::services::sound::CMD_164_C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -88,9 +88,9 @@ mod ground {
         let anim = if owner.u8(x.b, Player::LEVEL) > 0x14 { 0xb } else { 0xa };
         x.anim(ANIMS.0, anim);
         if owner.u8(x.b, f::FLIP) != 0 {
-            crate::hw::sound::play(x.b, SFX_RIGHT, x.o);
+            crate::services::sound::play(x.b, SFX_RIGHT, x.o);
         } else {
-            crate::hw::sound::play(x.b, SFX_LEFT, x.o);
+            crate::services::sound::play(x.b, SFX_LEFT, x.o);
         }
         colors(x);
     }
@@ -166,8 +166,8 @@ mod shadow {
     const RANK: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c4a8);
-    const SFX_FALL: crate::hw::sound::Sound = crate::hw::sound::CMD_13A_23A;
-    const SFX_STRIKE: crate::hw::sound::Sound = crate::hw::sound::CMD_13C_23C;
+    const SFX_FALL: crate::services::sound::Sound = crate::services::sound::CMD_13A_23A;
+    const SFX_STRIKE: crate::services::sound::Sound = crate::services::sound::CMD_13C_23C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x52e50) {
@@ -243,7 +243,7 @@ mod shadow {
         x.set8(f::POWER, 0xc);
         x.set8(f::POWER2, 0xc);
         x.anim(ANIMS.0, 3);
-        crate::hw::sound::play(x.b, SFX_STRIKE, x.o);
+        crate::services::sound::play(x.b, SFX_STRIKE, x.o);
     }
 
     fn fall<R: Bench>(x: &mut Cx<'_, R>) {
@@ -258,7 +258,7 @@ mod shadow {
             x.set32(Obj::Z, 0);
             x.anim(ANIMS.0, 3);
             if x.u8(Obj::VARIANT) == 0 {
-                crate::hw::sound::play(x.b, SFX_FALL, x.o);
+                crate::services::sound::play(x.b, SFX_FALL, x.o);
             }
             x.set8(f::HIT_FLAGS, 0);
             x.set8(Obj::VARIANT, 0);

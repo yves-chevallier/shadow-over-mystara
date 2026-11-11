@@ -1,7 +1,7 @@
 //! Common character code: healing, the jump skeleton and the run-up (action 0x10).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{players, Aligned};
 
@@ -67,7 +67,7 @@ pub fn heal_flicker(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::SPELL_REPEAT, n);
     for i in 0..4 {
         let v = players("heal_flicker").long_at(g.b, 16 * n as u32 + 4 * i);
-        crate::world::mem::wr32(g.b, FLICKER_PALETTE + 4 * i, v);
+        crate::hw::mem::wr32(g.b, FLICKER_PALETTE + 4 * i, v);
     }
 }
 
@@ -180,7 +180,7 @@ pub(super) fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.sound(crate::hw::sound::JUMP_VOICE, p);
+    g.sound(crate::services::sound::JUMP_VOICE, p);
     let kind = p.u8(g, Player::JUMP_KIND);
     launch_jump(g, p, kit.speeds, kind);
 }

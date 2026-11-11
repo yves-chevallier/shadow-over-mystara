@@ -23,7 +23,10 @@ use crate::world::World;
 use crate::world::ram::{Byte, Long, Word};
 use crate::regs;
 
-pub(crate) const BASE: u32 = crate::services::ai::RANK.0;
+/// Rank (dynamic difficulty 0..31): it indexes the decision and HP tables (`actors::ai`).
+pub const RANK: Word = Word::a5(0x7f92);
+
+pub(crate) const BASE: u32 = RANK.0;
 pub(crate) const CURRENT: u32 = 0x00;
 pub(crate) const MAX: u32 = 0x02;
 pub(crate) const MIN: u32 = 0x04;

@@ -1,11 +1,11 @@
 //! State machine of a player slot (see the `hud` module).
 
 use crate::screens::credits::CoinSlot;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::World;
 
 use super::{choice, draw, panel, player, select, var, Slot};
-use crate::core::game::sbcd;
+use crate::world::ops::sbcd;
 use crate::actors::player::init::Join;
 use crate::screens::scene::Ctx;
 
@@ -18,7 +18,7 @@ pub use choose::resume_end_enter;
 /// Original routines called by the interface (accounting, sounds, player start...).
 mod rom {
     /// Player class according to their character (byte, code tables).
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
     pub const CLASS_OF_CHARACTER: Rom = Rom::at(0x158c0);
     pub const CLASS_OF_CHARACTER_ALT: Rom = Rom::at(0x15e18);
 }
@@ -26,7 +26,7 @@ mod rom {
 /// Pointers to the banner texts (pointer tables in the code).
 mod banners {
     /// "PUSH START" outside continue (two languages, wide then narrow).
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
     pub const IDLE: Rom = Rom::at(0x156ca);
     /// Continue: "PUSH START".
     pub const IDLE_CONTINUE: Rom = Rom::at(0x156da);
@@ -207,7 +207,7 @@ fn idle(x: &mut Ctx, s: Slot) {
     if !start_pressed(b, s) || var::GAME_ON.get(b) == 0 {
         return idle_banner(b, s);
     }
-    crate::hw::eeprom::count_game(x.b);
+    crate::services::eeprom::count_game(x.b);
     let b = &mut *x.b;
     let credits = s.coins.credits(b).wrapping_sub(cost);
     s.coins.set_credits(b, credits);

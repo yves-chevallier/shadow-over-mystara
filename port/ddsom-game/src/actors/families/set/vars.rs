@@ -1,7 +1,7 @@
 //! Work RAM variables that the SET types read and write: offsets from A5, for the `a5_*` accessors of the context.
 //!
 //! The names come from `crate::world::ram`, `player` and the docs when the variable is known there; a guessed meaning is
-//! marked (h). The players' records are `crate::world::ram::PLAYERS` (fields: `crate::actors::player::Player`).
+//! marked (h). The players' records are `crate::world::ram::PLAYERS` (fields: `crate::world::objects::player::Player`).
 
 /// Input bits newly pressed this frame, one byte per player (h).
 pub const INPUTS_NEW: u32 = 0x0c;

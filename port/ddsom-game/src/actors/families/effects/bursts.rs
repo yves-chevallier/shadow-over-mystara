@@ -9,7 +9,7 @@ use super::*;
 pub(super) mod shard {
     pub const ANIMATIONS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x193ffe);
     pub const OFFSET: u32 = 0x5c;
-    pub const CREATE_SHOT_A: crate::hw::sound::Sound = crate::hw::sound::CMD_8C;
+    pub const CREATE_SHOT_A: crate::services::sound::Sound = crate::services::sound::CMD_8C;
 }
 
 pub(super) fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -45,7 +45,7 @@ pub(super) fn shard_lands<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if !(variant != 0) {
         let pause = vars::FROZEN.get(ctx.b) != 0;
         if !pause {
-            crate::hw::sound::play(ctx.b, shard::CREATE_SHOT_A, ctx.obj());
+            crate::services::sound::play(ctx.b, shard::CREATE_SHOT_A, ctx.obj());
             let shot = ctx.alloc(&pools::ESHL);
             if shot.is_none() {
                 return;

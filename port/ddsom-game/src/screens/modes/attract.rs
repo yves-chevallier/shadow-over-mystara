@@ -6,7 +6,7 @@
 use super::{mode, Flow, Sequence};
 use crate::screens::scene::fading;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::screens::scene::Ctx;
 use crate::Native;
 use crate::world::ram::Byte;
@@ -33,8 +33,8 @@ const FIXED_SCREEN_SLOT: u32 = 0xf0;
 /// Palette of the text screens and its two tile blocks ("copyright" screen).
 const TEXT_PALETTE: u16 = 0x53;
 const TILE_PLANE_3: u32 = crate::hw::video::SCROLL2.0 + 0x3000;
-const SOUND_SCREEN_A: crate::hw::sound::Sound = crate::hw::sound::CMD_3A;
-const SOUND_SCREEN_B: crate::hw::sound::Sound = crate::hw::sound::CMD_3B;
+const SOUND_SCREEN_A: crate::services::sound::Sound = crate::services::sound::CMD_3A;
+const SOUND_SCREEN_B: crate::services::sound::Sound = crate::services::sound::CMD_3B;
 
 /// Screen of sub-mode `sub`, if it is rewritten.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
@@ -93,8 +93,8 @@ crate::steps! {
             x.wait(1, Step::LegalScreenSound)
         },
         LegalScreenSound = 0x137e8 => |x| {
-            crate::hw::sound::play_global(x.b, SOUND_SCREEN_A);
-            crate::hw::sound::play_global(x.b, SOUND_SCREEN_B);
+            crate::services::sound::play_global(x.b, SOUND_SCREEN_A);
+            crate::services::sound::play_global(x.b, SOUND_SCREEN_B);
             fading::PAGES.set(x.b, 0xf);
             crate::core::tasks::fading::rise(x)
         },

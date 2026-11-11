@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -29,9 +29,9 @@ pub(super) fn banner_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// End of the banner: decrements the creator's counter and frees the object.
 pub(super) fn banner_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let counter = crate::world::mem::rd32(ctx.b, o.0 + banner::CREATOR);
-    let v = crate::world::mem::rd8(ctx.b, counter).wrapping_sub(1);
-    crate::world::mem::wr8(ctx.b, counter, v);
+    let counter = crate::hw::mem::rd32(ctx.b, o.0 + banner::CREATOR);
+    let v = crate::hw::mem::rd8(ctx.b, counter).wrapping_sub(1);
+    crate::hw::mem::wr8(ctx.b, counter, v);
     ctx.free(&pools::EFFCT);
 }
 
@@ -202,8 +202,8 @@ pub(super) mod interface {
     pub const PLAYER: u32 = 0x1a;
     pub const CHARACTER: u32 = 0x42;
     // subroutines not rewritten
-    pub const CHANGE_CHARACTER: crate::hw::sound::Sound = crate::hw::sound::CMD_134_234;
-    pub const SOUND_GAUGE: crate::hw::sound::Sound = crate::hw::sound::CMD_13B_23B;
+    pub const CHANGE_CHARACTER: crate::services::sound::Sound = crate::services::sound::CMD_134_234;
+    pub const SOUND_GAUGE: crate::services::sound::Sound = crate::services::sound::CMD_13B_23B;
 }
 
 /// Game phase: 8 or more, the game is over.
@@ -233,7 +233,7 @@ pub(super) fn interface_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             }
             add_u8(ctx, o, Obj::STATE, 2);
             for i in 0..8 {
-                crate::world::mem::wr32(ctx.b, interface::PALETTE_0 + 4 * i, 0xffff_ffff);
+                crate::hw::mem::wr32(ctx.b, interface::PALETTE_0 + 4 * i, 0xffff_ffff);
             }
         }
         state::ACTIVE => {}
@@ -282,7 +282,7 @@ pub(super) fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             shifted_u16(ctx, o, Obj::X, dx);
             shifted_u16(ctx, o, Obj::Z, dz);
             if change {
-                crate::hw::sound::play(ctx.b, interface::CHANGE_CHARACTER, ctx.obj());
+                crate::services::sound::play(ctx.b, interface::CHANGE_CHARACTER, ctx.obj());
             }
             let raise = o.u8(ctx.b, Interface::RAISED) != 0;
             if raise {
@@ -316,7 +316,7 @@ pub(super) fn copy_palette<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset: u16) {
         let source = slot.wrapping_add(offset) as i16 as i32 as u32;
         for k in 0..8 {
             let v = crate::services::palette::library_excerpt!("interface_palettes", 0x28ff00, 0x290c00, 2).at32(ctx.b, source.wrapping_add(4 * k)) | 0xf000_f000;
-            crate::world::mem::wr32(ctx.b, destination + 4 * k, v);
+            crate::hw::mem::wr32(ctx.b, destination + 4 * k, v);
         }
     }
 }
@@ -376,7 +376,7 @@ pub(super) fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 let blinks = o.u8(ctx.b, Interface::BLINK) != 0;
                 if !blinks {
                     o.set_u8(ctx.b, Interface::BLINK, 0xc);
-                    crate::hw::sound::play(ctx.b, interface::SOUND_GAUGE, ctx.obj());
+                    crate::services::sound::play(ctx.b, interface::SOUND_GAUGE, ctx.obj());
                 }
             }
             let remainder = o.u8(ctx.b, Interface::BLINK);

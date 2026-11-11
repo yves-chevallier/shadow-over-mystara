@@ -70,7 +70,7 @@ pub(super) fn disintegrate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.set8(E::LOOT, 0);
         x.set8(E::LOOT_ROW, 0);
         anim(x, 12);
-        let sound = if x.u8(E::KIND) == 1 { crate::hw::sound::CMD_304_404 } else { crate::hw::sound::CMD_370_470 };
+        let sound = if x.u8(E::KIND) == 1 { crate::services::sound::CMD_304_404 } else { crate::services::sound::CMD_370_470 };
         lib::sound(x, sound);
         return true;
     }
@@ -355,7 +355,7 @@ pub(super) fn floored<R: Bench>(x: &mut Cx<'_, R>, stars: bool) {
         defer_link(x);
     }
     anim(x, 17);
-    lib::sound(x, crate::hw::sound::CMD_31E_41E_B);
+    lib::sound(x, crate::services::sound::CMD_31E_41E_B);
     if stars {
         effect(x, 8, 0);
     }
@@ -417,6 +417,6 @@ pub(super) fn floored_9<R: Bench>(x: &mut Cx<'_, R>) {
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    lib::sound(x, crate::hw::sound::CMD_31E_41E_B);
+    lib::sound(x, crate::services::sound::CMD_31E_41E_B);
     effect(x, 9, 0);
 }

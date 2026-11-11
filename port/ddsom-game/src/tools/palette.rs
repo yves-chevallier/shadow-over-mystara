@@ -8,7 +8,7 @@ use m68k::Cpu;
 use crate::services::palette::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd16, rd32, wr32};
+use crate::hw::mem::{rd16, rd32, wr32};
 use crate::services::video::hw;
 
 macro_rules! page_native {

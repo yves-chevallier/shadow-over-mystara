@@ -314,7 +314,7 @@ pub(super) fn petrified<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(E::HEIGHT) as i16 <= 0 {
         next(x);
         x.set8(E::COUNTER, 40);
-        return lib::sound(x, crate::hw::sound::CMD_31F_41F);
+        return lib::sound(x, crate::services::sound::CMD_31F_41F);
     }
     x.set16(E::VZ, 0);
     x.set16(E::GRAVITY, -64i16 as u16);
@@ -392,7 +392,7 @@ pub(super) fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x3d882: burned (0xe909a), animation D0 left as is, six stars (0xabec8(4)).
 pub(super) fn burnt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(E::VULNERABLE, 0);
-    lib::sound(x, crate::hw::sound::CMD_176_276);
+    lib::sound(x, crate::services::sound::CMD_176_276);
     apply_pending(x);
     next(x);
     x.set8(E::ACTIVE, 1);

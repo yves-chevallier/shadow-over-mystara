@@ -15,7 +15,7 @@ use crate::hw::video::{regs, Vram};
 use crate::world::machine::Machine;
 use crate::world::objects::pools;
 use crate::world::objects::{Current, Obj};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{self, Word};
 use crate::services::scroll::{Camera, BACKDROP, BACKDROP_WORD, CAMERA_1, CAMERA_2};
 use crate::world::tables::engine;

@@ -14,7 +14,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::world::objects::Obj;
 use crate::Native;
 
@@ -116,8 +116,8 @@ fn show_locks(b: &mut World) {
 /// the text layer, one column per digit; returns the cell that follows.
 fn hex_byte(b: &mut World, mut at: u32, value: u8, attribute: u16) -> u32 {
     for digit in [value >> 4, value & 0xf] {
-        crate::world::mem::wr16(b, at, digit as u16);
-        crate::world::mem::wr16(b, at + 2, attribute);
+        crate::hw::mem::wr16(b, at, digit as u16);
+        crate::hw::mem::wr16(b, at + 2, attribute);
         at += 0x80;
     }
     at
@@ -125,7 +125,7 @@ fn hex_byte(b: &mut World, mut at: u32, value: u8, attribute: u16) -> u32 {
 
 /// Address `A5 + off` (A5 is always `mem::A5`; negative offsets are written modulo 2^32).
 pub(crate) const fn a5(off: u32) -> u32 {
-    crate::world::mem::A5.wrapping_add(off)
+    crate::hw::mem::A5.wrapping_add(off)
 }
 
 // ---------------------------------------------------------------------------------------------

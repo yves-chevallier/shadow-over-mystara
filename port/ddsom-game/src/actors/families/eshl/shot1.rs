@@ -61,14 +61,14 @@ fn body<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Shot::TIMER, 0x50);
                 x.set32(Obj::Z, 0);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_320_420, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_320_420, x.o);
                 x.anim_start(ANIMS.0, 1);
             }
         }
         LANDED => {
             if x.u8(Base::ANIM_EVENT) != 0 {
                 x.set8(Base::ANIM_EVENT, 0);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_321_421, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_321_421, x.o);
             }
             let t = x.u16(Shot::TIMER).wrapping_sub(1);
             x.set16(Shot::TIMER, t);

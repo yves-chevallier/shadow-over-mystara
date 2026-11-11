@@ -8,7 +8,7 @@ const CARRIER: u32 = 0x46;
 const RANK: u32 = 0x2f;
 const TIMER: u32 = 0x42;
 const SPEED_TABLE: u32 = 31;
-const SFX_RELEASE: crate::hw::sound::Sound = crate::hw::sound::CMD_387_487;
+const SFX_RELEASE: crate::services::sound::Sound = crate::services::sound::CMD_387_487;
 const RELEASE_STATE: u32 = 0x0204_0200;
 const RISE_HEIGHT: u16 = 0x20;
 
@@ -67,7 +67,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(Base::SUB_STATE, 2);
                 let rank = x.u8(RANK);
                 if rank == 0 || rank == 5 {
-                    crate::hw::sound::play(x.b, SFX_RELEASE, x.o);
+                    crate::services::sound::play(x.b, SFX_RELEASE, x.o);
                 }
                 return;
             }

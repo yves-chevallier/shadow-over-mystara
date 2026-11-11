@@ -7,7 +7,8 @@ use m68k::Cpu;
 use crate::services::video::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd16, set_low_byte, wr16};
+use crate::hw::mem::{rd16, set_low_byte, set_low_word, wr16};
+use crate::world::terrain::terrain_regs;
 
 /// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
 fn gauge_with_value(c: &mut Cpu, b: &mut World) {

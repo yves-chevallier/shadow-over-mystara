@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
@@ -134,8 +134,8 @@ mod cure {
     const OFFSETS_PRAYER: u32 = 0x4acb2;
     const OFFSETS_PLAYER: u32 = 0x4ad38;
     const OFFSETS_SPARK: u32 = 0x4ade0;
-    const SFX_PRAYER: crate::hw::sound::Sound = crate::hw::sound::CMD_174;
-    const SFX_PRAYER_B: crate::hw::sound::Sound = crate::hw::sound::CMD_175;
+    const SFX_PRAYER: crate::services::sound::Sound = crate::services::sound::CMD_174;
+    const SFX_PRAYER_B: crate::services::sound::Sound = crate::services::sound::CMD_175;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4abb8) {
@@ -167,9 +167,9 @@ mod cure {
         x.add16(Obj::Y, 0xffff);
         x.set16(Shot::Y_FRACTION, 0x8000);
         if x.u8(Shot::SETTING) == 0 {
-            crate::hw::sound::play(x.b, SFX_PRAYER, x.o);
+            crate::services::sound::play(x.b, SFX_PRAYER, x.o);
         } else {
-            crate::hw::sound::play(x.b, SFX_PRAYER_B, x.o);
+            crate::services::sound::play(x.b, SFX_PRAYER_B, x.o);
         }
         let n = (x.u8(Shot::SETTING) as u32) as u16;
         x.anim_start(ANIMS.0, n);
@@ -231,7 +231,7 @@ mod cure {
             x.set16(Shot::Y_FRACTION, 0x8000);
         }
         x.anim_start(ANIMS.0, 0);
-        crate::hw::sound::play(x.b, SFX_PRAYER, x.o);
+        crate::services::sound::play(x.b, SFX_PRAYER, x.o);
     }
 
     /// Variants 0 and 2: the star spins for one frame then disappears; every 4 ticks of the healing duration (`+0x168`
@@ -295,10 +295,10 @@ mod holy {
     const SCRIPT: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1b598c);
-    const SFX_START: crate::hw::sound::Sound = crate::hw::sound::CMD_192;
-    const SFX_BURST_A: crate::hw::sound::Sound = crate::hw::sound::CMD_193;
-    const SFX_BURST_B: crate::hw::sound::Sound = crate::hw::sound::CMD_188;
-    const SFX_END: crate::hw::sound::Sound = crate::hw::sound::CMD_194;
+    const SFX_START: crate::services::sound::Sound = crate::services::sound::CMD_192;
+    const SFX_BURST_A: crate::services::sound::Sound = crate::services::sound::CMD_193;
+    const SFX_BURST_B: crate::services::sound::Sound = crate::services::sound::CMD_188;
+    const SFX_END: crate::services::sound::Sound = crate::services::sound::CMD_194;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -331,7 +331,7 @@ mod holy {
         x.add16(Obj::Z, 0x7a);
         x.add16(Obj::Y, 0xffff);
         x.anim_start(ANIMS.0, 0);
-        crate::hw::sound::play(x.b, SFX_START, x.o);
+        crate::services::sound::play(x.b, SFX_START, x.o);
     }
 
     fn init_halo<R: Bench>(x: &mut Cx<'_, R>) {
@@ -394,8 +394,8 @@ mod holy {
         x.set16(Obj::Z, 8);
         x.anim_start(ANIMS.0, 0);
         crate::actors::families::small::peff_5_pair(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
-        crate::hw::sound::play(x.b, SFX_BURST_A, x.o);
-        crate::hw::sound::play(x.b, SFX_BURST_B, x.o);
+        crate::services::sound::play(x.b, SFX_BURST_A, x.o);
+        crate::services::sound::play(x.b, SFX_BURST_B, x.o);
         let owner = x.linked(f::OWNER);
         let player = owner.u8(x.b, Player::LEVEL) as u32;
         let row = player_data().holy_script_by_player.at8(x.b, player) as u32;
@@ -419,7 +419,7 @@ mod holy {
                 x.add8(Obj::STATE, 2);
                 let owner = x.linked(f::OWNER);
                 owner.set_u16(x.b, Player::ACTION_TIMER, 1);
-                crate::hw::sound::play(x.b, SFX_END, x.o);
+                crate::services::sound::play(x.b, SFX_END, x.o);
             } else {
                 // the table designates the shake by its routine (0x2824, 0x2860, 0x289c)
                 let mode = crate::services::camera_modes::shake::of_routine(player_data().holy_shake_table.long_at(x.b, command as u32));

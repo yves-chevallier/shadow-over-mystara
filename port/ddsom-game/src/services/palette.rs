@@ -590,7 +590,7 @@ pub fn character_palette(b: &mut World, o: crate::world::objects::Obj) {
 
 /// (offset, source, destination) of the palette of the character of object `o`.
 pub(crate) fn character_palette_at(b: &mut World, o: u32) -> (u32, u32, u32) {
-    let character = crate::actors::player::Player(o).character(b) as u32;
+    let character = crate::world::objects::player::Player(o).character(b) as u32;
     let offset = crate::world::tables::engine_table!("aura_offsets").nth16(b, character) as i16 as i32 as u32;
     let plain = crate::world::tables::engine_table!("aura_normal").rom;
     (offset, plain.wrapping_add(offset), PALETTES.wrapping_add(offset))

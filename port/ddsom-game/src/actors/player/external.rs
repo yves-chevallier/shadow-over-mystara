@@ -5,23 +5,23 @@
 /// Sounds ("wrappers" of `sound`, A0 = the player for the panning).
 pub mod sound {
     /// Wind-up of a charged hit, in two stages.
-    pub const CHARGE_A: crate::hw::sound::Sound = crate::hw::sound::CMD_129_229;
-    pub const CHARGE_B: crate::hw::sound::Sound = crate::hw::sound::CMD_A1_BY_CHARACTER_C;
+    pub const CHARGE_A: crate::services::sound::Sound = crate::services::sound::CMD_129_229;
+    pub const CHARGE_B: crate::services::sound::Sound = crate::services::sound::CMD_A1_BY_CHARACTER_C;
     /// Landed hit: heavy weapons (fighter, dwarf; second strike of the elf and the magic-user) and light ones (cleric,
     /// elf, magic-user) (h).
-    pub const STRIKE_HEAVY: crate::hw::sound::Sound = crate::hw::sound::CMD_A0_BY_CHARACTER;
-    pub const STRIKE_LIGHT: crate::hw::sound::Sound = crate::hw::sound::CMD_A1_BY_CHARACTER;
+    pub const STRIKE_HEAVY: crate::services::sound::Sound = crate::services::sound::CMD_A0_BY_CHARACTER;
+    pub const STRIKE_LIGHT: crate::services::sound::Sound = crate::services::sound::CMD_A1_BY_CHARACTER;
     /// Attack jump (start, end) (h).
-    pub const LEAP: crate::hw::sound::Sound = crate::hw::sound::CMD_A1_BY_CHARACTER_B;
-    pub const LEAP_END: crate::hw::sound::Sound = crate::hw::sound::CMD_113_213;
+    pub const LEAP: crate::services::sound::Sound = crate::services::sound::CMD_A1_BY_CHARACTER_B;
+    pub const LEAP_END: crate::services::sound::Sound = crate::services::sound::CMD_113_213;
     /// Spinning attack.
-    pub const SPIN: crate::hw::sound::Sound = crate::hw::sound::CMD_A2_BY_CHARACTER;
+    pub const SPIN: crate::services::sound::Sound = crate::services::sound::CMD_A2_BY_CHARACTER;
     /// Resurrection, victory, cursed weapon falling (h).
-    pub const FANFARE: crate::hw::sound::Sound = crate::hw::sound::CMD_A9_BY_CHARACTER;
-    pub const LANDING: crate::hw::sound::Sound = crate::hw::sound::LANDING_VOICE;
-    pub const SLIDE: crate::hw::sound::Sound = crate::hw::sound::SLIDE_VOICE;
+    pub const FANFARE: crate::services::sound::Sound = crate::services::sound::CMD_A9_BY_CHARACTER;
+    pub const LANDING: crate::services::sound::Sound = crate::services::sound::LANDING_VOICE;
+    pub const SLIDE: crate::services::sound::Sound = crate::services::sound::SLIDE_VOICE;
     /// Cleric's healing prayer, elf's earthquake (h).
-    pub const PRAYER_QUAKE: crate::hw::sound::Sound = crate::hw::sound::CMD_16A;
+    pub const PRAYER_QUAKE: crate::services::sound::Sound = crate::services::sound::CMD_16A;
 }
 
 /// Effects created by other subsystems (`families`, `effects_aids`).

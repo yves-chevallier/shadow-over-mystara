@@ -7,7 +7,7 @@
 //! in an arc, like an ITEM 2 thrown by the player (mode `+0x2f` = 1, delay `+0x59`) that falls back and waits to be
 //! picked up again. If already worn, it yields only a score event.
 
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::tables::{tables, Read};
@@ -254,7 +254,7 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>) {
         _ => crate::actors::families::effects::bad_index(slot),
     }
     let collection = x.u8(f::COLLECTION) as u32;
-    crate::world::mem::wr8(x.b, crate::actors::families::shell::vars::PICKED.0 + collection, 1);
+    crate::hw::mem::wr8(x.b, crate::actors::families::shell::vars::PICKED.0 + collection, 1);
     let announce = x.u8(f::ANNOUNCE);
     if announce != 0 {
         let o = x.o;

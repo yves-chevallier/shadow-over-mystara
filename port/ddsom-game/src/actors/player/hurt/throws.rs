@@ -1,7 +1,7 @@
 //! Simple reactions, airborne throws, falls, slides, bounces and getting up (steps shared by the
 //! reactions of the hit state and of the downed state).
 
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use super::*;
 
@@ -342,7 +342,7 @@ pub(super) fn land(g: &mut Ctx, p: Player, anim: u16) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, anim);
-    g.sound(crate::hw::sound::LANDING_EFFECT, p);
+    g.sound(crate::services::sound::LANDING_EFFECT, p);
 }
 
 /// 0x3a522: end of the fall, small bounce (vz 0x240).
@@ -378,7 +378,7 @@ pub(super) fn land_with_effect(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.sound(crate::hw::sound::LANDING_EFFECT, p);
+    g.sound(crate::services::sound::LANDING_EFFECT, p);
 }
 
 /// 0x3a544: start of the slide on the ground (vx 0x300 in the recoil direction).
@@ -465,7 +465,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.sound(crate::hw::sound::LANDING_EFFECT, p);
+                g.sound(crate::services::sound::LANDING_EFFECT, p);
             }
         }
         12 => {

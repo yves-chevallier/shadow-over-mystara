@@ -40,14 +40,14 @@ crate::steps! {
             sv::SCROLL_MODE.set(x.b, 0);
             let flags = sv::VIDEO_FLAGS.get(x.b) & !1;
             sv::VIDEO_FLAGS.set(x.b, flags);
-            x.subroutine(crate::services::video::black_screen::start, Step::Cleared)
+            x.subroutine(crate::screens::scene::black_screen::start, Step::Cleared)
         },
         Cleared = 0x1c846 => |x| {
             crate::actors::families::small::zero_game_variables(x.b);
             crate::world::ram::GAME.set(x.b, 1);
             reset_modes(x);
             mode::BOOTED.set(x.b, 1);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+            crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             crate::core::tasks::restart(x, MODE_LOOP)
         },
     }

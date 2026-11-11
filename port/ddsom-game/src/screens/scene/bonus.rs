@@ -11,7 +11,7 @@ use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
 use crate::hw::video::{PALETTES, SCROLL1, SCROLL2, SCROLL3, TEXT};
 use crate::world::ram::{Long, Word};
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 use crate::screens::modes::{Flow, Sequence};
 use crate::Native;
 use crate::actors::families::effects_creators::{end_screen, or_rest};
@@ -42,7 +42,7 @@ mod v {
 mod a5 {
     pub const SCENE: u32 = 0x34;
     /// Main camera: X, Y, copies of X and Y, and other fields reset to zero; same for the alternate one.
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
     use crate::screens::vars as sv;
     pub const CAM_X: u32 = sv::CAMERA_X.0 - A5;
     pub const CAM_Y: u32 = sv::CAMERA_Y.0 - A5;
@@ -52,13 +52,13 @@ mod a5 {
 
 /// ROM tables and subroutines.
 mod rom {
-    pub const DISPATCH: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5946);
+    pub const DISPATCH: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5946);
     /// Bonus terrain (rectangles of cells), according to `A5+0x70`.
-    pub const BACKDROP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x3f7e0e);
-    pub const BACKDROP_ALT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x3f6c08);
+    pub const BACKDROP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x3f7e0e);
+    pub const BACKDROP_ALT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x3f6c08);
 }
 mod sub {
-    pub const MUSIC: crate::hw::sound::Sound = crate::hw::sound::CMD_03;
+    pub const MUSIC: crate::services::sound::Sound = crate::services::sound::CMD_03;
 }
 
 /// Resumes (original addresses following a yield).
@@ -294,7 +294,7 @@ fn set_up(x: &mut Ctx) -> Flow {
         let o = or_rest(x.b, created);
         o.set_u8(x.b, obj::INDEX, k);
     }
-    crate::hw::sound::play_global(x.b, sub::MUSIC);
+    crate::services::sound::play_global(x.b, sub::MUSIC);
     x.wait(4, Step::SetUp)
 }
 

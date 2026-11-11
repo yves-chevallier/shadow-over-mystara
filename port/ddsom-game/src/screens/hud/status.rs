@@ -2,7 +2,7 @@
 //! when nobody is playing any more (`0x175a8`), with its on-screen countdown.
 
 use crate::hw::video::Cell;
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 use crate::world::World;
 
 use super::layer::{clear_cell, Brush, COLUMN};
@@ -118,8 +118,8 @@ pub(super) mod over {
     pub const GAME_OVER_FRAMES: u16 = 0x3c;
     pub const PHASE_GAME_OVER: u8 = 0x14;
     /// Original routines: countdown start music, end music, exit to the modes.
-    pub const MUSIC_START: crate::hw::sound::Sound = crate::hw::sound::CMD_05;
-    pub const MUSIC_STOP: crate::hw::sound::Sound = crate::hw::sound::MEMO_REPLAY;
+    pub const MUSIC_START: crate::services::sound::Sound = crate::services::sound::CMD_05;
+    pub const MUSIC_STOP: crate::services::sound::Sound = crate::services::sound::MEMO_REPLAY;
 }
 
 /// All the panels (even those that do not exist in the current layout).
@@ -230,13 +230,13 @@ pub fn countdown(x: &mut Ctx) -> Flow {
         for off in [over::ACTIVE, over::STATE, over::PLAYERS_FREE] {
             Obj(record).set_u8(x.b, off, 0);
         }
-        crate::hw::sound::play_global(x.b, over::MUSIC_STOP);
+        crate::services::sound::play_global(x.b, over::MUSIC_STOP);
         return Flow::Done;
     }
     match Obj(record).u8(x.b, over::STATE) {
         over::START => {
             if var::CONTINUE_ALLOWED.get(x.b) != 0 {
-                crate::hw::sound::play_global(x.b, over::MUSIC_START);
+                crate::services::sound::play_global(x.b, over::MUSIC_START);
                 Obj(record).set_u8(x.b, over::ACTIVE, 1);
                 let state = Obj(record).u8(x.b, over::STATE);
                 Obj(record).set_u8(x.b, over::STATE, state + 2);
@@ -282,7 +282,7 @@ fn wait_game_over(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     var::PHASE.set(x.b, over::PHASE_GAME_OVER);
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+    crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
     crate::actors::families::small::startup_done(x.b, true);
     Flow::Done
 }

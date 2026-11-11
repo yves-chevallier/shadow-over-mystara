@@ -18,7 +18,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             let (anim, id) = if owner.u8(x.b, Obj::KIND) != 0 { (1, 0xa) } else { (0, 9) };
             x.set8(Shot::ATTACK_ID, id);
             x.anim_start(ANIMS.0, anim);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_323_423, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_323_423, x.o);
             fly(x);
         }
         2 => fly(x),
@@ -28,7 +28,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Shot::HIT_FLAGS) & 0x28 != 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_122_222, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_122_222, x.o);
         return x.free_eshl();
     }
     if blocked_by_terrain(x) {

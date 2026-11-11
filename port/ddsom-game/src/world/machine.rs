@@ -25,9 +25,3 @@ pub trait Machine {
         rng::random(self.bus())
     }
 }
-
-impl Machine for crate::screens::scene::Ctx<'_> {
-    fn bus(&mut self) -> &mut World {
-        &mut *self.b
-    }
-}

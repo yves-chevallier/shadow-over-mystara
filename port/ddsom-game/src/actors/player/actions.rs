@@ -15,7 +15,7 @@ use super::checks::{attack_button, jump_button, turn_check};
 use super::states::{action, state};
 use super::walk::{clamp_to_screen, move_xy, walk_speed};
 use super::{animation, ram, Ctx, Player};
-use crate::world::mem::wr8;
+use crate::hw::mem::wr8;
 
 /// 0x35620: standing animation depending on the modes (slow walk, mount, weapon).
 pub fn start_stand(g: &mut Ctx, p: Player) {
@@ -239,7 +239,7 @@ fn grabbed(g: &mut Ctx, p: Player) {
             let step = p.u8(g, Player::STEP) + 2;
             p.set_u8(g, Player::STEP, step);
             let holder = p.u16(g, Player::HOLDER) as i16 as i32 as u32 & 0xff_ffff;
-            let kind = crate::world::mem::rd8(g.b, holder + 2);
+            let kind = crate::hw::mem::rd8(g.b, holder + 2);
             if kind != 6 && kind != 8 {
                 wr8(g.b, holder + 5, 4);
             }

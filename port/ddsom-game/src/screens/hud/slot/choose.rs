@@ -99,7 +99,7 @@ pub(super) fn choose(x: &mut Ctx, s: Slot) {
     let chosen = select::free_choice(b, current, false);
     s.set_p8(b, panel::CHOICE, chosen);
     s.set_g8(b, player::CHARACTER, chosen);
-    crate::hw::eeprom::stat_chosen_character(x.b, chosen as u16);
+    crate::services::eeprom::stat_chosen_character(x.b, chosen as u16);
     let b = &mut *x.b;
     s.set_p8(b, panel::LAST_MODE, 0x80);
     s.set_p8(b, panel::STATE, 0);
@@ -129,7 +129,7 @@ pub(super) fn start_player(x: &mut Ctx, s: Slot, how: Join) {
 /// 0x15a26: the player has fallen (state 0x402): start of the continue.
 pub(super) fn join_continue(x: &mut Ctx, s: Slot) {
     let frames = s.p32(x.b, panel::FRAMES);
-    crate::hw::eeprom::stat_game_duration(x.b, frames);
+    crate::services::eeprom::stat_game_duration(x.b, frames);
     let b = &mut *x.b;
     s.set_p8(b, panel::SUBSTEP, 1);
     let character = s.g8(b, player::CHARACTER);
@@ -230,7 +230,7 @@ pub(super) fn resume(x: &mut Ctx, s: Slot) {
     if !start_pressed(b, s) {
         return;
     }
-    crate::hw::eeprom::count_game(x.b);
+    crate::services::eeprom::count_game(x.b);
     let b = &mut *x.b;
     let credits = s.coins.credits(b).wrapping_sub(1);
     s.coins.set_credits(b, credits);
@@ -378,7 +378,7 @@ pub(super) fn resume_choose(x: &mut Ctx, s: Slot) {
     let chosen = select::resume_choice(b, s, current, false);
     s.set_p8(b, panel::CHOICE, chosen);
     s.set_g8(b, player::CHARACTER, chosen);
-    crate::hw::eeprom::stat_chosen_character(x.b, chosen as u16);
+    crate::services::eeprom::stat_chosen_character(x.b, chosen as u16);
     let b = &mut *x.b;
     let counter = CONTINUES.get(b).wrapping_add(1);
     CONTINUES.set(b, counter);

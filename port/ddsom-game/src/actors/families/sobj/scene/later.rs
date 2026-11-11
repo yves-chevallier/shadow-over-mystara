@@ -30,7 +30,7 @@ pub(super) fn v8_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let y = ram::CAMERA_Y.get(x.b).wrapping_add(0x1c8);
     x.set16(Obj::Z, y);
-    crate::world::mem::wr8(x.b, SCENE_DONE_FLAG, 0xff);
+    crate::hw::mem::wr8(x.b, SCENE_DONE_FLAG, 0xff);
     x.add8(Obj::STATE, 2);
     x.reinsert();
 }
@@ -45,7 +45,7 @@ pub(super) fn v9_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Y, 0);
     x.add16(Obj::Z, 0xf0);
     start(x, 0x113);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_8E, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_8E, x.o);
 }
 
 pub(super) fn v9_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -67,7 +67,7 @@ pub(super) fn v10_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Z, 0x70_0000);
     x.set32(Obj::Y, 0);
     start(x, 0x114);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_3C, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_3C, x.o);
 }
 
 pub(super) fn v10_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -103,7 +103,7 @@ pub(super) fn v10_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(Base::SUB_STATE, 2);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_40, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_40, x.o);
         }
         8 => {
             x.add32(Obj::Z, 0u32.wrapping_sub(0x4000));
@@ -132,7 +132,7 @@ pub(super) fn v11_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::Z, 0xc0);
     x.set16(Obj::X, 0x30);
     start(x, 0x115);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_3E, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_3E, x.o);
 }
 
 /// Variant 12: sprite that crosses the screen (1 pixel per frame to the right, or to the
@@ -248,7 +248,7 @@ pub(super) fn v16_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     random_flip(x);
     start(x, 0x1a2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_3D, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_3D, x.o);
 }
 
 pub(super) fn v16_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -272,7 +272,7 @@ pub(super) fn v17_init<R: Bench>(x: &mut Cx<'_, R>) {
     // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b`: the addition does not overflow into the high byte
     let n = 0x100 | (0xa3 + x.u8(Base::SETTING) as u32) & 0xff;
     start(x, n);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_3F, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_3F, x.o);
 }
 
 pub(super) fn v17_step<R: Bench>(x: &mut Cx<'_, R>) {

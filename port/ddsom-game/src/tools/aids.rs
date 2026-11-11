@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::services::aids` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::aids` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::services::aids::*;
+use crate::actors::aids::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd16, rd8};
+use crate::hw::mem::{rd16, rd8};
 
 /// D1 that 0x1386 leaves: the smaller of the two differences (its biased coordinate, low word = the absolute
 /// difference).

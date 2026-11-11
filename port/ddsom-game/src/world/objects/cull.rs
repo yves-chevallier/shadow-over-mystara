@@ -14,7 +14,7 @@ use super::Obj;
 use ddsom_data::tables::Bounds;
 
 use crate::world::data::data;
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::ram::{camera as camera_position, Word, CAMERA_ALT_ACTIVE};
 use crate::regs;
 

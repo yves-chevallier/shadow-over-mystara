@@ -20,7 +20,7 @@ use super::enemy_common::detach_from_host;
 use super::enemy_common::tables::{self, Table};
 use super::effects::records::Effect;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::Native;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -148,13 +148,13 @@ fn per_type<R: Bench>(x: &mut Cx<'_, R>, table: &Table, index: u32) -> Option<u3
 fn hit_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
     if let Some(sound) = per_type(x, tables::hit_sounds(), i) {
-        lib::sound(x, crate::hw::sound::Sound::at(sound));
+        lib::sound(x, crate::services::sound::Sound::at(sound));
     }
 }
 fn death_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
     if let Some(sound) = per_type(x, tables::death_sounds(), i) {
-        lib::sound(x, crate::hw::sound::Sound::at(sound));
+        lib::sound(x, crate::services::sound::Sound::at(sound));
     }
 }
 /// 0x3e000: type-specific get-up (per-type table; the address read designates its family's handler).

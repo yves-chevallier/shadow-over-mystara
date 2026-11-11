@@ -31,7 +31,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Fetch;
 use m68k::{Cpu, Ea, Op};
 
-use ddsom_game::world::mem::rd32;
+use ddsom_game::hw::mem::rd32;
 
 /// Original's bus during a trial: logs work RAM reads (address, size, PC).
 struct Journal<'a> {
@@ -126,7 +126,7 @@ struct Mutation {
 fn key(b: &Cps2Bus, a: u32) -> u32 {
     use ddsom_game::world::objects::pools::POOLS;
     for (i, p) in POOLS.iter().enumerate() {
-        let start = ddsom_game::world::mem::A5 + p.first;
+        let start = ddsom_game::hw::mem::A5 + p.first;
         if (start..start + p.stride * p.slots).contains(&a) {
             let slot = start + (a - start) / p.stride * p.stride;
             let type_ = read(b, slot + 2, 1);
@@ -145,7 +145,7 @@ fn key(b: &Cps2Bus, a: u32) -> u32 {
 fn existence_or_type(a: u32) -> bool {
     use ddsom_game::world::objects::pools::POOLS;
     POOLS.iter().any(|p| {
-        let start = ddsom_game::world::mem::A5 + p.first;
+        let start = ddsom_game::hw::mem::A5 + p.first;
         (start..start + p.stride * p.slots).contains(&a) && matches!((a - start) % p.stride, 0 | 2)
     })
 }
@@ -157,7 +157,7 @@ fn list_link(a: u32) -> bool {
         return true;
     }
     let link = |start: u32, step: u32, n: u32| (start..start + step * n).contains(&a) && (0x24..0x28).contains(&((a - start) % step));
-    link(0xff_85de, 0x200, 4) || POOLS.iter().any(|p| p.listed && link(ddsom_game::world::mem::A5 + p.first, p.stride, p.slots))
+    link(0xff_85de, 0x200, 4) || POOLS.iter().any(|p| p.listed && link(ddsom_game::hw::mem::A5 + p.first, p.stride, p.slots))
 }
 
 /// Values seen for each field (key, size) in the base states.
@@ -618,9 +618,9 @@ fn mutate(e: &mut Rng, domains: &Domains, base: &Base, muts: &mut Vec<Mutation>)
 fn apply(b: &mut Cps2Bus, muts: &[Mutation]) {
     for m in muts {
         match m.size {
-            1 => ddsom_game::world::mem::wr8(b, m.address, m.value as u8),
-            2 => ddsom_game::world::mem::wr16(b, m.address & !1, m.value as u16),
-            _ => ddsom_game::world::mem::wr32(b, m.address & !1, m.value),
+            1 => ddsom_game::hw::mem::wr8(b, m.address, m.value as u8),
+            2 => ddsom_game::hw::mem::wr16(b, m.address & !1, m.value as u16),
+            _ => ddsom_game::hw::mem::wr32(b, m.address & !1, m.value),
         }
     }
 }
@@ -642,7 +642,7 @@ fn describe(muts: &[Mutation]) -> String {
 /// Table of the native's Rust tasks, rebuilt from the FF0064 table and the original's stack heap (the
 /// reference machine has no Rust table): states, counts, stacks, entries, free stacks.
 fn table_from_original(b: &mut Cps2Bus) {
-    use ddsom_game::world::mem::{rd32, rd8};
+    use ddsom_game::hw::mem::{rd32, rd8};
     use ddsom_game::core::tasks::table::{self, Slot, State, Resume};
     use ddsom_game::tools::kernel::task_at;
     let mut t = table::Table::default();
@@ -664,7 +664,7 @@ fn table_from_original(b: &mut Cps2Bus) {
         s => s,
     };
     t.stacks = (top..0xff_01a6).step_by(4).rev().map(|a| rd32(b, a)).collect();
-    b.ext = Some(Box::new(t));
+    b.ext = Some(Box::new(ddsom_game::world::Parked { tasks: Some(t), leftovers: Default::default() }));
 }
 
 /// Runs the native on state `c0`/`b0` and compares it with the original's result `o`: returns the panic message or
@@ -694,7 +694,7 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
         diffs.push(format!("pc={:06x} instead of {:06x}", c1.pc, c2.pc));
     }
     // original kernel RAM: the native keeps the task table in Rust; compared separately
-    if let Some(t) = b1.ext.as_deref().and_then(|e| e.as_any().downcast_ref::<ddsom_game::core::tasks::table::Table>()) {
+    if let Some(t) = b1.ext.as_deref().and_then(|e| e.as_any().downcast_ref::<ddsom_game::world::Parked>()).and_then(|p| p.tasks.as_ref()) {
         diffs.extend(ddsom_game::core::tasks::table::gaps(t, &b2.ram, false));
     }
     for i in 0..0x800usize {
@@ -703,7 +703,7 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
         }
     }
     let sp = c2.a[7] & 0xff_ffff;
-    ddsom_game::world::mem::diff_bus(&b1, b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+    ddsom_game::hw::mem::diff_bus(&b1, b2, sp.saturating_sub(0x400)..sp, &mut diffs);
     Ok(diffs)
 }
 
@@ -847,19 +847,19 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
         let (a, end) = a.split_once('-').unwrap_or((&a, "0"));
         let a = u32::from_str_radix(a.trim_start_matches("0x"), 16).unwrap();
         let end = u32::from_str_radix(end.trim_start_matches("0x"), 16).unwrap();
-        ddsom_game::world::mem::watched::ADDRESS.store(a, std::sync::atomic::Ordering::Relaxed);
-        ddsom_game::world::mem::watched::END.store(end, std::sync::atomic::Ordering::Relaxed);
+        ddsom_game::hw::mem::watched::ADDRESS.store(a, std::sync::atomic::Ordering::Relaxed);
+        ddsom_game::hw::mem::watched::END.store(end, std::sync::atomic::Ordering::Relaxed);
         WATCHED_END.with(|x| x.set(end));
         eprintln!("SURVEILLE {a:06x} for {} {:06x} ({})", n.name, n.entry, describe(&min));
         WATCHED.with(|x| x.set(a));
         let _ = run_original(&c0, &b0, max_step, None);
         WATCHED.with(|x| x.set(0));
         let _ = compare(n, &c0, &b0, &o);
-        ddsom_game::world::mem::watched::ADDRESS.store(0, std::sync::atomic::Ordering::Relaxed);
+        ddsom_game::hw::mem::watched::ADDRESS.store(0, std::sync::atomic::Ordering::Relaxed);
     }
     let text = if e.trace {
         let mut bb = b0.clone();
-        let object: String = (0..0xc0).map(|i| format!("{:02x}", ddsom_game::world::mem::rd8(&mut bb, c0.a[0] + i))).collect();
+        let object: String = (0..0xc0).map(|i| format!("{:02x}", ddsom_game::hw::mem::rd8(&mut bb, c0.a[0] + i))).collect();
         format!("{text}\n      A0 {object}\n      TRACE {}", o.pcs.iter().take(4000).map(|p| format!("{p:x}")).collect::<Vec<_>>().join(" "))
     } else {
         text
@@ -915,10 +915,10 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
         if let Some((_, t)) = e.targets[&y].handler {
             // object A0 becomes of the type of `y`, often in its initial state
             let obj = c2.a[0] & 0xff_ffff;
-            ddsom_game::world::mem::wr8(&mut b2, obj + 2, t);
-            ddsom_game::world::mem::wr8(&mut b2, obj + 3, 0);
+            ddsom_game::hw::mem::wr8(&mut b2, obj + 2, t);
+            ddsom_game::hw::mem::wr8(&mut b2, obj + 3, 0);
             if e.over(2) == 0 {
-                ddsom_game::world::mem::wr32(&mut b2, obj + 4, 0);
+                ddsom_game::hw::mem::wr32(&mut b2, obj + 4, 0);
             }
         }
         e.targets.get_mut(&y).unwrap().substitutions += 1;

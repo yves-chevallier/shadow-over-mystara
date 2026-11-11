@@ -20,7 +20,7 @@ pub(super) fn stage_1(x: &mut Ctx) {
             creators::trails_pure(x.b);
             x.title_card();
             crate::world::objects::rank::reset(x.b);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -74,8 +74,8 @@ pub(super) fn stage_2(x: &mut Ctx) {
             x.fade_in();
             x.title_card();
             crate::world::objects::rank::reset(x.b);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_42);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::CMD_42);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -151,7 +151,7 @@ pub(super) fn boss_cave(x: &mut Ctx) {
             if scene == 7 {
                 crate::world::objects::rank::reset(x.b);
             }
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -177,7 +177,7 @@ pub(super) fn scene_8(x: &mut Ctx) {
             effect.set_u16(x.b, Obj::X, camera_x.wrapping_sub(0x60));
             effect.set_u16(x.b, Obj::Y, camera_y.wrapping_add(0x50));
             x.set_v16(0x46, effect.0 as u16);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+            crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             creators::countdown_timer(x.b, 1);
         }
         2 => {
@@ -204,7 +204,7 @@ pub(super) fn scene_10(x: &mut Ctx) {
             x.set_v16(0x46, effect.0 as u16);
             let set = x.spawn(&pools::SET, 14);
             set.set_u8(x.b, Obj::VARIANT, 1);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -232,8 +232,8 @@ pub(super) fn scene_11(x: &mut Ctx) {
             x.title_card();
             creators::swimmers(x.b);
             crate::world::objects::rank::reset(x.b);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::CMD_7D);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::CMD_7D);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -304,7 +304,7 @@ pub(super) fn wait_players_10(x: &mut Ctx) {
             x.fade_in();
             x.title_card();
             crate::world::objects::rank::reset(x.b);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(10) {
@@ -351,7 +351,7 @@ pub(super) fn scene_24(x: &mut Ctx) {
             x.fade_in();
             crate::world::objects::rank::reset(x.b);
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(6) {
@@ -414,7 +414,7 @@ pub(super) fn scene_26(x: &mut Ctx) {
             Word(TIMER).set(x.b, 0x60);
             x.fade_in();
             crate::world::objects::rank::reset(x.b);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -449,7 +449,7 @@ pub(super) fn scene_27(x: &mut Ctx) {
             Word(TIMER).set(x.b, 0x100);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -480,14 +480,14 @@ pub(super) fn scene_28(x: &mut Ctx) {
             x.title_card();
             if Word(MUSIC_STATE).get(x.b) == 0 {
                 Word(MUSIC_STATE).set(x.b, 1);
-                crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+                crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
             }
             if x.v8(0x4e) != 0 {
                 x.set_sub(6);
                 Word(TIMER).set(x.b, 1);
                 if Word(MUSIC_STATE).get(x.b) != 2 {
                     Word(MUSIC_STATE).set(x.b, 2);
-                    crate::hw::sound::play_with(x.b, crate::hw::sound::FROM_D4, crate::hw::sound::Source { d4: Some(24), ..Default::default() });
+                    crate::services::sound::play_with(x.b, crate::services::sound::FROM_D4, crate::services::sound::Source { d4: Some(24), ..Default::default() });
                     x.world();
                     return;
                 }
@@ -526,7 +526,7 @@ pub(super) fn scene_32(x: &mut Ctx) {
             Word(TIMER).set(x.b, 0xe0);
             x.fade_in();
             x.title_card();
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
@@ -557,9 +557,9 @@ pub(super) fn scene_34(x: &mut Ctx) {
             if x.v8(0x59) != 0 {
                 creators::type_68_pure(x.b);
             }
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff06 { lock: 144, line: 0 });
+            crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
+            crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff06 { lock: 144, line: 0 });
         }
         2 => {
             if x.tick(TIMER) {

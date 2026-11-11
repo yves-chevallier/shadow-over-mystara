@@ -13,7 +13,7 @@ use crate::world::machine::Machine;
 use crate::world::World;
 
 use super::{ram, Ctx, Player};
-use crate::world::mem::{rd16, rd8, wr8};
+use crate::hw::mem::{rd16, rd8, wr8};
 use crate::actors::player::tables::{player_data, byte, long, Aligned};
 
 mod tables {

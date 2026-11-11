@@ -11,7 +11,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8, Memory, A5};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8, Memory, A5};
 use crate::world::objects::Obj;
 
 /// Work RAM byte.

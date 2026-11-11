@@ -22,7 +22,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             addq8(x, f::SUB3, 2);
-            lib::sound(x, crate::hw::sound::CMD_349);
+            lib::sound(x, crate::services::sound::CMD_349);
             x.set_bit(Enemy::DISPLAY, 1, false);
             body(x, 0xe);
         }
@@ -43,13 +43,13 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Z, 0);
             addq8(x, f::SUB3, 2);
             body(x, 0xc);
-            lib::sound(x, crate::hw::sound::CMD_328_428_B);
+            lib::sound(x, crate::services::sound::CMD_328_428_B);
             lib::shake_54(x, 0x1e);
         }
         _ => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, crate::hw::sound::CMD_342_342);
+                lib::sound(x, crate::services::sound::CMD_342_342);
             }
             if x.anim_step() {
                 lib::set_immunities(x);
@@ -151,7 +151,7 @@ fn near_checks<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(Enemy::STRIKE_KEY) != 0 {
         x.set8(Enemy::STRIKE_KEY, 0);
-        lib::sound(x, crate::hw::sound::CMD_326_426);
+        lib::sound(x, crate::services::sound::CMD_326_426);
     }
     if x.u16(f::TARGET) == 0 {
         return;

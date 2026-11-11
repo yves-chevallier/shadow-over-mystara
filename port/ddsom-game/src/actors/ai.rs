@@ -13,13 +13,13 @@
 use crate::world::World;
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
-use crate::world::ram::{self, Word, LEVEL, PLAYERS, PLAYERS_ALIVE};
+use crate::world::objects::player::Player;
+use crate::world::ram::{self, LEVEL, PLAYERS, PLAYERS_ALIVE};
 use crate::world::rng;
 use crate::world::tables::{engine, engine_table, Table};
 
-/// Rank (dynamic difficulty 0..31, `objects::rank`): it indexes the decision and HP tables.
-pub const RANK: Word = Word::a5(0x7f92);
+/// Rank (dynamic difficulty 0..31): it indexes the decision and HP tables.
+pub use crate::world::objects::rank::RANK;
 
 /// Enemy fields read or written by these helpers.
 pub mod f {
@@ -272,10 +272,10 @@ fn side_of(b: &mut World, o: Obj, other: Obj) -> u8 {
 
 /// 0xb5e0: is the target of `o` (`+0x50`, on the ground) inside the box `hitbox` in front of `o` (0x7f19c on the
 /// target)?
-pub fn target_in_front(b: &mut World, o: Obj, hitbox: crate::services::ai_aids::Hitbox) -> crate::services::ai_aids::InHitbox {
+pub fn target_in_front(b: &mut World, o: Obj, hitbox: crate::actors::ai_aids::Hitbox) -> crate::actors::ai_aids::InHitbox {
     match o.u16(b, f::TARGET) {
-        0 => crate::services::ai_aids::InHitbox::No,
-        w => crate::services::ai_aids::box_around(b, o, Obj::from_word(w), hitbox),
+        0 => crate::actors::ai_aids::InHitbox::No,
+        w => crate::actors::ai_aids::box_around(b, o, Obj::from_word(w), hitbox),
     }
 }
 
@@ -379,7 +379,7 @@ pub fn keep_in_zone(b: &mut World, o: Obj) -> bool {
 /// 0xf0e8: turns the heading of `o` (`+0x2d`, 0..31) by one notch towards the point `to` (direction of 0x137e), by the
 /// shortest way.
 pub fn turn_toward(b: &mut World, o: Obj, to: (u16, u16)) {
-    let wanted = crate::services::aids::direction_from(b, o, to);
+    let wanted = crate::actors::aids::direction_from(b, o, to);
     let heading = o.u8(b, f::HEADING);
     let diff = wanted.wrapping_sub(heading) & 0x1f;
     if diff == 0 {

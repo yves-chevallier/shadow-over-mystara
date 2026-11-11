@@ -111,7 +111,7 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
         0 => reach_player(x),
         2 => {
             x.add8(Enemy::SUB_STEP, 2);
-            lib::sound(x, crate::hw::sound::CMD_38D);
+            lib::sound(x, crate::services::sound::CMD_38D);
             x.set16(Boss15::TIMER, 0xa0);
             set_anim(x, 0, 2);
         }
@@ -138,9 +138,9 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(Enemy::KEY_FRAME, 0);
             x.add8(Enemy::SUB_STEP, 2);
-            lib::sound(x, crate::hw::sound::CMD_38D);
+            lib::sound(x, crate::services::sound::CMD_38D);
             eshl_shot_34(x, 0);
-            lib::sound(x, crate::hw::sound::CMD_317);
+            lib::sound(x, crate::services::sound::CMD_317);
             x.set16(Boss15::TIMER, 0x100);
             flap(x);
         }
@@ -207,7 +207,7 @@ fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, py);
             x.set16(Boss15::TIMER, 0x40);
             set_anim(x, 2, 0x13);
-            lib::sound(x, crate::hw::sound::CMD_38D);
+            lib::sound(x, crate::services::sound::CMD_38D);
             push_side(x);
         }
         8 => push_side(x),
@@ -296,7 +296,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(Enemy::KEY_FRAME, 0);
     eshl_shot_34(x, 1);
-    lib::sound(x, crate::hw::sound::CMD_317);
+    lib::sound(x, crate::services::sound::CMD_317);
     x.set8(Enemy::HEADING, 0);
     x.select_speed(&crate::world::objects::motion::SPEEDS_A, 0x18);
 }
@@ -389,7 +389,7 @@ fn dive_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(Enemy::KEY_FRAME, 0);
     eshl_shot_34(x, 2);
-    lib::sound(x, crate::hw::sound::CMD_317);
+    lib::sound(x, crate::services::sound::CMD_317);
 }
 
 fn dive_b<R: Bench>(x: &mut Cx<'_, R>) {
@@ -596,7 +596,7 @@ fn push_players<R: Bench>(x: &mut Cx<'_, R>) {
         // `add.l #0x8000,D4` (carry into the high word), then the unit in D4.w
         let (bx, bz) = (x.u16(Obj::X) as u32, x.u16(Obj::Y) as u32);
         let (px, pz) = (p.u16(x.b, Obj::X) as u32, p.u16(x.b, Obj::Y) as u32);
-        let r = crate::services::aids::compute(x.b, bx, bz, px, pz);
+        let r = crate::actors::aids::compute(x.b, bx, bz, px, pz);
         *x.c.d2() = r.d2;
         *x.c.d3() = r.d3;
         // Slope (in 1/256 pixel) of the `shove` steps: 32 directions, (dx, dy) in words.
@@ -649,7 +649,7 @@ pub(crate) fn approach_toward<R: Bench>(x: &mut Cx<'_, R>, other: Obj) {
     let d2 = low(*x.c.d2(), other.u16(x.b, Obj::Y));
     let d3 = low(*x.c.d3(), me.u16(x.b, Obj::X));
     let d4 = low(*x.c.d4(), me.u16(x.b, Obj::Y));
-    let r = crate::services::aids::compute(x.b, d1, d2, d3, d4);
+    let r = crate::actors::aids::compute(x.b, d1, d2, d3, d4);
     *x.c.d2() = r.d2;
     *x.c.d3() = r.d3;
     // `add.l #0x8000,D4` (carry into the high word), then the unit in D4.w

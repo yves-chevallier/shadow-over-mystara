@@ -1,7 +1,7 @@
 //! Climbing (action 0x1a) and the exit from the scene (action 0x20).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{player_data, word, long, Aligned, Read};
 

@@ -100,7 +100,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             speed(x, 0x17);
             anim_kind(x, 0x20);
             next6(x);
-            lib::sound(x, crate::hw::sound::CMD_34F_44F);
+            lib::sound(x, crate::services::sound::CMD_34F_44F);
             body(x, 0xb);
         }
         2 => {
@@ -193,8 +193,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Boss::DEATH_CREDIT, 1);
                 var::BOSS_DOWN.set(x.b, 0xff);
                 lib::flash_and_shake(x);
-                crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-                lib::sound(x, crate::hw::sound::CMD_FF);
+                crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+                lib::sound(x, crate::services::sound::CMD_FF);
             } else {
                 lib::object_event(x);
             }
@@ -202,7 +202,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::ACTIVE, 2);
             let freeze = x.u8(Enemy::STUN);
             x.set8(f::FREEZE, freeze);
-            lib::sound(x, crate::hw::sound::CMD_30B_40B);
+            lib::sound(x, crate::services::sound::CMD_30B_40B);
             x.set16(Enemy::AX, 0);
             x.set16(Enemy::VZ, 0x500);
             x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
@@ -232,9 +232,9 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Z, 0);
             lib::debris(x, 5);
             if x.u8(Boss::DEATH_CREDIT) != 0 {
-                lib::sound(x, crate::hw::sound::CMD_35D);
+                lib::sound(x, crate::services::sound::CMD_35D);
             } else {
-                lib::sound(x, crate::hw::sound::CMD_327_427_B);
+                lib::sound(x, crate::services::sound::CMD_327_427_B);
             }
             lib::step(x);
         }

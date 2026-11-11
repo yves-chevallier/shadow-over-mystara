@@ -6,7 +6,7 @@ const ANIMS: [u32; 2] = [0x16ea18, 0x171574];
 const ATTACK: [u8; 2] = [0x25, 0x38];
 const TIMER: u32 = 0x42;
 const RANK: u32 = 0x2f;
-const SFX: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_34D_44D, crate::hw::sound::CMD_330];
+const SFX: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_34D_44D, crate::services::sound::CMD_330];
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -74,5 +74,5 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>, v: usize) {
         x.anim_start(ANIMS[1], 1);
     }
     crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
-    crate::hw::sound::play(x.b, SFX[v], x.o);
+    crate::services::sound::play(x.b, SFX[v], x.o);
 }

@@ -2,12 +2,11 @@
 
 use cps2::Cps2Bus;
 
-use crate::world::World;
 
 /// Base of the work RAM addressed by A5 throughout the game.
 pub const A5: u32 = 0xff8000;
 
-/// A 68000 address space: the game's [`World`] (work RAM without address decoding), or the bus of a machine that
+/// A 68000 address space: the game's `World` (work RAM without address decoding), or the bus of a machine that
 /// runs the original code (tools).
 pub trait Memory {
     fn read8(&mut self, a: u32) -> u8;
@@ -16,28 +15,6 @@ pub trait Memory {
     fn write16(&mut self, a: u32, v: u16);
     /// Word of the program space (tools: the decrypted program of a machine with the ROMs).
     fn fetch16(&mut self, a: u32) -> u16;
-}
-
-impl Memory for World {
-    #[inline]
-    fn read8(&mut self, a: u32) -> u8 {
-        World::read8(self, a)
-    }
-    #[inline]
-    fn read16(&mut self, a: u32) -> u16 {
-        World::read16(self, a)
-    }
-    #[inline]
-    fn write8(&mut self, a: u32, v: u8) {
-        World::write8(self, a, v)
-    }
-    #[inline]
-    fn write16(&mut self, a: u32, v: u16) {
-        World::write16(self, a, v)
-    }
-    fn fetch16(&mut self, a: u32) -> u16 {
-        self.hw.fetch16(a)
-    }
 }
 
 impl Memory for Cps2Bus {

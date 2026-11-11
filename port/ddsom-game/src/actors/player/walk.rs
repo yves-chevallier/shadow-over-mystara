@@ -3,7 +3,7 @@
 use crate::world::World;
 
 use super::{ram, Ctx, Player};
-use crate::world::mem::{rd16, wr16, wr8};
+use crate::hw::mem::{rd16, wr16, wr8};
 use crate::world::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
 use crate::world::objects::Obj;
 use crate::actors::player::tables::{word, long};

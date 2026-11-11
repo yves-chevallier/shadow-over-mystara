@@ -1,18 +1,17 @@
 //! Input and output ports of the CPS2 board (docs/video.md, `credits.rs`).
 
-use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, wr16};
+use crate::hw::mem::{rd16, rd8, wr16, Memory as Space};
 
 /// An input port (read only): bytes and words of the board's input registers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Port(pub u32);
 
 impl Port {
-    pub fn get(self, b: &mut World) -> u8 {
+    pub fn get(self, b: &mut impl Space) -> u8 {
         rd8(b, self.0)
     }
-    pub fn word(self, b: &mut World) -> u16 {
+    pub fn word(self, b: &mut impl Space) -> u16 {
         rd16(b, self.0)
     }
 }
@@ -31,7 +30,7 @@ pub const IN2_SERVICE: Port = Port(0x804021);
 pub struct Output(pub u32);
 
 impl Output {
-    pub fn set(self, b: &mut World, v: u16) {
+    pub fn set(self, b: &mut impl Space, v: u16) {
         wr16(b, self.0, v)
     }
 }
@@ -48,17 +47,17 @@ impl DevRam {
     pub const fn offset(self, n: u32) -> DevRam {
         DevRam(self.0.wrapping_add(n))
     }
-    pub fn byte(self, b: &mut World) -> u8 {
+    pub fn byte(self, b: &mut impl Space) -> u8 {
         rd8(b, self.0)
     }
-    pub fn set_byte(self, b: &mut World, v: u8) {
-        crate::world::mem::wr8(b, self.0, v)
+    pub fn set_byte(self, b: &mut impl Space, v: u8) {
+        crate::hw::mem::wr8(b, self.0, v)
     }
-    pub fn set_word(self, b: &mut World, v: u16) {
+    pub fn set_word(self, b: &mut impl Space, v: u16) {
         wr16(b, self.0, v)
     }
-    pub fn set_long(self, b: &mut World, v: u32) {
-        crate::world::mem::wr32(b, self.0, v)
+    pub fn set_long(self, b: &mut impl Space, v: u32) {
+        crate::hw::mem::wr32(b, self.0, v)
     }
 }
 
@@ -68,16 +67,16 @@ impl DevRam {
 pub struct Memory(pub u32);
 
 impl Memory {
-    pub fn byte(self, b: &mut World) -> u8 {
+    pub fn byte(self, b: &mut impl Space) -> u8 {
         rd8(b, self.0)
     }
-    pub fn set_byte(self, b: &mut World, v: u8) {
-        crate::world::mem::wr8(b, self.0, v)
+    pub fn set_byte(self, b: &mut impl Space, v: u8) {
+        crate::hw::mem::wr8(b, self.0, v)
     }
-    pub fn word(self, b: &mut World) -> u16 {
+    pub fn word(self, b: &mut impl Space) -> u16 {
         rd16(b, self.0)
     }
-    pub fn set_word(self, b: &mut World, v: u16) {
+    pub fn set_word(self, b: &mut impl Space, v: u16) {
         wr16(b, self.0, v)
     }
 }

@@ -18,7 +18,7 @@ use super::super::combos::clear_recognizers;
 use super::super::init::init_weapon_stats;
 use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, ram, Ctx, Player};
-use crate::world::mem::{wr16, wr8, A5};
+use crate::hw::mem::{wr16, wr8, A5};
 use crate::world::objects::Obj;
 use crate::actors::player::external as ext;
 use crate::actors::player::tables::{pc16, word};
@@ -78,7 +78,7 @@ const NO_SHOCK_SCENE: u8 = 41;
 /// Original routines called by these tools.
 pub mod rom {
     /// Sound associated with the spark of `item_spark`.
-    pub const SPARK_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_18C;
+    pub const SPARK_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_18C;
     /// Creation of a player effect (PEFF pool) of the type given by D0, according to the weapon.
     pub const SPAWN_EFFECT: crate::world::data::RomAddr = crate::world::data::RomAddr(0x4c58e);
     /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
@@ -130,14 +130,14 @@ pub fn step_with_d0(g: &mut Ctx, p: Player, d0: u8) -> (bool, u8) {
 pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
-    crate::hw::sound::play_with(g.b, crate::hw::sound::WEAPON_VOICE, crate::hw::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::services::sound::play_with(g.b, crate::services::sound::WEAPON_VOICE, crate::services::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Plays the voice of the weapon held in the left hand (D4 = `WEAPON_B`, magic-user).
 pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_B) as u32;
-    crate::hw::sound::play_with(g.b, crate::hw::sound::WEAPON_VOICE, crate::hw::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::services::sound::play_with(g.b, crate::services::sound::WEAPON_VOICE, crate::services::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Starts animation `n`, then plays the voice of the left-hand weapon (`WEAPON_B`, magic-user).
@@ -477,7 +477,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let row = tables::SPARKS + 8 * kind as u32;
     let (d0, d1, d2, height) = (pc16(g.b, row), pc16(g.b, row + 2), pc16(g.b, row + 4), pc16(g.b, row + 6));
     // the speed and the height stay in D2-D4 (leftovers of the original)
-    crate::world::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+    crate::hw::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
     g.leftovers.d4 = height as u32;
     g.leftovers.d2 = d2 as u32;
     match g.shock(p, d0 as u8, d1, d2, 0xffff) {

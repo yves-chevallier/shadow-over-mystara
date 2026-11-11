@@ -70,7 +70,7 @@ fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Ogre::TIMER2, 0);
             x.set16(Obj::AX, 0x30);
             lib::shake_58(x, 0x1e);
-            lib::sound(x, crate::hw::sound::CMD_328_428_B);
+            lib::sound(x, crate::services::sound::CMD_328_428_B);
             act(x, 0xa);
         }
         8 => {
@@ -91,7 +91,7 @@ fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            lib::sound(x, crate::hw::sound::CMD_30C_40C);
+            lib::sound(x, crate::services::sound::CMD_30C_40C);
             mv(x, 8);
         }
         12 => {
@@ -156,7 +156,7 @@ fn thump<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set8(f::KEY_FRAME, 0);
-    lib::sound(x, crate::hw::sound::CMD_329_429);
+    lib::sound(x, crate::services::sound::CMD_329_429);
     spark(x, 4);
     lib::shake_54(x, 0xa);
 }
@@ -169,8 +169,8 @@ fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
     x.set16(Obj::AX, vy as u16);
     lib::shake_54(x, 0x14);
-    lib::sound(x, crate::hw::sound::CMD_328_428);
-    lib::sound(x, crate::hw::sound::CMD_329_429);
+    lib::sound(x, crate::services::sound::CMD_328_428);
+    lib::sound(x, crate::services::sound::CMD_329_429);
     mv(x, 5);
 }
 
@@ -203,7 +203,7 @@ fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>) {
         2 | 4 => {
             if lib::target_in_box(x, -0x40, 0x40, 0x40) {
                 x.add8(f::SUB3, 2);
-                lib::sound(x, crate::hw::sound::CMD_30C_40C);
+                lib::sound(x, crate::services::sound::CMD_30C_40C);
                 mv(x, 8);
             } else {
                 lib::step(x);

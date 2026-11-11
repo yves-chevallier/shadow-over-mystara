@@ -213,7 +213,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
             spark(x, 1);
-            lib::sound(x, crate::hw::sound::CMD_376_476);
+            lib::sound(x, crate::services::sound::CMD_376_476);
             look(x, 4);
             mv(x, 8);
         }
@@ -224,7 +224,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
                 lib::shake_54(x, 0x10);
-                lib::sound(x, crate::hw::sound::CMD_376_476);
+                lib::sound(x, crate::services::sound::CMD_376_476);
             }
             let (mut d0, mut d1);
             if x.u8(WarMachine::AIMED) == 0 {

@@ -3,7 +3,7 @@ use crate::world::data::RomAddr;
 
 const ANIMS: RomAddr = RomAddr(0x170468);
 const HOST: u32 = 0x42;
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_35B_45B;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_35B_45B;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -23,7 +23,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.add32(Obj::Y, 2);
             let flip = copy_flip(x, host);
             x.add16(Obj::X, if flip != 0 { 0x6e } else { neg(0x6e) });
-            crate::hw::sound::play(x.b, SOUND, x.o);
+            crate::services::sound::play(x.b, SOUND, x.o);
             ai_anim(x, ANIMS.0, 0);
         }
         2 => match x.u8(Base::SUB_STATE) {

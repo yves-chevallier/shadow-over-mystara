@@ -3,8 +3,8 @@ use crate::world::data::RomAddr;
 use crate::actors::families::shell::records::view;
 
 const ANIMS: RomAddr = RomAddr(0x16f174);
-const SOUND_START: crate::hw::sound::Sound = crate::hw::sound::CMD_32E;
-const SOUND_END: crate::hw::sound::Sound = crate::hw::sound::CMD_337;
+const SOUND_START: crate::services::sound::Sound = crate::services::sound::CMD_32E;
+const SOUND_END: crate::services::sound::Sound = crate::services::sound::CMD_337;
 const OWNER_ARMED: u32 = 0xaf;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -12,7 +12,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         0 => init(x),
         2 => active(x),
         4 => {
-            crate::hw::sound::play(x.b, SOUND_END, x.o);
+            crate::services::sound::play(x.b, SOUND_END, x.o);
             x.free_eshl()
         }
         _ => x.free_eshl(),
@@ -43,7 +43,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let owner = x.linked(Shot::OWNER);
     if (owner.u8(x.b, Obj::STATE) as i8) >= 4 || owner.u16(x.b, Obj::STATE) == 0x20a {
-        crate::hw::sound::play(x.b, SOUND_END, x.o);
+        crate::services::sound::play(x.b, SOUND_END, x.o);
         return x.free_eshl();
     }
     match x.u8(Base::SUB_STATE) {
@@ -56,7 +56,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             x.add8(Base::SUB_STATE, 2);
-            crate::hw::sound::play(x.b, SOUND_START, x.o);
+            crate::services::sound::play(x.b, SOUND_START, x.o);
             x.set16(Shot30::TIMER, 0x30);
             x.anim_start(ANIMS.0, 1);
         }
@@ -72,7 +72,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         }
         6 => {
             if x.anim_step() {
-                crate::hw::sound::play(x.b, SOUND_END, x.o);
+                crate::services::sound::play(x.b, SOUND_END, x.o);
                 x.add8(Obj::STATE, 4);
                 x.set8(Base::SUB_STATE, 0);
                 let owner = x.linked(Shot::OWNER);

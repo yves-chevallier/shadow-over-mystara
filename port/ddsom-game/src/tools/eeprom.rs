@@ -1,14 +1,14 @@
-//! Tools: the natives of `crate::hw::eeprom` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::services::eeprom` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::hw::eeprom::*;
+use crate::services::eeprom::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd32, rd8};
+use crate::hw::mem::{rd32, rd8};
 
 macro_rules! native_counter {
     ($fn:ident, $k:expr) => {

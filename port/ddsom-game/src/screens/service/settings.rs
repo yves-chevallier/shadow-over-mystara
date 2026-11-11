@@ -34,23 +34,23 @@ mod line {
 
 /// Texts.
 mod text {
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2caa6);
-    pub const MENU: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cad2);
-    pub const SELECT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb16);
-    pub const HELP_START: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb36);
-    pub const HELP_RESET: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb56);
-    pub const HELP_EXIT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb76);
-    pub const SAVING: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cdce);
-    pub const SYSTEM_TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cb96);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2caa6);
+    pub const MENU: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cad2);
+    pub const SELECT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cb16);
+    pub const HELP_START: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cb36);
+    pub const HELP_RESET: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cb56);
+    pub const HELP_EXIT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cb76);
+    pub const SAVING: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cdce);
+    pub const SYSTEM_TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cb96);
     /// Lines of 7-1: without language or cards, with the language (variant 8), with the cards (4, 10).
-    pub const SYSTEM_LINES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cbc8);
-    pub const SYSTEM_LINES_LANGUAGE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cc3c);
-    pub const SYSTEM_LINES_CARDS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ce1a);
-    pub const GAME_TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ccc0);
-    pub const GAME_LINES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ccee);
-    pub const SUB_SELECT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd12);
-    pub const SUB_HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd36);
-    pub const SUB_HELP_EXIT: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2cd82);
+    pub const SYSTEM_LINES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cbc8);
+    pub const SYSTEM_LINES_LANGUAGE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cc3c);
+    pub const SYSTEM_LINES_CARDS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ce1a);
+    pub const GAME_TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ccc0);
+    pub const GAME_LINES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ccee);
+    pub const SUB_SELECT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cd12);
+    pub const SUB_HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cd36);
+    pub const SUB_HELP_EXIT: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2cd82);
 }
 
 /// Arrows of the menu and submenus; line "4. SAVE & EXIT" coloured when not at factory settings.
@@ -59,8 +59,8 @@ const SUB_ARROW: u32 = crate::hw::video::TEXT.at(0x11c).0;
 const SAVE_LINE: u32 = crate::hw::video::TEXT.at(0xb2c).0;
 
 /// Coin modes offered with the card dispenser (variant 4, then 10), PC-relative bytes.
-const CARD_MODES_4: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2c008);
-const CARD_MODES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2c00c);
+const CARD_MODES_4: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2c008);
+const CARD_MODES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2c00c);
 
 /// Game variables (offsets from A5).
 mod v {
@@ -204,7 +204,7 @@ fn draw(x: &mut Ctx, s: &Setting) {
         Show::Text { table, stride, width } => {
             let from = table + stride * value as u32;
             for k in 0..width {
-                let ch = crate::screens::tables::byte(x.b, from + k) as u16;
+                let ch = crate::world::screen_tables::byte(x.b, from + k) as u16;
                 Cell(s.cell + 0x80 * k).put(x.b, ch, 0);
             }
             width

@@ -10,7 +10,7 @@ use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
 use crate::world::objects::Obj;
-use crate::world::mem::{rd16, set_low_byte};
+use crate::hw::mem::{rd16, set_low_byte};
 
 fn dw(c: &Cpu, n: usize) -> u16 {
     c.d[n] as u16

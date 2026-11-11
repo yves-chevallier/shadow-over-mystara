@@ -140,7 +140,7 @@ pub(super) fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Effect::ANIM_EVENT, 0);
                 crate::world::placement::load_effect_palette(x.b, crate::world::placement::effect_palette::LIGHT);
                 crate::actors::families::effects_creators::pillars(x.b);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_357, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_357, x.o);
                 crate::world::ram::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 x.set8(floater::SHAKE, 8);
                 crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_WHITE_VALUE);
@@ -613,7 +613,7 @@ pub(super) fn riser_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
         wr16(x.b, o.0 + 0x42, x.o.0 as u16);
         let facing = x.u8(Effect::FACING);
         wr8(x.b, o.0 + 0x2c, facing);
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_368, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_368, x.o);
     } else {
         for field in [Obj::X, Obj::Y, Obj::Z] {
             let v = x.u16(field);
@@ -632,8 +632,8 @@ pub(super) fn riser<R: Bench>(x: &mut Cx<'_, R>) {
             x.add16(Obj::Z, 0x32);
             crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_WHITE_VALUE);
             vars::SHAKE.set(x.b, 0xa);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_5F, x.o);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_173, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_5F, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_173, x.o);
             x.anim_start(riser::ANIM_SET.0, 9);
         }
         2 => riser_active(x),
@@ -722,14 +722,14 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
             wr16(x.b, o.0 + Obj::X, px);
             wr16(x.b, o.0 + Obj::Y, py);
             wr16(x.b, o.0 + Obj::Z, 0x66);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_365, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_365, x.o);
         }
         18 => {
             if countdown(x, riser::TIMER) {
                 return;
             }
             x.set16(riser::TIMER, 0x3c);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_366_B, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_366_B, x.o);
             riser_anim(x, 5);
         }
         20 => {

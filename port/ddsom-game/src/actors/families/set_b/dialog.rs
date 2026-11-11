@@ -1,5 +1,5 @@
 use super::*;
-use crate::world::mem::{rd16, rd32, wr16, wr32};
+use crate::hw::mem::{rd16, rd32, wr16, wr32};
 use crate::actors::families::set::tables as set_tables;
 
 /// Window definitions per variant (pointers, data space).
@@ -37,7 +37,7 @@ mod text;
 use text::build;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::SetObj;
 use crate::actors::families::set_b::fields::DialogObj;
 
@@ -266,7 +266,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn rd8(b: &mut crate::world::World, a: u32) -> u8 {
-    crate::world::mem::rd8(b, a)
+    crate::hw::mem::rd8(b, a)
 }
 
 /// Substate 2: the frame grows by one line every `+0x36` frames.
@@ -406,8 +406,8 @@ fn close<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.a5_u8(vars::SCENES).wrapping_sub(1);
     x.set_a5_u8(vars::SCENES, n);
     x.set8(DialogObj::CLOSING, 0);
-    let v = crate::world::mem::rd8(x.b, OPEN_COUNT).wrapping_sub(1);
-    crate::world::mem::wr8(x.b, OPEN_COUNT, v);
+    let v = crate::hw::mem::rd8(x.b, OPEN_COUNT).wrapping_sub(1);
+    crate::hw::mem::wr8(x.b, OPEN_COUNT, v);
     x.free(&pools::SET);
 }
 

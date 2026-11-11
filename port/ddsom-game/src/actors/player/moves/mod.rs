@@ -11,7 +11,7 @@ use super::spawn::Thrown;
 use super::states::State;
 use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move_z, run_speed, walk_speed};
 use super::{animation, ram, Ctx, Player};
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::world::objects::{pools, Obj};
 use crate::actors::player::external as ext;
 use crate::actors::player::tables::{player_data, Aligned};
@@ -26,7 +26,7 @@ pub use leaps::*;
 /// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
     /// Push sound.
-    pub const PUSH_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_14B_24B;
+    pub const PUSH_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_14B_24B;
     /// Rare pose 0x26: sound, flash, creation of a SET object of the scene (0xc8312) of this variant.
     pub const SCENE_SET_VARIANT: u8 = 0x29;
 }
@@ -72,8 +72,8 @@ fn set_vx_pair(g: &mut Ctx, p: Player, vx: u16, ax: u16) {
 /// One frame out of four (depending on the character), dust under the feet: variant D0, settings D1, speeds D2/D3
 /// (which stay in D2.w and D3.w: leftovers of the original).
 fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
-    crate::world::mem::set_low_word(&mut g.leftovers.d2, d2);
-    crate::world::mem::set_low_word(&mut g.leftovers.d3, d3);
+    crate::hw::mem::set_low_word(&mut g.leftovers.d2, d2);
+    crate::hw::mem::set_low_word(&mut g.leftovers.d3, d3);
     g.shock(p, d0 as u8, d1, d2, d3);
 }
 

@@ -105,7 +105,7 @@ fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 
 /// 0x6ad12: sound then animation 4.
 fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
-    lib::sound(x, crate::hw::sound::CMD_335_435);
+    lib::sound(x, crate::services::sound::CMD_335_435);
     mv(x, 4);
 }
 

@@ -361,7 +361,7 @@ pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
         let r = rand_and(x, 0xf);
         let sound = tables::table("dbeast/pounce_cries").at8(x.b, r);
         if sound != 0 {
-            lib::sound(x, crate::hw::sound::CMD_31B_41B);
+            lib::sound(x, crate::services::sound::CMD_31B_41B);
         }
     }
     if x.anim_step() {

@@ -14,9 +14,9 @@ use super::Ctx;
 use crate::services::video::{clear_layer, Layer};
 use super::screen::blocks::EXIT_STEP;
 use crate::hw::video::regs;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::screens::obj;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 use crate::screens::vars as sv;
 use crate::screens::modes::{Flow, Sequence};
 use crate::Native;
@@ -47,23 +47,23 @@ mod f {
 /// Tables (`data`: read as data; `pc`: PC-relative).
 mod rom {
     /// Shop number per scene (data).
-    pub const SHOP_OF_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ad0);
+    pub const SHOP_OF_SCENE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7ad0);
     /// Shop music: offset (data) into a routine table (data).
-    pub const MUSIC_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ab0);
-    pub const MUSIC: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7ac4);
+    pub const MUSIC_INDEX: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7ab0);
+    pub const MUSIC: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7ac4);
     /// Welcome sound: index (data, 20 shops) into a routine table (data).
-    pub const WELCOME_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7b88);
-    pub const WELCOME: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7b9c);
+    pub const WELCOME_INDEX: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7b88);
+    pub const WELCOME: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7b9c);
     pub const WELCOME_SHOPS: u8 = 20;
     /// Exit message lists: index (pc) into a pointer table (pc).
-    pub const EXIT_LIST_INDEX: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7c14);
-    pub const EXIT_LISTS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7c28);
+    pub const EXIT_LIST_INDEX: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7c14);
+    pub const EXIT_LISTS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7c28);
     /// Shop followed by another (data); scene imposed after the shop (data, 0: the return scene).
-    pub const CHAINED: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7d72);
-    pub const NEXT_SCENE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7d5e);
+    pub const CHAINED: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7d72);
+    pub const NEXT_SCENE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7d5e);
     /// Player portraits: 8 bytes per character (address, tile, attributes), depending on the layout.
-    pub const PORTRAITS_WIDE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7eb2);
-    pub const PORTRAITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7e92);
+    pub const PORTRAITS_WIDE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7eb2);
+    pub const PORTRAITS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7e92);
 }
 
 mod sub {
@@ -118,7 +118,7 @@ pub fn run(x: &mut Ctx) -> Flow {
             }
             set_b16(x, f::STATE, 0x800);
             // D0 still holds the state (6), set for the dispatch: it serves as the row of the delay table
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 6 });
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 6 });
             Flow::Done
         }
         8 => match b8(x, f::EXIT_STEP) {
@@ -163,7 +163,7 @@ crate::steps! {
             }
             let index = rom::MUSIC_INDEX.byte(x.b, shop as u32) as u32;
             let music = rom::MUSIC.long(x.b, index);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::Sound::at(music));
+            crate::services::sound::play_global(x.b, crate::services::sound::Sound::at(music));
             set_b16(x, f::STATE, 0x200);
             set_b8(x, f::SHOPPERS, 0);
             set_b8(x, f::TALKING, 0);
@@ -281,7 +281,7 @@ fn welcome(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     let sound = rom::WELCOME.long(x.b, 4 * index as u32);
-    crate::hw::sound::play_global(x.b, crate::hw::sound::Sound::at(sound));
+    crate::services::sound::play_global(x.b, crate::services::sound::Sound::at(sound));
     Flow::Done
 }
 

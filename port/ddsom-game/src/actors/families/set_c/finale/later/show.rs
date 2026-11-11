@@ -162,7 +162,7 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
 /// the sound call 0xea83e rings out from time to time.
 pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     const ORDER: u32 = 0xcfa3c;
-    const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_3F;
+    const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_3F;
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
@@ -172,7 +172,7 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
         _ => return,
     }
     if rng(x) & 7 == 0 {
-        crate::hw::sound::play(x.b, SOUND, x.o);
+        crate::services::sound::play(x.b, SOUND, x.o);
     }
     if x.a5_u16(a5::BG_Y) == 0 {
         return next_state(x);

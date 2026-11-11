@@ -26,7 +26,7 @@ const KILLED_SLOT: u16 = 0xf0;
 
 fn entry(x: &mut Ctx) -> Flow {
     for k in 0..MENU_LONGS {
-        crate::world::mem::wr32(x.b, MENU + 4 * k, 0);
+        crate::hw::mem::wr32(x.b, MENU + 4 * k, 0);
     }
     crate::core::kernel::kill_task(x.b, KILLED_SLOT as u32);
     turn(x)

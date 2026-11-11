@@ -25,7 +25,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x9b752: key frame of the attack animation (sound 0xebfdc), then end when the animation is finished.
 fn finish_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        lib::sound(x, crate::hw::sound::CMD_361);
+        lib::sound(x, crate::services::sound::CMD_361);
         x.set8(f::KEY_FRAME, 0);
     }
     if x.anim_step() {
@@ -388,7 +388,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>, down: bool) {
         return step_anim(x);
     }
     lib::shake_54(x, 0x1e);
-    lib::sound(x, if down { crate::hw::sound::CMD_371 } else { crate::hw::sound::CMD_372 });
+    lib::sound(x, if down { crate::services::sound::CMD_371 } else { crate::services::sound::CMD_372 });
     x.set32(Obj::Z, 0);
     dust_line(x);
     next7(x);

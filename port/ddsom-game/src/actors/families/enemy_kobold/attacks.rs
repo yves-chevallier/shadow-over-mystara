@@ -429,7 +429,7 @@ pub(super) fn breath_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let r = rand_and(x, 0xf);
         let flag = tables::table("kobold/breath_sounds").at8(x.b, r);
         if flag != 0 {
-            lib::sound(x, crate::hw::sound::CMD_300_400);
+            lib::sound(x, crate::services::sound::CMD_300_400);
         }
     }
     if !x.anim_step() {

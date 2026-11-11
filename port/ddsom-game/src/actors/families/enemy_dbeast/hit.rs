@@ -61,7 +61,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(DisplacerBeast::WANT_ANIM, 0x1e);
             let want = x.u8(DisplacerBeast::WANT_ANIM);
             x.set8(DisplacerBeast::CUR_ANIM, want);
-            lib::sound(x, crate::hw::sound::CMD_350_450);
+            lib::sound(x, crate::services::sound::CMD_350_450);
             x.set16(Enemy::VX, 0x300);
             x.set16(Enemy::AX, (-0x28i16) as u16);
             let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
@@ -180,7 +180,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(Enemy::BLOCKED) != 0 {
                 x.add8(f::SUB2, 2);
             }
-            let t = crate::services::video::terrain_of(x.b, x.o);
+            let t = crate::world::terrain::terrain_of(x.b, x.o);
                 let terrain = t.number as u8;
             x.set8(Enemy::BLOCKED, terrain);
             x.move_by_table_xy();

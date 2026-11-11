@@ -22,7 +22,7 @@
 use crate::actors::families::cx::Bench;
 use crate::world::objects::Current;
 use crate::actors::families::cx::Cx;
-use crate::world::mem::{rd16, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::world::objects::pools::{BOSS, EFFCT, ENEMY, ESHL, ITEM, PEFF, SET, SOBJ};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
@@ -99,8 +99,8 @@ const CURTAIN_TABLE: u32 = 0xbcea4;
 const CURTAIN_PALETTE: u32 = 0xbcfc6;
 
 // Engine routines called.
-const PREPARE_EFFECTS: crate::hw::sound::Sound = crate::hw::sound::CMD_322_422;
-const FADE_OUT: crate::hw::sound::Sound = crate::hw::sound::SCENE_MUSIC;
+const PREPARE_EFFECTS: crate::services::sound::Sound = crate::services::sound::CMD_322_422;
+const FADE_OUT: crate::services::sound::Sound = crate::services::sound::SCENE_MUSIC;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
@@ -470,7 +470,7 @@ fn clear_all<R: Bench>(x: &mut Cx<'_, R>) {
     next_state(x, 2);
     x.set_a5_u8(a5::SCENE_LATCH, 0xff);
     x.set_a5_u8(a5::FROZEN, 0);
-    crate::hw::sound::play(x.b, FADE_OUT, x.o);
+    crate::services::sound::play(x.b, FADE_OUT, x.o);
     for pool in [&SET, &ENEMY, &SOBJ, &BOSS, &EFFCT, &ITEM, &ESHL, &PEFF] {
         for i in 0..pool.slots {
             let o = pool.slot(i);
@@ -493,7 +493,7 @@ fn effects_wave<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(a5::FROZEN) != 0 {
         return next_state(x, 2);
     }
-    crate::hw::sound::play(x.b, PREPARE_EFFECTS, x.o);
+    crate::services::sound::play(x.b, PREPARE_EFFECTS, x.o);
     if spawn(x, &pools::EFFCT, 0x21, Some(0)).is_none() {
         return;
     }

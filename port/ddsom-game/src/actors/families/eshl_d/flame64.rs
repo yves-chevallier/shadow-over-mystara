@@ -7,8 +7,8 @@ const GENERATION: u32 = 0x2f;
 const TIMER: u32 = 0x42;
 const SOUND_COUNT: u32 = 0x46;
 const LAST_GENERATION: u8 = 4;
-const SFX_FLAME: crate::hw::sound::Sound = crate::hw::sound::CMD_330;
-const SFX_LAND: crate::hw::sound::Sound = crate::hw::sound::CMD_32F;
+const SFX_FLAME: crate::services::sound::Sound = crate::services::sound::CMD_330;
+const SFX_LAND: crate::services::sound::Sound = crate::services::sound::CMD_32F;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
@@ -64,7 +64,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(SOUND_COUNT).wrapping_sub(1);
     x.set8(SOUND_COUNT, n);
     if n == 0 {
-        crate::hw::sound::play(x.b, SFX_FLAME, x.o);
+        crate::services::sound::play(x.b, SFX_FLAME, x.o);
         x.set8(SOUND_COUNT, 3);
     }
     follow(x);
@@ -104,7 +104,7 @@ fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(Base::SUB_STATE, 2);
                 shape(x);
-                crate::hw::sound::play(x.b, SFX_LAND, x.o);
+                crate::services::sound::play(x.b, SFX_LAND, x.o);
                 x.anim_start(ANIMS.0, 1);
             }
         }
@@ -119,7 +119,7 @@ fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
             shape(x);
             x.set16(TIMER, 12);
             x.anim_start(ANIMS.0, 2);
-            crate::hw::sound::play(x.b, SFX_FLAME, x.o);
+            crate::services::sound::play(x.b, SFX_FLAME, x.o);
         }
         _ => {
             if count_down(x, TIMER) {

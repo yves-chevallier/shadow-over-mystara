@@ -15,7 +15,7 @@ use super::actions::to_stand;
 use super::{animation, combos};
 use super::states::{action, main, state, sub, State};
 use super::{ram, Ctx, Player};
-use crate::world::mem::{rd16, rd8, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr8, A5};
 use crate::world::objects::pools;
 use crate::actors::player::tables::{player_data, players, byte, long, Aligned, Read};
 
@@ -176,7 +176,7 @@ pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
     };
     wr8(g.b, effect.0, 1);
     wr8(g.b, effect.0 + 3, 0xff);
-    crate::world::mem::wr16(g.b, effect.0 + 0x50, p.0 as u16);
+    crate::hw::mem::wr16(g.b, effect.0 + 0x50, p.0 as u16);
     p.set_u16(g, Player::SPECIAL_EFFECT, effect.0 as u16);
     p.set_u8(g, Player::SPECIAL_ACTIVE, 1);
     let character = p.u8(g, Player::CHARACTER) as u32;
@@ -256,7 +256,7 @@ pub const TEAM_SCORE: u32 = 0xff_203a;
 /// 0x37658: BCD sum of the scores of the living players; true if it reaches 2,000,000.
 pub fn team_score_reached(g: &mut Ctx) -> bool {
     cov!();
-    crate::world::mem::wr32(g.b, TEAM_SCORE, 0);
+    crate::hw::mem::wr32(g.b, TEAM_SCORE, 0);
     for q in Player::all() {
         if q.u8(g, Player::ACTIVE) == 0 || q.u16(g, Player::HP) == 0 {
             continue;
@@ -270,7 +270,7 @@ pub fn team_score_reached(g: &mut Ctx) -> bool {
             carry = c;
         }
     }
-    (crate::world::mem::rd32(g.b, TEAM_SCORE) as i32) >= 0x0200_0000
+    (crate::hw::mem::rd32(g.b, TEAM_SCORE) as i32) >= 0x0200_0000
 }
 
 /// Packed decimal addition of one byte (ABCD) with incoming carry; returns the result and the carry.

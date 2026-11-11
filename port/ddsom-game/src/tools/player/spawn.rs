@@ -5,7 +5,8 @@
 use crate::actors::player::spawn::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::actors::player::{Ctx, Player};
+use crate::actors::player::Ctx;
+use crate::world::objects::player::Player;
 
 /// Declares the native of a creator at its original address; `$body` reads its parameters in `$d` and `$a`.
 macro_rules! creator {

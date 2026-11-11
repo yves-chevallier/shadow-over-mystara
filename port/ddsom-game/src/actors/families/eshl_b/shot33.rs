@@ -3,15 +3,15 @@ use crate::world::data::RomAddr;
 use crate::actors::families::shell::records::view;
 
 const ANIMS: RomAddr = RomAddr(0x16f8ea);
-const SOUND_FIRE: crate::hw::sound::Sound = crate::hw::sound::CMD_32E;
-const SOUND_END: crate::hw::sound::Sound = crate::hw::sound::CMD_337;
+const SOUND_FIRE: crate::services::sound::Sound = crate::services::sound::CMD_32E;
+const SOUND_END: crate::services::sound::Sound = crate::services::sound::CMD_337;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
     if host_dead(x) {
-        crate::hw::sound::play(x.b, SOUND_END, x.o);
+        crate::services::sound::play(x.b, SOUND_END, x.o);
         return x.free_eshl();
     }
     match x.u8(Obj::STATE) {
@@ -27,7 +27,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                     ai_step(x);
                 } else {
                     x.add8(Base::SUB_STATE, 2);
-                    crate::hw::sound::play(x.b, SOUND_FIRE, x.o);
+                    crate::services::sound::play(x.b, SOUND_FIRE, x.o);
                     ai_start(x, ANIMS.0, 1);
                 }
             }
@@ -58,7 +58,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             _ => {}
         },
         _ => {
-            crate::hw::sound::play(x.b, SOUND_END, x.o);
+            crate::services::sound::play(x.b, SOUND_END, x.o);
             return x.free_eshl();
         }
     }

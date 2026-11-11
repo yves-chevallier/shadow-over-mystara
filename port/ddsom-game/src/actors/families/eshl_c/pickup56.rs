@@ -7,7 +7,7 @@ use crate::actors::families::shell::tables::{tables, Read};
 const ANIMS: RomAddr = RomAddr(0x170c3e);
 /// Creation animation per object type (variant / 2).
 const INIT_ANIMS: [u32; 6] = [2, 4, 5, 5, 4, 7];
-const PICKUP_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_36E_46E;
+const PICKUP_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_36E_46E;
 const COUNTDOWN: u32 = 0x56;
 const STAGE_NO_CULL: u8 = 0x19;
 const LINK: u32 = 0x5c;
@@ -133,7 +133,7 @@ fn touch_then_pick<R: Bench>(x: &mut Cx<'_, R>, with_effects: bool) {
         2 => {
             if pick_countdown(x) && with_effects {
                 x.anim_start(ANIMS.0, 3);
-                crate::hw::sound::play(x.b, PICKUP_SOUND, x.o);
+                crate::services::sound::play(x.b, PICKUP_SOUND, x.o);
             }
         }
         4 => {

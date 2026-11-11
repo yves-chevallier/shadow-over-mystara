@@ -21,7 +21,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 
 pub mod dev_card;
 
@@ -66,7 +66,7 @@ const WAIT_MAX: u32 = 0x2ffff;
 
 /// Address `A5 + off` (A5 is always `mem::A5`).
 pub(crate) const fn a5(off: u32) -> u32 {
-    crate::world::mem::A5.wrapping_add(off)
+    crate::hw::mem::A5.wrapping_add(off)
 }
 
 /// The state of the EEPROM lines, which the original keeps in D2 from one end of the transfer to the other.

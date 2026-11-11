@@ -64,7 +64,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_34F_44F);
+            lib::sound(x, crate::services::sound::CMD_34F_44F);
             mv(x, 0xb);
         }
         2 => {
@@ -150,7 +150,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(Enemy::ACTIVE, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            lib::sound(x, crate::hw::sound::CMD_30B_40B);
+            lib::sound(x, crate::services::sound::CMD_30B_40B);
             lib::object_event(x);
             lib::drop_rewards(x);
             detach_from_host(x);
@@ -185,7 +185,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
             spark(x, 5);
-            lib::sound(x, crate::hw::sound::CMD_327_427_B);
+            lib::sound(x, crate::services::sound::CMD_327_427_B);
             lib::step(x);
         }
         6 => {
@@ -217,7 +217,7 @@ fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
             spark(x, 1);
-            lib::sound(x, crate::hw::sound::CMD_376_476);
+            lib::sound(x, crate::services::sound::CMD_376_476);
             look(x, 0x40);
             mv(x, 8);
         }
@@ -228,7 +228,7 @@ fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
                 lib::shake_54(x, 0x10);
-                lib::sound(x, crate::hw::sound::CMD_376_476);
+                lib::sound(x, crate::services::sound::CMD_376_476);
             }
             if lib::outside_band(x, -0x30, 0x1b0) {
                 detach_from_host(x);

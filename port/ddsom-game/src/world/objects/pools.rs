@@ -12,7 +12,7 @@ use crate::world::World;
 
 use super::lists;
 use super::Obj;
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::ram::Word;
 
 /// Queue of collision candidate objects of a category: number of entries, write

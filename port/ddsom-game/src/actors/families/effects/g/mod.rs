@@ -46,7 +46,7 @@ mod f {
 /// Routines d'origine.
 mod rom {
     /// Sound of the impact on the ground.
-    pub const SOUND_LANDING: crate::hw::sound::Sound = crate::hw::sound::CMD_363_363;
+    pub const SOUND_LANDING: crate::services::sound::Sound = crate::services::sound::CMD_363_363;
 }
 
 fn free<R: Bench>(x: &mut Cx<'_, R>) {

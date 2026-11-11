@@ -310,7 +310,7 @@ pub(super) static SEQ_35: Sequence = Sequence {
         St::Custom(seq35_fade),
         St::Custom(seq35_message),
         St::Custom(seq35_boss),
-        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(crate::hw::sound::CMD_9B), ..LEAVE }),
+        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(crate::services::sound::CMD_9B), ..LEAVE }),
     ],
 };
 

@@ -29,8 +29,8 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_bit(Enemy::DISPLAY, 1, false);
             x.set16(Boss::TIMER, 0x78);
             lib::shake_54(x, 0x7a);
-            lib::sound(x, crate::hw::sound::CMD_331);
-            lib::sound(x, crate::hw::sound::CMD_23);
+            lib::sound(x, crate::services::sound::CMD_331);
+            lib::sound(x, crate::services::sound::CMD_23);
             body(x, 0);
         }
         4 => {

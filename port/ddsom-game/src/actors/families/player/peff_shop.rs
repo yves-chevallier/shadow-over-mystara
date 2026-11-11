@@ -8,18 +8,18 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
-use crate::world::mem::{rd16, rd8, wr16, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::world::objects::Obj;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, Aligned};
 
 /// Merchant message to display (word, A5 - 0x554e) and the two shop sounds (D0 unused: the message is read from RAM).
 const MESSAGE: u32 = A5 - 0x554e;
-const SOUND_OK: crate::hw::sound::Sound = crate::hw::sound::CMD_135_235;
-const SOUND_MESSAGE: crate::hw::sound::Sound = crate::hw::sound::CMD_136_236;
+const SOUND_OK: crate::services::sound::Sound = crate::services::sound::CMD_135_235;
+const SOUND_MESSAGE: crate::services::sound::Sound = crate::services::sound::CMD_136_236;
 /// List of the four customers (address words, 0 = absent).
 const CUSTOMERS: u32 = 0xff2aa4;
 
@@ -54,7 +54,7 @@ fn find_slot<R: Bench>(x: &mut Cx<'_, R>, player: Obj, item: u8) -> Option<u32> 
 /// Sets the message and plays the message sound.
 fn say<R: Bench>(x: &mut Cx<'_, R>, message: u16) {
     wr16(x.b, MESSAGE, message);
-    crate::hw::sound::play(x.b, SOUND_MESSAGE, x.o);
+    crate::services::sound::play(x.b, SOUND_MESSAGE, x.o);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -223,7 +223,7 @@ mod item {
     /// Purchase (0x50f2a equipment, 0x50f94 stackable consumable): stock, purse, free slot, then payment.
     fn buy<R: Bench>(x: &mut Cx<'_, R>, player: Obj, stackable: bool) {
         if (x.u8(STOCK) as i8) < 0 {
-            return crate::hw::sound::play(x.b, SOUND_MESSAGE, x.o);
+            return crate::services::sound::play(x.b, SOUND_MESSAGE, x.o);
         }
         let gold = player.u32(x.b, p::GOLD);
         if (gold as i32) < (x.u32(PRICE) as i32) {
@@ -256,7 +256,7 @@ mod item {
             x.anim_step();
         }
         pay(x, player);
-        crate::hw::sound::play(x.b, SOUND_OK, x.o);
+        crate::services::sound::play(x.b, SOUND_OK, x.o);
     }
 
     /// The player's purse (six BCD bytes `+0x112..+0x117`) minus the price (`+0x4e..+0x53`), by `sbcd`.
@@ -265,7 +265,7 @@ mod item {
         for k in 1..=6 {
             let price = x.u8(PRICE_END - k);
             let gold = player.u8(x.b, p::GOLD_END - k);
-            let (v, b) = crate::core::game::sbcd(gold, price, borrow);
+            let (v, b) = crate::world::ops::sbcd(gold, price, borrow);
             borrow = b;
             player.set_u8(x.b, p::GOLD_END - k, v);
         }
@@ -342,7 +342,7 @@ mod talk {
 
     /// The customer enters the menu (player state 2, substate 5): sound, menu open.
     fn open_menu<R: Bench>(x: &mut Cx<'_, R>, s: &mut Script, player: Obj) {
-        crate::hw::sound::play(x.b, SOUND_OK, x.o);
+        crate::services::sound::play(x.b, SOUND_OK, x.o);
         player.set_u8(x.b, Player::SPEED_CLASS, 2);
         player.set_u8(x.b, Player::SHOP_VISIT, 5);
         player.set_u8(x.b, p::SHOP, IDLE);
@@ -394,7 +394,7 @@ mod talk {
                 SELL_CONFIRMED => {
                     let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 1 {
-                        crate::hw::sound::play(x.b, SOUND_OK, x.o);
+                        crate::services::sound::play(x.b, SOUND_OK, x.o);
                         player.set_u8(x.b, p::SHOP, 0xa);
                         wr8(x.b, SOLD_FLAG, 1);
                         skip(s);
@@ -418,7 +418,7 @@ mod talk {
                             player.set_u8(x.b, Player::WORN_4, 4);
                             player.set_u8(x.b, Player::WEAPON_B, 0x2c);
                             wr8(x.b, LEARNED_FLAG, 1);
-                            crate::hw::sound::play(x.b, SOUND_OK, x.o);
+                            crate::services::sound::play(x.b, SOUND_OK, x.o);
                         } else {
                             player.set_u8(x.b, p::SHOP, 0xa);
                             wr8(x.b, SOLD_FLAG, 1);
@@ -457,11 +457,11 @@ mod talk {
     fn give_weapon<R: Bench>(x: &mut Cx<'_, R>, s: &Script, player: Obj) -> bool {
         let Some(k) = find_slot(x, player, EMPTY) else {
             wr16(x.b, MESSAGE, 0x87);
-            crate::hw::sound::play(x.b, SOUND_MESSAGE, x.o);
+            crate::services::sound::play(x.b, SOUND_MESSAGE, x.o);
             return false;
         };
         player.set_u8(x.b, p::SHOP, IDLE);
-        crate::hw::sound::play(x.b, SOUND_OK, x.o);
+        crate::services::sound::play(x.b, SOUND_OK, x.o);
         let character = player.u8(x.b, p::CHARACTER);
         // D0.w = character (high byte zero, see `LEARN`), divided by two
         let class = character >> 1;
@@ -485,16 +485,16 @@ mod talk {
         if find_slot(x, player, ITEM).is_some() {
             save(x, s);
             player.set_u8(x.b, p::SHOP, IDLE);
-            crate::hw::sound::play(x.b, SOUND_OK, x.o);
+            crate::services::sound::play(x.b, SOUND_OK, x.o);
             return true;
         }
         let Some(k) = find_slot(x, player, EMPTY) else {
             wr16(x.b, MESSAGE, 0x87);
-            crate::hw::sound::play(x.b, SOUND_MESSAGE, x.o);
+            crate::services::sound::play(x.b, SOUND_MESSAGE, x.o);
             return false;
         };
         player.set_u8(x.b, p::SHOP, IDLE);
-        crate::hw::sound::play(x.b, SOUND_OK, x.o);
+        crate::services::sound::play(x.b, SOUND_OK, x.o);
         player.set_u8(x.b, p::SLOTS + k, ITEM);
         player.set_u8(x.b, p::COUNTS + k, 1);
         wr8(x.b, ITEM_2B_FLAG, 1);

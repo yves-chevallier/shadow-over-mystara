@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -371,7 +371,7 @@ fn eshl_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
 /// players, cameras, rank, and for each player its state, life, keys and position
 /// autour de l'objet `obj`.
 fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
-    use ddsom_game::world::mem::{rd16, wr8};
+    use ddsom_game::hw::mem::{rd16, wr8};
     if step != 0 && !rng.next().is_multiple_of(4) {
         return;
     }
@@ -597,7 +597,7 @@ fn leftovers(c: &Cpu, b: &Bus, entry: u32, rng: &mut Rng) -> ([bool; 10], Option
 }
 
 fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, filter: Option<u32>) {
-    use ddsom_game::world::mem::{rd16, rd8};
+    use ddsom_game::hw::mem::{rd16, rd8};
     use ddsom_game::world::objects::pools::{Pool, BOX, EFFCT, ENEMY, ESHL, ITEM, SET, SOBJ};
     let ee = std::fs::read(eeprom).ok();
     let m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -782,7 +782,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
-                    ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    ddsom_game::hw::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                     for _ in 0..20_000 {
                         if c2.pc == 0xfffe {
                             break;
@@ -823,7 +823,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                         let sp = c2.a[7];
                         c2.pc = entry;
                         c2.a[7] = sp.wrapping_sub(4);
-                        ddsom_game::world::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        ddsom_game::hw::mem::wr32(&mut b2, c2.a[7], 0xfffe);
                         for _ in 0..DDSOM_TRACE_LEN {
                             if c2.pc == 0xfffe {
                                 break;
@@ -973,7 +973,7 @@ fn rng_shop(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             wr16(b, 0xff2aa4 + 2 * k, w);
         }
         for off in [0x8u32, 0xc, 0x10] {
-            let v = ddsom_game::world::mem::rd16(b, me + off).wrapping_add((rng.next() % 0x20) as u16);
+            let v = ddsom_game::hw::mem::rd16(b, me + off).wrapping_add((rng.next() % 0x20) as u16);
             wr16(b, client + off, v);
         }
         for (off, v) in [(0x14u32, 0x20u16), (0x16, 0x40), (0x54, 0x20), (0x56, 0x40)] {
@@ -1004,7 +1004,7 @@ fn rng_shop(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             wr16(b, 0xff2aa4 + 2 * k, w);
         }
         for off in [0x8u32, 0xc, 0x10] {
-            let v = ddsom_game::world::mem::rd16(b, me + off).wrapping_add((rng.next() % 0x10) as u16);
+            let v = ddsom_game::hw::mem::rd16(b, me + off).wrapping_add((rng.next() % 0x10) as u16);
             wr16(b, client + off, v);
         }
         for (off, v) in [(0x14u32, 0x20u16), (0x16, 0x40), (0x18, 0x20), (0x1a, 0x40), (0x50, 0x20), (0x52, 0x40), (0x54, 0x20), (0x56, 0x40)] {
@@ -1073,17 +1073,17 @@ fn main() {
             rng_state(c, b, &mut rng);
             let (d0, a0) = (c.d[0], c.a[0]);
             let context = if entry == 0x2d662 {
-                let var = ddsom_game::world::mem::rd16(b, A5 + 0x70);
-                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, 0xff1d8e + i)).collect();
-                let block: Vec<u8> = (0..18).map(|i| ddsom_game::world::mem::rd8(b, c.a[6] + i)).collect();
+                let var = ddsom_game::hw::mem::rd16(b, A5 + 0x70);
+                let copy: Vec<u8> = (0..18).map(|i| ddsom_game::hw::mem::rd8(b, 0xff1d8e + i)).collect();
+                let block: Vec<u8> = (0..18).map(|i| ddsom_game::hw::mem::rd8(b, c.a[6] + i)).collect();
                 format!(" var={var} copy={copy:02x?} defaults={block:02x?}")
             } else if *group == "camera" {
                 let cam = c.a[0];
                 let fields: Vec<String> = [0x08u32, 0x0c, 0x10, 0x14, 0x20, 0x2e, 0x34, 0x40]
                     .iter()
-                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::world::mem::rd16(b, cam + o)))
+                    .map(|o| format!("{o:02x}={:04x}", ddsom_game::hw::mem::rd16(b, cam + o)))
                     .collect();
-                format!(" scene={:02x} terrain={} {}", ddsom_game::world::mem::rd8(b, A5 + 0x34), ddsom_game::world::mem::rd8(b, A5 + 0x37), fields.join(" "))
+                format!(" scene={:02x} terrain={} {}", ddsom_game::hw::mem::rd8(b, A5 + 0x34), ddsom_game::hw::mem::rd8(b, A5 + 0x37), fields.join(" "))
             } else {
                 String::new()
             };
@@ -1110,7 +1110,7 @@ fn main() {
 /// game variables (level, difficulty, frozen scene...), the variant (script) and the player state,
 /// which the generic fuzz does not vary. `start`: initial object state (variant, state).
 fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
-    use ddsom_game::world::mem::{rd16, rd32, rd8};
+    use ddsom_game::hw::mem::{rd16, rd32, rd8};
     wr8(b, A5 + 0x34, if rng.next().is_multiple_of(3) { 4 } else { 1 + (rng.next() % 7) as u8 });
     wr8(b, A5 + 0x35, if rng.next().is_multiple_of(10) { 0 } else { 1 + (rng.next() % 4) as u8 });
     wr8(b, A5 + 0x2c, [0xc, 4, 8, 0, 0x18][rng.next() as usize % 5]);

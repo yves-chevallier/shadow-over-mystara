@@ -23,7 +23,7 @@ use crate::world::record::record;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 mod attacks;
 mod fight;
@@ -195,7 +195,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         lib::initial_hp_boss(x);
     } else {
         if var::GAME_ON.get(x.b) != 0 {
-            lib::sound(x, crate::hw::sound::CMD_20);
+            lib::sound(x, crate::services::sound::CMD_20);
         }
         lib::empty_popups(x);
         lib::clear_popup(x);

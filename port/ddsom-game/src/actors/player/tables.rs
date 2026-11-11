@@ -183,7 +183,7 @@ const RAM: u32 = 0xff_0000;
 /// Byte at the address `a` of a table (data space).
 pub(crate) fn byte(b: &mut World, a: u32) -> u8 {
     if a & 0xff_ffff >= RAM {
-        return crate::world::mem::rd8(b, a);
+        return crate::hw::mem::rd8(b, a);
     }
     match holding(a, false) {
         Some((t, off)) => t.at8(b, off),
@@ -198,7 +198,7 @@ pub(crate) fn byte(b: &mut World, a: u32) -> u8 {
 pub(crate) fn word(b: &mut World, a: u32) -> u16 {
     let a = a & !1;
     if a & 0xff_ffff >= RAM {
-        return crate::world::mem::rd16(b, a);
+        return crate::hw::mem::rd16(b, a);
     }
     match holding(a, false) {
         Some((t, off)) => t.at16(b, off),
@@ -216,7 +216,7 @@ pub(crate) fn word(b: &mut World, a: u32) -> u16 {
 pub(crate) fn long(b: &mut World, a: u32) -> u32 {
     let a = a & !1;
     if a & 0xff_ffff >= RAM {
-        return crate::world::mem::rd32(b, a);
+        return crate::hw::mem::rd32(b, a);
     }
     match holding(a, false) {
         Some((t, off)) => t.at32(b, off),

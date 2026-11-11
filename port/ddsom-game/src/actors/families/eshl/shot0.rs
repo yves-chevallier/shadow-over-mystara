@@ -41,7 +41,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.set8(Shot::ATTACK_POWER, power);
     x.set8(Shot::ATTACK_ID, id);
     x.anim_start(ANIMS.0, anim);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_322_422, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_322_422, x.o);
     true
 }
 
@@ -49,7 +49,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     let hit = x.u8(Shot::HIT_FLAGS);
     if hit & 0x08 != 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::CMD_122_222, x.o);
+        crate::services::sound::play(x.b, crate::services::sound::CMD_122_222, x.o);
         x.free_eshl();
         return;
     }
@@ -57,7 +57,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
         return fall(x);
     }
-    let t = crate::services::video::terrain_of(x.b, x.o);
+    let t = crate::world::terrain::terrain_of(x.b, x.o);
     let terrain = t.number as u32;
     let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
     if ground && terrain & 0x40 == 0 {
@@ -74,7 +74,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Base::STEP) {
         FALL_START => {
             x.add8(Base::STEP, 2);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_123_223, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_123_223, x.o);
             x.set16(Obj::VZ, -0xc0i16 as u16);
             x.set16(Obj::AZ, -0x10i16 as u16);
             x.set16(Obj::VX, 0);

@@ -19,7 +19,7 @@
 use crate::actors::families::cx::Bench;
 use crate::world::data::RomAddr;
 use crate::world::record::record;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::eshl_b::shot32::Shot32;
 use super::eshl_b::shot33::Shot33;
 use super::eshl_b::ShotB;

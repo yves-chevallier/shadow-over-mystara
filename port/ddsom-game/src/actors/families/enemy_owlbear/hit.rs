@@ -50,7 +50,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_329_429);
+            lib::sound(x, crate::services::sound::CMD_329_429);
         }
         4 => {
             let low = var::FRAME_COUNTER.get(x.b) & 3;

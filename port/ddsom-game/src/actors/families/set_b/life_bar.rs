@@ -1,8 +1,8 @@
 use super::*;
-use crate::world::mem::{wr16, wr32};
+use crate::hw::mem::{wr16, wr32};
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::SetObj;
 use crate::actors::families::set_b::fields::{LifeBarObj, LifeOwner};
 

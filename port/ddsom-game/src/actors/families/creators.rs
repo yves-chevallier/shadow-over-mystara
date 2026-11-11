@@ -12,7 +12,7 @@ use crate::world::objects::pools;
 use crate::actors::families::effects::tables::Read;
 use crate::world::objects::Obj;
 use crate::world::ops::Size;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::ram::{Byte, Word};
 
 /// Address word of an object (`move.w An,...`).
@@ -291,7 +291,7 @@ pub fn run_scene_exit(b: &mut World, scene: Obj) {
 fn scene_routine(b: &mut World, scene: Obj, routine: u32) {
     match routine {
         0xd99f8 => {}
-        0xe0c5c | 0xe0d8c => crate::hw::sound::play(b, crate::hw::sound::Sound::at(routine), scene),
+        0xe0c5c | 0xe0d8c => crate::services::sound::play(b, crate::services::sound::Sound::at(routine), scene),
         r => unreachable!("scene routine {r:#x}: tables 0xd978c and 0xd982e only hold 0xd99f8, 0xe0d8c and 0xe0c5c"),
     }
 }

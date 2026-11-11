@@ -7,7 +7,7 @@ use m68k::Cpu;
 use crate::actors::player::walk::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// 68000 entry (0x35c0): D0 = 1 if the abscissa was corrected, A1 = camera.
 fn clamp_native(c: &mut Cpu, b: &mut World) {

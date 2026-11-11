@@ -1,7 +1,7 @@
 //! Step tables of the end-of-scene cinematics (routines 0x2411a to 0x24de6).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{pc8, pc16, word, long};
 

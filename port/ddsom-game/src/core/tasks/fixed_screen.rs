@@ -16,9 +16,9 @@
 //! The cells of the text layer (scroll 1) are pairs of words (tile, attribute), stored by columns:
 //! `+4` next row, `+0x80` next column. The tile tables are read from the ROM (data).
 
-use crate::services::aids::divide;
+use crate::actors::aids::divide;
 use crate::screens::scene::fading;
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::screens::modes::{Flow, Sequence};
 use crate::screens::scene::Ctx;
 use crate::services::video::Grid;

@@ -429,7 +429,7 @@ fn leap_land<'a, R: Bench>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>)) {
         return step_anim(x);
     }
     lib::shake_54(x, 0x1e);
-    lib::sound(x, crate::hw::sound::CMD_372);
+    lib::sound(x, crate::services::sound::CMD_372);
     x.set32(Obj::Z, 0);
     dust_line(x);
     next7(x);
@@ -581,7 +581,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
             if (prey.u16(x.b, f::HP) as i16) <= 1 {
                 return release_prey(x);
             }
-            lib::sound(x, crate::hw::sound::CMD_341_441);
+            lib::sound(x, crate::services::sound::CMD_341_441);
             let hp = prey.u16(x.b, f::HP).wrapping_sub(4);
             prey.set_u16(x.b, f::HP, hp);
             if (hp as i16) > 0 {
@@ -662,7 +662,7 @@ pub(super) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
                 return step_anim(x);
             }
             lib::shake_54(x, 0x1e);
-            lib::sound(x, crate::hw::sound::CMD_371);
+            lib::sound(x, crate::services::sound::CMD_371);
             x.set32(Obj::Z, 0);
             dust_line(x);
             next6(x);

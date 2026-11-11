@@ -73,7 +73,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Boss22::ANIM_ID, 0x1e);
             x.set8(Boss22::ANIM_LAST, 0x1e);
             lib::set_68(x);
-            lib::sound(x, crate::hw::sound::CMD_127_227_B);
+            lib::sound(x, crate::services::sound::CMD_127_227_B);
             let side = x.u8(Enemy::ATTACKER_FLIP);
             x.set8(f::FLIP, side);
             let side = x.u8(f::FLIP) ^ 0x20;
@@ -174,7 +174,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            lib::sound(x, crate::hw::sound::CMD_FF);
+            lib::sound(x, crate::services::sound::CMD_FF);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             x.set8(Enemy::ACTIVE, 2);
             let freeze = x.u8(Enemy::STUN);
@@ -195,8 +195,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 record_defeat(x, 2);
                 x.set8(Boss::DEATH_CREDIT, 1);
                 var::BOSS_DOWN.set(x.b, 0xff);
-                crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-                lib::sound(x, crate::hw::sound::CMD_FF);
+                crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+                lib::sound(x, crate::services::sound::CMD_FF);
                 lib::flash_and_shake(x);
             } else {
                 lib::object_event(x);
@@ -225,7 +225,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Z, 0);
             let right = x.u8(f::FLIP) != 0;
             dust_trail(x, right);
-            lib::sound(x, crate::hw::sound::CMD_35D);
+            lib::sound(x, crate::services::sound::CMD_35D);
             if !second_form(x) {
                 effct_33(x);
             }

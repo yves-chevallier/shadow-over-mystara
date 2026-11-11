@@ -17,7 +17,7 @@
 //! Animations: 0x175da6 (body), 0x175dc4 (attacks), 0x175e0c (fall, death).
 
 use crate::actors::families::cx::Bench;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::data::RomAddr;
 use crate::world::record::record;
 use super::boss_common::*;
@@ -341,7 +341,7 @@ fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     if x.u8(f::KEY_FRAME) != 0 {
-        lib::sound(x, crate::hw::sound::CMD_382);
+        lib::sound(x, crate::services::sound::CMD_382);
     }
     if p.u8(x.b, Enemy::ACTIVE) == 0 {
         return grab_release(x);
@@ -401,7 +401,7 @@ fn simple_attack<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(Boss5::FRAME_KIND, 0x4b);
-            lib::sound(x, crate::hw::sound::CMD_382);
+            lib::sound(x, crate::services::sound::CMD_382);
             attack_anim(x, 0);
             end_of_script(x);
         }
@@ -424,7 +424,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(Boss5::BLINK, 0x14);
-            lib::sound(x, crate::hw::sound::CMD_382);
+            lib::sound(x, crate::services::sound::CMD_382);
             x.select_speed(&crate::world::objects::motion::SPEEDS_B, 0x13);
             x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
@@ -652,7 +652,7 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VZ, 0x600);
             x.set16(Enemy::GRAVITY, (-0x80i16) as u16);
             fall_anim(x, 0);
-            lib::sound(x, crate::hw::sound::CMD_31E_41E_B);
+            lib::sound(x, crate::services::sound::CMD_31E_41E_B);
             lib::attack_effect(x, 8, 0);
         }
         6 | 0xa => {
@@ -744,8 +744,8 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             var::PLAYERS_FROZEN.set(x.b, 1);
             crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_WHITE_VALUE);
             lib::drop_rewards(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
             let kind = x.u8(Enemy::KIND);
             record_defeat(x, kind);
             lib::flash_and_shake(x);

@@ -49,7 +49,7 @@ pub(super) fn lob_init<R: Bench>(x: &mut Cx<'_, R>) {
     let ty = tables().lob_targets.at16(x.b, 4 * v + 2).wrapping_add(vars::CAMERA1_Y.get(x.b));
     x.set16(lob::TARGET_X, tx);
     x.set16(lob::TARGET_Y, ty);
-    let dir = crate::services::aids::direction_from(x.b, x.o, (tx, ty));
+    let dir = crate::actors::aids::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, dir);
     let n = (tables().lob_speed_tables.at8(x.b, v) as u32) as u16;
     x.select_speed(&crate::world::objects::motion::SPEEDS_B, n);
@@ -124,7 +124,7 @@ pub(super) fn lob_active<R: Bench>(x: &mut Cx<'_, R>) {
             };
             vars::SHAKE.set(x.b, shake);
             crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_RED);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_367_467, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_367_467, x.o);
         }
         4 => {
             if x.anim_step() {
@@ -440,7 +440,7 @@ pub(super) fn spell<R: Bench>(x: &mut Cx<'_, R>) {
                     }
                     x.set8(Effect::OWN_PALETTE, 1);
                     x.set8(Effect::PALETTE, 0x17);
-                    crate::hw::sound::play(x.b, crate::hw::sound::CMD_353, x.o);
+                    crate::services::sound::play(x.b, crate::services::sound::CMD_353, x.o);
                     x.anim_start(spell::ANIM_SET.0, 6);
                 }
                 _ => return,
@@ -473,7 +473,7 @@ pub(super) fn spell<R: Bench>(x: &mut Cx<'_, R>) {
                         if mode == 1 && x.u8(Effect::ANIM_EVENT) == 1 {
                             x.set8(Effect::ANIM_EVENT, 0);
                             crate::actors::families::eshl_creators::ring_28(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o);
-                            crate::hw::sound::play(x.b, crate::hw::sound::CMD_346, x.o);
+                            crate::services::sound::play(x.b, crate::services::sound::CMD_346, x.o);
                         }
                         if x.anim_step() {
                             match mode {
@@ -512,7 +512,7 @@ pub(super) fn toss_sound<R: Bench>(x: &mut Cx<'_, R>, table: &Table) {
     let k = 4 * x.u8(f::VARIANT) as u32;
     let routine = table.at32(x.b, k);
     if routine != 0 {
-        crate::hw::sound::play(x.b, crate::hw::sound::Sound::at(routine), x.o);
+        crate::services::sound::play(x.b, crate::services::sound::Sound::at(routine), x.o);
     }
 }
 

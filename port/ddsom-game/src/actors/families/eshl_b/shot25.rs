@@ -4,7 +4,7 @@ use crate::world::ram;
 use crate::actors::families::shell::records::view;
 
 const ANIMS: RomAddr = RomAddr(0x16ea18);
-const IMPACT_EFFECT: crate::hw::sound::Sound = crate::hw::sound::CMD_34D_44D;
+const IMPACT_EFFECT: crate::services::sound::Sound = crate::services::sound::CMD_34D_44D;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
@@ -61,7 +61,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Z, 0);
     crate::actors::families::effects_creators::debris(x.b, x.o, 3);
     crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
-    crate::hw::sound::play(x.b, IMPACT_EFFECT, x.o);
+    crate::services::sound::play(x.b, IMPACT_EFFECT, x.o);
     if x.u16(Shot25::LINK) != 0 {
         let shadow = x.linked(Shot25::LINK);
         shadow.set_u8(x.b, Obj::STATE, 6);

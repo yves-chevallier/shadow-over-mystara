@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -24,8 +24,8 @@ pub(super) mod shop {
     pub const FULL_LIFE: u16 = 0x85;
     pub const TOO_MANY: u16 = 0x86;
     pub const NO_ROOM: u16 = 0x87;
-    pub const SOUND_REFUSED: crate::hw::sound::Sound = crate::hw::sound::CMD_136_236;
-    pub const SOUND_BOUGHT: crate::hw::sound::Sound = crate::hw::sound::CMD_135_235;
+    pub const SOUND_REFUSED: crate::services::sound::Sound = crate::services::sound::CMD_136_236;
+    pub const SOUND_BOUGHT: crate::services::sound::Sound = crate::services::sound::CMD_135_235;
     /// Pointers (words) of the four possible buyers.
     pub const BUYERS: u32 = 0xff2aa4;
     /// Annonce en cours (`A5-0x554e`).
@@ -87,7 +87,7 @@ pub(super) fn shop_watch<R: Bench>(x: &mut Cx<'_, R>, buy: fn(&mut Cx<'_, R>, Ob
                 x.set8(shop::OCCUPIED, 1);
                 let message = x.u16(shop::MESSAGE_ID);
                 if x.u8(shop::ANNOUNCED) == 0 && message != 0 {
-                    crate::world::mem::wr16(x.b, shop::MESSAGE, message);
+                    crate::hw::mem::wr16(x.b, shop::MESSAGE, message);
                     x.set8(shop::ANNOUNCED, 1);
                 }
                 if (buyer.u8(x.b, Buyer::PURCHASE) as i8) > 0 {
@@ -109,8 +109,8 @@ pub(super) fn buyer_player<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> Obj {
 
 /// Refusal: sound, then message.
 pub(super) fn shop_refuse<R: Bench>(x: &mut Cx<'_, R>, message: u16) {
-    crate::hw::sound::play(x.b, shop::SOUND_REFUSED, x.o);
-    crate::world::mem::wr16(x.b, shop::MESSAGE, message);
+    crate::services::sound::play(x.b, shop::SOUND_REFUSED, x.o);
+    crate::hw::mem::wr16(x.b, shop::MESSAGE, message);
 }
 
 /// `0xafad0`: purchase by buyer `buyer` (A2), from slot `slot` of the buyers list, according to the purchase
@@ -126,7 +126,7 @@ pub(super) fn shop_buy<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
     match kind {
         shop::EXIT => {
             // the exit: the buyer leaves the list and goes to state 4, the palette comes back
-            crate::world::mem::wr16(x.b, slot, 0);
+            crate::hw::mem::wr16(x.b, slot, 0);
             buyer.set_u16(x.b, Obj::STATE, 0x400);
             vars::FADE_PAGES.set(x.b, 0xf);
             crate::services::palette::full_brightness(x.b);
@@ -145,8 +145,8 @@ pub(super) fn shop_buy<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
             };
             if let Some(&(_, message)) = refused.iter().find(|&&(c, _)| c == class) {
                 if message == shop::TOO_MANY {
-                    crate::world::mem::wr16(x.b, shop::MESSAGE, message);
-                    return crate::hw::sound::play(x.b, shop::SOUND_REFUSED, x.o);
+                    crate::hw::mem::wr16(x.b, shop::MESSAGE, message);
+                    return crate::services::sound::play(x.b, shop::SOUND_REFUSED, x.o);
                 }
                 return shop_refuse(x, message);
             }
@@ -181,21 +181,21 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
                 k
             }
             None => {
-                crate::world::mem::wr16(x.b, shop::MESSAGE, shop::NO_ROOM);
-                return crate::hw::sound::play(x.b, shop::SOUND_REFUSED, x.o);
+                crate::hw::mem::wr16(x.b, shop::MESSAGE, shop::NO_ROOM);
+                return crate::services::sound::play(x.b, shop::SOUND_REFUSED, x.o);
             }
         },
     };
     if player.u8(x.b, Player::QUANTITIES + slot) as i8 >= 9 {
-        crate::world::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
-        return crate::hw::sound::play(x.b, shop::SOUND_REFUSED, x.o);
+        crate::hw::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
+        return crate::services::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
     let id = x.u8(shop::ITEM + 1);
     player.set_u8(x.b, Player::INVENTORY + slot, id);
     let n = player.u8(x.b, Player::QUANTITIES + slot).wrapping_add(1);
     player.set_u8(x.b, Player::QUANTITIES + slot, n);
     let collected = x.u8(shop::ITEM) as u32;
-    crate::world::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
+    crate::hw::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
     shop_pay(x, player);
 }
 
@@ -207,12 +207,12 @@ pub(super) fn shop_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
     } else {
         let mut borrow = false;
         for k in 1..=6 {
-            let (v, b) = crate::core::game::sbcd(player.u8(x.b, Player::GOLD_END - k), x.u8(ShopPrice::PRICE_END - k), borrow);
+            let (v, b) = crate::world::ops::sbcd(player.u8(x.b, Player::GOLD_END - k), x.u8(ShopPrice::PRICE_END - k), borrow);
             player.set_u8(x.b, Player::GOLD_END - k, v);
             borrow = b;
         }
     }
-    crate::hw::sound::play(x.b, shop::SOUND_BOUGHT, x.o);
+    crate::services::sound::play(x.b, shop::SOUND_BOUGHT, x.o);
 }
 
 /// `0xafc3c`: meal (healing `heal`): refused if life is full; the last of the stock moves the
@@ -225,8 +225,8 @@ pub(super) fn shop_meal<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
     let player = buyer_player(x, buyer);
     let full = player.u16(x.b, Player::HP_MAX);
     if full as i16 <= player.u16(x.b, Player::HP) as i16 {
-        crate::world::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
-        return crate::hw::sound::play(x.b, shop::SOUND_REFUSED, x.o);
+        crate::hw::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
+        return crate::services::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
     if !shop_can_pay(x, player) {
         return;
@@ -326,8 +326,8 @@ pub(super) fn purse_init<R: Bench>(x: &mut Cx<'_, R>) {
     let player = owner.u8(x.b, Obj::KIND);
     let palette = 0x18u8.wrapping_add(player);
     x.set8(Effect::PALETTE, palette);
-    crate::world::mem::wr32(x.b, 0x91c54e, 0xf062_f0f6);
-    crate::world::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
+    crate::hw::mem::wr32(x.b, 0x91c54e, 0xf062_f0f6);
+    crate::hw::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
     // the original keeps D0 (the palette) across the allocation
     let Some(item) = x.alloc(&pools::ITEM) else { crate::actors::families::effects::address_error(purse::POOL_FULL.0) };
     wr8(x.b, item.0, 1);
@@ -466,7 +466,7 @@ pub(super) fn purse_give<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, buttons: u32) 
         }
         let mut borrow = false;
         for i in (1..4).rev() {
-            let (v, c) = crate::core::game::sbcd(owner.u8(x.b, GOLD + i), x.u8(purse::GIFT + i), borrow);
+            let (v, c) = crate::world::ops::sbcd(owner.u8(x.b, GOLD + i), x.u8(purse::GIFT + i), borrow);
             owner.set_u8(x.b, GOLD + i, v);
             borrow = c;
         }
@@ -621,9 +621,9 @@ pub(super) fn counter_buy<R: Bench>(x: &mut Cx<'_, R>, _buyer: Obj, _slot: u32) 
     if active != 0 && active != x.o.0 as u16 {
         return;
     }
-    crate::world::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
+    crate::hw::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
     let Some(seller) = scene_set_of(x, 0x64) else {
-        return crate::world::mem::wr16(x.b, counter::ACTIVE, 0);
+        return crate::hw::mem::wr16(x.b, counter::ACTIVE, 0);
     };
     x.set16(counter::SELLER, seller.0 as u16);
     x.add8(f::SUB_STATE, 2);
@@ -639,7 +639,7 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
         if countdown_word(x, counter::TIMER) {
             x.set8(f::SUB_STATE, 0);
             x.set8(counter::STEP, 0);
-            crate::world::mem::wr16(x.b, counter::ACTIVE, 0);
+            crate::hw::mem::wr16(x.b, counter::ACTIVE, 0);
         }
         return;
     }
@@ -674,7 +674,7 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(counter::STEP, 2);
-    crate::world::mem::wr16(x.b, shop::MESSAGE, counter::SALE_MESSAGE);
+    crate::hw::mem::wr16(x.b, shop::MESSAGE, counter::SALE_MESSAGE);
     for (off, tile) in counter::SIGN_TILES {
         wr32(x.b, counter::SIGN + off, tile);
     }

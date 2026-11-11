@@ -9,7 +9,8 @@
 use crate::world::World;
 
 use crate::world::ram::{Byte, Long, Word};
-use crate::core::dispatch::{Dispatch, Leftovers};
+use crate::core::dispatch::Dispatch;
+use crate::world::Leftovers;
 use crate::world::objects::pools;
 use crate::world::objects::{Current, Obj};
 use crate::{regs, Native};
@@ -107,14 +108,14 @@ impl<R: Bench> Cx<'_, R> {
     /// 0xfbb0: keeps the object on the screen within `margin` pixels; true if it was moved. Original glitch: the result
     /// stays in D5 (0 or 1), which the burst row of a crate rereads (`Leftovers::d5`).
     pub fn keep_on_screen(&mut self, margin: u16) -> bool {
-        let moved = crate::services::ai::keep_on_screen(self.b, self.o, margin);
+        let moved = crate::actors::ai::keep_on_screen(self.b, self.o, margin);
         *self.c.d5() = moved as u32;
         moved
     }
 
     /// 0xfbae: `keep_on_screen` with the play area margin (0x30).
     pub fn keep_in_zone(&mut self) -> bool {
-        self.keep_on_screen(crate::services::ai::ZONE_MARGIN)
+        self.keep_on_screen(crate::actors::ai::ZONE_MARGIN)
     }
 
     /// 0x33fe4: collision with the terrain (`terrain::push`); returns the original's Z flag. Original glitch: the
@@ -198,7 +199,7 @@ impl<R> Cx<'_, R> {
 
     /// Word of the work RAM at `A5 + offset` (sign-extended offset).
     pub fn ram16(&mut self, offset: i32) -> u16 {
-        Word(crate::world::mem::A5.wrapping_add(offset as u32)).get(self.b)
+        Word(crate::hw::mem::A5.wrapping_add(offset as u32)).get(self.b)
     }
 
     /// The frame camera: screen (x, y), the alternate camera when it is selected (`ram::camera`).
@@ -233,4 +234,10 @@ pub(crate) use handlers;
 /// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
 pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut World, &mut Dispatch)) -> Native {
     Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+}
+
+impl<R> crate::world::objects::current::Current for Cx<'_, R> {
+    fn obj(&self) -> crate::world::objects::Obj {
+        self.o
+    }
 }

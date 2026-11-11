@@ -143,7 +143,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
-    lib::sound(x, crate::hw::sound::CMD_23);
+    lib::sound(x, crate::services::sound::CMD_23);
     lib::create_set_15(x);
     lib::pick_target(x);
     lib::draw_stance(x);

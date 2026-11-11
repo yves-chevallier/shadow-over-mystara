@@ -240,7 +240,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             }
             if x.u8(f::KEY_FRAME) == 3 {
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, crate::hw::sound::CMD_329_429);
+                lib::sound(x, crate::services::sound::CMD_329_429);
                 lib::debris(x, 4);
                 lib::shake_54(x, 0xa);
             }
@@ -273,8 +273,8 @@ fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set16(Enemy::AX, brake as u16);
     lib::shake_54(x, 0x14);
-    lib::sound(x, crate::hw::sound::CMD_328_428);
-    lib::sound(x, crate::hw::sound::CMD_329_429);
+    lib::sound(x, crate::services::sound::CMD_328_428);
+    lib::sound(x, crate::services::sound::CMD_329_429);
     body(x, 5);
 }
 

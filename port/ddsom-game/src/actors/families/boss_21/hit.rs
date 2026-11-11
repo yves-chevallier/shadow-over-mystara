@@ -120,7 +120,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Boss::ANIM_KIND, 0x20);
             x.set8(Boss::ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            lib::sound(x, crate::hw::sound::CMD_126_226_B);
+            lib::sound(x, crate::services::sound::CMD_126_226_B);
             body(x, 0xb);
         }
         2 => {
@@ -256,7 +256,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             lib::object_event(x);
             x.set8(Enemy::ACTIVE, 2);
             x.set8(Boss21::SLOW, 0);
-            lib::sound(x, crate::hw::sound::CMD_83_83);
+            lib::sound(x, crate::services::sound::CMD_83_83);
             lib::drop_rewards(x);
             x.set16(Enemy::AX, 0);
             x.set16(Enemy::VZ, 0x500);

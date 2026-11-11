@@ -1,5 +1,5 @@
 use super::*;
-use crate::world::mem::{wr8, A5};
+use crate::hw::mem::{wr8, A5};
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;

@@ -17,13 +17,13 @@
 
 use crate::hw::video::{palette, OBJECTS};
 use crate::world::ram::Word;
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 use crate::screens::vars as sv;
 use crate::world::World;
 use crate::screens::scene::fading;
 
 use super::{mode, Block, Flow, Sequence};
-use crate::services::effects_aids::scenery_6;
+use crate::actors::effects_aids::scenery_6;
 use crate::actors::families::creators::set_15_pure;
 use crate::world::objects::Obj;
 use crate::services::video::{clear_layer, Layer};
@@ -93,7 +93,7 @@ mod ext {
 
 /// ROM tables (data, or addresses read by the original code relative to the PC).
 mod table {
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
     /// Pointers of the two starting scripts, alternating (longs, read through the PC).
     pub const SCRIPTS: Rom = Rom::at(0x1f348);
     /// Sound command routines (longs, byte index).
@@ -213,7 +213,7 @@ crate::steps! {
         EndingShow = 0x20c2c => |x| {
             let v = var::VIDEO.get(x.b) | 0xc;
             var::VIDEO.set(x.b, v);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
             Flow::Done
         },
         /// Phase returns (`jsr (A0)` of the two loops): a phase may cede control, then come back here.
@@ -277,7 +277,7 @@ fn next_operation(x: &mut Ctx) -> Flow {
             // 0xe1024), called by `jsr (A6)`
             let index = tables::byte(x.b, script + 1) as u32;
             let routine = table::COMMANDS.pc_long(x.b, index);
-            crate::hw::sound::play_global(x.b, crate::hw::sound::Sound::at(routine));
+            crate::services::sound::play_global(x.b, crate::services::sound::Sound::at(routine));
             scene_start(x, script + 3)
         }
         _ => presentation(x, script + 1),
@@ -558,7 +558,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                     fading::DELAY.set(x.b, 2);
                     fading::PAGES.set(x.b, 15);
                     crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::DESCENT);
-                    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 0 });
+                    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0 });
                 }
             }
         }
@@ -602,7 +602,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
 /// will resume at [`Step::AfterWorld`]).
 pub(crate) fn demo_phase_12(x: &mut Ctx) -> Flow {
     // Original glitch: D2-D4 of the input copy (0x2aec) are re-read by handlers (see game.rs)
-    crate::hw::inputs::copy_in_game(x.b);
+    crate::services::inputs::copy_in_game(x.b);
     demo_inputs(x);
     x.push_return(Step::AfterWorld);
     if crate::core::game::update_world(x.b) == Flow::Yield {

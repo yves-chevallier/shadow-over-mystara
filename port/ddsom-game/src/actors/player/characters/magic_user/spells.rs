@@ -1,6 +1,6 @@
 //! Special attack of the magic-user and its first spells (sparks, bolt, frost, quake).
 
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{player_data, pc16, Read};
 
@@ -70,7 +70,7 @@ pub fn special(g: &mut Ctx, p: Player) {
 }
 
 /// Plays ROM sounds.
-pub(super) fn sounds(g: &mut Ctx, p: Player, list: &[crate::hw::sound::Sound]) {
+pub(super) fn sounds(g: &mut Ctx, p: Player, list: &[crate::services::sound::Sound]) {
     for &sound in list {
         g.sound(sound, p);
     }
@@ -117,7 +117,7 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 crate::actors::families::creators::for_players::sparks(&mut g.leftovers, g.b, p.obj());
-                g.sound(crate::hw::sound::CMD_160, p);
+                g.sound(crate::services::sound::CMD_160, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -125,7 +125,7 @@ pub(super) fn sparks(g: &mut Ctx, p: Player) {
                 let level = p.u8(g, Player::LEVEL) as u32;
                 let gesture = player_data().magic_user_spark_gestures.at8(g.b, level) as u16;
                 animation::start_plain(g, p, 0x36 + gesture);
-                g.sound(crate::hw::sound::CMD_70, p);
+                g.sound(crate::services::sound::CMD_70, p);
             }
         }
         4 => {
@@ -171,7 +171,7 @@ pub(super) fn bolt(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 crate::actors::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 0);
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::LIGHT);
-                g.sound(crate::hw::sound::CMD_F6, p);
+                g.sound(crate::services::sound::CMD_F6, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -182,7 +182,7 @@ pub(super) fn bolt(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.sound(crate::hw::sound::CMD_167, p);
+                g.sound(crate::services::sound::CMD_167, p);
                 if is_cancelled(g, p) {
                     p.set_u8(g, Player::STEP, 0xa);
                     common::cancel_cast(g, p, 0x1d);
@@ -194,7 +194,7 @@ pub(super) fn bolt(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x5a);
                 animation::start_plain(g, p, 0x1e);
-                sounds(g, p, &[crate::hw::sound::CMD_168, crate::hw::sound::CMD_71]);
+                sounds(g, p, &[crate::services::sound::CMD_168, crate::services::sound::CMD_71]);
             }
         }
         6 => {
@@ -229,7 +229,7 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 spawn::ice_crown(g, p);
-                sounds(g, p, &[crate::hw::sound::CMD_F6, crate::hw::sound::CMD_163]);
+                sounds(g, p, &[crate::services::sound::CMD_F6, crate::services::sound::CMD_163]);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -237,7 +237,7 @@ pub(super) fn frost(g: &mut Ctx, p: Player) {
                 p.set_u8(g, Player::SPELL_LEVEL, 2);
                 p.set_u16(g, field::TIMER, 0x78);
                 animation::start_plain(g, p, 0x22);
-                g.sound(crate::hw::sound::CMD_72, p);
+                g.sound(crate::services::sound::CMD_72, p);
             }
         }
         6 => {
@@ -333,11 +333,11 @@ pub(super) fn quake(g: &mut Ctx, p: Player) {
                 let duration = by_level(g, p, QUAKE_DURATIONS);
                 p.set_u16(g, field::TIMER, duration);
                 animation::start_plain(g, p, 0x3e);
-                g.sound(crate::hw::sound::CMD_73, p);
+                g.sound(crate::services::sound::CMD_73, p);
             } else if take_event(g, p) {
                 crate::actors::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), true);
                 crate::world::placement::load_effect_palette(g.b, crate::world::placement::effect_palette::NORMAL);
-                g.sound(crate::hw::sound::CMD_16A, p);
+                g.sound(crate::services::sound::CMD_16A, p);
             }
         }
         4 => {
@@ -352,7 +352,7 @@ pub(super) fn quake(g: &mut Ctx, p: Player) {
                 }
                 crate::actors::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), false);
                 crate::actors::families::small::quake_b(g.b, p.obj());
-                g.sound(crate::hw::sound::CMD_16B, p);
+                g.sound(crate::services::sound::CMD_16B, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -393,6 +393,6 @@ pub(super) const STORM_STRIKE_LEFT: Strike = Strike {
     immune_bit: 6,
     reaction: 0x74,
     boosts: &[Boost::Held(0x1f, 2), Boost::Held(0x20, 2), Boost::Held(0x21, 1), Boost::Armor],
-    sound: Some(crate::hw::sound::CMD_34A_44A_B),
+    sound: Some(crate::services::sound::CMD_34A_44A_B),
     ..STORM_STRIKE
 };

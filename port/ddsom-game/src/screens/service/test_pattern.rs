@@ -7,16 +7,16 @@ use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
 
 /// Help common to the test patterns: "EXIT = 1P START & SHOT1".
-const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a076);
+const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a076);
 
 // ---------------------------------------------------------------------------------------------
 // 4. COLOR (0x29366)
 
 mod color {
     /// Bar palettes: 4 × 16 colours (red, green, blue, white) copied into palettes 0x1c-0x1f.
-    pub const RAMPS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x293a6);
+    pub const RAMPS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x293a6);
     pub const PALETTES: u32 = crate::hw::video::palette(1, 0x1c0).0;
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a224);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a224);
     /// Bars: (starting cell, palette).
     pub const BARS: [(u32, u16); 4] = [(crate::hw::video::TEXT.at(0x7a0).0, 0x1c), (crate::hw::video::TEXT.at(0x7b4).0, 0x1d), (crate::hw::video::TEXT.at(0x7c8).0, 0x1e), (crate::hw::video::TEXT.at(0x7dc).0, 0x1f)];
     /// Tile of the first column (the following ones: +1).
@@ -66,7 +66,7 @@ fn bar(x: &mut Ctx, cell: u32, palette: u16) {
 // 5. DOT CROSS HATCH (0x2949c)
 
 mod hatch {
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a298);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a298);
     /// Palette 0x40 (0x91c800): white, then 0xff00 alternating.
     pub const PALETTE: u32 = crate::hw::video::palette(2, 0x0).0;
     /// Plane 2 (32-bit cells, columns of 0x40 bytes).
@@ -126,13 +126,13 @@ fn grid(x: &mut Ctx) {
 
 mod data {
     use crate::world::ram::Long;
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b92a);
-    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b94a);
-    pub const COUNTERS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b984);
-    pub const FREEPLAY: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b9b0);
-    pub const CARDS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2baf0);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b92a);
+    pub const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b94a);
+    pub const COUNTERS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b984);
+    pub const FREEPLAY: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b9b0);
+    pub const CARDS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2baf0);
     /// Play time text (development card).
-    pub const TIME: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b96c);
+    pub const TIME: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b96c);
     /// First cell of the play time (hours, minutes, seconds, one digit per line).
     pub const TIME_CELL: u32 = crate::hw::video::TEXT.at(0xf9c).0;
     /// Play time (A5 - 0x615c) and its indicator (A5 - 0x6158): without indicator, 00:00:00.

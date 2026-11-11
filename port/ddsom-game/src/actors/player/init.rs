@@ -12,7 +12,7 @@ use crate::world::machine::Machine;
 use crate::world::World;
 
 use super::{ram, Ctx, Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
-use crate::world::mem::{wr32, A5};
+use crate::hw::mem::{wr32, A5};
 use crate::Native;
 use crate::actors::player::tables::{player_data, players, pc32, byte, word, long, Aligned, Read};
 
@@ -191,7 +191,7 @@ fn init_unlocked(g: &mut Ctx, p: Player) {
         if flag == 0 {
             break;
         }
-        crate::world::mem::wr8(g.b, UNLOCKED_FLAGS + flag, 1);
+        crate::hw::mem::wr8(g.b, UNLOCKED_FLAGS + flag, 1);
         at += 1;
     }
 }
@@ -218,8 +218,8 @@ fn init_weapons(g: &mut Ctx, p: Player) {
     let (w1, w2, f1, f2) = (byte(g.b, row), byte(g.b, row + 1), byte(g.b, row + 2) as u32, byte(g.b, row + 3) as u32);
     p.set_u8(g, Player::WEAPON_A, w1);
     p.set_u8(g, Player::WEAPON_B, w2);
-    crate::world::mem::wr8(g.b, UNLOCKED_FLAGS + f1, 1);
-    crate::world::mem::wr8(g.b, UNLOCKED_FLAGS + f2, 1);
+    crate::hw::mem::wr8(g.b, UNLOCKED_FLAGS + f1, 1);
+    crate::hw::mem::wr8(g.b, UNLOCKED_FLAGS + f2, 1);
 }
 
 /// 0x3552: base power of the weapon (`+0x109` for `WEAPON_A`, `+0x10a` for `WEAPON_B`, numbers
@@ -386,42 +386,42 @@ const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
 /// HP (bosses with 32 HP or less are spared, and keep at least 1 HP).
 fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
     let damage = players("shock_damage").word_at(g.b, 2 * strength as u32) & 63;
-    crate::world::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
+    crate::hw::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
     for pool in [&crate::world::objects::pools::BOSS, &crate::world::objects::pools::ENEMY] {
         for o in pool.iter() {
             let e = o.0;
             let b = &mut *g.b;
-            let hp = crate::world::mem::rd16(b, e + 0x62);
-            if crate::world::mem::rd8(b, e) == 0
-                || crate::world::mem::rd8(b, e + 1) & 1 == 0
+            let hp = crate::hw::mem::rd16(b, e + 0x62);
+            if crate::hw::mem::rd8(b, e) == 0
+                || crate::hw::mem::rd8(b, e + 1) & 1 == 0
                 || hp == 0
-                || crate::world::mem::rd8(b, e + 0x40) != 0
-                || (crate::world::mem::rd32(b, e + 0x94) as i32) < 0
+                || crate::hw::mem::rd8(b, e + 0x40) != 0
+                || (crate::hw::mem::rd32(b, e + 0x94) as i32) < 0
             {
                 continue;
             }
             wr32(b, e + 4, 0x0400_0000);
-            crate::world::mem::wr8(b, e + 1, 1);
-            let (index, character) = (crate::world::mem::rd8(b, p.at(2)), crate::world::mem::rd8(b, p.at(3)));
-            crate::world::mem::wr8(b, e + 0x48, index);
-            crate::world::mem::wr8(b, e + 0x4b, character);
-            crate::world::mem::wr16(b, e + 0x54, p.0 as u16);
+            crate::hw::mem::wr8(b, e + 1, 1);
+            let (index, character) = (crate::hw::mem::rd8(b, p.at(2)), crate::hw::mem::rd8(b, p.at(3)));
+            crate::hw::mem::wr8(b, e + 0x48, index);
+            crate::hw::mem::wr8(b, e + 0x4b, character);
+            crate::hw::mem::wr16(b, e + 0x54, p.0 as u16);
             wr32(b, e + 0x8a, 0x0400_0000);
-            crate::world::mem::wr8(b, e + 0x49, 12);
-            let facing = crate::world::mem::rd8(b, e + 0x2c) ^ 0x20;
-            crate::world::mem::wr8(b, e + 0x4a, facing);
-            let boss = crate::world::mem::rd8(b, e + 0x28) == 4;
+            crate::hw::mem::wr8(b, e + 0x49, 12);
+            let facing = crate::hw::mem::rd8(b, e + 0x2c) ^ 0x20;
+            crate::hw::mem::wr8(b, e + 0x4a, facing);
+            let boss = crate::hw::mem::rd8(b, e + 0x28) == 4;
             if !(boss && hp <= 32) {
                 let left = hp.wrapping_sub(damage);
                 let left = if (left as i16) > 0 { left } else if boss { 1 } else { 0 };
-                crate::world::mem::wr16(b, e + 0x62, left);
+                crate::hw::mem::wr16(b, e + 0x62, left);
             }
-            let kind = crate::world::mem::rd8(b, e + 2);
+            let kind = crate::hw::mem::rd8(b, e + 2);
             let bar = crate::world::events::Popup {
                 header: (index as u16) << 8 | kind as u16,
-                max: crate::world::mem::rd16(g.b, e + 0x60),
-                value: crate::world::mem::rd16(g.b, e + 0x62),
-                raw: crate::world::mem::rd8(g.b, e + 0x28) == 2,
+                max: crate::hw::mem::rd16(g.b, e + 0x60),
+                value: crate::hw::mem::rd16(g.b, e + 0x62),
+                raw: crate::hw::mem::rd8(g.b, e + 0x28) == 2,
             };
             crate::world::events::create_popup(g.b, bar);
         }

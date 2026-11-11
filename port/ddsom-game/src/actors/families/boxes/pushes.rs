@@ -163,7 +163,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>, axe: u32, d: i16) {
 fn realign_scenery<R: Bench>(x: &mut Cx<'_, R>) {
     x.push_terrain();
     // 0x35c0: keeps the crate on screen like a player
-    crate::actors::player::walk::clamp_to_screen(x.b, crate::actors::player::Player(x.o.0));
+    crate::actors::player::walk::clamp_to_screen(x.b, crate::world::objects::player::Player(x.o.0));
 }
 
 /// Variant 1: sliding in height (directions 2 and 4) or in X (6 and 8).

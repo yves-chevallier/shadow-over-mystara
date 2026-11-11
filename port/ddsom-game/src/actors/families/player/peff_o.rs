@@ -2,10 +2,10 @@
 //! exchange for points). See `docs/families/joueur.md`.
 
 use super::vars;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
-use crate::world::mem::{rd32, wr32, wr8};
+use crate::hw::mem::{rd32, wr32, wr8};
 use super::pshell::*;
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
@@ -118,13 +118,13 @@ mod coins {
         let slot = player.0 + rank;
         let character = (player.u8(x.b, Player::CHARACTER) & 0xe) as u32;
         let table = player_data().sell_tables.long_at(x.b, character * 2);
-        let id = crate::world::mem::rd8(x.b, slot + 0x140) as u32;
+        let id = crate::hw::mem::rd8(x.b, slot + 0x140) as u32;
         let code = byte(x.b, table + id);
         if code == 0 {
             return;
         }
         let repeats: u16 = if code == 1 {
-            (crate::world::mem::rd8(x.b, slot + 0x148) as u16).wrapping_sub(1)
+            (crate::hw::mem::rd8(x.b, slot + 0x148) as u16).wrapping_sub(1)
         } else if (code as i8) > 1 {
             0
         } else {
@@ -139,7 +139,7 @@ mod coins {
             let mut carry = false;
             for k in (1..=3u32).rev() {
                 let add = byte(x.b, price + k);
-                let sum = crate::world::mem::rd8(x.b, player.0 + 0x114 + k);
+                let sum = crate::hw::mem::rd8(x.b, player.0 + 0x114 + k);
                 let (r, c) = bcd_add(sum, add, carry);
                 wr8(x.b, player.0 + 0x114 + k, r);
                 carry = c;

@@ -56,10 +56,10 @@ pub(super) fn reserve_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     }
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
     let counter = player.0 + COUNTERS + variant;
-    let n = crate::world::mem::rd8(ctx.b, counter).wrapping_add(1);
-    crate::world::mem::wr8(ctx.b, counter, n);
+    let n = crate::hw::mem::rd8(ctx.b, counter).wrapping_add(1);
+    crate::hw::mem::wr8(ctx.b, counter, n);
     if !(n <= 9) {
-        crate::world::mem::wr8(ctx.b, counter, 9);
+        crate::hw::mem::wr8(ctx.b, counter, 9);
     }
     false
 }

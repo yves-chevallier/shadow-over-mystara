@@ -77,7 +77,7 @@ pub(super) fn far_from_camera(b: &mut World, o: Obj) -> bool {
 /// 0xf084: aims at the farthest point around the target and turns one notch towards it.
 pub fn walk_far_point(b: &mut World, o: Obj) {
     let goal = pick_point(b, o, walk_points(), Pick::Farthest, None, false);
-    crate::services::ai::turn_toward(b, o, goal);
+    crate::actors::ai::turn_toward(b, o, goal);
 }
 
 /// 0xe76c: aims at the nearest point around the target (far from the camera: the farthest, 0xf084) and
@@ -90,7 +90,7 @@ pub fn approach_target(b: &mut World, o: Obj) {
         return walk_far_point(b, o);
     }
     let goal = pick_point(b, o, walk_points(), Pick::Nearest, None, false);
-    crate::services::ai::turn_toward(b, o, goal);
+    crate::actors::ai::turn_toward(b, o, goal);
 }
 
 /// 0xeff2: like `approach_target` (without the far case), the offsets flipped according to the target's direction.
@@ -99,7 +99,7 @@ pub fn walk_near_point(b: &mut World, o: Obj) {
         return;
     }
     let goal = pick_point(b, o, mirrored_walk_points(), Pick::Nearest, None, true);
-    crate::services::ai::turn_toward(b, o, goal);
+    crate::actors::ai::turn_toward(b, o, goal);
 }
 
 /// 0xe886: retains the farthest point around the target, except the last one retained (`+0x99`); far from the

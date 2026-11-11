@@ -2,18 +2,18 @@
 //! of the game (69, taken over by 105).
 
 use super::*;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::screens::scene::fading;
 use crate::screens::scene::tiles;
 use crate::world::objects::Obj;
 use crate::screens::obj;
 
 mod ext {
-    pub const MUSIC_B: crate::hw::sound::Sound = crate::hw::sound::CMD_16;
-    pub const MUSIC_F: crate::hw::sound::Sound = crate::hw::sound::CMD_2E;
-    pub const MUSIC_G: crate::hw::sound::Sound = crate::hw::sound::CMD_31;
-    pub const MUSIC_H: crate::hw::sound::Sound = crate::hw::sound::CMD_1FC;
-    pub const MUSIC_FINALE: crate::hw::sound::Sound = crate::hw::sound::CMD_31A;
+    pub const MUSIC_B: crate::services::sound::Sound = crate::services::sound::CMD_16;
+    pub const MUSIC_F: crate::services::sound::Sound = crate::services::sound::CMD_2E;
+    pub const MUSIC_G: crate::services::sound::Sound = crate::services::sound::CMD_31;
+    pub const MUSIC_H: crate::services::sound::Sound = crate::services::sound::CMD_1FC;
+    pub const MUSIC_FINALE: crate::services::sound::Sound = crate::services::sound::CMD_31A;
 }
 
 /// Palette page 0x91c400 and its backup.
@@ -240,7 +240,7 @@ crate::steps! {
             sprites_next_frame(x, Step::S46Drawn)
         },
         S46Drawn = 0xf9ef2 => |x| {
-            crate::hw::sound::play_global(x.b, ext::MUSIC_FINALE);
+            crate::services::sound::play_global(x.b, ext::MUSIC_FINALE);
             VARS_BLOCK.set16(x.b, var::TIMER, 300);
             layers_or(x, 0xe);
             yield_frames(x, 1, At(Step::S46Shown.into()))
@@ -397,7 +397,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf99f0) {
         0 => {
             x.set_v16(a5::LAYERS, 0x138e);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_B);
+            crate::services::sound::play_global(x.b, ext::MUSIC_B);
             let last_tile = tiles(x, TB, 0x228, SCROLL_2);
             tiles(x, TB, 0x229, last_tile);
             let last_tile = tiles(x, TB2, 0x15a, SCROLL_3);
@@ -433,7 +433,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            crate::hw::sound::play_global(x.b, ext::MUSIC_F);
+            crate::services::sound::play_global(x.b, ext::MUSIC_F);
             tiles(x, TB, 0x226, SCROLL_2);
             let last_tile = tiles(x, TB2, 8, SCROLL_3);
             tiles(x, TB2, 8, last_tile);
@@ -488,7 +488,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9bee) {
         0 => {
             next(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_G);
+            crate::services::sound::play_global(x.b, ext::MUSIC_G);
             set_camera(x, a5::CAM2_Y, 8);
             let last_tile = tiles(x, TB2, 0x15c, SCROLL_3);
             tiles(x, TB2, 0x15d, last_tile);
@@ -546,7 +546,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             copy_palettes(x, PALETTE_PAGE, PALETTE_SAVE);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_H);
+            crate::services::sound::play_global(x.b, ext::MUSIC_H);
             fading::DELAY.set(x.b, 1);
             fading::PAGES.set(x.b, ALL_PAGES);
             goto(x, crate::core::tasks::fading::to_white, At(Step::S38End.into()))
@@ -631,7 +631,7 @@ pub fn finale(x: &mut Ctx) -> Flow {
             next(x);
             fading::PAGES.set(x.b, 12);
             crate::services::palette::full_brightness(x.b);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_FINALE);
+            crate::services::sound::play_global(x.b, ext::MUSIC_FINALE);
             let last_tile = tiles(x, TB, 544, crate::hw::video::SCROLL2.offset(0x1000).0);
             tiles(x, TB, 545, last_tile);
             let last_tile = tiles(x, TB2, 389, crate::hw::video::SCROLL3.offset(0x1000).0);

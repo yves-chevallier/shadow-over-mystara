@@ -49,7 +49,7 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u16) {
 /// relative to A0; we read the same address.
 fn tick_word<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let addr = x.o.0.wrapping_sub(0x7f92) & 0xff_ffff;
-    crate::world::mem::rd16(x.b, addr)
+    crate::hw::mem::rd16(x.b, addr)
 }
 
 /// Speeds `(vx, vz)` by direction: `(a, b)` if the dragon looks right (`+0x2c` zero inverted).

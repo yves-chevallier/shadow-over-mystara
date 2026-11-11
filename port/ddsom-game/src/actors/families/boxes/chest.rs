@@ -85,10 +85,10 @@ mod j {
 mod rom {
     pub const ANIMATIONS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bebc2);
     // subroutines not rewritten, or native
-    pub const SOUND_HIT: crate::hw::sound::Sound = crate::hw::sound::CMD_139_239;
-    pub const SOUND_BROKEN: crate::hw::sound::Sound = crate::hw::sound::CMD_146_246;
-    pub const SOUND_LANDS: crate::hw::sound::Sound = crate::hw::sound::CMD_13F_23F;
-    pub const SOUND_SET_DOWN: crate::hw::sound::Sound = crate::hw::sound::CMD_149_249;
+    pub const SOUND_HIT: crate::services::sound::Sound = crate::services::sound::CMD_139_239;
+    pub const SOUND_BROKEN: crate::services::sound::Sound = crate::services::sound::CMD_146_246;
+    pub const SOUND_LANDS: crate::services::sound::Sound = crate::services::sound::CMD_13F_23F;
+    pub const SOUND_SET_DOWN: crate::services::sound::Sound = crate::services::sound::CMD_149_249;
 }
 
 /// Crates broken in the scene (byte, `A5-0x5b21`).
@@ -213,7 +213,7 @@ fn intact<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::SUB_SUB_STATE, 4);
         x.set8(f::ACTIVE, 2);
         x.set8(f::DELAY, 8);
-        crate::hw::sound::play(x.b, rom::SOUND_BROKEN, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_BROKEN, x.o);
     }
 }
 
@@ -326,7 +326,7 @@ fn broken<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::HIT) != 0 {
         x.set8(f::HIT, 0);
         dropped_loot(x);
-        crate::hw::sound::play(x.b, rom::SOUND_HIT, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_HIT, x.o);
         if x.u8(f::SPECIAL) != 0 {
             effect_special(x, 0);
         }
@@ -392,7 +392,7 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
             effect_special(x, 1);
         }
         dropped_loot(x);
-        crate::hw::sound::play(x.b, rom::SOUND_HIT, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_HIT, x.o);
     }
     if !x.anim_step() {
         return;
@@ -508,7 +508,7 @@ fn launched_start<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Terrain under the crate (`0x24a8`, D2): true if it is an obstacle (attributes 5 to 8).
 fn obstacle<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let t = crate::services::video::terrain_of(x.b, x.o);
+    let t = crate::world::terrain::terrain_of(x.b, x.o);
     // Original glitch: 0x24a8 leaves its work registers as leftovers (D2-D4)
     crate::actors::families::player::pshell::leftovers_terrain(x, &t);
     (t.number & 0x3f).wrapping_sub(5) <= 3
@@ -534,7 +534,7 @@ fn launched_flight<R: Bench>(x: &mut Cx<'_, R>) {
             dropped_loot(x);
         }
         shards(x);
-        crate::hw::sound::play(x.b, rom::SOUND_LANDS, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_LANDS, x.o);
         return count_broken(x);
     }
     let bounces = x.u8(f::BOUNCE) == 0 && (x.u8(f::WITHOUT_SCENERY) != 0 || obstacle(x));
@@ -550,7 +550,7 @@ fn launched_flight<R: Bench>(x: &mut Cx<'_, R>) {
         advance(x) < 0
     };
     if pose {
-        crate::hw::sound::play(x.b, rom::SOUND_SET_DOWN, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_SET_DOWN, x.o);
         x.add8(f::SUB_SUB_STATE, 2);
         x.set8(f::WITHOUT_SCENERY, 0);
         x.set16(f::Z, 0);
@@ -623,7 +623,7 @@ fn dropped_fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::ORIGINAL_X, px);
     let py = x.u16(f::Y);
     x.set16(f::ORIGINAL_Y, py);
-    crate::hw::sound::play(x.b, rom::SOUND_SET_DOWN, x.o);
+    crate::services::sound::play(x.b, rom::SOUND_SET_DOWN, x.o);
 }
 
 /// Dropped, 4: on the first hit, loot and special effect; end of animation: blinking.
@@ -631,7 +631,7 @@ fn dropped_broken<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::HIT) != 0 {
         x.set8(f::HIT, 0);
         dropped_loot(x);
-        crate::hw::sound::play(x.b, rom::SOUND_HIT, x.o);
+        crate::services::sound::play(x.b, rom::SOUND_HIT, x.o);
         count_broken(x);
         if x.u8(f::SPECIAL) != 0 {
             effect_special(x, 2);

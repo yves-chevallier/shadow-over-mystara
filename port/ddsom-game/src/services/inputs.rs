@@ -8,7 +8,7 @@
 
 use crate::world::World;
 
-use crate::world::mem::{rd16, rd8, set_low_byte, wr16, wr8, A5};
+use crate::hw::mem::{rd16, rd8, set_low_byte, wr16, wr8, A5};
 
 /// Offsets relative to A5 (RAM FF8000).
 pub mod ram {
@@ -158,7 +158,7 @@ pub enum InputCopy {
 /// flags are reread by nobody.
 pub fn copy_in_game(b: &mut World) {
     if let InputCopy::Masked { mask, d } = copy(b) {
-        let leftovers = &mut crate::core::tasks::table::table(b).leftovers;
+        let leftovers = &mut b.leftovers;
         set_low_byte(&mut leftovers.d2, d[2]);
         set_low_byte(&mut leftovers.d3, d[3]);
         set_low_byte(&mut leftovers.d4, mask);
@@ -182,7 +182,7 @@ pub fn player_inputs(b: &mut World, object: u32) -> Inputs {
 pub fn clear_inputs(b: &mut World) {
     for k in 0..4 {
         let player = 0xff85de + 0x200 * k;
-        crate::world::mem::wr16(b, player + 0x6c, 0);
-        crate::world::mem::wr8(b, player + 0x6e, 0);
+        crate::hw::mem::wr16(b, player + 0x6c, 0);
+        crate::hw::mem::wr8(b, player + 0x6e, 0);
     }
 }

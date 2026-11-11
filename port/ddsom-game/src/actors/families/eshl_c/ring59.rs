@@ -6,9 +6,9 @@ use crate::actors::families::shell::tables::{tables, Read};
 const ANIMS: RomAddr = RomAddr(0x171026);
 const LINK: u32 = 0x5c;
 const TIMER: u32 = 0x42;
-const FX_START_0: crate::hw::sound::Sound = crate::hw::sound::CMD_389;
-const FX_START_1: crate::hw::sound::Sound = crate::hw::sound::CMD_38B;
-const FX_END: crate::hw::sound::Sound = crate::hw::sound::CMD_38A;
+const FX_START_0: crate::services::sound::Sound = crate::services::sound::CMD_389;
+const FX_START_1: crate::services::sound::Sound = crate::services::sound::CMD_38B;
+const FX_END: crate::services::sound::Sound = crate::services::sound::CMD_38A;
 const PALETTE_COUNTDOWN: u32 = 0x46;
 const PALETTE_INDEX: u32 = 0x47;
 
@@ -37,7 +37,7 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Base::BOX_SET, 7);
             x.set8(Shot::ATTACK_ID, 0x24);
             x.set8(PALETTE_COUNTDOWN, 2);
-            crate::hw::sound::play(x.b, FX_START_0, x.o);
+            crate::services::sound::play(x.b, FX_START_0, x.o);
             let maker = x.linked(LINK);
             copy_xyz32(x, maker);
             copy_flip(x, maker);
@@ -52,7 +52,7 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Base::BOX_SET, 7);
             x.set8(Shot::ATTACK_ID, 0x24);
             x.set8(PALETTE_COUNTDOWN, 2);
-            crate::hw::sound::play(x.b, FX_START_1, x.o);
+            crate::services::sound::play(x.b, FX_START_1, x.o);
             let maker = x.linked(LINK);
             let (mx, my) = (maker.u16(x.b, Obj::X), maker.u16(x.b, Obj::Y));
             let z = maker.u32(x.b, Obj::Z);
@@ -96,7 +96,7 @@ fn ring<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if x.anim_step() {
                 x.add8(Obj::STATE, 2);
-                crate::hw::sound::play(x.b, FX_END, x.o);
+                crate::services::sound::play(x.b, FX_END, x.o);
             }
         }
         _ => {}

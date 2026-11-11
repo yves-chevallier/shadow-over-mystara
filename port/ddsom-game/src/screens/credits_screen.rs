@@ -15,14 +15,14 @@ use crate::world::World;
 
 use crate::screens::credits::{ram, write_digit, CoinSlot};
 use crate::hw::video::TEXT;
-use crate::world::mem::set_low_byte;
-use crate::screens::tables::Rom;
+use crate::hw::mem::set_low_byte;
+use crate::world::screen_tables::Rom;
 use crate::services::text;
 
 /// ROM tables: text pointers by credit (one table per variant, `texts.json`), offsets of the digits
 /// (`data/screens.json`), and erased area.
 mod table {
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
 
     pub const TEXT_ONE: Rom = Rom::at(0x1ae10);
     pub const TEXT_ONE_EMPTY: Rom = Rom::at(0x1ae80);

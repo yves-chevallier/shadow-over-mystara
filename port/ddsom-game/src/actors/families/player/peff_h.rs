@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -39,7 +39,7 @@ mod shower {
     const OFFSETS_C: u32 = 0x4deac;
     const SPEEDS_A: u32 = 0x4df52;
     const SPEEDS_B: u32 = 0x4dfc4;
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_161;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_161;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -126,7 +126,7 @@ mod shower {
         *x.c.d3() = rank as u32;
         *x.c.d2() = row;
         crate::actors::families::creators::bolt_shot(x.b, owner, vx, vz);
-        crate::hw::sound::play(x.b, SFX, Obj(ext(owner)));
+        crate::services::sound::play(x.b, SFX, Obj(ext(owner)));
         x.set8(Shot::ANIM_EVENT, 0);
     }
 }

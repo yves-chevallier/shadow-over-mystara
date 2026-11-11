@@ -7,7 +7,7 @@
 use crate::world::World;
 
 use crate::hw::video::{Cell, TEXT};
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 
 pub const LAYER: u32 = TEXT.base;
 pub const COLUMN: u32 = TEXT.column;
@@ -21,7 +21,7 @@ const DIGIT_8: u16 = 496;
 pub const COLON: u16 = 766;
 pub const SECONDS: u16 = 767;
 /// Big digit tiles (words, table read relative to the PC).
-const BIG_DIGITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf6e74);
+const BIG_DIGITS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf6e74);
 
 /// A cell two high: `tile` on top, `tile + 16` below.
 pub fn tall(b: &mut World, at: u32, tile: u16, attr: u16) {

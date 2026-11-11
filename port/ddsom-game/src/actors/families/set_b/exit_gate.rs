@@ -1,7 +1,7 @@
 use super::*;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set_b::fields::DoorObj;
 use crate::actors::families::set_b::fields::ExitGateBObj;
 use crate::actors::families::set::fields::SetObj;
@@ -21,7 +21,7 @@ const BONUS_STAGES: u8 = 4;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let me = x.o;
-    crate::services::effects_aids::living_players(x.b, me);
+    crate::actors::effects_aids::living_players(x.b, me);
     let lock = x.a5_u16(GATE_LOCK);
     if lock != 0 && lock != x.o.0 as u16 {
         return;

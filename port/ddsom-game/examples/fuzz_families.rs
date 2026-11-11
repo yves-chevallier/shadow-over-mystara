@@ -23,7 +23,7 @@ use cps2::Cps2Bus;
 use m68k::Bus;
 use m68k::Cpu;
 
-use ddsom_game::world::mem::{rd16, rd32, rd8, wr16, wr8};
+use ddsom_game::hw::mem::{rd16, rd32, rd8, wr16, wr8};
 
 #[derive(Default)]
 struct Summary {
@@ -299,7 +299,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
         diffs.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c2.a[0]));
     }
     let sp = c2.a[7] & 0xff_ffff;
-    ddsom_game::world::mem::diff_bus(&b1, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+    ddsom_game::hw::mem::diff_bus(&b1, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
     SUMMARY.with(|m| {
         let mut m = m.borrow_mut();
         let summary = m.entry(n.name).or_default();

@@ -230,7 +230,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 x.add8(Enemy::SUB_STEP, 2);
                 x.set16(Obj::Z, 0);
-                lib::sound(x, crate::hw::sound::CMD_362);
+                lib::sound(x, crate::services::sound::CMD_362);
                 body(x, 0xa);
             }
         }

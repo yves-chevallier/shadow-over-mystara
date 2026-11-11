@@ -5,7 +5,7 @@
 
 use crate::hw::video::{regs, Cell};
 use crate::world::ram::Long;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 use super::{exit_check, f, hex_digits, key, layers_off, layers_on, next_step, pressed, print, var, MENU_BLOCK};
 use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
@@ -24,19 +24,19 @@ fn players(x: &mut Ctx) -> u32 {
 
 mod input {
     /// Title, help, and tables of the 2, 3 or 4 players (pointers addressed PC-relative).
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a6e4);
-    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a726);
-    pub const TABLES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a558);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a6e4);
+    pub const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a726);
+    pub const TABLES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a558);
     /// Cells of the "0/1" (pointer tables in ROM): service, test, coins, starts, joysticks (one table
     /// of 8 directions per player), buttons.
-    pub const SERVICE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a9f4);
-    pub const TEST: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a9f8);
-    pub const COINS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a9fc);
-    pub const STARTS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2aa0c);
-    pub const LEVERS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a63c);
-    pub const BUTTONS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2aa9c);
+    pub const SERVICE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a9f4);
+    pub const TEST: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a9f8);
+    pub const COINS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a9fc);
+    pub const STARTS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2aa0c);
+    pub const LEVERS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a63c);
+    pub const BUTTONS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2aa9c);
     /// Joystick values (4 bits) for each of the 8 directions displayed.
-    pub const DIRECTIONS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a64c);
+    pub const DIRECTIONS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a64c);
 }
 
 pub fn input(x: &mut Ctx) -> Flow {
@@ -97,12 +97,12 @@ fn input_update(x: &mut Ctx) {
 
 mod output {
     use crate::world::ram::Byte;
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2acd2);
-    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2acf4);
-    pub const LOCKS_12: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ad16);
-    pub const LOCKS_3: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ad7a);
-    pub const LOCKS_34: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2ad9c);
-    pub const CARD: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2addc);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2acd2);
+    pub const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2acf4);
+    pub const LOCKS_12: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ad16);
+    pub const LOCKS_3: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ad7a);
+    pub const LOCKS_34: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2ad9c);
+    pub const CARD: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2addc);
     /// Electric counter: state toggled by P1's fire 2 (A5 - 0x6294), and long reset to zero (A5 - 0x6298).
     pub const COUNTER: Byte = Byte(0xff_1d6c);
     pub const CLEARED: u32 = 0xff_1d68;
@@ -182,8 +182,8 @@ fn output_update(x: &mut Ctx) {
 // 3. SOUND & VOICE (0x2b450)
 
 mod sound {
-    pub const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b618);
-    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2b7e4);
+    pub const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b618);
+    pub const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2b7e4);
     /// Fields of the record: code (word), volume (0-39), code to redisplay.
     pub const CODE: u32 = 0x30;
     pub const VOLUME: u32 = 0x32;
@@ -266,10 +266,10 @@ fn request(x: &mut Ctx, new: u8) {
         let code = MENU_BLOCK.get16(x.b, sound::CODE);
         if code != 0 {
             // D2 and D3 are those left by the code keys (0x2b50e)
-            crate::hw::sound::emit(x.b, crate::hw::sound::Command { d1: code as u32, d2: 1, d3: 3 });
+            crate::services::sound::emit(x.b, crate::services::sound::Command { d1: code as u32, d2: 1, d3: 3 });
         }
     } else if new & key::SHOT2 != 0 {
-        crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+        crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
     }
 }
 

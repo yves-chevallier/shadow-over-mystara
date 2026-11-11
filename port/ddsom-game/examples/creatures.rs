@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ddsom_game::world::mem::{rd16, rd32, rd8};
+use ddsom_game::hw::mem::{rd16, rd32, rd8};
 
 const A5: u32 = 0xff8000;
 const ENEMY: (u32, u32, u32) = (A5 + 0x299e, 0xc0, 22);
@@ -358,18 +358,18 @@ fn spawn(a: &[String]) {
             let slot = (0..n).map(|k| pool + size * k).find(|&o| rd8(b, o) == 0).expect("pool plein");
             let (px, py) = (rd32(b, PLAYER + 8), rd32(b, PLAYER + 0x10));
             for off in 0..size {
-                ddsom_game::world::mem::wr8(b, slot + off, 0);
+                ddsom_game::hw::mem::wr8(b, slot + off, 0);
             }
-            ddsom_game::world::mem::wr8(b, slot + 0x28, if family == "boss" { 4 } else { 2 });
-            ddsom_game::world::mem::wr8(b, slot + 2, kind);
-            ddsom_game::world::mem::wr8(b, slot + 3, variant);
-            ddsom_game::world::mem::wr32(b, slot + 8, px.wrapping_add(0x60 << 16));
-            ddsom_game::world::mem::wr32(b, slot + 0x10, py);
+            ddsom_game::hw::mem::wr8(b, slot + 0x28, if family == "boss" { 4 } else { 2 });
+            ddsom_game::hw::mem::wr8(b, slot + 2, kind);
+            ddsom_game::hw::mem::wr8(b, slot + 3, variant);
+            ddsom_game::hw::mem::wr32(b, slot + 8, px.wrapping_add(0x60 << 16));
+            ddsom_game::hw::mem::wr32(b, slot + 0x10, py);
             if family == "enemy" {
                 let free = rd16(b, A5 + 0x7e62);
-                ddsom_game::world::mem::wr16(b, A5 + 0x7e62, free.wrapping_sub(1));
+                ddsom_game::hw::mem::wr16(b, A5 + 0x7e62, free.wrapping_sub(1));
             }
-            ddsom_game::world::mem::wr8(b, slot, 1);
+            ddsom_game::hw::mem::wr8(b, slot, 1);
             spawned = true;
         }
         if f > 3000 {

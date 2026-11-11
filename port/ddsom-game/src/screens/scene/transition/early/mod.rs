@@ -11,11 +11,11 @@ pub use timed::{scene_11, scene_13};
 /// Engine routines specific to these scripts.
 mod ext {
     /// Music and ambient sounds of the interludes.
-    pub const MUSIC_A: crate::hw::sound::Sound = crate::hw::sound::CMD_2B;
-    pub const MUSIC_B: crate::hw::sound::Sound = crate::hw::sound::CMD_16;
-    pub const MUSIC_C: crate::hw::sound::Sound = crate::hw::sound::CMD_19;
-    pub const MUSIC_D: crate::hw::sound::Sound = crate::hw::sound::CMD_2C;
-    pub const MUSIC_E: crate::hw::sound::Sound = crate::hw::sound::CMD_2F;
+    pub const MUSIC_A: crate::services::sound::Sound = crate::services::sound::CMD_2B;
+    pub const MUSIC_B: crate::services::sound::Sound = crate::services::sound::CMD_16;
+    pub const MUSIC_C: crate::services::sound::Sound = crate::services::sound::CMD_19;
+    pub const MUSIC_D: crate::services::sound::Sound = crate::services::sound::CMD_2C;
+    pub const MUSIC_E: crate::services::sound::Sound = crate::services::sound::CMD_2F;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ crate::steps! {
         },
         S4Shown = 0xf87c2 => |x| {
             // palette of page 7 (eight longs, `movem.l`: the registers keep the data)
-            const FROM: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x292260);
+            const FROM: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x292260);
             const TO: crate::hw::video::Vram = crate::hw::video::palette(0, 0xf0);
             for k in 0..8 {
                 let v = FROM.long(x.b, 4 * k);
@@ -261,7 +261,7 @@ crate::steps! {
         S13Retry11 = 0xf9022 => s13_set_11,
         S13Set11Drawn = 0xf9034 => |x| yield_frames(x, 1, At(Step::S13Set11Shown.into())),
         S13Set11Shown = 0xf903c => |x| {
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 144, line: 0 });
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 144, line: 0 });
             x.set_v16(a5::LAYERS, 0x138e);
             fading::PAGES.set(x.b, SCENE_PAGES);
             fading::DELAY.set(x.b, 4);
@@ -278,7 +278,7 @@ crate::steps! {
         S13Retry9 = 0xf9134 => s13_set_9,
         S13OutDrawn = 0xf9150 => |x| {
             next_sub(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_E);
+            crate::services::sound::play_global(x.b, ext::MUSIC_E);
             for (off, palettes) in [(0x492, 0x253000), (0x49a, 0x272a60), (0x49e, 0x283140)] {
                 x.set_v32(off, palettes);
             }
@@ -324,7 +324,7 @@ fn s1_message(x: &mut Ctx) -> Flow {
 pub fn scene_2(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf82e4) {
         0 => {
-            crate::hw::sound::play_global(x.b, ext::MUSIC_A);
+            crate::services::sound::play_global(x.b, ext::MUSIC_A);
             if !try_message(x, 9) {
                 return Flow::Done;
             }
@@ -388,7 +388,7 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf848a) {
         0 => {
             next(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_B);
+            crate::services::sound::play_global(x.b, ext::MUSIC_B);
             let end = tiles(x, TB, 0x218, SCROLL_2);
             tiles(x, TB, 0x219, end);
             VARS_BLOCK.set16(x.b, var::TIMER, 60);
@@ -440,7 +440,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf876a) {
         0 => {
             next(x);
-            crate::hw::sound::play_global(x.b, ext::MUSIC_A);
+            crate::services::sound::play_global(x.b, ext::MUSIC_A);
             let end = tiles(x, TB, 0x20c, SCROLL_2);
             tiles(x, TB, 0x20c, end);
             let end = tiles(x, TB2, 0x14e, SCROLL_3);

@@ -1,7 +1,7 @@
 //! Common character code: strikes, allies in range and the spell skeleton.
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---- common strikes ----------------------------------------------------------------------------

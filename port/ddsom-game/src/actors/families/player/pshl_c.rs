@@ -3,12 +3,12 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::{rd16, wr16};
+use crate::hw::mem::{rd16, wr16};
 use crate::world::objects::pools;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, byte, Aligned, Read};
@@ -37,7 +37,7 @@ mod jet {
     const DELAY: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c698);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_13C_23C;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_13C_23C;
     const KIND: u8 = 0xc;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -75,7 +75,7 @@ mod jet {
                     x.add8(Obj::STATE, 2);
                     x.anim(ANIMS.0, 1);
                     x.reinsert();
-                    crate::hw::sound::play(x.b, SFX, x.o);
+                    crate::services::sound::play(x.b, SFX, x.o);
                 }
             }
             2 => active(x),
@@ -132,9 +132,9 @@ mod item {
                 let page = (owner.u8(x.b, Player::SPECIAL_COUNT) as u32) << 4 & 0xffff;
                 let count = owner.0 + 0x120 + page + 8;
                 let left = byte(x.b, count).wrapping_sub(1);
-                crate::world::mem::wr8(x.b, count, left);
+                crate::hw::mem::wr8(x.b, count, left);
                 if left == 0 {
-                    crate::world::mem::wr8(x.b, owner.0 + 0x120 + page, 0x26);
+                    crate::hw::mem::wr8(x.b, owner.0 + 0x120 + page, 0x26);
                 }
                 x.copy_pos(owner);
                 x.add16(Obj::Y, 0xffff);
@@ -170,7 +170,7 @@ mod flame {
     const TIMER: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c7a6);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_14E_24E;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_14E_24E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53420) {
@@ -185,7 +185,7 @@ mod flame {
                 x.set8(f::POWER2, 6);
                 x.anim(ANIMS.0, 0);
                 x.reinsert();
-                crate::hw::sound::play(x.b, SFX, x.o);
+                crate::services::sound::play(x.b, SFX, x.o);
             }
             2 => {
                 if x.anim_step() {
@@ -273,7 +273,7 @@ mod star {
     const PHASE: u32 = 0x5d;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c8a2);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_14F_24F;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_14F_24F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x536a8) {
@@ -293,7 +293,7 @@ mod star {
                 x.anim(ANIMS.0, 0);
                 x.reinsert();
                 if x.u8(Obj::VARIANT) == 0 {
-                    crate::hw::sound::play(x.b, SFX, x.o);
+                    crate::services::sound::play(x.b, SFX, x.o);
                 }
             }
             2 => {
@@ -326,7 +326,7 @@ mod stone {
     const TIMER: u32 = 0x5c;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15c90a);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_169;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_169;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53808) {
@@ -363,7 +363,7 @@ mod stone {
                     x.set16(TIMER, 4);
                     crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 8);
                     x.anim(ANIMS.0, 1);
-                    crate::hw::sound::play(x.b, SFX, x.o);
+                    crate::services::sound::play(x.b, SFX, x.o);
                 }
                 2 => {
                     x.add16(TIMER, 0xffff);

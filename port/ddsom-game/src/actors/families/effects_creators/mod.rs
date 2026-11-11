@@ -11,7 +11,7 @@ use crate::world::World;
 
 use crate::actors::families::effects::records::{Carrier, Effect};
 use crate::actors::families::effects::tables::{tables, Read, Table};
-use crate::world::mem::{rd32, rd8, wr16, wr32, A5};
+use crate::hw::mem::{rd32, rd8, wr16, wr32, A5};
 use crate::world::objects::pools::{self, Pool};
 use crate::world::objects::Obj;
 use leftovers::{Pure, Regs};

@@ -43,7 +43,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(Enemy::STRIKE_POWER, 0x10);
     stop(x);
     attack_anim(x, n);
-    lib::sound(x, crate::hw::sound::CMD_361);
+    lib::sound(x, crate::services::sound::CMD_361);
 }
 
 /// Step forward at the key frames (`+0x33`): offset read from table `table` (PC-relative), toward the front.
@@ -96,7 +96,7 @@ fn double_claw<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::STRIKE_KIND, 0);
             x.set8(Enemy::STRIKE_POWER, 0x10);
             attack_anim(x, 9);
-            lib::sound(x, crate::hw::sound::CMD_361);
+            lib::sound(x, crate::services::sound::CMD_361);
         }
         _ => {
             if lib::step(x) {
@@ -205,7 +205,7 @@ fn cries<R: Bench>(x: &mut Cx<'_, R>) {
             crate::actors::families::effects_creators::shouts(x.b, x.o, false);
             next7(x);
             x.set8(Boss3::TIMER, 4);
-            lib::sound(x, crate::hw::sound::CMD_336_436);
+            lib::sound(x, crate::services::sound::CMD_336_436);
         }
         _ => {
             push_players(x, 1);
@@ -215,7 +215,7 @@ fn cries<R: Bench>(x: &mut Cx<'_, R>) {
             }
             crate::actors::families::effects_creators::shouts(x.b, x.o, false);
             if sub8(x, Boss3::TIMER, 1).gt() {
-                return lib::sound(x, crate::hw::sound::CMD_336_436);
+                return lib::sound(x, crate::services::sound::CMD_336_436);
             }
             after_attack(x)
         }
@@ -455,7 +455,7 @@ fn cry<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(f::KEY_FRAME, 0);
             lib::eshl_burst_26(x);
-            lib::sound(x, crate::hw::sound::CMD_355_455);
+            lib::sound(x, crate::services::sound::CMD_355_455);
         }
     }
 }
@@ -463,7 +463,7 @@ fn cry<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x804b0 : cri (0xb3ec6, 0xedb82).
 fn shriek<R: Bench>(x: &mut Cx<'_, R>) {
     crate::actors::families::effects_creators::shouts(x.b, x.o, true);
-    lib::sound(x, crate::hw::sound::CMD_336_436);
+    lib::sound(x, crate::services::sound::CMD_336_436);
 }
 
 /// 0x803aa: sideways flight at height 0x60 toward the middle of the screen (body sideways: it pushes the players

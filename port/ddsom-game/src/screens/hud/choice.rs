@@ -8,7 +8,7 @@ use super::draw::{
 };
 use super::layer::{clear_cell, columns, Brush, COLUMN};
 use super::{panel, player, var, Slot};
-use crate::screens::tables::{self, Rom};
+use crate::world::screen_tables::{self as tables, Rom};
 
 /// Byte `+0x15d` of the player: selection family (2: none); its letter-table entry says
 /// whether the character has its own image (zero byte: attribute 0xc).

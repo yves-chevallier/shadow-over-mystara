@@ -1,7 +1,7 @@
 //! Leaps of the characters (action 0x12), parry and the special-move actions (combos, backstab).
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::actors::player::tables::{player_data, players, long, Read};
 
@@ -22,7 +22,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.sound(crate::hw::sound::JUMP_VOICE, p);
+            g.sound(crate::services::sound::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -85,7 +85,7 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::VX, pair);
             }
             let (x, y) = (p.u16(g, Obj::X).wrapping_add(shift), p.u16(g, Obj::Y));
-            if crate::services::video::terrain(g.b, x, y).number & 63 == 0 {
+            if crate::world::terrain::terrain(g.b, x, y).number & 63 == 0 {
                 p.set_u16(g, Obj::X, x);
             }
             super::super::walk::clamp_to_screen(g.b, p);

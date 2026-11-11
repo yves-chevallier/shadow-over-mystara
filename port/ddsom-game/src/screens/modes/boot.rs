@@ -10,7 +10,7 @@ use crate::hw::io::Port;
 use crate::hw::video::{palette, regs};
 use crate::world::ram::{Byte, Long, Word};
 use crate::screens::scene::fading;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
 use crate::screens::scene::Ctx;
 use crate::Native;
@@ -44,7 +44,7 @@ crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
         /// Task entry (`0x11b16`): black screen, then initialisation.
-        Entry = 0x11b16 => |x| x.subroutine(crate::services::video::black_screen::start, Step::Init),
+        Entry = 0x11b16 => |x| x.subroutine(crate::screens::scene::black_screen::start, Step::Init),
         Init = 0x11b22 => |x| {
             crate::services::palette::load_all_palettes(x.b);
             for i in 0..8 {
@@ -60,7 +60,7 @@ crate::steps! {
             crate::world::events::clear_points(x.b);
             crate::world::events::clear_counter(x.b);
             crate::world::events::clear_popups(x.b);
-            crate::hw::sound::clear_private_stack(x.b);
+            crate::services::sound::clear_private_stack(x.b);
             crate::actors::player::init::clear_all_players(x.b);
             crate::actors::player::init::clear_sub_objects(x.b);
             clear_mode_state(x);
@@ -102,7 +102,7 @@ crate::steps! {
             if crate::screens::hud::var::START_NOW.get(x.b) & 1 != 0 {
                 STARTUP_SWITCH.set(x.b, 1);
             }
-            crate::hw::eeprom::initialize_accounting(x.b);
+            crate::services::eeprom::initialize_accounting(x.b);
             if !crate::core::config::initialize(x.b) {
                 return Flow::Yield;
             }

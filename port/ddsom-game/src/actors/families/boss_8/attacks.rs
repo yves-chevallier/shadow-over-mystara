@@ -65,7 +65,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, crate::hw::sound::CMD_342_342);
+                lib::sound(x, crate::services::sound::CMD_342_342);
             }
             x.anim_step();
         }
@@ -116,7 +116,7 @@ fn volley_start<R: Bench>(x: &mut Cx<'_, R>, kind: u8, extra: bool) {
 /// First shot of a volley: sounds, effect, then one shot per living player.
 fn volley_fire<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     lib::shake_58(x, 0x30);
-    lib::sound(x, crate::hw::sound::CMD_345);
+    lib::sound(x, crate::services::sound::CMD_345);
     addq8(x, f::SUB3, 2);
     x.set16(Warrior::TIMER, 0x32);
     let n = var::PLAYERS_ALIVE.get(x.b);
@@ -197,7 +197,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             }
             addq8(x, f::SUB3, 2);
             x.set8(f::KEY_FRAME, 0);
-            lib::sound(x, crate::hw::sound::CMD_329_429);
+            lib::sound(x, crate::services::sound::CMD_329_429);
             let (mut d0, mut d1) = (-0x800i16, 0x20i16);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
@@ -302,7 +302,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
                 return;
             }
             lib::shake_58(x, 0x14);
-            lib::sound(x, crate::hw::sound::CMD_327_427_C);
+            lib::sound(x, crate::services::sound::CMD_327_427_C);
             aids::burst_small(x);
             x.set32(Obj::Z, 0);
             addq8(x, f::SUB3, 2);
@@ -333,7 +333,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
             addq8(x, f::SUB3, 2);
             x.set8(Warrior::PHASE_TIMER, 0x10);
             key(x, 0x12);
-            lib::sound(x, crate::hw::sound::CMD_349);
+            lib::sound(x, crate::services::sound::CMD_349);
             body(x, 4);
         }
         2 => {
@@ -349,7 +349,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(Enemy::DISPLAY, 1, false);
-                lib::sound(x, crate::hw::sound::CMD_349);
+                lib::sound(x, crate::services::sound::CMD_349);
             }
         }
         _ => finish(x),

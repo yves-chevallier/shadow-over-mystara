@@ -25,7 +25,7 @@ pub mod settings;
 
 use crate::hw::video::{regs, Cell, PALETTES};
 use crate::world::ram::Long;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::screens::block::Block;
 use crate::core::config;
 use crate::services::video::Layer;
@@ -93,8 +93,8 @@ const BOOT_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Startup;
 
 /// Menu texts (descriptors in ROM).
 mod text {
-    pub const MENU: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x29f1e);
-    pub const HELP: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2a03a);
+    pub const MENU: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x29f1e);
+    pub const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a03a);
 }
 
 /// Value of the board outputs (0x400004) set by the menu.
@@ -377,7 +377,7 @@ pub fn exit_check(x: &mut Ctx) -> Flow {
 
 /// `0x29a5a`: return to the menu (the sound is cut).
 pub fn back_to_menu(x: &mut Ctx) -> Flow {
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::GeneralStop);
+    crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
     MENU_BLOCK.set8(x.b, f::STATE, state::MENU);
     // step of the screen and configuration cursors (bytes 2 to 5)
     MENU_BLOCK.set16(x.b, f::STEP, 0);

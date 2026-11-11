@@ -97,7 +97,7 @@ pub(super) fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_start(attached::ANIM_SET.0, 4);
             let carrier = x.linked(attached::CARRIER);
             if matches!(carrier.u8(x.b, f::VARIANT), 4 | 9) {
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_367_467, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_367_467, x.o);
             }
         }
         6 => {
@@ -105,8 +105,8 @@ pub(super) fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
             }
         7 => {}
         8..=11 => {
-            const SOUNDS: [crate::hw::sound::Sound; 4] = [crate::hw::sound::CMD_102_202, crate::hw::sound::CMD_10C_20C, crate::hw::sound::CMD_10F_20F, crate::hw::sound::CMD_109_209];
-            crate::hw::sound::play(x.b, SOUNDS[v as usize - 8], x.o);
+            const SOUNDS: [crate::services::sound::Sound; 4] = [crate::services::sound::CMD_102_202, crate::services::sound::CMD_10C_20C, crate::services::sound::CMD_10F_20F, crate::services::sound::CMD_109_209];
+            crate::services::sound::play(x.b, SOUNDS[v as usize - 8], x.o);
             x.anim_start(attached::ANIM_SET.0, (v as u32 - 3) as u16);
         }
         12 | 13 => {
@@ -230,7 +230,7 @@ pub(super) fn attached_shake<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             } else if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(attached::TIMER, 0x3c);
-                crate::services::ai_aids::debris_set(x.b, x.o, 0xb);
+                crate::actors::ai_aids::debris_set(x.b, x.o, 0xb);
                 // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Leftovers`)
                 *x.c.d5() = 0xffff;
             }
@@ -324,7 +324,7 @@ pub(super) fn prop_active<R: Bench>(x: &mut Cx<'_, R>) {
         (1, 2) => {
             if matches!(carrier_state(x), 0x0200_060c | 0x0200_080c) {
                 x.add8(f::SUB_STATE, 2);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_311_411, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_311_411, x.o);
             }
             x.anim_step();
         }
@@ -340,7 +340,7 @@ pub(super) fn prop_active<R: Bench>(x: &mut Cx<'_, R>) {
         (2, 2) => {
             if carrier_state(x) == 0x0200_000c {
                 x.add8(f::SUB_STATE, 2);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_311_411, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_311_411, x.o);
             }
             x.anim_step();
         }
@@ -459,7 +459,7 @@ pub(super) fn double_active<R: Bench>(x: &mut Cx<'_, R>) {
             toggle_hidden(x);
             let carrier = x.linked(double::CARRIER);
             let (cx_, cy) = (carrier.u16(x.b, Obj::X), carrier.u16(x.b, Obj::Y));
-            let dir = crate::services::aids::direction_from(x.b, x.o, (cx_, cy));
+            let dir = crate::actors::aids::direction_from(x.b, x.o, (cx_, cy));
             x.set8(Obj::SPEED_INDEX, dir);
             double_speed_table(x);
             if double_slide(x) {

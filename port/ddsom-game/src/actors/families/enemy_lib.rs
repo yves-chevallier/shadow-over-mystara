@@ -9,8 +9,8 @@ use crate::actors::families::cx::Bench;
 use super::cx::Cx;
 use super::enemy_common::*;
 use super::enemy_common::tables;
-use crate::services::ai;
-use crate::services::ai_aids;
+use crate::actors::ai;
+use crate::actors::ai_aids;
 use crate::world::machine::Machine;
 use crate::world::objects::{Current, Obj};
 
@@ -75,7 +75,7 @@ pub fn next_threshold<R: Bench>(x: &mut Cx<'_, R>, block: u16) -> bool {
 }
 
 /// Gesture chosen by `turn_decision` (0x1047a).
-pub use crate::services::ai::Turn;
+pub use crate::actors::ai::Turn;
 
 /// 0x1047a: AI decision according to the side of the target.
 pub fn turn_decision<R: Bench>(x: &mut Cx<'_, R>) -> Turn {
@@ -301,17 +301,17 @@ pub fn chance_10_16<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x1386 (`aids::direction`): direction (0 to 31) from `de` to `to`.
 pub fn aim<R: Bench>(x: &mut Cx<'_, R>, de: (u16, u16), to: (u16, u16)) -> u8 {
-    crate::services::aids::direction(x.b, de, to)
+    crate::actors::aids::direction(x.b, de, to)
 }
 
 /// 0x137e: direction from the object to the point `to`.
 pub fn aim_from<R: Bench>(x: &mut Cx<'_, R>, to: (u16, u16)) -> u8 {
-    crate::services::aids::direction_from(x.b, x.o, to)
+    crate::actors::aids::direction_from(x.b, x.o, to)
 }
 
 /// 0x1376: direction from the object to `target`.
 pub fn aim_to<R: Bench>(x: &mut Cx<'_, R>, target: Obj) -> u8 {
-    crate::services::aids::direction_to(x.b, x.o, target)
+    crate::actors::aids::direction_to(x.b, x.o, target)
 }
 
 /// 0xfc44: is a player hit by the object's attack box `attack`? Returns that player.
@@ -396,7 +396,7 @@ pub fn flash_and_shake<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x3e480: landing sound specific to the object's type (ROM table per type: each entry is a sound, or an `rts`).
 pub fn landing_by_kind<R: Bench>(x: &mut Cx<'_, R>) {
     if let Some((sound_id, _)) = ai_aids::landing_routine(x.b, x.o) {
-        sound(x, crate::hw::sound::Sound::at(sound_id));
+        sound(x, crate::services::sound::Sound::at(sound_id));
     }
 }
 
@@ -443,8 +443,8 @@ pub fn choose_near_walk_point<R: Bench>(x: &mut Cx<'_, R>) {
 // --- sounds -------------------------------------------------------------------------------------------
 
 /// Plays the sound `sound` for the object.
-pub fn sound<R: Bench>(x: &mut Cx<'_, R>, sound: crate::hw::sound::Sound) {
-    crate::hw::sound::play(x.b, sound, x.o);
+pub fn sound<R: Bench>(x: &mut Cx<'_, R>, sound: crate::services::sound::Sound) {
+    crate::services::sound::play(x.b, sound, x.o);
 }
 
 // --- object creators and services of other modules -----------------------------------------------------
@@ -481,7 +481,7 @@ pub fn empty_popups<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x19eb0: clears all the displayed pop-ups.
 pub fn clear_all_popups<R: Bench>(x: &mut Cx<'_, R>) {
-    crate::screens::popups::clear_all(x.b);
+    crate::services::popups::clear_all(x.b);
 }
 
 /// What the 0xb10c8 shock returns: the created effect, or what the original leaves in A1 and the carry.
@@ -496,7 +496,7 @@ pub enum Impact {
 
 /// 0xb10c8: shock effect at the object's position: variant, setting (`+0x2d`, `+0x2f`), speeds `+0x14`, `+0x1c`.
 pub fn shock<R: Bench>(x: &mut Cx<'_, R>, variant: u32, setting: u16, vx: u16, vy: u16) -> Impact {
-    if let Some(o) = crate::services::effects_aids::shock(x.b, x.o, variant as u8, setting, vx, vy) {
+    if let Some(o) = crate::actors::effects_aids::shock(x.b, x.o, variant as u8, setting, vx, vy) {
         return Impact::Created(o);
     }
     if crate::world::ram::SCENE.get(x.b) == 41 {
@@ -673,12 +673,12 @@ pub fn palette_script<R: Bench>(x: &mut Cx<'_, R>, index: u16) {
         *v = scripts.at32(x.b, from.wrapping_add(4 * k as u32));
     }
     for (k, &v) in longs.iter().enumerate() {
-        crate::world::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
+        crate::hw::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
     }
     // leftovers: the `movem` leaves longs 2 to 5 in D2-D5 (`dispatch::Leftovers`)
     (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (longs[2], longs[3], longs[4], longs[5]);
     for k in 0..8 {
-        let v = crate::world::mem::rd32(x.b, PALETTE + 4 * k);
-        crate::world::mem::wr32(x.b, PALETTE + 4 * k, v | 0xf000_f000);
+        let v = crate::hw::mem::rd32(x.b, PALETTE + 4 * k);
+        crate::hw::mem::wr32(x.b, PALETTE + 4 * k, v | 0xf000_f000);
     }
 }

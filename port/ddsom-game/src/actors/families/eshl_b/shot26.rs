@@ -4,7 +4,7 @@ use crate::actors::families::shell::records::view;
 use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x16ea90);
-const LAND_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_8D;
+const LAND_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_8D;
 const FLY: u8 = 0;
 const GROUND: u8 = 2;
 const BLINK: u8 = 4;
@@ -62,7 +62,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Z, 0);
     x.set16(Shot26::TIMER, 0x80);
     x.anim_start(ANIMS.0, 1);
-    crate::hw::sound::play(x.b, LAND_SOUND, x.o);
+    crate::services::sound::play(x.b, LAND_SOUND, x.o);
     if let Some(shadow) = crate::actors::families::small::shot_18(&mut crate::actors::families::effects_creators::leftovers::Pure, x.b, x.o, 1) {
         x.set16(Shot26::LINK, low16(shadow));
     }

@@ -22,24 +22,24 @@ pub const CHECK: crate::world::data::RomAddr = crate::world::data::RomAddr(0x2cf
 /// Endless loop of the original after an "NG".
 pub const BLOCKED: crate::world::data::RomAddr = crate::world::data::RomAddr(0x2d112);
 
-const TITLE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d184);
-const LABELS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d1a8);
+const TITLE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d184);
+const LABELS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d1a8);
 /// 10-character texts (bytes in ROM).
-const TESTING: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d27c);
-const OK: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d286);
-const NG: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d290);
+const TESTING: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d27c);
+const OK: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d286);
+const NG: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d290);
 /// Countdown before returning to the menu (record field).
 const COUNTDOWN: u32 = 0x14;
 const COUNTDOWN_FRAMES: u8 = 0x3c;
 
 /// Patterns written into each word (table addressed PC-relative).
-const PATTERNS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2d0ce);
+const PATTERNS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2d0ce);
 /// Output that selects the Object RAM bank seen at 0x708000.
 const OBJ_BANK: Memory = Memory(0x8040e1);
 /// Byte of the Z80 shared RAM set before and after its test.
 const Z80_FLAG: Memory = Memory(0x619ffb);
 /// Expected sums of the program blocks (header words).
-const ROM_SUMS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xca);
+const ROM_SUMS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xca);
 /// Size of a block of the program, and distance between two bytes summed.
 const ROM_BLOCK: u32 = 1 << 19;
 const ROM_STRIDE: u32 = (1 << 12) - 1;
@@ -85,7 +85,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
 /// `0x2d12a`: a 10-character text on line `at`.
 fn label(x: &mut Ctx, at: u32, text: u32, attr: u16) {
     for k in 0..10 {
-        let ch = crate::screens::tables::byte(x.b, text + k) as u16;
+        let ch = crate::world::screen_tables::byte(x.b, text + k) as u16;
         crate::hw::video::Cell(at + 0x80 * k).put(x.b, ch, attr);
     }
 }
@@ -130,7 +130,7 @@ fn rom_sum(x: &mut Ctx, k: u32) -> u16 {
     let mut sum = 0u32;
     let mut a = start;
     while a < start + ROM_BLOCK {
-        sum = sum.wrapping_add(crate::screens::tables::byte(x.b, a) as u32);
+        sum = sum.wrapping_add(crate::world::screen_tables::byte(x.b, a) as u32);
         a += ROM_STRIDE;
     }
     sum as u16
@@ -172,7 +172,7 @@ fn check(x: &mut Ctx) -> bool {
     }
     Z80_FLAG.set_byte(x.b, 0x88);
     label(x, cell::EEPROM, TESTING.addr(), 0);
-    let ok = crate::hw::eeprom::tester(x.b);
+    let ok = crate::services::eeprom::tester(x.b);
     if !verdict(x, cell::EEPROM, ok) {
         return false;
     }

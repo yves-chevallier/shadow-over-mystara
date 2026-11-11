@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 use crate::world::data::RomAddr;
 use crate::actors::families::shell::vars;
@@ -79,7 +79,7 @@ pub(super) fn icon_sound<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, base: u32) {
     o.set_u8(ctx.b, DELAY, DELAY_SOUND);
     let draw = o.u8(ctx.b, field::MODE) as u32;
     let sound = tables().item_scene_icon_sounds.at32(ctx.b, base + draw * 4);
-    crate::hw::sound::play(ctx.b, crate::hw::sound::Sound::at(sound), ctx.obj());
+    crate::services::sound::play(ctx.b, crate::services::sound::Sound::at(sound), ctx.obj());
 }
 
 /// Substate 0 of the icon: follows the player, animates, sorts, and plays the sound drawn every 0x3c frames.
@@ -185,7 +185,7 @@ pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// walks in X until it leaves the screen, or stops near the player, creates a SET and waits like the guide (`0xdcc5a`,
 /// `0xdcc82`).
 mod start {
-    pub const SOUND_STOP: crate::hw::sound::Sound = crate::hw::sound::CMD_4B;
+    pub const SOUND_STOP: crate::services::sound::Sound = crate::services::sound::CMD_4B;
     /// Icon counter of the object `+0x46`.
     pub const ICONS: u32 = 0x30;
     /// Stop requested (`+0x33`).
@@ -211,7 +211,7 @@ pub(super) fn start_launches<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         // departure sound of the mode (0xe1da0, 0xe1d60), played on the icon
         let sound = tables().item_scene_start_routines.at32(ctx.b, 4 * mode);
         if sound != 0 {
-            crate::hw::sound::play(ctx.b, crate::hw::sound::Sound::at(sound), o);
+            crate::services::sound::play(ctx.b, crate::services::sound::Sound::at(sound), o);
         }
     }
     if o.u8(ctx.b, Base::FLIP) == 0 {
@@ -252,7 +252,7 @@ pub(super) fn start_stop<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let mode = o.u8(ctx.b, field::MODE) as u32;
     let sound = tables().item_scene_stop_sounds.at8(ctx.b, mode);
     if sound != 0 {
-        crate::hw::sound::play(ctx.b, start::SOUND_STOP, ctx.obj());
+        crate::services::sound::play(ctx.b, start::SOUND_STOP, ctx.obj());
     }
     let animation = tables().item_scene_stop_animations.at8(ctx.b, mode);
     ctx.anim_start(ANIMATIONS.0, animation as u16);
@@ -394,7 +394,7 @@ pub(super) fn created_set<R: Bench>(ctx: &mut Cx<'_, R>, type_set: u32) -> Optio
 pub(super) fn guide_running<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let target_x = o.u16(ctx.b, TARGET_X);
     let target_y = o.u16(ctx.b, TARGET_Y);
-    let direction = crate::services::aids::direction_from(ctx.b, o, (target_x, target_y));
+    let direction = crate::actors::aids::direction_from(ctx.b, o, (target_x, target_y));
     o.set_u8(ctx.b, Obj::SPEED_INDEX, direction);
     ctx.move_by_table_xy();
     let dx = target_x.wrapping_sub(o.u16(ctx.b, Obj::X)).wrapping_add(8);
@@ -510,7 +510,7 @@ mod guide_3 {
 }
 
 pub(super) fn guide_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let light = crate::world::mem::rd32(ctx.b, guide_3::REFERENCE) & 0xf000_f000;
+    let light = crate::hw::mem::rd32(ctx.b, guide_3::REFERENCE) & 0xf000_f000;
     for i in 0..8 {
         let colour = tables().item_scene_guide_3_palette.at32(ctx.b, 4 * i);
         // Original glitch: the original's `movem` passes colours 1 to 6 through D1-D6; D2-D5 stay for the next
@@ -522,7 +522,7 @@ pub(super) fn guide_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             5 => *ctx.c.d5() = colour,
             _ => {}
         }
-        crate::world::mem::wr32(ctx.b, guide_3::PALETTE_DEST + 4 * i, colour | light);
+        crate::hw::mem::wr32(ctx.b, guide_3::PALETTE_DEST + 4 * i, colour | light);
     }
     add_u8(ctx, o, Obj::STATE, 2);
     // A2: the end of the palette copy

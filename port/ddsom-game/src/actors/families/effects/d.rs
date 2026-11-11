@@ -8,10 +8,10 @@
 //! - 1: trophy of the end board, which waits for the signal of its controller, animates after a randomly drawn delay
 //!   then counts itself down with the controller; 9: sign placed on the alternate camera.
 
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
-use crate::world::mem::{rd8, wr16, wr32};
+use crate::hw::mem::{rd8, wr16, wr32};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -292,7 +292,7 @@ fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::VARIANT, mode);
     x.set8(Obj::KIND, kind);
     // the variant is kept in D0.b during the sound, then put back
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_A9_BY_CHARACTER, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_A9_BY_CHARACTER, x.o);
     x.set8(f::VARIANT, variant);
     x.set8(Obj::KIND, 31);
     x.add8(f::SUB_STATE, 2);
@@ -604,7 +604,7 @@ impl LineDraw {
         }
         at += 0x100;
         self.shown = false;
-        let score = crate::world::mem::rd32(x.b, self.record + 8);
+        let score = crate::hw::mem::rd32(x.b, self.record + 8);
         for i in 0..8 {
             self.digit(x, &mut at, (score >> (28 - 4 * i)) as u16);
         }
@@ -725,7 +725,7 @@ fn walker_wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// One step toward the target (direction 0x137e, current speed table).
 fn walker_move<R: Bench>(x: &mut Cx<'_, R>) {
     let (tx, ty) = (x.u16(walker::TARGET_X), x.u16(walker::TARGET_Y));
-    let direction = crate::services::aids::direction_from(x.b, x.o, (tx, ty));
+    let direction = crate::actors::aids::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, direction);
     x.move_by_table_xy();
 }

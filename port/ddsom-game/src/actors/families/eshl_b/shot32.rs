@@ -4,8 +4,8 @@ use crate::actors::families::shell::vars;
 use crate::actors::families::shell::records::{Host, view};
 
 const ANIMS: RomAddr = RomAddr(0x16f58c);
-const SOUND_FLYING: crate::hw::sound::Sound = crate::hw::sound::CMD_32F;
-const SOUND_LANDING: crate::hw::sound::Sound = crate::hw::sound::CMD_330;
+const SOUND_FLYING: crate::services::sound::Sound = crate::services::sound::CMD_32F;
+const SOUND_LANDING: crate::services::sound::Sound = crate::services::sound::CMD_330;
 const FLY: u8 = 0;
 const FALL: u8 = 2;
 const END: u8 = 4;
@@ -24,7 +24,7 @@ fn state<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 if x.u8(Shot32::ARMED) != 0 {
                     x.add8(Base::SUB_STATE, 2);
-                    crate::hw::sound::play(x.b, SOUND_FLYING, x.o);
+                    crate::services::sound::play(x.b, SOUND_FLYING, x.o);
                 }
                 ai_step(x);
             }
@@ -44,7 +44,7 @@ fn state<R: Bench>(x: &mut Cx<'_, R>) {
                 let x_pos = x.u16(Obj::X);
                 let inside = (left.wrapping_sub(0x30) as i16) < x_pos as i16 && (left.wrapping_add(0x1b0) as i16) > x_pos as i16;
                 if inside {
-                    crate::hw::sound::play(x.b, SOUND_LANDING, x.o);
+                    crate::services::sound::play(x.b, SOUND_LANDING, x.o);
                 }
                 ai_start(x, ANIMS.0, 2);
             }
@@ -68,11 +68,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let (target, angle);
     if variant == 0 {
         target = x.linked(Shot::OWNER);
-        angle = crate::services::aids::direction_to(x.b, x.o, target);
+        angle = crate::actors::aids::direction_to(x.b, x.o, target);
     } else {
         target = x.linked(Shot32::TARGET);
         let to = (target.u16(x.b, Host::TARGET_X), target.u16(x.b, Host::TARGET_Y));
-        angle = crate::services::aids::direction_from(x.b, x.o, to);
+        angle = crate::actors::aids::direction_from(x.b, x.o, to);
     }
     x.set8(Obj::SPEED_INDEX, angle);
     speed_table(x, 0x41);
@@ -94,7 +94,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         }
         steps = (steps + 1) & 0xffff;
     }
-    let quotient = crate::services::aids::divide(x.u16(Obj::Z) as u32, steps).0;
+    let quotient = crate::actors::aids::divide(x.u16(Obj::Z) as u32, steps).0;
     let slope = (quotient as i32).wrapping_neg() as u32;
     let slope = (slope.rotate_left(16) as i32 >> 8) as u16;
     x.set16(Obj::VZ, slope);

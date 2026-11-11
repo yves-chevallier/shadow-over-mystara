@@ -73,7 +73,7 @@ fn end_shot<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
 fn step_with_spark<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::step(x) {
         if key_bit0(x) {
-            lib::sound(x, crate::hw::sound::CMD_68_68);
+            lib::sound(x, crate::services::sound::CMD_68_68);
         }
         return false;
     }
@@ -86,7 +86,7 @@ fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            lib::sound(x, crate::hw::sound::CMD_68_68);
+            lib::sound(x, crate::services::sound::CMD_68_68);
             strike_anim(x, 0x10, 0);
         }
         2 => {
@@ -119,7 +119,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(Enemy::SUB_STEP, 2);
             x.set16(Boss::TIMER, 0x14);
             x.set16(Enemy::AX, 0);
-            lib::sound(x, crate::hw::sound::CMD_68_68);
+            lib::sound(x, crate::services::sound::CMD_68_68);
             let a = x.u8(Obj::SPEED_INDEX) ^ 0x10;
             x.set8(Obj::SPEED_INDEX, a);
             speed(x, 0x35);
@@ -269,7 +269,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(Enemy::SUB_STEP, 2);
             x.set16(Enemy::AX, 0);
-            lib::sound(x, crate::hw::sound::CMD_68_68);
+            lib::sound(x, crate::services::sound::CMD_68_68);
             strike(x, 7);
         }
         4 => {
@@ -344,7 +344,7 @@ fn ball<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER, 0xa);
             let shot = x.linked(Boss18::CHILD);
             shot.set_u8(x.b, Shot32::ARMED, 1);
-            lib::sound(x, crate::hw::sound::CMD_6C_6C);
+            lib::sound(x, crate::services::sound::CMD_6C_6C);
             step_only(x);
         }
         6 => {
@@ -401,7 +401,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER, 0x5a);
             let shot = x.linked(Boss18::CHILD);
             shot.set_u8(x.b, Shot33::FIRST, 1);
-            lib::sound(x, crate::hw::sound::CMD_6D_6D);
+            lib::sound(x, crate::services::sound::CMD_6D_6D);
             step_only(x);
         }
         6 => {
@@ -480,7 +480,7 @@ fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Boss18::SPAWNED) as i8) > 0 {
         return;
     }
-    lib::sound(x, crate::hw::sound::CMD_6F_6F);
+    lib::sound(x, crate::services::sound::CMD_6F_6F);
     x.set8(Boss18::SPAWNED, 0);
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * 2;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
@@ -509,7 +509,7 @@ fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            lib::sound(x, crate::hw::sound::CMD_69_69);
+            lib::sound(x, crate::services::sound::CMD_69_69);
             var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, Boss18::BUDGET_C, 1);
             x.set16(Boss::TIMER, 6);
@@ -610,7 +610,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            lib::sound(x, crate::hw::sound::CMD_6E_6E);
+            lib::sound(x, crate::services::sound::CMD_6E_6E);
             strike_anim(x, 0x18, 0xd);
         }
         2 => {
@@ -628,7 +628,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(Enemy::SUB_STEP, 2);
             place_after_teleport(x);
             x.set_bit(Enemy::DISPLAY, 1, false);
-            lib::sound(x, crate::hw::sound::CMD_331);
+            lib::sound(x, crate::services::sound::CMD_331);
             strike(x, 0xe);
         }
         6 => {
@@ -658,7 +658,7 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
             var::INPUT_MASK.set(x.b, 0x7f);
             sub8(x, Boss18::BUDGET_E, 1);
             x.set16(Boss::TIMER, 0xa);
-            lib::sound(x, crate::hw::sound::CMD_69_69);
+            lib::sound(x, crate::services::sound::CMD_69_69);
             strike_anim(x, 0x19, 0xb);
         }
         2 => {
@@ -722,7 +722,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER2, n);
             x.set16(Boss::TIMER, 0xe);
             dust(x);
-            lib::sound(x, crate::hw::sound::CMD_69_69);
+            lib::sound(x, crate::services::sound::CMD_69_69);
             strike_anim(x, 0x1a, 0xb);
         }
         2 => {

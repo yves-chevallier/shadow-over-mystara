@@ -52,7 +52,7 @@ const PLAYER_1: u32 = 0x5de;
 
 /// Address `A5 + off` (A5 is always `mem::A5`).
 pub(crate) const fn a5(off: u32) -> u32 {
-    crate::world::mem::A5.wrapping_add(off)
+    crate::hw::mem::A5.wrapping_add(off)
 }
 
 // ---------------------------------------------------------------------------------------------

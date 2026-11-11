@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ pub(super) fn switch_watch<R: Bench>(x: &mut Cx<'_, R>) {
 
 pub(super) mod barrier {
     pub const ANIM_SET: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1c03a6);
-    pub const OPEN_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_34E_44E;
+    pub const OPEN_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_34E_44E;
     /// Associated SET scenery (16-bit pointer).
     pub const SET: u32 = 0x46;
     /// Switches (up to four 16-bit pointers) and their number.
@@ -101,7 +101,7 @@ pub(super) fn barrier<R: Bench>(x: &mut Cx<'_, R>) {
                 if barrier_all_pressed(x) {
                     x.add8(f::SUB_STATE, 2);
                     x.set8(barrier::OPEN, 1);
-                    crate::hw::sound::play(x.b, barrier::OPEN_SOUND, x.o);
+                    crate::services::sound::play(x.b, barrier::OPEN_SOUND, x.o);
                     x.set16(Obj::VZ, 0x180);
                     x.set16(Obj::VX, 0x200);
                 }

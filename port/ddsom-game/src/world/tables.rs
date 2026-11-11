@@ -169,7 +169,7 @@ impl Tables {
     /// Byte of the data space at `a` (ROM table, or RAM).
     pub fn byte(&self, b: &mut World, a: u32) -> u8 {
         if a & 0xff_ffff >= ROM_END {
-            return crate::world::mem::rd8(b, a);
+            return crate::hw::mem::rd8(b, a);
         }
         self.runs[0].get(a, 1).map_or_else(|| self.missing(a).read8(b, a), |v| v as u8)
     }
@@ -177,7 +177,7 @@ impl Tables {
     /// Word of the data space at `a`.
     pub fn word(&self, b: &mut World, a: u32) -> u16 {
         if a & 0xff_ffff >= ROM_END {
-            return crate::world::mem::rd16(b, a);
+            return crate::hw::mem::rd16(b, a);
         }
         self.runs[0].get(a, 2).map_or_else(|| self.missing(a).read16(b, a), |v| v as u16)
     }
@@ -185,7 +185,7 @@ impl Tables {
     /// Long of the data space at `a`.
     pub fn long(&self, b: &mut World, a: u32) -> u32 {
         if a & 0xff_ffff >= ROM_END {
-            return crate::world::mem::rd32(b, a);
+            return crate::hw::mem::rd32(b, a);
         }
         self.runs[0].get(a, 4).unwrap_or_else(|| self.missing(a).read32(b, a))
     }

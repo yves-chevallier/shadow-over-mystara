@@ -25,11 +25,11 @@ const MESSAGE_TIME: u32 = 0x32;
 /// Byte `+0x56` of the record at `A5-0x5b88` (h), receives the answer of scene 33.
 const RECORD_56: crate::world::ram::Byte = crate::world::ram::Byte(0xff_2478 + 0x56);
 use crate::screens::block::Block;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 use super::Ctx;
 use crate::screens::scene::fading;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::screens::modes::{Flow, Sequence};
 use crate::world::objects::Obj;
 use crate::core::tasks::table::Next;
@@ -55,7 +55,7 @@ mod a5 {
     pub const CLOCK: u32 = 0x38;
     /// Fade: pages, steps left, delay, target palettes (longs).
     /// Cameras: position (X, Y) and their copies (`+8`).
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
     use crate::screens::vars as sv;
     pub const CAM1_X: u32 = sv::CAMERA_X.0 - A5;
     pub const CAM1_Y: u32 = sv::CAMERA_Y.0 - A5;
@@ -145,7 +145,7 @@ fn tiles(x: &mut Ctx, grid: Grid, n: u16, destination: u32) -> u32 {
 
 /// Sound command 0xff07 of line `line` (0xe0a82, without lock).
 fn sound(x: &mut Ctx, line: u16) {
-    crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff07 { lock: 0, line });
+    crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line });
 }
 
 /// Camera: position and copy.
@@ -338,7 +338,7 @@ fn retry_next_frame(x: &mut Ctx, retry: impl Into<Next>) -> bool {
 /// System object of variant `n` (0xddeaa) that receives the address of the variables; otherwise yields and resumes
 /// at `retry`.
 fn system_object(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> Option<Obj> {
-    let Ok(o) = crate::services::effects_aids::scenery_6(x.b, n) else {
+    let Ok(o) = crate::actors::effects_aids::scenery_6(x.b, n) else {
         retry_next_frame(x, retry);
         return None;
     };
@@ -347,7 +347,7 @@ fn system_object(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> Option<Obj> {
 /// System object of variant `n` whose failure is not tested. Original glitch: the A1 left by the allocation receives
 /// the address of the variables.
 fn system_object_untested(x: &mut Ctx, n: u8) -> Obj {
-    let o = crate::services::effects_aids::scenery_6(x.b, n).unwrap_or_else(|a1| a1);
+    let o = crate::actors::effects_aids::scenery_6(x.b, n).unwrap_or_else(|a1| a1);
     attach(x, o)
 }
 /// SET object of type `n` (0xce00a) attached to the variables; `None` if the pool is full.

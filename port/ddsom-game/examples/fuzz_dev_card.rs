@@ -12,7 +12,7 @@ use std::path::Path;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use ddsom_game::world::mem::{wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
@@ -55,7 +55,7 @@ fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
         let mut bytes = vec![0u8; words as usize];
         for (i, o) in bytes.iter_mut().enumerate() {
             *o = match start {
-                0x1140 => ddsom_game::world::mem::rd8(b, 0x2ebfc + ((r << 4) as u16 as u32) + i as u32),
+                0x1140 => ddsom_game::hw::mem::rd8(b, 0x2ebfc + ((r << 4) as u16 as u32) + i as u32),
                 _ => {
                     if i % 4 == 0 && words == 4 {
                         0
@@ -102,7 +102,7 @@ fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
 }
 
 fn run_original_code(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    let ret = ddsom_game::world::mem::rd32(b, c.a[7]);
+    let ret = ddsom_game::hw::mem::rd32(b, c.a[7]);
     let sp_after = c.a[7].wrapping_add(4);
     let mut guard = 0;
     while !(c.pc == ret && c.a[7] == sp_after) {
@@ -144,13 +144,13 @@ fn main() {
         ("startup 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
         ("reset 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
             ddsom_game::world::World::lend(b, |w| {
-                ddsom_game::hw::eeprom::reset_card(w);
+                ddsom_game::services::eeprom::reset_card(w);
                 ddsom_game::tools::frames::rts(c, w);
             });
         })),
         ("game time 0x2e540", 0x2e540, Box::new(|c, b| {
             ddsom_game::world::World::lend(b, |w| {
-                ddsom_game::hw::eeprom::dev_card::play_time(w);
+                ddsom_game::services::eeprom::dev_card::play_time(w);
                 ddsom_game::tools::frames::rts(c, w);
             });
         })),
@@ -198,7 +198,7 @@ fn main() {
             }
             let mut diffs = Vec::new();
             let sp = c2.a[7] & 0xff_ffff;
-            ddsom_game::world::mem::diff_bus(&b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+            ddsom_game::hw::mem::diff_bus(&b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
             if std::env::var_os("FUZZ_REGISTRES").is_some() {
                 for i in 0..8 {
                     if c.d[i] != c2.d[i] {

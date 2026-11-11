@@ -3,7 +3,7 @@ use crate::actors::families::shell::records::{Base, view};
 
 const KILL: u32 = 0x0600_0000;
 const BADGE_VARIANT: u8 = 1;
-const SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_356_456;
+const SOUND: crate::services::sound::Sound = crate::services::sound::CMD_356_456;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 {
@@ -132,7 +132,7 @@ fn child<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Badge::COUNTER, counter);
             if counter != 0 {
                 x.set_bit(Obj::FLAGS, 1, false);
-                return crate::hw::sound::play(x.b, SOUND, x.o);
+                return crate::services::sound::play(x.b, SOUND, x.o);
             }
             x.set_bit(Obj::FLAGS, 1, true);
             let n = x.u8(Badge::WAIT).wrapping_sub(1);

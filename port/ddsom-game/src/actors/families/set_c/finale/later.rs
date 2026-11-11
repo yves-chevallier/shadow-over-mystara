@@ -2,7 +2,7 @@
 
 use crate::actors::families::cx::Bench;
 use super::*;
-use crate::world::mem::{rd16, rd32, rd8, wr32};
+use crate::hw::mem::{rd16, rd32, rd8, wr32};
 use crate::world::objects::pools;
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
@@ -44,7 +44,7 @@ fn spawn_finale<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
 
 /// Creates a SOBJ of type 6 (routine 0xddeaa), variant `variant`.
 fn spawn_sobj<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
-    crate::services::effects_aids::scenery_6(x.b, variant as u8).ok()
+    crate::actors::effects_aids::scenery_6(x.b, variant as u8).ok()
 }
 
 /// Creates an effect (type 0x1f of 0xb1a7a): variant, value of `+0x2f`.

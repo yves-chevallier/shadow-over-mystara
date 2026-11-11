@@ -45,7 +45,7 @@ fn sub_state<R: Bench>(x: &mut Cx<'_, R>) {
                 let v = x.a5_u16(ram::CAMERA_X);
                 x.set_a5_u16(vars::CAMERA_MAX_X, v);
                 x.set16(ZoneEndObj::DELAY, DELAY);
-                let _ = crate::services::effects_aids::scenery_11(x.b, 0, 0);
+                let _ = crate::actors::effects_aids::scenery_11(x.b, 0, 0);
                 return;
             }
             x.add8(Obj::STATE, 2);
@@ -71,8 +71,8 @@ fn sub_state<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(Obj::STATE, 2);
             x.set_a5_u16(SCROLL_LOCK, 0);
             eshl_creators::linked_34(&mut Pure, x.b, x.o, 3);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_1FA, x.o);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_22, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_1FA, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_22, x.o);
         }
         _ => {}
     }

@@ -14,7 +14,7 @@ use crate::world::objects::Obj;
 use super::init::{clear_overlays_of, clear_player, UNLOCKED_FLAGS};
 use super::states::sub;
 use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
-use crate::world::mem::{wr32, wr8};
+use crate::hw::mem::{wr32, wr8};
 use crate::world::objects::lists;
 use crate::actors::player::tables::{player_data, Aligned};
 
@@ -195,7 +195,7 @@ mod scores {
 fn record_high_score(g: &mut Ctx, p: Player) {
     let score = p.u32(g, Player::SCORE_BCD) as i32;
     let entry = |rank: u32| scores::TABLE + scores::ENTRY * rank;
-    let score_of = |g: &mut Ctx, rank: u32| crate::world::mem::rd32(g.b, entry(rank) + scores::SCORE) as i32;
+    let score_of = |g: &mut Ctx, rank: u32| crate::hw::mem::rd32(g.b, entry(rank) + scores::SCORE) as i32;
     let last = scores::COUNT - 1;
     if score < score_of(g, last) {
         return;
@@ -210,22 +210,22 @@ fn record_high_score(g: &mut Ctx, p: Player) {
     };
     write(g, entry(last));
     wr32(g.b, entry(last) + scores::NAME, name_a);
-    crate::world::mem::wr16(g.b, entry(last) + scores::NAME + 4, name_b);
+    crate::hw::mem::wr16(g.b, entry(last) + scores::NAME + 4, name_b);
     for rank in (0..last).rev() {
         if score < score_of(g, rank) {
             return;
         }
         let (from, to) = (entry(rank), entry(rank + 1));
         for off in [0u32, 1, 0xd] {
-            let v = crate::world::mem::rd8(g.b, from + off);
+            let v = crate::hw::mem::rd8(g.b, from + off);
             wr8(g.b, to + off, v);
         }
         for off in [2u32, 8] {
-            let v = crate::world::mem::rd32(g.b, from + off);
+            let v = crate::hw::mem::rd32(g.b, from + off);
             wr32(g.b, to + off, v);
         }
-        let v = crate::world::mem::rd16(g.b, from + 6);
-        crate::world::mem::wr16(g.b, to + 6, v);
+        let v = crate::hw::mem::rd16(g.b, from + 6);
+        crate::hw::mem::wr16(g.b, to + 6, v);
         write(g, from);
         let preset = match (name_a >> 24) as u8 {
             0xff if ram::VERSION.get(g.b) == 0 => Some(8 * character as u32),
@@ -243,6 +243,6 @@ fn record_high_score(g: &mut Ctx, p: Player) {
             None => (name_a, name_b),
         };
         wr32(g.b, from + scores::NAME, a);
-        crate::world::mem::wr16(g.b, from + scores::NAME + 4, b);
+        crate::hw::mem::wr16(g.b, from + scores::NAME + 4, b);
     }
 }

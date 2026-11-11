@@ -5,7 +5,7 @@ use crate::world::World;
 use crate::actors::families::effects_creators::leftovers::{Pure, Regs};
 use crate::world::objects::{pools, Obj};
 use crate::world::ops::Size;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::record::record;
 use crate::world::tables::engine;
 

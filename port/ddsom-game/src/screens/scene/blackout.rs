@@ -14,9 +14,9 @@ use crate::services::video::{clear_layer, Layer};
 use crate::screens::modes::{Flow, Sequence};
 use crate::Native;
 
-const DISPATCH: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf7eda);
+const DISPATCH: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7eda);
 /// Palettes of the next scene: set for page 0 (negative: none), then D0 of 0x1a60a, 0x1a67e, 0x1a8b2.
-const PALETTES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf80c4);
+const PALETTES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf80c4);
 /// Scene 105 (end of the game) takes the palettes and script of scene 69.
 const FINALE: u8 = 105;
 const FINALE_AS: u32 = 69;

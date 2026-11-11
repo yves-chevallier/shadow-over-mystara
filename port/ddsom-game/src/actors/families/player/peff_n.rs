@@ -3,12 +3,12 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::{rd8, wr32, wr8};
+use crate::hw::mem::{rd8, wr32, wr8};
 use crate::world::objects::Obj;
 use crate::world::objects::Current;
 use crate::actors::player::tables::{player_data, byte, long, Aligned};
@@ -182,7 +182,7 @@ mod guardian {
 
     /// Dust of the arrival (`0xb10c8`): EFFCT 7 effect at a slightly higher height.
     fn dust<R: Bench>(x: &mut Cx<'_, R>) {
-        let Some(o) = crate::services::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
+        let Some(o) = crate::actors::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
         o.set_u8(x.b, TOUCHED, 1);
         let z = o.u16(x.b, Obj::Z).wrapping_add(0x18);
         o.set_u16(x.b, Obj::Z, z);
@@ -324,7 +324,7 @@ mod guardian {
                 let t = x.u8(TIMER) & 3;
                 x.set8(TIMER, t);
                 if t == 0 {
-                    crate::services::effects_aids::shock(x.b, x.o, 1, 1, 0xfff0, 0xffff);
+                    crate::actors::effects_aids::shock(x.b, x.o, 1, 1, 0xfff0, 0xffff);
                 }
                 x.move_x();
                 if x.u8(Obj::VX) == 0 {
@@ -424,7 +424,7 @@ mod guardian {
     /// `0x508fc`: turns one notch toward `toward` (the object the caller leaves in A1); if the facing must change,
     /// starts the turn-around.
     fn turn<R: Bench>(x: &mut Cx<'_, R>, toward: Obj) {
-        let diff = crate::services::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(Obj::SPEED_INDEX)) & 0x1f;
+        let diff = crate::actors::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(Obj::SPEED_INDEX)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(step) & 0x1f;
         x.set8(Obj::SPEED_INDEX, angle);

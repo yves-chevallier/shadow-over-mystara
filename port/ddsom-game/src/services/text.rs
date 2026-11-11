@@ -10,7 +10,7 @@ use crate::world::World;
 
 use crate::hw::video::{Cell, TEXT};
 use crate::world::objects::Obj;
-use crate::screens::tables;
+use crate::world::screen_tables as tables;
 
 const LAYER: u32 = TEXT.base;
 const ROW: u32 = TEXT.row;

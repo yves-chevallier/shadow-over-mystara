@@ -1,5 +1,5 @@
 use super::*;
-use crate::world::mem::{wr32, wr8, A5};
+use crate::hw::mem::{wr32, wr8, A5};
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
 use crate::actors::families::set::fields::SetObj;
@@ -25,7 +25,7 @@ const FRAME_WIDTH: u32 = 0x14;
 const FRAME_FREE_STATE: u32 = 0x6000000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if crate::world::mem::rd8(x.b, STOP) == 0 {
+    if crate::hw::mem::rd8(x.b, STOP) == 0 {
         if x.u8(Obj::STATE) == 0 {
             return create(x);
         }

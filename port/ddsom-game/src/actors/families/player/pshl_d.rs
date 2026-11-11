@@ -3,12 +3,12 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::world::mem::{rd16, wr16};
+use crate::hw::mem::{rd16, wr16};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -21,7 +21,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     // Original glitch: the leftovers of 0x24a8 (D3 = cell index) are re-read by a following handler (batch C:
     // `boss11_scene42_mort`, frame 4447)
-    let t = crate::services::video::terrain_of(x.b, x.o);
+    let t = crate::world::terrain::terrain_of(x.b, x.o);
     leftovers_terrain(x, &t);
     let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
@@ -53,7 +53,7 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1c89b6);
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15cdb6);
-    const SFX_END: crate::hw::sound::Sound = crate::hw::sound::CMD_162_262;
+    const SFX_END: crate::services::sound::Sound = crate::services::sound::CMD_162_262;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53ea2) {
@@ -192,7 +192,7 @@ mod chain {
 
     /// Turns one notch toward the target (`0x53fe0`).
     fn steer<R: Bench>(x: &mut Cx<'_, R>, target: Obj) {
-        let delta = crate::services::aids::direction_to(x.b, x.o, target);
+        let delta = crate::actors::aids::direction_to(x.b, x.o, target);
         let mut step: u8 = 1;
         let diff = delta.wrapping_sub(x.u8(Obj::SPEED_INDEX)) & 0x1f;
         if diff > 0x10 {
@@ -312,7 +312,7 @@ mod chain {
                     let flip = x.u8(f::FLIP);
                     spark.set_u8(x.b, f::FLIP, flip);
                 }
-                crate::hw::sound::play(x.b, SFX_END, x.o);
+                crate::services::sound::play(x.b, SFX_END, x.o);
             } else {
                 x.set32(ANGLES, 0x8080_8080);
             }
@@ -407,7 +407,7 @@ mod knife {
     use super::*;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15d0b0);
-    const SFX_HIT: crate::hw::sound::Sound = crate::hw::sound::CMD_12F_22F;
+    const SFX_HIT: crate::services::sound::Sound = crate::services::sound::CMD_12F_22F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x5445e) {
@@ -442,7 +442,7 @@ mod knife {
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 || stopped_by_terrain(x) {
                     x.add8(Obj::STATE, 2);
-                    return crate::hw::sound::play(x.b, SFX_HIT, x.o);
+                    return crate::services::sound::play(x.b, SFX_HIT, x.o);
                 }
                 x.anim_step();
                 x.move_xy();

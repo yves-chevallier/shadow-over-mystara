@@ -4,12 +4,12 @@
 //! (`dispatch::Leftovers`).
 
 use crate::actors::families::cx::{Bench, Cx};
-use crate::world::mem::{rd8, wr32};
+use crate::hw::mem::{rd8, wr32};
 use crate::actors::families::set::vars;
 use crate::world::objects::pools;
 use crate::world::objects::Obj;
 use crate::actors::families::set::tables as set_tables;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 
 /// Sets the four leftovers D2-D5.
 fn set_leftovers<R: Bench>(x: &mut Cx<'_, R>, [d2, d3, d4, d5]: [u32; 4]) {

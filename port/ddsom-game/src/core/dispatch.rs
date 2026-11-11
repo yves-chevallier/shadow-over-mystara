@@ -139,12 +139,12 @@ fn run_handler(b: &mut World, handler: Handler, object: Obj, counter: u16) {
         Handler::Dead { entry } => unreachable!("handler {entry:06x}: dead type of the original table"),
     };
     crate::core::frame::note(b, native);
-    let mut a = Dispatch { object, counter, leftovers: crate::core::tasks::table::table(b).leftovers };
+    let mut a = Dispatch { object, counter, leftovers: b.leftovers };
     #[cfg(feature = "tools")]
     crate::tools::check_handler(native, run, b, &mut a);
     #[cfg(not(feature = "tools"))]
     run(b, &mut a);
-    crate::core::tasks::table::table(b).leftovers = a.leftovers;
+    b.leftovers = a.leftovers;
     crate::core::tasks::return_to_caller(b);
 }
 
@@ -160,30 +160,7 @@ pub struct Dispatch {
     pub leftovers: Leftovers,
 }
 
-/// Leftover registers that a handler leaves and that a following handler rereads (original glitches). The probe
-/// `DDSOM_POISON=exit` (registers changed by each handler, inverted on its return) pointed to them in all
-/// scenarios; the other registers that a handler leaves are reread by nobody. Other routines also write them (sprite
-/// list, cameras, input copy, gauge: `sprites::build_in_game`...).
-///
-/// They are a game state, stored in the task table (`tasks::table::Table::leftovers`); the natives called by the
-/// original code (tools) find them in their register bench ([`Leftovers::to_bench`] and [`Leftovers::from_bench`]).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Leftovers {
-    /// D2: what is left by the collision with the terrain (0x33fe4, `terrain::push`), the box tests (0xb5e0,
-    /// 0x7f19c, 0x7ef4), the loot treasure line (0xb780); the spark of `flash_and_shake` (0x103ba) takes
-    /// its speed from it, the bounce of the frost shard (0x4bda8) its setting, the ITEM 5 object (0xdc382) rereads it.
-    pub d2: u32,
-    /// D3: like D2 (collision, box tests, special loot); acceleration of the spark of `flash_and_shake`.
-    pub d3: u32,
-    /// D4: the last long copied by the palette animation (SET 0, 0xba310), the raft movement (EFFCT,
-    /// 0xad63e), the attributes of the last piece of the sprite list...; the pilotless raft adds it to the
-    /// players' position (0xad7b0).
-    pub d4: u32,
-    /// D5: 0 or 1 (the object moved) after keeping on screen (0xfbae, `ai::keep_on_screen`), 1 after a
-    /// collision with the terrain (0x33fe4), the exhausted counter of a `dbf` loop...; the row of shards of a crate
-    /// (0xa17d0, `eshl_creators::row_1a`) rereads its high byte.
-    pub d5: u32,
-}
+pub use crate::world::Leftovers;
 
 /// Resumption of a dispatch loop in which a handler made the task cede control.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,10 +212,10 @@ fn current_call(b: &mut World) -> Option<(Obj, u16)> {
 /// leftovers those of the game (the original keeps them in the registers, which the cession saves and restores).
 pub fn resume_handler(b: &mut World, object: Option<Obj>, f: impl FnOnce(&mut World, &mut Dispatch)) {
     let (current, counter) = current_call(b).expect("a handler resumes outside a dispatch loop");
-    let leftovers = crate::core::tasks::table::table(b).leftovers;
+    let leftovers = b.leftovers;
     let mut a = Dispatch { object: object.unwrap_or(current), counter, leftovers };
     f(b, &mut a);
-    crate::core::tasks::table::table(b).leftovers = a.leftovers;
+    b.leftovers = a.leftovers;
 }
 
 /// Offset of the return address of the `jsr (A1)` that calls the handler, in each of the ten

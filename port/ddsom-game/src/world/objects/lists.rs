@@ -21,7 +21,7 @@
 use crate::world::World;
 
 use super::{Link, Obj};
-use crate::world::mem::{set_low_word, A5};
+use crate::hw::mem::{set_low_word, A5};
 use crate::world::ram::Word;
 use crate::world::ops::{Alu, Registers, Size};
 

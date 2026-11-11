@@ -11,7 +11,7 @@ use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
 use crate::tools::prog32;
 use crate::world::objects::Obj;
-use crate::world::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
+use crate::hw::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
 
 macro_rules! anim_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {

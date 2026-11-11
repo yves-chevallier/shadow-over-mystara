@@ -27,7 +27,7 @@ pub(super) fn knockback<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::FREEZE, 4);
         x.set16(Enemy::VX, 0x500);
         x.set16(Enemy::AX, 0xffc8);
-        lib::sound(x, crate::hw::sound::CMD_127_227_B);
+        lib::sound(x, crate::services::sound::CMD_127_227_B);
         let side = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
         x.set8(Enemy::ATTACKER_FLIP, side);
         if side != 0 {

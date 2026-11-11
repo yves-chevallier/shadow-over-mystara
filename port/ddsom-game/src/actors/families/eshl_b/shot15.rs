@@ -47,7 +47,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Shot15::RELEASED, 0);
             x.set8(Shot::ATTACK_POWER, 0xc);
             x.set8(Shot::ATTACK_ID, 0x11);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_32B, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_32B, x.o);
             let owner_state = owner.u32(x.b, Obj::STATE);
             if owner_state == 0x0202_0004 {
                 x.set32(Obj::STATE, 0x0202_0000);

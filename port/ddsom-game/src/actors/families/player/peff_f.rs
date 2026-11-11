@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -234,8 +234,8 @@ mod flash {
     const MOVE_STEP: u32 = 0x5d;
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1baa5c);
-    const SFX_BODY: crate::hw::sound::Sound = crate::hw::sound::CMD_182;
-    const SFX_CORNER: crate::hw::sound::Sound = crate::hw::sound::CMD_183_283;
+    const SFX_BODY: crate::services::sound::Sound = crate::services::sound::CMD_182;
+    const SFX_CORNER: crate::services::sound::Sound = crate::services::sound::CMD_183_283;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(Obj::VARIANT) != 0;
@@ -244,7 +244,7 @@ mod flash {
                 x.add8(Obj::STATE, 2);
                 x.anim(ANIMS.0, 0);
                 x.reinsert();
-                crate::hw::sound::play(x.b, SFX_BODY, x.o);
+                crate::services::sound::play(x.b, SFX_BODY, x.o);
             }
             0 => init_corner(x),
             2 if !child => body(x),
@@ -331,7 +331,7 @@ mod flash {
             x.set_bit(Obj::FLAGS, 1, false);
             x.set8(BLINK, 2);
             vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
-            crate::hw::sound::play(x.b, SFX_CORNER, x.o);
+            crate::services::sound::play(x.b, SFX_CORNER, x.o);
         }
         if x.anim_step() {
             x.add8(COUNT, 0xff);

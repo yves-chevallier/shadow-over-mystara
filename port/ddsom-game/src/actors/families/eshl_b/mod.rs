@@ -10,7 +10,7 @@ use crate::actors::families::shell::records::view;
 use crate::actors::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::*;
-use crate::world::mem::{rd32, wr32};
+use crate::hw::mem::{rd32, wr32};
 use crate::world::objects::Obj;
 use ddsom_data::effects::Table;
 use super::shell::tables::Read;

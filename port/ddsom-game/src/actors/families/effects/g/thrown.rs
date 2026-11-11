@@ -82,8 +82,8 @@ pub(super) fn chunk_active<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB_STATE, 2);
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
-            crate::hw::sound::play(x.b, rom::SOUND_LANDING, x.o);
-            crate::services::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
+            crate::services::sound::play(x.b, rom::SOUND_LANDING, x.o);
+            crate::actors::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
             // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Leftovers`)
             *x.c.d5() = 0xffff;
             match x.u8(f::VARIANT) {
@@ -220,7 +220,7 @@ pub(super) fn rain_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(rain::SAVED_Y, y);
         x.set16(Obj::AX, 0xffe8);
         let o = x.o;
-        crate::services::effects_aids::shock(x.b, o, 5, 0x201, 0, 0);
+        crate::actors::effects_aids::shock(x.b, o, 5, 0x201, 0, 0);
         x.set16(rain::TIMER, 0x26);
         let variant = x.u8(f::VARIANT) as u32;
         let speed = tables().rain_speed_by_variant.at8(x.b, variant);

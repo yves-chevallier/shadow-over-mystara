@@ -201,7 +201,7 @@ fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set16(Boss::TIMER, 0x20);
             x.anim_start(SET_BODY.0, 6);
-            lib::sound(x, crate::hw::sound::CMD_5D);
+            lib::sound(x, crate::services::sound::CMD_5D);
         }
         2 => {
             if sub16(x, Boss::TIMER, 1).ne() {
@@ -404,7 +404,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
             let xx = x.u16(Boss10::JUMP_X).wrapping_add(d2);
             x.set16(Boss10::JUMP_X, xx);
             body(x, 7);
-            lib::sound(x, crate::hw::sound::CMD_331);
+            lib::sound(x, crate::services::sound::CMD_331);
         }
         2 => {
             if x.anim_step() {
@@ -417,7 +417,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
                     x.set8(f::FLIP, 0x20);
                 }
                 body(x, 8);
-                lib::sound(x, crate::hw::sound::CMD_331);
+                lib::sound(x, crate::services::sound::CMD_331);
             } else if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
                 x.set8(Enemy::PALETTE, 0x16);
@@ -444,7 +444,7 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 x.add8(Enemy::SUB_STEP, 2);
                 x.anim_start(SET_SHOT.0, 0);
-                lib::sound(x, crate::hw::sound::CMD_5A);
+                lib::sound(x, crate::services::sound::CMD_5A);
             }
             2 => {
                 if x.anim_step() {
@@ -473,7 +473,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             var::INPUT_MASK.set(x.b, 0x7f);
             x.set8(Enemy::ACTIVE, 2);
             x.anim_start(SET_SHOT.0, 1);
-            lib::sound(x, crate::hw::sound::CMD_5A);
+            lib::sound(x, crate::services::sound::CMD_5A);
         }
         2 => {
             x.anim_step();
@@ -509,7 +509,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Boss::TIMER, 0x20);
             let shot = x.linked(Boss10::SHOT);
             shot.set_u8(x.b, Shot33::FIRST, 1);
-            lib::sound(x, crate::hw::sound::CMD_5E);
+            lib::sound(x, crate::services::sound::CMD_5E);
             x.anim_step();
         }
         6 => {
@@ -547,7 +547,7 @@ fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         x.set8(Boss10::WAIT_BLINK, 0xfa);
         x.anim_start(SET_BODY.0, 6);
-        return lib::sound(x, crate::hw::sound::CMD_5D);
+        return lib::sound(x, crate::services::sound::CMD_5D);
     }
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         lib::pick_target_any(x);
@@ -558,7 +558,7 @@ fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set8(Boss10::WAIT_BLINK, 0xfa);
-    lib::sound(x, crate::hw::sound::CMD_5D);
+    lib::sound(x, crate::services::sound::CMD_5D);
     x.anim_step();
 }
 
@@ -618,7 +618,7 @@ fn stun<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::FREEZE, stun);
             x.set8(Boss::SHAKE, 0x10);
             x.anim_start(SET_DIE.0, 8);
-            lib::sound(x, crate::hw::sound::CMD_5B);
+            lib::sound(x, crate::services::sound::CMD_5B);
         }
         2 => {
             if x.u8(Boss::SHAKE) == 0 {
@@ -692,8 +692,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             record_defeat(x, kind);
             x.set32(f::IMMUNITY, 0x0fff_ffff);
             lib::flash_and_shake(x);
-            crate::hw::sound::service(x.b, crate::hw::sound::Service::Ff05);
-            lib::sound(x, crate::hw::sound::CMD_FF);
+            crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
+            lib::sound(x, crate::services::sound::CMD_FF);
             x.set16(Enemy::AX, 0);
             x.set16(Enemy::VZ, 0x500);
             x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
@@ -707,7 +707,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VX, vx as u16);
             x.set8(f::FLIP, side);
             x.anim_start(SET_DIE.0, 0x15);
-            lib::sound(x, crate::hw::sound::CMD_5C);
+            lib::sound(x, crate::services::sound::CMD_5C);
         }
         2 => {
             x.move_xz();
@@ -732,7 +732,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
-            lib::sound(x, crate::hw::sound::CMD_AA);
+            lib::sound(x, crate::services::sound::CMD_AA);
             x.anim_start(SET_DIE.0, 0x18);
         }
         8 => {

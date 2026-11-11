@@ -3,7 +3,7 @@
 
 use super::vars;
 use crate::actors::families::player::records::Shot;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Obj;
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx};
@@ -36,7 +36,7 @@ mod orbit {
 
     const ANIMS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x15b346);
     const SPEEDS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1c89b6);
-    const SFX: crate::hw::sound::Sound = crate::hw::sound::CMD_33A_43A;
+    const SFX: crate::services::sound::Sound = crate::services::sound::CMD_33A_43A;
     const TURN_TABLE: u32 = 0x52b32;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -88,7 +88,7 @@ mod orbit {
         x.set8(f::POWER2, p2);
         x.set_bit(Obj::FLAGS, 1, true);
         x.anim(ANIMS.0, 0);
-        crate::hw::sound::play(x.b, SFX, x.o);
+        crate::services::sound::play(x.b, SFX, x.o);
     }
 
     /// Substate 0: waits for delay `+0x53`, then moves on to the opening animation.

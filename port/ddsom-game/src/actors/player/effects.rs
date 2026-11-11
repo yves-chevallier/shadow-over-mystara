@@ -6,7 +6,7 @@
 //! slot.
 
 use super::{ram, Ctx, Player};
-use crate::world::mem::wr32;
+use crate::hw::mem::wr32;
 use crate::actors::player::tables::{player_data, long, Aligned};
 
 /// Character palette RAM (two bytes per color, 16 colors per block).

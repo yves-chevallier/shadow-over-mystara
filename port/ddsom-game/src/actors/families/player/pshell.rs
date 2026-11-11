@@ -106,7 +106,7 @@ pub fn offset<R: Bench>(x: &mut Cx<'_, R>, table: u32, row: u32) -> (u16, u16) {
 /// Leftovers of the terrain search (0x24a8 / 0x24b0, `video::terrain_regs`): D2 (number), D3 (cell index), D4.w
 /// (column). Original glitch: following handlers re-read them (`dispatch::Leftovers`; D3: `boss11_scene42_mort`, D2:
 /// bounce of the freeze shard).
-pub fn leftovers_terrain<R: Bench>(x: &mut Cx<'_, R>, t: &crate::services::video::Terrain) {
+pub fn leftovers_terrain<R: Bench>(x: &mut Cx<'_, R>, t: &crate::world::terrain::Terrain) {
     if t.fixed_map {
         *x.c.d3() = t.index as u32;
     } else {

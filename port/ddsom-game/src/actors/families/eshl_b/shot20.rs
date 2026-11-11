@@ -59,7 +59,7 @@ fn freeze<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(Shot::OWNER);
     let armed = owner.u8(x.b, ARMED) & !1;
     owner.set_u8(x.b, ARMED, armed);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_37A, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_37A, x.o);
     x.anim_start(ANIMS.0, 3);
 }
 
@@ -89,7 +89,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
             let owner = x.linked(Shot::OWNER);
             if (owner.u32(x.b, Obj::STATE) as i32) >= 0x0200_0600 && x.u8(Base::ANIM_EVENT) != 0 {
                 x.set8(Base::ANIM_EVENT, 0);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_311_411, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_311_411, x.o);
             }
             if x.anim_step() {
                 if x.u16(Shot::OWNER) == 0 {
@@ -131,8 +131,8 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
             if !x.anim_step() {
                 return attach(x, &tables().shot20_attach);
             }
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_311_411, x.o);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_379, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_311_411, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_379, x.o);
             x.add8(Base::STEP, 2);
             // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
             let blow = x.alloc_unchecked(&pools::ESHL);
@@ -163,7 +163,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
                 let owner = x.linked(Shot::OWNER);
                 let armed = owner.u8(x.b, ARMED) & !1;
                 owner.set_u8(x.b, ARMED, armed);
-                crate::hw::sound::play(x.b, crate::hw::sound::CMD_37A, x.o);
+                crate::services::sound::play(x.b, crate::services::sound::CMD_37A, x.o);
                 x.anim_start(ANIMS.0, 3);
             } else {
                 attach(x, &tables().shot20_attach);

@@ -8,7 +8,7 @@ use crate::actors::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::effects_creators::leftovers::{Pure, OnBench};
 use super::eshl_creators;
-use crate::world::mem::{rd32, rd8, wr32, wr8, A5};
+use crate::hw::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;
@@ -17,7 +17,7 @@ use crate::actors::families::set::vars;
 
 /// Typed views of the SET B objects.
 pub mod fields;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set_b::fields::DoorObj;
 
 /// The four player records: A5+0x5de, 0x200 bytes each.
@@ -55,7 +55,7 @@ fn players() -> impl Iterator<Item = Obj> {
 /// the original leaves (loop counter: `moveq #12,D5`, high word zero; 0xFFFF after the last), a leftover reread by the
 /// handlers (`dispatch::Leftovers`); A1 and D6 of the allocation are reread by nobody.
 pub(crate) fn spawn_bumpers(b: &mut crate::world::World) -> u32 {
-    crate::world::mem::wr16(b, A5 + vars::CAMERA_FOCUS, 0);
+    crate::hw::mem::wr16(b, A5 + vars::CAMERA_FOCUS, 0);
     for counter in (0..13u32).rev() {
         let Some(o) = pools::SET.alloc(b) else { return counter };
         o.set_u8(b, Obj::ACTIVE, 1);

@@ -6,9 +6,9 @@
 
 use crate::world::World;
 
-use crate::services::ai::RANK;
+use crate::world::objects::rank::RANK;
 use crate::world::objects::{pools, Enemy, Obj};
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::rng;
 use crate::world::tables::{engine, Table};
 

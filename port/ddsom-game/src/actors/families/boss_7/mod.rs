@@ -159,7 +159,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         x.add8(f::STATE, 2);
         x.add16(Obj::Z, 0x50);
-        lib::sound(x, crate::hw::sound::CMD_23);
+        lib::sound(x, crate::services::sound::CMD_23);
     }
     var::BOSS_FIGHT.set(x.b, 1);
     lib::clear_popup(x);

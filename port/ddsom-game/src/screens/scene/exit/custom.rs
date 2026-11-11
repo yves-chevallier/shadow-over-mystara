@@ -10,7 +10,7 @@ const EFFECT_SPEED: u32 = 0x58;
 const ANSWER: u32 = 0x23;
 
 /// Wait of sequence 30 by the number of players (PC-relative words).
-const PLAYER_WAITS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf5542);
+const PLAYER_WAITS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf5542);
 use crate::world::objects::Obj;
 
 // ---------------------------------------------------------------------------------------------
@@ -21,7 +21,7 @@ pub(super) fn seq0_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, fading::DESCENT);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
+    crate::services::inputs::clear_inputs(ex.x.b);
     ex.x.world();
 }
 
@@ -30,8 +30,8 @@ pub(super) fn seq6_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, fading::DESCENT);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
-    crate::hw::sound::service(ex.x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+    crate::services::inputs::clear_inputs(ex.x.b);
+    crate::services::sound::service(ex.x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     ex.x.world();
 }
 
@@ -84,7 +84,7 @@ pub(super) fn seq31_start(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 192);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
+    crate::services::inputs::clear_inputs(ex.x.b);
     ex.x.world();
 }
 
@@ -102,7 +102,7 @@ pub(super) fn seq33_walk(ex: &mut Ex) {
         ex.next();
         PAUSE.set(ex.x.b, 0);
         var::INPUT_LOCK.set(ex.x.b, 0);
-        crate::hw::inputs::clear_inputs(ex.x.b);
+        crate::services::inputs::clear_inputs(ex.x.b);
         ex.fade(2, fading::DESCENT);
         ex.release_players(false);
     }
@@ -190,7 +190,7 @@ pub(super) fn seq2_countdown(ex: &mut Ex) {
         ex.next();
         ex.set_b16(blk::TIMER, 128);
         crate::services::camera_modes::start_shake(ex.x.b, crate::services::camera_modes::shake::B, 30);
-        crate::hw::sound::play_global(ex.x.b, crate::hw::sound::CMD_98);
+        crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_98);
     }
 }
 
@@ -237,7 +237,7 @@ pub(super) fn walk_with_effect(ex: &mut Ex) {
     ex.next();
     PAUSE.set(ex.x.b, 0);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
+    crate::services::inputs::clear_inputs(ex.x.b);
     ex.set_b16(blk::TIMER, 144);
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
@@ -275,7 +275,7 @@ pub(super) fn seq14_countdown(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.message(36);
-        crate::hw::sound::play_global(ex.x.b, crate::hw::sound::CMD_89_89);
+        crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_89_89);
     }
 }
 
@@ -315,7 +315,7 @@ pub(super) fn seq21_start(ex: &mut Ex) {
     ex.next();
     PAUSE.set(ex.x.b, 0);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
+    crate::services::inputs::clear_inputs(ex.x.b);
     ex.reset_transition();
     ex.reset_shop();
     ex.message(70);
@@ -324,7 +324,7 @@ pub(super) fn seq21_start(ex: &mut Ex) {
 
 /// Sequence 21: the finished message gives an index (`+0x23`) into a table of next scenes.
 pub(super) fn seq21_route(ex: &mut Ex) {
-    const NEXT_SCENES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0xf4a0c);
+    const NEXT_SCENES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf4a0c);
     let m = ex.object(blk::MESSAGE);
     if m.u8(ex.x.b, crate::screens::obj::MESSAGE_DONE) != 0 {
         ex.next();
@@ -385,7 +385,7 @@ pub(super) fn seq30_effect(ex: &mut Ex) {
     if ex.b16(blk::TIMER) == 32 {
         let e = ex.x.spawn(&pools::EFFCT, 75);
         e.set_u8(ex.x.b, Obj::VARIANT, 1);
-        crate::hw::sound::play_global(ex.x.b, crate::hw::sound::CMD_38E);
+        crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_38E);
     }
     if ex.countdown() {
         ex.next();
@@ -429,7 +429,7 @@ pub(super) fn seq35_walk(ex: &mut Ex) {
     PAUSE.set(ex.x.b, 0);
     Word(scratch(0xaa84)).set(ex.x.b, 0x1400);
     var::INPUT_LOCK.set(ex.x.b, 0);
-    crate::hw::inputs::clear_inputs(ex.x.b);
+    crate::services::inputs::clear_inputs(ex.x.b);
     ex.release_players(false);
 }
 
@@ -438,7 +438,7 @@ pub(super) fn seq35_fade(ex: &mut Ex) {
     ex.set_b16(blk::TIMER, 64);
     ex.fade(2, fading::RISE);
     ex.clear_text();
-    crate::hw::sound::service(ex.x.b, crate::hw::sound::Service::Ff07 { lock: 0, line: 4 });
+    crate::services::sound::service(ex.x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
 }
 
 pub(super) fn seq35_message(ex: &mut Ex) {
@@ -451,7 +451,7 @@ pub(super) fn seq35_message(ex: &mut Ex) {
     let set = crate::actors::families::creators::set_15_pure(ex.x.b, 24).unwrap_or_else(|a1| a1);
     ex.set_b16(blk::OBJECT, set.0 as u16);
     crate::services::camera_modes::start_shake(ex.x.b, crate::services::camera_modes::shake::B, 0x7fff);
-    crate::hw::sound::play_global(ex.x.b, crate::hw::sound::CMD_9A);
+    crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_9A);
 }
 
 pub(super) fn seq35_boss(ex: &mut Ex) {

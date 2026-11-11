@@ -196,8 +196,3 @@ pub trait Current: Machine {
     }
 }
 
-impl<R> Current for crate::actors::families::cx::Cx<'_, R> {
-    fn obj(&self) -> Obj {
-        self.o
-    }
-}

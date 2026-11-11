@@ -160,10 +160,10 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
     x.set16(Enemy::HP_LAST, hp as u16);
     x.set16(Double::HURT_WAIT, 0x14);
     if hp > 0 {
-        return lib::sound(x, crate::hw::sound::CMD_359);
+        return lib::sound(x, crate::services::sound::CMD_359);
     }
     x.set8(Double::WOUNDED, 1);
-    lib::sound(x, crate::hw::sound::CMD_35A);
+    lib::sound(x, crate::services::sound::CMD_35A);
     x.set8(Enemy::EVENT_KIND, dying_code);
     lib::object_event(x);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };

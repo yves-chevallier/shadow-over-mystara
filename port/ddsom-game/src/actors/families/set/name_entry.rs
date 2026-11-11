@@ -1,5 +1,5 @@
 use super::*;
-use crate::world::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
 

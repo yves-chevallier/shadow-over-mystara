@@ -1,7 +1,7 @@
 use super::*;
 use crate::actors::families::set::tables as set_tables;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set::fields::NameBoardObj;
 
 /// 0xc979e: state 0. Resets the records to zero and loads four palettes (with the

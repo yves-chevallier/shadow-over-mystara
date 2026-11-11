@@ -29,14 +29,14 @@ use later::*;
 /// ROM tables (data), indexed by scene number.
 pub(crate) mod table {
     /// One byte per scene copied to `A5+0x48` / `A5+0x49` (scene palette parameters).
-    pub const PALETTE_A: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21b38);
-    pub const PALETTE_B: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21bb0);
+    pub const PALETTE_A: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x21b38);
+    pub const PALETTE_B: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x21bb0);
     /// One byte per scene (copied to `A5+0x3e` and `A5+0x40`), index ×2.
-    pub const SCENE_BYTE: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x21156);
+    pub const SCENE_BYTE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x21156);
     /// Players' entry position: 4 pairs (X, Y) of words per scene.
-    pub const START_POSITIONS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2123c);
+    pub const START_POSITIONS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2123c);
     /// One byte per player and per scene (`+0x2c` of the player).
-    pub const START_STATES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x2196c);
+    pub const START_STATES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2196c);
 }
 
 /// Work RAM variables outside the A5 ± 0x7fff page, cleared on entry.
@@ -168,7 +168,7 @@ pub fn place_players(b: &mut World) -> u8 {
         p.set_u16(b, Obj::Y, py.wrapping_add(dy));
         p.set_z(b, 0);
         let state = table::START_STATES.byte(b, states);
-        p.set_u8(b, crate::actors::player::Player::FACING, state);
+        p.set_u8(b, crate::world::objects::player::Player::FACING, state);
         states += 1;
         p.set_u8(b, ARRIVAL_RANK, rank);
         rank += 1;
@@ -249,7 +249,7 @@ fn quick(x: &mut Ctx) {
     x.leave_phase();
     var::PLAYERS_FROZEN.set(x.b, 0);
     x.fade_in();
-    crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+    crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
     x.world();
 }
 
@@ -260,7 +260,7 @@ fn quick_with_music(x: &mut Ctx) {
     x.fade_in();
     if x.v8(0x67) == 0 {
         x.set_v8(0x67, 1);
-        crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+        crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
     }
     x.world();
 }
@@ -281,7 +281,7 @@ fn quick_with_sobj(x: &mut Ctx) {
     var::PLAYERS_FROZEN.set(x.b, 0);
     x.fade_in();
     x.sobj_6(23);
-    crate::hw::sound::play_global(x.b, crate::hw::sound::SCENE_MUSIC);
+    crate::services::sound::play_global(x.b, crate::services::sound::SCENE_MUSIC);
     x.world();
 }
 

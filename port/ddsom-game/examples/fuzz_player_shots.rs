@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use ddsom_game::world::objects::pools::{Pool, PEFF, PSHL};
 
 struct Rng(u64);

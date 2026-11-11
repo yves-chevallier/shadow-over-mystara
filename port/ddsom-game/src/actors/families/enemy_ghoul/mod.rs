@@ -353,8 +353,8 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                     let mut near = 0;
                     for k in 0..4u32 {
                         let p = 0xff85de + 0x200 * k;
-                        let dx = x.u16(Obj::X).wrapping_sub(crate::world::mem::rd16(x.b, p + Obj::X)).wrapping_add(0x60);
-                        let dy = x.u16(Obj::Y).wrapping_sub(crate::world::mem::rd16(x.b, p + Obj::Y)).wrapping_add(0x30);
+                        let dx = x.u16(Obj::X).wrapping_sub(crate::hw::mem::rd16(x.b, p + Obj::X)).wrapping_add(0x60);
+                        let dy = x.u16(Obj::Y).wrapping_sub(crate::hw::mem::rd16(x.b, p + Obj::Y)).wrapping_add(0x30);
                         if dx <= 0xc0 && dy <= 0x60 {
                             near += 1;
                         }

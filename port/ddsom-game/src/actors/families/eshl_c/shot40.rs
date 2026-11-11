@@ -22,7 +22,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(Obj::STATE, 2);
-    crate::hw::sound::play(x.b, crate::hw::sound::CMD_346, x.o);
+    crate::services::sound::play(x.b, crate::services::sound::CMD_346, x.o);
     x.set8(Base::BOX_SET, 7);
     x.set8(Shot::ATTACK_POWER, 5);
     x.set8(Shot::ATTACK_ID, 0x1e);
@@ -60,7 +60,7 @@ fn live<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(LIFETIME, t);
         if s16(t) < 0 {
             x.add8(Obj::STATE, 2);
-            crate::hw::sound::play(x.b, crate::hw::sound::CMD_337, x.o);
+            crate::services::sound::play(x.b, crate::services::sound::CMD_337, x.o);
         }
     }
     flicker(x);

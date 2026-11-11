@@ -64,7 +64,7 @@ fn message_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Plays `sound`.
-fn fx<R: Bench>(x: &mut Cx<'_, R>, sound: crate::hw::sound::Sound) {
+fn fx<R: Bench>(x: &mut Cx<'_, R>, sound: crate::services::sound::Sound) {
     lib::sound(x, sound);
 }
 
@@ -85,7 +85,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             speed(x, 0x12);
             x.set16(Boss::TIMER, 7);
             effect(x, true, 0x31, None, true);
-            fx(x, crate::hw::sound::CMD_311_411);
+            fx(x, crate::services::sound::CMD_311_411);
             body(x, 0x16);
         }
         1 => {
@@ -114,7 +114,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
         3 => {
             if !tst16(x, Enemy::VY).gt() {
                 x.add8(Enemy::SUB_STEP, 2);
-                fx(x, crate::hw::sound::CMD_311_411);
+                fx(x, crate::services::sound::CMD_311_411);
                 x.set16(Boss::TIMER, 0x30);
                 x.set16(Boss::TIMER2, 7);
                 x.set16(Enemy::VY, (-0x80i16) as u16);
@@ -129,7 +129,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 if sub16(x, Boss::TIMER2, 1).le() {
                     x.add8(Enemy::SUB_STEP, 2);
                     x.set16(Enemy::VZ, 0);
-                    fx(x, crate::hw::sound::CMD_88_88);
+                    fx(x, crate::services::sound::CMD_88_88);
                     x.set8(Obj::SPEED_INDEX, 5);
                     speed(x, 0x1d);
                 } else {
@@ -140,9 +140,9 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                         // `moveq #3,D5`
                         *x.c.d5() = 3;
                         decide::spawn_ring(x, 3);
-                        fx(x, crate::hw::sound::CMD_86_86);
+                        fx(x, crate::services::sound::CMD_86_86);
                     } else if cmp16(x, Boss::TIMER2, 2).eq() {
-                        fx(x, crate::hw::sound::CMD_311_411);
+                        fx(x, crate::services::sound::CMD_311_411);
                     }
                 }
             }
@@ -175,7 +175,7 @@ fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            fx(x, crate::hw::sound::CMD_331);
+            fx(x, crate::services::sound::CMD_331);
             let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x68);
             x.set16(Obj::X, px);
@@ -227,7 +227,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            fx(x, crate::hw::sound::CMD_331);
+            fx(x, crate::services::sound::CMD_331);
             body(x, 0x17);
         }
         1 => {
@@ -247,7 +247,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::X, px);
                 x.set16(Obj::Y, py);
                 x.set16(Obj::Z, 0);
-                fx(x, crate::hw::sound::CMD_331);
+                fx(x, crate::services::sound::CMD_331);
                 body(x, 0x18);
             }
         }
@@ -255,7 +255,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
             if lib::step(x) {
                 x.add8(Enemy::SUB_STEP, 2);
                 x.set16(Boss::TIMER, 0xa);
-                fx(x, crate::hw::sound::CMD_2D);
+                fx(x, crate::services::sound::CMD_2D);
                 body(x, 0);
             }
         }
@@ -269,7 +269,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(Enemy::SUB_STEP, 2);
-            fx(x, crate::hw::sound::CMD_7F);
+            fx(x, crate::services::sound::CMD_7F);
             open_message(x, 0x13);
         }
         5 => {
@@ -282,7 +282,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
             for d5 in (0..=3u8).rev() {
                 effect(x, true, 0x10, Some(d5), true);
             }
-            fx(x, crate::hw::sound::CMD_364);
+            fx(x, crate::services::sound::CMD_364);
         }
         6 => {
             if sub16(x, Boss::TIMER, 1).le() {
@@ -312,12 +312,12 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
                 e.set_u16(x.b, Obj::Y, py);
                 e.set_u16(x.b, Obj::Z, 0x66);
             }
-            fx(x, crate::hw::sound::CMD_365);
+            fx(x, crate::services::sound::CMD_365);
         }
         9 => {
             if sub16(x, Boss::TIMER, 1).le() {
                 x.add8(Enemy::SUB_STEP, 2);
-                fx(x, crate::hw::sound::CMD_366_B);
+                fx(x, crate::services::sound::CMD_366_B);
                 strike(x, 0xe);
             }
         }
@@ -334,7 +334,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(Enemy::SUB_STEP, 2);
-            fx(x, crate::hw::sound::CMD_88_88);
+            fx(x, crate::services::sound::CMD_88_88);
             open_message(x, 0x14);
         }
         12 => {
@@ -343,7 +343,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(Enemy::SUB_STEP, 2);
-            fx(x, crate::hw::sound::CMD_7F);
+            fx(x, crate::services::sound::CMD_7F);
             open_message(x, 0x15);
         }
         13 => {
@@ -381,7 +381,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(Enemy::SUB_STEP, 2);
             x.set8(f::FLIP, 0x20);
-            fx(x, crate::hw::sound::CMD_7F);
+            fx(x, crate::services::sound::CMD_7F);
             x.anim_start(SET_BODY.0, 0x11);
         }
         23 => {
@@ -401,7 +401,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
         25 => {
             if message_done(x) {
                 x.add8(Enemy::SUB_STEP, 2);
-                fx(x, crate::hw::sound::CMD_88_88);
+                fx(x, crate::services::sound::CMD_88_88);
                 body(x, 0x17);
             } else {
                 x.anim_step();
@@ -479,7 +479,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(Enemy::SUB_STEP, 2);
     x.set16(Obj::Z, 0);
-    fx(x, crate::hw::sound::CMD_35E_45E);
+    fx(x, crate::services::sound::CMD_35E_45E);
     x.anim_start(SET_BODY.0, 0x15);
 }
 
@@ -588,8 +588,8 @@ fn variant_start<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     x.set16(Boss::TIMER, 0xa);
     effect(x, true, 0x31, Some(1), true);
     if second {
-        fx(x, crate::hw::sound::CMD_311_411);
-        fx(x, crate::hw::sound::CMD_24);
+        fx(x, crate::services::sound::CMD_311_411);
+        fx(x, crate::services::sound::CMD_24);
     } else if let Some(boss) = alloc_retry(x, &pools::BOSS) {
         boss.set_u8(x.b, Obj::ACTIVE, 2);
         boss.set_u8(x.b, Obj::KIND, 0x15);
@@ -597,7 +597,7 @@ fn variant_start<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
         boss.set_u8(x.b, f::FLIP, side);
         boss.set_u16(x.b, f::HOST, x.o.0 as u16);
         x.set16(f::HOST, boss.0 as u16);
-        fx(x, crate::hw::sound::CMD_311_411);
+        fx(x, crate::services::sound::CMD_311_411);
     }
     body(x, 0x19);
 }

@@ -41,10 +41,10 @@ mod status;
 pub use slot::forget_displayed;
 
 use crate::screens::credits::CoinSlot;
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::World;
 
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
 use crate::Native;

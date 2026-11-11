@@ -19,8 +19,8 @@
 use crate::world::World;
 
 use crate::hw::video::{Cell, TEXT};
-use crate::world::mem::A5;
-use crate::screens::tables::{self, Rom};
+use crate::hw::mem::A5;
+use crate::world::screen_tables::{self as tables, Rom};
 use crate::services::text::clear_cells;
 use crate::world::ram::Byte;
 use crate::world::objects::Obj;
@@ -45,15 +45,15 @@ const REDUCED: u32 = 0x20;
 /// Program ROM data.
 mod rom {
     /// Rectangles to erase (column, row, width, height), one per slot: large, then reduced.
-    use crate::screens::tables::Rom;
+    use crate::world::screen_tables::Rom;
     pub const CLEARS: [Rom; 2] = [Rom::at(0x19f02), Rom::at(0x19f12)];
     /// Origin of the bubble in the text layer, per slot (4 large, then 4 reduced): read
     /// as a PC-relative table, hence in the decrypted program.
-    pub const ORIGINALS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x19f6c);
+    pub const ORIGINALS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x19f6c);
     /// Offsets of the texts (by number) to strings of tile indices terminated by `/`.
-    pub const TEXTS: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x1a01a);
+    pub const TEXTS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x1a01a);
     /// Tiles of the bottom edge of the frame (by height remainder from 1 to 8 pixels).
-    pub const EDGES: crate::screens::tables::Rom = crate::screens::tables::Rom::at(0x1a25e);
+    pub const EDGES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x1a25e);
 }
 
 const TEXT_LAYER: u32 = TEXT.base;

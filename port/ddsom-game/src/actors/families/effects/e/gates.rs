@@ -1,4 +1,4 @@
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use super::*;
 
 // ---------------------------------------------------------------------------------------------
@@ -121,8 +121,8 @@ pub(super) mod gate {
     /// (offset from `A5`, slots, size).
     pub const FROZEN: [(u32, u32, u32); 6] =
         [(0x4a9e, 32, 0x50), (0x549e, 38, 0x60), (0x795e, 16, 0x50), (0x3a1e, 3, 0xc0), (0x3c5e, 38, 0x60), (0x179e, 48, 0x60)];
-    pub const MUSIC_OF_SCENE: crate::hw::sound::Sound = crate::hw::sound::SCENE_MUSIC_OR_STOP;
-    pub const PLAY_MUSIC: crate::hw::sound::Sound = crate::hw::sound::FROM_D4;
+    pub const MUSIC_OF_SCENE: crate::services::sound::Sound = crate::services::sound::SCENE_MUSIC_OR_STOP;
+    pub const PLAY_MUSIC: crate::services::sound::Sound = crate::services::sound::FROM_D4;
 }
 
 pub(super) fn gate<R: Bench>(x: &mut Cx<'_, R>) {
@@ -265,7 +265,7 @@ pub(super) fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     let (alt_x, alt_y) = (crate::world::ram::CAMERA_ALT_X.get(x.b), crate::world::ram::CAMERA_ALT_Y.get(x.b));
     x.set16(gate::ALT_X, alt_x);
     x.set16(gate::ALT_Y, alt_y);
-    let scroll = crate::world::mem::rd32(x.b, gate::SCENE_SCROLL);
+    let scroll = crate::hw::mem::rd32(x.b, gate::SCENE_SCROLL);
     x.set32(gate::SCROLL, scroll);
     let step = rd8(x.b, gate::SCENE_SCROLL_STEP);
     x.set8(gate::SCROLL_STEP, step);
@@ -284,7 +284,7 @@ pub(super) fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     // 0xae37c: variant's scenery (D0 = 0, D1 = variant)
     let v = x.u8(f::VARIANT);
     scene_prop(x, 0, v);
-    crate::hw::sound::play(x.b, gate::MUSIC_OF_SCENE, x.o);
+    crate::services::sound::play(x.b, gate::MUSIC_OF_SCENE, x.o);
     // 0xcc0ca
     crate::actors::families::scenery::restart_scene(x);
 }
@@ -344,14 +344,14 @@ pub(super) fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     vars::CAMERA_ALT_TARGET_X.set(x.b, alt_x & 0xffe0);
     vars::CAMERA_ALT_TARGET_Y.set(x.b, alt_y.wrapping_sub(0x160));
     let scroll = x.u32(gate::SCROLL);
-    crate::world::mem::wr32(x.b, gate::SCENE_SCROLL, scroll);
+    crate::hw::mem::wr32(x.b, gate::SCENE_SCROLL, scroll);
     let step = x.u8(gate::SCROLL_STEP);
     wr8(x.b, gate::SCENE_SCROLL_STEP, step);
     let music = x.u16(gate::MUSIC);
     // Original glitch: the music stays in D4.w (`dispatch::Leftovers`)
     *x.c.d4() = *x.c.d4() & 0xffff_0000 | music as u32;
     x.add8(f::SUB_STATE, 2);
-    crate::hw::sound::play_with(x.b, gate::PLAY_MUSIC, crate::hw::sound::Source { object: Some(x.o), d4: Some(music as u32), ..Default::default() });
+    crate::services::sound::play_with(x.b, gate::PLAY_MUSIC, crate::services::sound::Source { object: Some(x.o), d4: Some(music as u32), ..Default::default() });
 }
 
 /// State 4, substate 2: the curtain opens (two columns cleared per frame from the center).

@@ -131,9 +131,9 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
             if x.u8(f::KEY_FRAME) != 0 {
                 let special = matches!(var::SCENE.get(x.b), 6 | 0xc);
                 if x.u8(Obj::VARIANT) == variant && special {
-                    lib::sound(x, crate::hw::sound::CMD_305_405);
+                    lib::sound(x, crate::services::sound::CMD_305_405);
                 } else if !special {
-                    lib::sound(x, crate::hw::sound::CMD_36F_46F);
+                    lib::sound(x, crate::services::sound::CMD_36F_46F);
                 }
                 x.add8(f::SUB3, 2);
                 x.set8(Enemy::VULNERABLE, 0);

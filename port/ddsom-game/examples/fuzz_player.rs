@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use ddsom_game::world::mem::{rd8, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd8, wr16, wr32, wr8, A5};
 use ddsom_game::actors::player::Player;
 
 struct Rng(u64);
@@ -156,7 +156,7 @@ fn main() {
                 c.a[0] = p;
                 c.a[5] = A5;
                 ddsom_game::call(c, b, 0x41656);
-                out.push(ddsom_game::world::mem::rd16(b, p + 0x62));
+                out.push(ddsom_game::hw::mem::rd16(b, p + 0x62));
             }
             println!("{kind:#x} : {out:?}");
         }
@@ -175,7 +175,7 @@ fn main() {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ seed.wrapping_mul(0x2545_f491_4f6c_dd1d));
     let mut shown = 0;
     let p = Player::nth(0).0;
-    println!("player 0: state {:08x}, character {}", ddsom_game::world::mem::rd32(b, p + 4), rd8(b, p + 3));
+    println!("player 0: state {:08x}, character {}", ddsom_game::hw::mem::rd32(b, p + 4), rd8(b, p + 3));
     for _ in 0..rounds.parse::<u32>().unwrap() {
         for &(entry, name) in &entries {
             for r in 0..8 {

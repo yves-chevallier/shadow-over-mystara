@@ -13,11 +13,14 @@
 
 use crate::world::World;
 
-use crate::world::mem::set_low_word;
+use crate::hw::mem::set_low_word;
 use crate::world::objects::Obj;
 use crate::world::ops::{Alu, Registers, Size};
 use crate::world::ram::{Long, Word};
 use crate::{world::ops, Native};
+use crate::world::data::data;
+use crate::world::tables::engine;
+use crate::hw::video::Cell;
 
 /// Switch bit (`ram::DSW`): terrain collision active.
 const ENABLED: u16 = 0x800;
@@ -129,8 +132,8 @@ impl<R: Alu> Push<'_, R> {
         let (x, y) = (o.u16(self.b, Obj::X), o.u16(self.b, Obj::Y));
         self.set_d(0, x);
         self.set_d(1, y);
-        let t = crate::services::video::terrain(self.b, x, y);
-        crate::services::video::terrain_regs(self.c, &t);
+        let t = crate::world::terrain::terrain(self.b, x, y);
+        crate::world::terrain::terrain_regs(self.c, &t);
         let number = self.c.d()[2] as u8;
         o.set_terrain(self.b, number);
         self.c.logic(number as u32, Size::Byte);
@@ -296,3 +299,80 @@ pub fn push_second_leftovers(b: &mut World, o: Obj, leftovers: [&mut u32; 4]) ->
 }
 
 pub const NATIVES: &[Native] = &[];
+
+// ---------------------------------------------------------------------------------------------
+// V2: terrain attribute under a point
+// ---------------------------------------------------------------------------------------------
+
+/// Terrain attribute under a point, and the computation leftovers that the original leaves in its registers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Terrain {
+    /// Terrain number: bits 7 to 15 of the cell's attribute word (D2.w; 0: free ground).
+    pub number: u16,
+    /// Corrected coordinates (D0.w, D1.w): y shifted by -/+ 0x10 on the fixed maps, camera 2 otherwise.
+    pub x: u16,
+    pub y: u16,
+    /// Address of the cell (A1): fixed map in ROM, or scroll layer 2 in GFX RAM.
+    pub case: u32,
+    /// Index of the cell in the map (D3.w, whole D3 on the fixed maps) and column (D4.w).
+    pub index: u16,
+    pub column: u16,
+    /// Fixed map of scenes 2 and 0x14 (D2 is then only written as a low word; elsewhere D2 = 0 first).
+    pub fixed_map: bool,
+}
+
+/// Terrain number under point (x, y) (0x24b0). Scenes 2 and 0x14: fixed map in ROM (y shifted by -/+ 0x10);
+/// elsewhere: cell of scroll layer 2 in GFX RAM, with the camera correction when camera 2 is
+/// current.
+pub fn terrain(b: &mut World, x: u16, y: u16) -> Terrain {
+    let stage = crate::world::ram::SCENE.get(b);
+    let (mut x, mut y) = (x, y);
+    // the fixed maps of `terrain.json` (scenes 2 and 0x14), with their correction of y
+    let fixed_map = data().terrain.maps.iter().find(|m| m.stage == stage).map(|m| (m.rom, m.dy as u16));
+    let (word, case, index, column) = if let Some((map, dy)) = fixed_map {
+        y = y.wrapping_add(dy);
+        let row = 0x1e - ((y as u8 >> 3) & 0x1e) as u16;
+        let column = x.wrapping_add(x) & 0xffe0;
+        let index = row.wrapping_add(column);
+        let case = map.wrapping_add(index as i16 as u32);
+        (engine().word(b, case), case, index, column)
+    } else {
+        use crate::world::ram::{CAMERA_ALT_ACTIVE, CAMERA_ALT_X, CAMERA_ALT_Y, CAMERA_X, CAMERA_Y};
+        if CAMERA_ALT_ACTIVE.is_set(b) {
+            x = x.wrapping_add(CAMERA_X.get(b).wrapping_sub(CAMERA_ALT_X.get(b)));
+            y = y.wrapping_add(CAMERA_Y.get(b).wrapping_sub(CAMERA_ALT_Y.get(b)));
+        }
+        let page = 0x3000u16.wrapping_sub((y & 0x300) << 4);
+        let row = 0x3c - ((y as u8 >> 2) & 0x3c) as u16;
+        let column = x.wrapping_shl(2) & 0xfc0;
+        let index = page.wrapping_add(row).wrapping_add(column);
+        let case = crate::hw::video::SCROLL2.0.wrapping_add(index as i16 as u32);
+        (Cell(case).attr(b), case, index, column)
+    };
+    Terrain { number: (word & 0xff80) >> 7, x, y, case, index, column, fixed_map: fixed_map.is_some() }
+}
+
+/// Registers left by 0x24b0: D0/D1 (corrected coordinates), D2 (number), D3/D4 (computation leftovers, read by
+/// callers that take them as arguments), A1 (cell) and Z (zero number, the other flags cleared).
+pub(crate) fn terrain_regs(r: &mut impl crate::world::ops::Alu, t: &Terrain) {
+    if t.fixed_map {
+        r.d()[3] = t.index as u32;
+    } else {
+        set_low_word(&mut r.d()[3], t.index);
+        r.d()[2] = 0;
+    }
+    set_low_word(&mut r.d()[4], t.column);
+    r.a()[1] = t.case;
+    set_low_word(&mut r.d()[0], t.x);
+    set_low_word(&mut r.d()[1], t.y);
+    set_low_word(&mut r.d()[2], t.number);
+    r.flags(crate::world::ops::ALL, if t.number == 0 { crate::world::ops::Z } else { 0 });
+}
+
+/// Terrain number under object `o` (0x24a8: x position at +8, y at +0x10).
+pub fn terrain_of(b: &mut World, o: crate::world::objects::Obj) -> Terrain {
+    use crate::world::objects::Obj;
+    let (x, y) = (o.u16(b, Obj::X), o.u16(b, Obj::Y));
+    terrain(b, x, y)
+}
+

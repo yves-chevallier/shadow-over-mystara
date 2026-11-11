@@ -22,7 +22,7 @@ use cps2::Cps2Bus;
 use m68k::decode::{Ea, Op};
 use m68k::Cpu;
 
-use ddsom_game::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use ddsom_game::world::objects::pools::{EFFCT, ENEMY};
 
 struct Rng(u64);

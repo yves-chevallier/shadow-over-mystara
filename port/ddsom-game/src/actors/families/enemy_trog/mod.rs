@@ -384,9 +384,9 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::SUB2) == 0 {
                 let scene = var::SCENE.get(x.b);
                 if scene == 6 || scene == 0xc {
-                    lib::sound(x, crate::hw::sound::CMD_305_405);
+                    lib::sound(x, crate::services::sound::CMD_305_405);
                 } else {
-                    lib::sound(x, crate::hw::sound::CMD_36F_46F);
+                    lib::sound(x, crate::services::sound::CMD_36F_46F);
                 }
                 x.add8(f::SUB2, 2);
                 x.set16(Obj::VZ, 0x600);

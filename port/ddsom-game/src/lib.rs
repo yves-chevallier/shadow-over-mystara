@@ -1,7 +1,13 @@
 //! Game logic of ddsom rewritten in idiomatic Rust.
 //!
-//! The game is the game without a 68000 (`install_no_68k`, module `no68k`): Rust functions run by the kernel's
+//! The game is the game without a 68000 (`install_no_68k`, module `core::frame`): Rust functions run by the kernel's
 //! frame loop. It has no processor: no `m68k::Cpu`, no register.
+//!
+//! The game state is its [`world::World`]: the work RAM (indexed without address decoding), the task table and the
+//! hardware. The modules are in layers (docs/fin.md, section 2), from the bottom: [`hw`] (memory accesses, video,
+//! input and output ports), [`world`] (state, objects, data), [`services`] (palette, text, sprites, scrolling,
+//! sound, inputs, EEPROM...), [`actors`] (object families, players, their aids), [`screens`] (modes, scenes,
+//! interface), [`core`] (kernel, tasks, dispatch, frame loop).
 //!
 //! A *native routine* is the Rust version of a 68000 routine; its entry address and name are metadata for the tools.
 //! The game calls its routines directly and finds the object handlers in the dispatch tables (`dispatch`, Rust arrays
@@ -125,7 +131,7 @@ pub fn refuse_hybrid() {
     }
 }
 
-/// Game without a 68000: Rust functions run by the kernel frame loop (`no68k`). The machine's `Cpu` is not used. The
+/// Game without a 68000: Rust functions run by the kernel frame loop (`frame`). The machine's `Cpu` is not used. The
 /// machine's RAM moves into the game's [`World`].
 pub fn install_no_68k(m: cps2::Machine) -> GameMachine {
     install_data(&m);

@@ -9,7 +9,7 @@ use crate::world::objects::rank::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::world::mem::{rd8, set_low_byte, set_low_word, A5};
+use crate::hw::mem::{rd8, set_low_byte, set_low_word, A5};
 
 /// 0x1f258: `reset`. Leaves A0 = structure.
 fn reset_regs(c: &mut Cpu, b: &mut World) {

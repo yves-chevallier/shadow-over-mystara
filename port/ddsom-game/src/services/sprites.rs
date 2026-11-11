@@ -168,9 +168,9 @@ pub fn build(b: &mut World, d4: u32) -> Option<Leftovers> {
 /// (`DDSOM_POISON=call_1de96`: long_28_scenes, frame 10431): it is the leftover D4 of the game
 /// (`dispatch::Leftovers`). A4 and A6 are reread by nobody.
 pub fn build_in_game(b: &mut World) {
-    let d4 = crate::core::tasks::table::table(b).leftovers.d4;
+    let d4 = b.leftovers.d4;
     if let Some(r) = build(b, d4) {
-        crate::core::tasks::table::table(b).leftovers.d4 = r.d4;
+        b.leftovers.d4 = r.d4;
     }
 }
 

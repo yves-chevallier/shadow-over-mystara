@@ -8,7 +8,7 @@ use m68k::{Cpu, SR_X};
 use crate::world::events::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::world::mem::{rd16, rd8, set_low_byte};
+use crate::hw::mem::{rd16, rd8, set_low_byte};
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $name:expr, $run:expr) => {

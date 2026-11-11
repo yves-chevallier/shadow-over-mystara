@@ -285,7 +285,7 @@ pub(super) mod dark_warrior_double {
 
     /// 0x77cee: does the terrain under the double reverse its depth speed?
     fn terrain_reverses<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-        let t = crate::services::video::terrain_of(x.b, x.o);
+        let t = crate::world::terrain::terrain_of(x.b, x.o);
         let terrain = t.number & 0x3f;
         *x.c.d2() = *x.c.d2() & !0xffff | terrain as u32;
         if terrain as u8 >= 9 {

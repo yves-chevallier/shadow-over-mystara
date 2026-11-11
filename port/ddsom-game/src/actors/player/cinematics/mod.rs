@@ -11,7 +11,7 @@
 use super::actions::start_stand;
 use super::walk::{clamp_to_screen, move_z};
 use super::{animation, ram, Ctx, Player};
-use crate::world::mem::{rd16, wr32, A5};
+use crate::hw::mem::{rd16, wr32, A5};
 use crate::world::objects::lists::ACTORS;
 use crate::world::objects::Obj;
 use crate::actors::player::external as ext;
@@ -114,8 +114,8 @@ fn stray_hex_dump(g: &mut Ctx, offset: u16) {
         for _ in 0..5 {
             let digit = d1 & 0xf;
             d1 = d1.rotate_right(4);
-            crate::world::mem::wr16(g.b, a1, digit as u16);
-            crate::world::mem::wr16(g.b, a1.wrapping_add(2), 0x10);
+            crate::hw::mem::wr16(g.b, a1, digit as u16);
+            crate::hw::mem::wr16(g.b, a1.wrapping_add(2), 0x10);
             a1 = a1.wrapping_sub(0x80);
         }
         d1 = d1.rotate_right(12).wrapping_add(0x10) & 0x3ffff;
@@ -135,7 +135,7 @@ fn anim_step(g: &mut Ctx, p: Player) -> bool {
 }
 
 fn scene_step(g: &mut Ctx) -> u8 {
-    crate::world::mem::rd8(g.b, SCENE_STEP)
+    crate::hw::mem::rd8(g.b, SCENE_STEP)
 }
 
 fn end_done(g: &mut Ctx) -> bool {

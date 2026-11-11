@@ -11,7 +11,7 @@
 
 use super::table::{record, table, State, Resume, Table, SLOTS};
 use super::{cede, Wait};
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::screens::modes::Flow;
 use crate::screens::scene::Ctx;
 

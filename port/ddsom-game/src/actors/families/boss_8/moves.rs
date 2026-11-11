@@ -19,7 +19,7 @@ fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(Warrior::PHASE_TIMER, 0x10);
     key(x, 0x12);
-    lib::sound(x, crate::hw::sound::CMD_349);
+    lib::sound(x, crate::services::sound::CMD_349);
     body(x, 4);
 }
 
@@ -28,7 +28,7 @@ fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, Warrior::TIMER, 1).mi() {
         addq8(x, f::SUB3, 2);
         x.set_bit(Enemy::DISPLAY, 1, false);
-        lib::sound(x, crate::hw::sound::CMD_349);
+        lib::sound(x, crate::services::sound::CMD_349);
     }
 }
 

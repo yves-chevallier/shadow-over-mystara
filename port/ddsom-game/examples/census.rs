@@ -15,7 +15,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ddsom_game::world::mem::{rd8, wr16, wr32, wr8, A5};
+use ddsom_game::hw::mem::{rd8, wr16, wr32, wr8, A5};
 use ddsom_game::world::objects::pools::{self, Pool};
 
 struct Rng(u64);
@@ -252,7 +252,7 @@ fn trajectory(
         }
     }
     for off in [0x8u32, 0xc, 0x10] {
-        let v = (ddsom_game::world::mem::rd16(&mut b, owner + off) as u32) << 16 | (rng.next() & 0xffff);
+        let v = (ddsom_game::hw::mem::rd16(&mut b, owner + off) as u32) << 16 | (rng.next() & 0xffff);
         wr32(&mut b, obj.0 + off, v);
     }
     wr16(&mut b, obj.0 + 0xc, (rng.next() % 0x60) as u16);

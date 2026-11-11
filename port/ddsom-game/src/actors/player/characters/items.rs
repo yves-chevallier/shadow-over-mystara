@@ -23,7 +23,7 @@ use super::super::{animation, Ctx, Player};
 /// effect creators are in `spawn`).
 pub mod rom {
     /// Sound of a used item.
-    pub const SOUND_ITEM: crate::hw::sound::Sound = crate::hw::sound::ITEM;
+    pub const SOUND_ITEM: crate::services::sound::Sound = crate::services::sound::ITEM;
     /// End of the auras after the red magic.
     pub const SPELL_RESET_AURA: crate::world::data::RomAddr = crate::world::data::RomAddr(0x37882);
 }
@@ -138,7 +138,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
         4 => {
             animation::step(g, p);
             let target = target_of(g, p, style.target);
-            if crate::world::mem::rd16(g.b, target + 0x0c) == 0 {
+            if crate::hw::mem::rd16(g.b, target + 0x0c) == 0 {
                 // the bolt is born at the target's position (A2)
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
@@ -208,7 +208,7 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
         4 => {
             animation::step(g, p);
             let target = target_of(g, p, style.target);
-            if crate::world::mem::rd16(g.b, target + 0x0c) == 0 {
+            if crate::hw::mem::rd16(g.b, target + 0x0c) == 0 {
                 common::consume_charge(g, p);
                 to_stand(g, p);
             }

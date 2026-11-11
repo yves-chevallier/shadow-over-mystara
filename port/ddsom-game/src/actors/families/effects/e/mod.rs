@@ -10,7 +10,7 @@
 
 use crate::actors::families::cx::Bench;
 use crate::actors::families::cx::{handlers, Cx, Gx};
-use crate::world::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::world::objects::Current;

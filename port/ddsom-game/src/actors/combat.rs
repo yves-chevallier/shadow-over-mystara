@@ -10,11 +10,11 @@
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
 use crate::world::objects::Enemy;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::World;
 
-use crate::core::dispatch::Leftovers;
-use crate::world::mem::{rd16, rd8, wr16, wr8, A5};
+use crate::world::Leftovers;
+use crate::hw::mem::{rd16, rd8, wr16, wr8, A5};
 pub use crate::world::objects::Obj;
 use crate::world::objects::pools;
 use crate::actors::player::tables::{box_bytes, long};
@@ -62,7 +62,7 @@ use shots::*;
 /// A5 variables (RAM FF8000) read by the collisions (the variables shared with the players are in
 /// `player::ram`).
 mod ram {
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
     use crate::world::ram::{Word, Byte};
 
     pub use crate::actors::player::ram::{
@@ -239,9 +239,9 @@ impl Combat<'_> {
     /// restores A1 to A4, so A2 is unchanged.
     fn spark(&mut self, spark: Spark, a0: Obj, a1: Obj, variant: u8) {
         match spark {
-            Spark::Linked => crate::services::effects_aids::spark_by(&mut self.leftovers, self.b, a0, a1.0, variant),
+            Spark::Linked => crate::actors::effects_aids::spark_by(&mut self.leftovers, self.b, a0, a1.0, variant),
             Spark::Between { owner_first } => {
-                crate::services::effects_aids::spark_between_by(&mut self.leftovers, self.b, a0, a1.0, variant, owner_first)
+                crate::actors::effects_aids::spark_between_by(&mut self.leftovers, self.b, a0, a1.0, variant, owner_first)
             }
         };
     }
@@ -629,7 +629,7 @@ fn player_blow_on_enemy(w: &mut Combat, p: Obj, e: Obj) {
     }
     // hit parried / absorbed by the victim (0xb048: Z clear)
     // hit parried by the victim (0xb048)
-    if crate::services::ai_aids::parries(w.b, p, e, crate::services::ai_aids::Parry::A) {
+    if crate::actors::ai_aids::parries(w.b, p, e, crate::actors::ai_aids::Parry::A) {
         e.set_u32(w.b, f::STATE, state::BLOCKED);
         p.set_u8(w.b, f::HITSTOP, 8);
         w.set_bit(p, f::HIT_MARK, 6);
@@ -708,7 +708,7 @@ fn enemy_reacts_to_hit(w: &mut Combat, p: Obj, e: Obj) {
     e.set_u8(w.b, f::REACTION, 0x4c);
     if e.u8(w.b, f::FLIES) == 0 {
         // 0xf232e
-        w.a2 = crate::actors::player::hit_reactions::enemy_reacts_from_hit(w.b, crate::actors::player::Player(p.0), e.0);
+        w.a2 = crate::actors::player::hit_reactions::enemy_reacts_from_hit(w.b, crate::world::objects::player::Player(p.0), e.0);
     }
     w.spark(Spark::Linked, p, e, 0);
     let mut d4 = p.u8(w.b, f::WEAPON_10D);
@@ -716,9 +716,9 @@ fn enemy_reacts_to_hit(w: &mut Combat, p: Obj, e: Obj) {
         d4 = p.u8(w.b, f::WEAPON_10E);
     }
     set_low8(&mut w.leftovers.d4, d4);
-    let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { crate::hw::sound::HIT_BY_CATEGORY } else { crate::hw::sound::HIT_BY_VARIANT };
-    let source = crate::hw::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.leftovers.d4) };
-    crate::hw::sound::play_with(w.b, target, source);
+    let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { crate::services::sound::HIT_BY_CATEGORY } else { crate::services::sound::HIT_BY_VARIANT };
+    let source = crate::services::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.leftovers.d4) };
+    crate::services::sound::play_with(w.b, target, source);
 }
 
 /// 0x26562: counts the chained special hits (byte `+0x9c` of the victim) outside class 4.

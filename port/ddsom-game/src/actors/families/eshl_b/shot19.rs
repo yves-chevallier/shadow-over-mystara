@@ -43,7 +43,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let de = (x.u16(Obj::X), x.u16(Obj::Z));
     let to = (target.u16(x.b, Obj::X), 0);
-    let angle = crate::services::aids::direction(x.b, de, to) & 0x1f;
+    let angle = crate::actors::aids::direction(x.b, de, to) & 0x1f;
     let (base, steps) = if x.u8(Base::FLIP) != 0 { (9, STEPS_FACING_LEFT) } else { (0x10, STEPS_FACING_RIGHT) };
     let r = angle.wrapping_sub(base);
     let step = if r == 0 {

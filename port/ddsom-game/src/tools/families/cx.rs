@@ -6,7 +6,7 @@ use m68k::Cpu;
 
 use crate::actors::families::cx::*;
 use crate::tools::frames::*;
-use crate::world::mem::A5;
+use crate::hw::mem::A5;
 use crate::world::objects::Obj;
 
 impl Bench for &mut Cpu {

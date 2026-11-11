@@ -53,7 +53,7 @@ pub fn clear_longs(b: &mut World, at: u32, n: u32) {
 
 /// State blocks reset by the initialisation routines.
 pub mod blocks {
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
     /// Scene exit block (phase 16), 8 longs (0xf3130).
     pub const EXIT: u32 = A5 - 0x55ca;
     /// Its state (`+2`, step of 4) and the sub-state of the shared states (`+3`, step of 2).
@@ -112,7 +112,7 @@ pub const NATIVES: &[Native] = &[RESET_EXIT, RESET_SHOP, RESET_TRANSITION, RESET
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::mem::A5;
+    use crate::hw::mem::A5;
 
     #[test]
     fn block_addresses() {

@@ -1,11 +1,11 @@
 use super::super::set_b;
 use super::*;
-use crate::world::mem::{rd16, rd8, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr8, A5};
 use crate::world::World;
 use crate::actors::families::set::tables as set_tables;
 use crate::actors::families::set::vars;
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::actors::families::set_b::fields::DoorObj;
 use crate::actors::families::set::fields::SetObj;
 
@@ -264,7 +264,7 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(DoorObj::TRANSITION_SAVED);
     x.set_a5_u8(vars::TRANSITION, v);
     let music = x.u16(DoorObj::MUSIC);
-    crate::hw::sound::play_with(x.b, crate::hw::sound::FROM_D4, crate::hw::sound::Source { d4: Some(music as u32), ..Default::default() });
+    crate::services::sound::play_with(x.b, crate::services::sound::FROM_D4, crate::services::sound::Source { d4: Some(music as u32), ..Default::default() });
     for p in players() {
         if p.u8(x.b, P_ACTIVE) != 0 {
             place(x, p);
@@ -301,7 +301,7 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     p.set_u16(x.b, P_Y, gy.wrapping_add(dy));
     p.set_u16(x.b, P_Z, 0);
     // Original glitch: the Y offset stays in D2.w (`dispatch::Leftovers`)
-    crate::world::mem::set_low_word(x.c.d2(), dy);
+    crate::hw::mem::set_low_word(x.c.d2(), dy);
 }
 
 fn alive(b: &mut World, p: Obj) -> bool {

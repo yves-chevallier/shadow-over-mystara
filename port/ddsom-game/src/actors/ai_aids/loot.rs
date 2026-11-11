@@ -218,7 +218,7 @@ pub fn ground_debris(b: &mut World, o: Obj, second: bool) {
         let depth = fx.u16(b, Obj::Y).wrapping_add(ddepth);
         fx.set_u16(b, Obj::Y, depth);
     }
-    crate::hw::sound::play(b, crate::hw::sound::CMD_380, o);
+    crate::services::sound::play(b, crate::services::sound::CMD_380, o);
 }
 
 /// 0xb648: only once per object (`+0x9d`), if the bit drawn in the mask `+0x9c` is set, drops the kind 2 object

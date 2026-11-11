@@ -12,7 +12,7 @@ const HOME_Z: u32 = 0x4e;
 /// Last vertical scroll (word), and its new reading.
 const LAST_SCROLL: u32 = 0x16;
 const SCROLL: u32 = 0x14;
-const THUD: crate::hw::sound::Sound = crate::hw::sound::CMD_37D_47D;
+const THUD: crate::services::sound::Sound = crate::services::sound::CMD_37D_47D;
 /// Substates (`+5`).
 const WAIT: u8 = 0;
 const SINK: u8 = 2;
@@ -142,7 +142,7 @@ fn cycle<R: Bench>(x: &mut Cx<'_, R>, trigger: Trigger) {
             x.move_z();
             let floor = if trigger == Trigger::Maker || x.u8(Base::SETTING) == 0 { 0x20 } else { 0x38 };
             if s16(x.u16(Obj::Z)) <= floor {
-                crate::hw::sound::play(x.b, THUD, x.o);
+                crate::services::sound::play(x.b, THUD, x.o);
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(TIMER, 0x10);
             }
@@ -183,8 +183,8 @@ fn player_on<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         if character == 5 || p.u8(x.b, Obj::ACTIVE) != 1 {
             continue;
         }
-        let hitbox = crate::services::ai_aids::Hitbox { offset: 0, half_width: 0x28, half_depth: 8 };
-        if crate::services::ai_aids::box_around(x.b, x.o, p, hitbox) != crate::services::ai_aids::InHitbox::No {
+        let hitbox = crate::actors::ai_aids::Hitbox { offset: 0, half_width: 0x28, half_depth: 8 };
+        if crate::actors::ai_aids::box_around(x.b, x.o, p, hitbox) != crate::actors::ai_aids::InHitbox::No {
             return true;
         }
     }

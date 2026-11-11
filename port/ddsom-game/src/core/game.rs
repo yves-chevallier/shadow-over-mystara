@@ -8,9 +8,10 @@
 //! are then steps ([`Step`]), where the task will resume.
 
 use crate::world::World;
+use crate::world::ops::sbcd;
 
 use crate::core::dispatch::{self, Class};
-use crate::world::mem::{rd16, rd8, wr16, wr8, A5};
+use crate::hw::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::screens::modes::Flow;
 use crate::world::objects::pools::{self, Queue};
 use crate::world::objects::Obj;
@@ -157,11 +158,11 @@ fn run_steps(b: &mut World, order_index: u8, from: usize) -> Flow {
 
 /// The players' code `f` (`player::Ctx`), with the leftovers D2-D5 of the game, which it reads and writes by name.
 fn with_players(b: &mut World, f: fn(&mut crate::actors::player::Ctx)) {
-    let leftovers = table::table(b).leftovers;
+    let leftovers = b.leftovers;
     let mut g = crate::actors::player::Ctx { leftovers, ..crate::actors::player::Ctx::new(b) };
     f(&mut g);
     let leftovers = g.leftovers;
-    table::table(b).leftovers = leftovers;
+    b.leftovers = leftovers;
 }
 
 /// 0x35292: the players.
@@ -176,11 +177,11 @@ pub fn update_player_parts(b: &mut World) {
 
 /// 0x260ee: the frame's collisions (`combat`), with the leftovers D2-D5 of the game.
 pub fn update_combat(b: &mut World) {
-    let leftovers = table::table(b).leftovers;
-    let mut w = crate::services::combat::Combat { b, a2: 0, leftovers };
-    crate::services::combat::combat_update(&mut w);
+    let leftovers = b.leftovers;
+    let mut w = crate::actors::combat::Combat { b, a2: 0, leftovers };
+    crate::actors::combat::combat_update(&mut w);
     let leftovers = w.leftovers;
-    table::table(b).leftovers = leftovers;
+    b.leftovers = leftovers;
 }
 
 /// Length of an absolute `jsr`: the return address is that of the call site + 6.
@@ -408,20 +409,6 @@ const LAST_SCENE: i8 = 0x6c;
 const BUTTONS_NEXT: u8 = 0x90;
 const BUTTONS_PREVIOUS: u8 = 0x60;
 
-/// `d - s - X` in BCD on a byte: result and carry (that of `sbcd`).
-pub(crate) fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
-    let (d, s, x) = (d as i32, s as i32, x as i32);
-    let unadjusted = d - s - x;
-    let mut adjust = 0;
-    if (d & 0x0f) - (s & 0x0f) - x < 0 {
-        adjust |= 0x06;
-    }
-    let borrow = unadjusted < 0 || unadjusted - adjust < 0;
-    if unadjusted < 0 {
-        adjust |= 0x60;
-    }
-    ((unadjusted - adjust) as u8, borrow)
-}
 
 /// Removes a frame from the clock (frames, seconds, minutes in cascade, from 59 to 00): the cascade
 /// stops as soon as a byte stays positive. `borrow`: the X flag that the first `sbcd` takes as carry.
@@ -481,7 +468,7 @@ pub fn phase12(b: &mut World) -> Flow {
     // 0x2aec. Original glitch: the input bytes that the copy leaves in D2-D4 are reread by a handler of the world
     // update, which writes them into an object (DDSOM_POISON=call_2aec: long_elfe_objets, frame 13133, ram ffd694):
     // leftovers of the game
-    crate::hw::inputs::copy_in_game(b);
+    crate::services::inputs::copy_in_game(b);
     table::call(b, Step::AfterWorld);
     if update_world(b) == Flow::Yield {
         return Flow::Yield;
@@ -512,12 +499,12 @@ pub fn after_world(b: &mut World) {
     update_combat(b);
     crate::services::video::gauge_in_world(b, 0x4f_001e);
     // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
-    crate::screens::popups::animate_obj(b);
+    crate::services::popups::animate_obj(b);
     crate::screens::scene::script::step(b);
     // 0x1f27c
     crate::world::objects::rank::tick(b);
     // 0x28d8
-    crate::services::aids::game_over(b);
+    crate::actors::aids::game_over(b);
 }
 
 /// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production

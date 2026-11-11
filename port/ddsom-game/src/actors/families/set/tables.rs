@@ -82,7 +82,7 @@ fn missing(a: u32) -> Missing {
 /// Byte of the data space.
 pub fn byte(b: &mut World, a: u32) -> u8 {
     if a >= ROM_END {
-        return crate::world::mem::rd8(b, a);
+        return crate::hw::mem::rd8(b, a);
     }
     match bytes(false, a, 1) {
         Some(v) => v as u8,
@@ -93,7 +93,7 @@ pub fn byte(b: &mut World, a: u32) -> u8 {
 /// Word of the data space.
 pub fn word(b: &mut World, a: u32) -> u16 {
     if a >= ROM_END {
-        return crate::world::mem::rd16(b, a);
+        return crate::hw::mem::rd16(b, a);
     }
     bytes(false, a, 2).map_or_else(|| missing(a).word_in(b, a, false), |v| v as u16)
 }
@@ -101,7 +101,7 @@ pub fn word(b: &mut World, a: u32) -> u16 {
 /// Long of the data space.
 pub fn long(b: &mut World, a: u32) -> u32 {
     if a >= ROM_END {
-        return crate::world::mem::rd32(b, a);
+        return crate::hw::mem::rd32(b, a);
     }
     bytes(false, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, false))
 }

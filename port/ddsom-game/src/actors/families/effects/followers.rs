@@ -370,12 +370,12 @@ pub(super) fn projectile_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 pub(super) mod trigger {
     pub const ANIMATIONS: crate::world::data::RomAddr = crate::world::data::RomAddr(0x1bf5c2);
     pub const PRINCIPAL: i32 = 0x46;
-    pub const EFFECT: crate::hw::sound::Sound = crate::hw::sound::CMD_14A_24A;
+    pub const EFFECT: crate::services::sound::Sound = crate::services::sound::CMD_14A_24A;
 }
 
 /// `0xb53b0`: trigger.
 pub(super) fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    crate::hw::sound::play(ctx.b, trigger::EFFECT, ctx.obj());
+    crate::services::sound::play(ctx.b, trigger::EFFECT, ctx.obj());
     let level = crate::world::ram::PLAYERS_ALIVE.get(ctx.b) as u32;
     let mut offset = tables().trigger_offsets.at8(ctx.b, level) as u16;
     for i in 0..4u32 {

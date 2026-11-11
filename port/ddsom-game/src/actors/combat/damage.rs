@@ -4,7 +4,7 @@
 //! The scales are ROM tables (read at run time); only the formulas are here.
 
 use crate::world::objects::Obj;
-use crate::actors::player::Player;
+use crate::world::objects::player::Player;
 use crate::world::objects::Enemy;
 use super::*;
 use crate::world::objects::pools;

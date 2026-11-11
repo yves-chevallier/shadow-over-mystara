@@ -3,7 +3,7 @@ use crate::world::data::RomAddr;
 use crate::actors::families::shell::tables::{tables, Read};
 
 const ANIMS: RomAddr = RomAddr(0x16ea18);
-const IMPACT_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_34D_44D;
+const IMPACT_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_34D_44D;
 const TIMER: u32 = 0x42;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -58,7 +58,7 @@ fn live<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Obj::STATE, 2);
         crate::actors::families::effects_creators::debris(x.b, x.o, 3);
         crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
-        crate::hw::sound::play(x.b, IMPACT_SOUND, x.o);
+        crate::services::sound::play(x.b, IMPACT_SOUND, x.o);
     }
     x.keep_on_screen(0x10);
     x.reinsert();

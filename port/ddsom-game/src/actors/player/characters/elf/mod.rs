@@ -29,26 +29,26 @@ pub use spells::*;
 /// Identifiers (original addresses) of the routines reached: player effects, sounds, palettes and screen effects.
 mod rom {
     /// Whirl sounds (the effect: `creators::for_players::whirl`).
-    pub const WHIRL_SOUND_A: crate::hw::sound::Sound = crate::hw::sound::CMD_141_241;
+    pub const WHIRL_SOUND_A: crate::services::sound::Sound = crate::services::sound::CMD_141_241;
     /// Sounds of the spells, in the call order of each spell.
-    pub const WARD_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_E8, crate::hw::sound::CMD_17F];
-    pub const WARD_END_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_64, crate::hw::sound::CMD_172];
-    pub const SHIELD_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_E8, crate::hw::sound::CMD_171];
-    pub const SHIELD_SECOND_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_65, crate::hw::sound::CMD_172];
-    pub const BEAM_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_16F;
-    pub const BEAM_SECOND_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_66;
-    pub const SPARK_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_160;
-    pub const SPARK_END_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_60;
-    pub const BOLT_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_E8;
-    pub const BOLT_SECOND_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_167;
-    pub const BOLT_END_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_168, crate::hw::sound::CMD_61];
-    pub const FROST_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_E8, crate::hw::sound::CMD_163];
-    pub const FROST_START_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_62;
-    pub const QUAKE_START_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_63;
-    pub const QUAKE_SECOND_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_16B;
-    pub const MOON_START_SOUNDS: [crate::hw::sound::Sound; 2] = [crate::hw::sound::CMD_177, crate::hw::sound::MOON];
-    pub const MOON_SOUND: crate::hw::sound::Sound = crate::hw::sound::CMD_67;
-    pub const MOON_SOUND_B: crate::hw::sound::Sound = crate::hw::sound::CMD_18B;
+    pub const WARD_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_E8, crate::services::sound::CMD_17F];
+    pub const WARD_END_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_64, crate::services::sound::CMD_172];
+    pub const SHIELD_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_E8, crate::services::sound::CMD_171];
+    pub const SHIELD_SECOND_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_65, crate::services::sound::CMD_172];
+    pub const BEAM_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_16F;
+    pub const BEAM_SECOND_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_66;
+    pub const SPARK_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_160;
+    pub const SPARK_END_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_60;
+    pub const BOLT_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_E8;
+    pub const BOLT_SECOND_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_167;
+    pub const BOLT_END_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_168, crate::services::sound::CMD_61];
+    pub const FROST_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_E8, crate::services::sound::CMD_163];
+    pub const FROST_START_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_62;
+    pub const QUAKE_START_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_63;
+    pub const QUAKE_SECOND_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_16B;
+    pub const MOON_START_SOUNDS: [crate::services::sound::Sound; 2] = [crate::services::sound::CMD_177, crate::services::sound::MOON];
+    pub const MOON_SOUND: crate::services::sound::Sound = crate::services::sound::CMD_67;
+    pub const MOON_SOUND_B: crate::services::sound::Sound = crate::services::sound::CMD_18B;
 }
 
 /// Field that keeps the ally blessed by spell 0x15 (word: address of its record).

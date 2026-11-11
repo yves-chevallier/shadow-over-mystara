@@ -9,7 +9,7 @@
 //!
 //! Each frame then calls the input copy, the world update and the sprites.
 
-use crate::screens::tables::Rom;
+use crate::world::screen_tables::Rom;
 use crate::world::World;
 
 use super::{scratch, var, Ctx};
