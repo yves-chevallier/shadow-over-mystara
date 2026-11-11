@@ -13,14 +13,14 @@ ddsom-rc = { path = "../ddsom-rc", optional = true }
 ddsom-game = { path = "../ddsom-game", default-features = false }
 # The game data of the mode with ROMs, extracted in memory (without the 68000 decoder of the `extract` program).
 extract = { path = "../extract", default-features = false }
-libloading = "0.8"
+# The window, the keyboard, the frame texture and its filters (L21 facade).
+macroquad = { version = "0.4.16", default-features = false }
 
 [features]
 # `cargo run -p ddsom --features original`: the original code on the emulated 68000 (DDSOM_ORIGINE=1, DDSOM_INTERP=1).
 original = ["dep:ddsom-rc", "cps2/m68k"]
 
-[target.'cfg(unix)'.dependencies]
-minifb = { version = "0.27", default-features = false, features = ["x11"] }
-
-[target.'cfg(windows)'.dependencies]
-minifb = "0.27"
+# Sound output (PulseAudio, waveOut: libraries loaded at run time) and gamepads (gilrs); none on the web.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+libloading = "0.8"
+gilrs = "0.11.2"
