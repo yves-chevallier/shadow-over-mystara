@@ -4,11 +4,11 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 
 ## Point d'arrêt du 2026-11-11
 
-**main = 1dc7207** : lots L0 à L15 et L19 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
+**main = 6fd951d** : lots L0 à L15, L15c et L19 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
 et L15 (`World` tient la RAM et la table des tâches, modules en six couches `hw`, `world`, `services`, `actors`,
 `screens`, `core`) sont dans main ; voir [fin.md](fin.md) « L14 » et « L15 », « Résultat ».
 
-**L15c (2026-11-11, branche `wt-l15c-couches`, non fusionnée)** : les couches n'ont plus d'arête vers le haut
+**L15c (2026-11-11, branche `wt-l15c-couches`, fusionnée dans main 6fd951d)** : les couches n'ont plus d'arête vers le haut
 (`measure_end.py` : aucune composante entre couches, 0 arête vers une couche plus haute, contre 27). Les étapes
 des tâches (`enum` de chaque module), la table, les traps du noyau et l'API de cession (`Flow`, `Ctx`, `cede`,
 `wait`...) sont dans `world::tasks` ; le code de chaque étape reste dans son module (`steps! { impl Step {...} }`),
@@ -22,10 +22,19 @@ jour du monde dans `actors`, `camera_modes` dans `actors`, fondus et `config` da
 `core::tasks::fading` → `services::fading`, `services::camera_modes` → `actors::camera_modes`) : réécriture outillée
 possible pour les branches ouvertes avant (voir le commit 1af4e1e).
 
+**L17 (2026-11-11, branche `wt-l17-outils`, non fusionnée)** : la crate `ddsom-tools` est **abandonnée** selon la
+règle de risque (environ 230 éléments `pub(crate)` du jeu à ouvrir pour les natives à registres des outils ; essai
+gardé sur `wt-l17-crate-essai`, ne compile pas) : `ddsom_game::tools` et les exemples restent dans `ddsom-game`
+(fonctionnalité `tools`), **les commandes ne changent pas** (`cargo build --release -p ddsom-game --examples`,
+binaires dans `port/target/release/examples/`). Fait : le registre des natives n'est plus dans les modules du jeu
+(`tools/registry.rs` : `MEMORY`, `HANDLERS`, réactions communes, gestionnaires pris dans `dispatch::CLASSES`) ; une
+routine que seul le code d'origine appelle par adresse s'y déclare. `DDSOM_CHECK=1` remarche (la copie qui exécute
+l'original reçoit la ROM de la machine de référence, `set_original_rom`). Détails : [fin.md](fin.md) « L17 ».
+
 **Pour reprendre :**
-1. Fusionner `wt-l15c-couches` (après relecture) ; une nouvelle étape qui cède la main se déclare dans
+1. Fusionner `wt-l17-outils` (après relecture). Une nouvelle étape qui cède la main se déclare dans
    `world/tasks/stages.rs` (variante, et dans `Step` si c'est un nouveau module) et se code dans son module.
-2. Puis L16/L17 facultatifs, L18 (documentation finale), L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et
+2. Puis L16 facultatif, L18 (documentation finale), L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et
    le lot `touches.cfg` (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours
    exporter `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
    génération de `ddsom-rc`, ~12 min à 40 min).

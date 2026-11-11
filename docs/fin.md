@@ -1488,12 +1488,56 @@ L15b partiel** (branche `wt-l15-world`, voir « Résultat »), **achevé par L15
 **L16. État Rust plus projection** (facultatif, petit par bloc). Voir la section 2. Un bloc par commit, avec la
 preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adresse sur les 308 scénarios).
 
-**L17. Outils hors du jeu** (facultatif, moyen)
+**L17. Outils hors du jeu** (facultatif, moyen) — **registre fait, crate `ddsom-tools` abandonnée** (branche
+`wt-l17-outils`, voir « Résultat »)
 * `ddsom_game::tools` (7 018 lignes, 70 fichiers) et les exemples passent dans `ddsom-tools`. Le jeu exporte les
   points d'accroche nécessaires (`check_handler`, `natives` des outils) derrière une fonctionnalité `hooks`.
 * Gain : `ddsom-game` n'a plus de `#[cfg(feature = "tools")]`.
 * Risque : beaucoup de `pub(crate)` à ouvrir. Si la liste dépasse une centaine d'éléments, on garde le module en
   l'état.
+* Résultat (branche `wt-l17-outils`, depuis main 6fd951d) :
+  * **Crate `ddsom-tools` : abandonnée selon la règle de risque.** L'essai (branche `wt-l17-crate-essai`, d8b8ef8,
+    ne compile pas) a fait la moitié du chemin : `ddsom-game` compilait sans aucun `#[cfg(feature = "tools")]`,
+    avec un module `hooks` (fonctionnalité `hooks` : `set_check_handler`, `set_original_code_resumes`,
+    `set_call_site`, trois `OnceLock`) et un `Native` réduit aux gestionnaires des tables d'aiguillage ; outils et
+    exemples déplacés dans `port/ddsom-tools` (`ddsom_game::tools::` → `ddsom_tools::`, `Native`/`Body`/`regs`
+    des outils dans la crate des outils). Mais les natives pour le code d'origine (`tools/<module>.rs`, qui
+    reflètent chacune un module du jeu par `use ddsom_game::<module>::*`) lisent **environ 230 éléments
+    `pub(crate)` du jeu** (sans compter la trentaine qu'ouvrait l'essai pour les natives du jeu déplacées), plus du double du seuil d'une centaine :
+    `families/effects_creators` 48 (les variantes `*_via` qui rendent les registres), `families/eshl_creators` 30,
+    `palette` 23, `events` 18, `eeprom` 18, `families/creators` 14, `objects/rank` 13, `families/small` 13,
+    `scroll` 8, `sound` 7, `text` 5, `placement` 5, `terrain` 4, `video` 3, `effects_aids` 3, puis 1 ou 2 dans
+    `popups`, `player/scripted`, `player/init`, `families/boss_3`, `aids`, `rng`, `objects/{pools,lists,cull,anim}`,
+    `modes/demo`, `hud`, `frames`, `set_residue`, `diag`, `credits*`, `tasks` (`forget_cession`, `table_if`).
+    Le module `tools` reste donc dans `ddsom-game` derrière la fonctionnalité `tools` (« on garde le module en
+    l'état »). Une reprise ne vaudrait que si ces natives à registres disparaissent (elles ne servent qu'au fuzz
+    différentiel et à `DDSOM_CHECK` de routines déjà validées).
+  * **Registre de natives hors des modules du jeu** (fait, sans rien ouvrir) : les listes `NATIVES`, `natives()`,
+    `JOIN`, `SHAKES` des modules du jeu, les 47 natives `Body::Memory` et les 93 natives de gestionnaires que seul le
+    code d'origine appelle par adresse (26 actions des personnages, 3 poses rares, 3 secousses, 9 relevés après une
+    réaction commune, 52 réactions communes) sont construites dans `tools::registry` (`MEMORY`, `HANDLERS`, macro
+    `action!` sur `characters::routine`, `Body::HandlerIn` des outils pour les réactions de
+    `reactions::ROUTINES`) ; les gestionnaires des tables d'aiguillage y sont pris dans `dispatch::CLASSES`. Le jeu
+    ne garde que ses données : les 341 gestionnaires des dix tables (`handlers!`, adresse et nom pour le
+    diagnostic d'un arrêt). Même liste de natives que main (`names` : 1 473 natives, identiques). Retirés : les
+    masques `REGS_*` d'`objects` (jamais lus), les enveloppes `init_p1..4`, `clear_scroll1..3`, `send_to_z80`,
+    `config::init` (seules les natives les appelaient). `measure_end.py` compte maintenant le registre (colonne
+    `natives` : 71 sur main, **0** sur la branche).
+  * **`DDSOM_CHECK=1` remarche** : depuis L14 il paniquait aussi sur main (la copie de la machine du jeu, sans ROM,
+    exécutait l'original) ; `tools::set_original_rom` donne aux copies la ROM de la machine de référence
+    (`validate`). bot30k, 2 000 images : 21 444 appels comparés, 0 écart.
+  * `bench` bot30k 12 000 images sans rendu, même dossier cible, 7 passes alternées, même empreinte
+    `a65ecd8aa6e38d4f` : médiane 23 485 images/s contre 23 561 pour main (−0,3 %, dans le bruit ; le chemin du jeu
+    est inchangé). `render_check` bot30k 12 000 images : identique (`09850058246a1e2c`). `fuzz_couv` (bot30k, C10,
+    3 000 images, graine 1) : sortie et carte de couverture identiques à main (résidu : 623 lectures, 0 depuis les
+    états de base).
+  * Validation au code de 9074ae0 : **309/309 VALID en mode par défaut et avec `DDSOM_ASSETS`** (assets réextraits
+    par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1`, `residue: 0` dans tous les journaux ; `bench` avec
+    rendu : 3 999 images/s contre 3 993 pour main (médianes de 3 passes alternées) ; tests `ddsom-game --lib` (19 : `dispatch_handlers_are_game_natives` est
+    devenu vrai par construction) ; `cargo clippy` sans avertissement, avec et sans `tools`, exemples et tests
+    compris (et `ddsom`, aussi avec `--features original`) ; `cargo tree -p ddsom -e normal` sans `m68k`, `z80`,
+    `ddsom-rc`.
+  * Aucun code mort de l'original nouveau.
 
 **L18. Documentation finale** (petit à moyen)
 * `README.md` réécrit pour le joueur :
@@ -1567,18 +1611,18 @@ validation. Le moteur 2D n'est qu'une façade interchangeable.
 
 ## 4. Fin du projet : critères mesurables
 
-| Critère | Aujourd'hui | Cible |
+| Critère | Aujourd'hui (L17, `wt-l17-outils`) | Cible |
 |---|---:|---:|
-| Validation (deux modes, `DDSOM_LONG=1`) | 308/308 | 308/308 (plus les nouveaux scénarios) |
-| Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 1 699 | 0 |
-| Zones brutes `natives.json` lues par le jeu | 2 963 | 0 (toutes nommées) |
-| Lectures de `Residue` (308 scénarios) | — | 0 |
-| Décalages de champs littéraux | ~11 250 | 0 hors des `record!` |
-| `A5 + littéral` | ~785 | 0 hors de `world::ram` |
-| Littéraux GFX RAM et registres CPS dans le jeu | 407 + 72 | 0 hors de `hw::video` |
-| Sons par adresse | 317 | 0 |
-| Registre de natives dans le jeu | 481 | 0 (outils seulement) |
-| Fichiers de plus de 1 500 lignes (hors `tools/`) | 14 | 0 |
-| Plus grande composante fortement connexe des modules | 37 | 1 module par couche, plus `core` |
-| `rebuild` dans le jeu | oui | non |
-| `bench` bot30k, avec et sans rendu | 1 862 et 11 408 images/s | au moins 2 500 et 14 000 images/s |
+| Validation (deux modes, `DDSOM_LONG=1`) | 309/309 | 308/308 (plus les nouveaux scénarios) |
+| Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 0 | 0 |
+| Zones brutes `natives.json` lues par le jeu | 0 (seul le résidu, jamais consulté) | 0 (toutes nommées) |
+| Lectures de `Residue` (308 scénarios) | 0 (309 scénarios) | 0 |
+| Décalages de champs littéraux | 0 | 0 hors des `record!` |
+| `A5 + littéral` | 3 | 0 hors de `world::ram` |
+| Littéraux GFX RAM et registres CPS dans le jeu | ~177 + ~30 (motif approché, hors `hw::video`) | 0 hors de `hw::video` |
+| Sons par adresse | 0 | 0 |
+| Registre de natives dans le jeu | 0 (341 gestionnaires des tables d'aiguillage, données du jeu) | 0 (outils seulement) |
+| Fichiers de plus de 1 500 lignes (hors `tools/`) | 0 | 0 |
+| Plus grande composante fortement connexe des modules | 9 (dans `world`), aucune entre couches | 1 module par couche, plus `core` |
+| `rebuild` dans le jeu | non | non |
+| `bench` bot30k, avec et sans rendu | ~4 000 et ~23 500 images/s | au moins 2 500 et 14 000 images/s |

@@ -384,8 +384,8 @@ Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `fami
 
 ## 10. Pour brancher une nouvelle classe
 
-Écrire un module avec une `JumpKit` (ou un saut propre, comme le nain et le voleur), une fonction par action, des `action_native!` aux
-adresses d'origine, les ajouter à `player::NATIVES` et à `cov::SOURCES`, puis lancer `fuzz_player` en adaptant `max_step` aux tables de pas de
+Écrire un module avec une `JumpKit` (ou un saut propre, comme le nain et le voleur), une fonction par action, l'ajouter à
+`characters::routine`, déclarer ses natives aux adresses d'origine (`action!` de `tools/registry.rs`, depuis L17) et l'ajouter à `cov::SOURCES`, puis lancer `fuzz_player` en adaptant `max_step` aux tables de pas de
 la classe (l'argument `character` filtre les natives par préfixe de nom ; `DDSOM_WHICH`, `DDSOM_SUB` et `DDSOM_PAS` fixent le numéro
 d'attaque spéciale, la sous-action et le pas). Les `field` de `common` sont nommés d'après les classes déjà réécrites ; les noms (h) sont à
 confirmer. Les tables de sous-actions de l'original peuvent avoir plus d'entrées que le nombre apparent (le voleur en a 16) : mesurer la

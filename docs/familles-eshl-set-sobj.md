@@ -30,8 +30,8 @@ le code d'origine ; leur durée s'ajoute d'elle-même.
   `free_eshl()`, `call(address)`, tables de la ROM : `rom16/rom8` (espace *programme*, pour les
   adressages `(table,PC,Dn)`) et `data16/data32/data8` (espace de *données*, pour les adressages
   absolus ou par registre : les deux espaces diffèrent sur CPS2, le programme étant chiffré).
-  Macro `handlers!` : une constante par gestionnaire et la table `NATIVES` d'un fichier, `NOM address "name"
-  chemin` ; les tables d'aiguillage de `dispatch.rs` désignent ces constantes (L13).
+  Macro `handlers!` : une constante par gestionnaire, `NOM address "name" chemin` ; les tables d'aiguillage de
+  `dispatch.rs` désignent ces constantes (L13), et les outils en tirent leurs natives (`tools::registry`, L17).
 * `shell/` : aides propres à ESHL (`place_in_front`, `blink`, `camera`...), et pour les familles ESHL, SOBJ, ITEM
   et BOX les tables (`tables.rs`, `data/objects.json`), les champs (`records.rs` : `Base`, `Shot`, vues partagées,
   macro `view!`) et les variables de la RAM de travail (`vars.rs`).

@@ -76,8 +76,9 @@ pub const NOM: Native = Native {
 - Une routine qui **cède la main** à l'ordonnanceur (0xa40 attend l'image suivante, 0xa86 cède sans
   attendre) ne peut pas être une native d'un seul tenant : la découper aux points de cession, ou
   réécrire la tâche entière comme une machine à états Rust.
-- Ajouter la routine à la liste `NATIVES` de son module, chaînée dans `all_natives()` de `src/lib.rs`
-  (le test `unique_inputs` vérifie qu'aucune adresse n'est remplacée deux fois).
+- Une routine que seul le code d'origine appelle par adresse se déclare dans `tools/registry.rs` (`MEMORY`,
+  `HANDLERS`, depuis L17 ; un gestionnaire d'une table d'aiguillage y est pris tout seul) ; le test `unique_inputs`
+  vérifie qu'aucune adresse n'est remplacée deux fois.
 
 ## Style
 
