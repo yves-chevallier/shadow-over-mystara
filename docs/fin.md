@@ -225,15 +225,15 @@ port/
 
 L'arrivée est un graphe sans cycle, en couches. Chaque couche n'appelle que celles du dessous.
 
-| Couche | Modules (d'après les fichiers d'aujourd'hui) | Rôle |
+| Couche | Modules (état après L15c, `port/ddsom-game/src/<couche>/`) | Rôle |
 |---|---|---|
 | `data` (crate `ddsom-data`) | — | tables immuables : sprites, animations, décors, palettes, terrain, textes, tables de jeu, scripts |
-| `hw` | `video` (tilemaps, sprites, registres CPS, palette), `sound` (file de commandes vers le pilote), `inputs`, `eeprom` | interface avec le matériel modélisé ; aucune logique de jeu |
-| `world` | `world::ram` (RAM de travail), `obj` (`Obj`, `Link`, enregistrements typés), `objects/` (pools, listes, animation, mouvement, rang, visibilité), `terrain`, `rng`, `placement`, `events` | état du monde et moteur d'objets |
-| `services` | `palette`, `text`, `sprites`, `scroll`, `camera_modes`, `ai`, `ai_aids`, `aids`, `effects_aids`, `combat` | services de jeu appelés par les acteurs |
-| `actors` | `families/` (ennemis, boss, effets, SET, ESHL...), `player/` | gestionnaires d'objets et joueurs |
-| `screens` | `modes/`, `scene/`, `hud/`, `service/`, `credits*`, `popups` | écrans et séquences |
-| `core` | `kernel`, `tasks/`, `dispatch`, `vblank`, `startup`, `frame` (ex-`no68k`), `game`, `config` | ordonnanceur, tâches, boucle d'image |
+| `hw` | `mem`, `video`, `io` | interface avec le matériel modélisé ; aucune logique de jeu |
+| `world` | `World`, `ram`, `record`, `objects/` (pools, listes, animation, mouvement, rang, visibilité, fiche `Player`), `tasks/` (table des tâches, traps du noyau, étapes `stages`, API de cession), `data`, `tables`, `screen_tables`, `terrain`, `rng`, `placement`, `events`, `machine`, `ops`, `diag` | état du monde, moteur d'objets, tâches comme données |
+| `services` | `palette`, `fading`, `text`, `sprites`, `scroll`, `video`, `popups`, `sound`, `inputs`, `eeprom`, `config` | services de jeu appelés par les acteurs et les écrans |
+| `actors` | `families/` (ennemis, boss, effets, SET, ESHL...), `player/`, `ai`, `ai_aids`, `aids`, `effects_aids`, `combat`, `camera_modes`, `dispatch`, `update` (mise à jour du monde) | gestionnaires d'objets, joueurs, caméras |
+| `screens` | `modes/`, `scene/`, `hud/`, `service/`, `credits*`, `prompt`, `fixed_screen`, `block`, `obj`, `vars` | écrans et séquences |
+| `core` | `kernel` (ordonnanceur), `tasks/` (exécution des étapes, tâches `game` et `freeze`), `vblank`, `startup`, `frame` (ex-`no68k`), `game` (phases 0 et 12), `scenario` | ordonnanceur, boucle d'image |
 
 ### État du jeu : la RAM reste l'état, d'abord typée, puis détachée du bus
 
@@ -1344,7 +1344,7 @@ branche `wt-l9a-boss`, voir « Résultat L9a » ; L9b : branche `wt-l9b-boss`, v
     (`lto cgu.00`) : l'arrêter et relancer l'a ramenée à 6 minutes.
 
 **L15. RAM du jeu hors du bus, modules en couches** (moyen à grand, en deux commits validés) — **L15a fait,
-L15b partiel** (branche `wt-l15-world`, voir « Résultat »)
+L15b partiel** (branche `wt-l15-world`, voir « Résultat »), **achevé par L15c** (branche `wt-l15c-couches`, plus bas)
 * L15a, `World` :
   * la RAM de travail (`[u16; 0x8000]`) et la table des tâches appartiennent au jeu ;
   * `world::ram` y accède sans décodage d'adresse ;
@@ -1413,6 +1413,76 @@ L15b partiel** (branche `wt-l15-world`, voir « Résultat »)
     `DDSOM_ASSETS`** (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1`, `residue: 0` dans
     tous les journaux ; tests `ddsom-game --lib` (20) ; `cargo clippy` sans avertissement, avec et sans `tools` (et
     `ddsom`, aussi avec `--features original`).
+  * Aucun code mort nouveau.
+
+**L15c. Couches sans arête vers le haut** (branche `wt-l15c-couches`, depuis main 1dc7207) — **fait**
+* Décision (option 1 de L15, « Résultat ») : les étapes des tâches et l'API de cession descendent dans `world`, la
+  table ne dépend plus des couches hautes ; aucun effacement de type (ni `dyn` ni pointeur de fonction) dans la table.
+  Retirer aussi les autres arêtes à l'envers (`actors/families → screens`, `screens → core/game`, `→ core/config`,
+  `services/camera_modes → actors/families`).
+* Fin : `measure_end.py` sans composante entre couches et 0 arête vers une couche plus haute (ou une courte liste
+  justifiée) ; `bench` sans rendu pas plus lent que main ; 309/309 dans les deux modes ; `render_check` identique.
+* Résultat (commits 1af4e1e, 55c5733, 22c07f2) :
+  * **`world::tasks`** (nouveau) :
+    * `table` (ex-`core/tasks/table.rs`, sans `gaps` ni `Next::address`) ;
+    * `traps` : les traps du noyau tels que les tâches les appellent (`create_task`, `kill_task`, `wait`,
+      `cede_ready`, `finish`, `restart`, `block`, `keep_step`, masque d'interruption) et `Point` ; ils ne font que
+      modifier la table ;
+    * `mod.rs` : `Flow`, `Ctx` (la structure ; ses accès nommés à la RAM restent dans `screens::scene`), `Wait`,
+      `cede`, `wait`, `one_frame`, `wait_then_return`, `restart`, `finish`, `has_ceded`, `Task`, `Step` (l'`enum`
+      des étapes de toutes les tâches) et le trait `Sequence` ;
+    * `stages` : les 31 `enum` d'étapes (une par module qui cède la main, données pures : variantes, objets,
+      compteurs, restes) et les types qu'elles portent (`Fade`, `Brightness`, `Component`, `Target`, `Seq`,
+      `GameStart`, `CoinSlot`, `InterludePlayer`).
+  * **Le code de chaque étape reste dans son module** : `pub use crate::world::tasks::stages::Title as Step;` puis
+    `crate::steps! { impl Step { Entry = 0x... => entry, ... } }`, qui donne `address` et `step` (ou un `impl Step`
+    écrit à la main pour les étapes à champs). Les variantes sont donc nommées deux fois (déclaration dans `world`,
+    correspondance adresse et fonction dans le module), le compilateur vérifie que la correspondance est exhaustive.
+    `core::tasks` associe chaque étape de `Step` à celle de son module (`run_steps!`), donne `Task::first_step`,
+    `Task::address`, `Next::address`, et exécute (`execute`, `resume_step`, `return_to_caller`). `core::kernel`
+    garde l'ordonnanceur, l'adresse d'un point (`kernel::address`) et `gaps` (comparaison avec la table FF0064).
+  * **Une inversion de dépendance, justifiée** : un sous-programme qui revient sans céder exécute aussitôt la
+    continuation de son appelant, qui peut être l'étape de n'importe quel module (`Sequence::subroutine`, le retour
+    d'un gestionnaire dans la boucle de dispatch, `title::t18_sub`). Ce lancement appartient au cœur : le trait
+    `Sequence` (attente, sous-programme, retour empilé ou abandonné, `return_to_caller`) est déclaré dans `world` et
+    mis en œuvre par `core::tasks` pour `Ctx`. C'est un appel statique, sans effacement de type ; le remplacer par
+    un retour différé (`Flow::Done` propagé jusqu'à `execute`) aurait changé l'ordre des effets dans les appelants
+    qui ne sont pas en position terminale (`service::task::turn`, `exit::run_shared`, `exit_fading`).
+  * **Déplacements** :
+    * `dispatch` et la mise à jour du monde (`update_world`, ordres, joueurs, combat : ex-`core/game.rs`) vont dans
+      `actors` (`actors::dispatch`, `actors::update`) ; `core::game` garde les phases 0 et 12 et la fin d'image ;
+    * les fondus (`core/tasks/fading.rs`) vont dans `services::fading`, `config` dans `services::config` (ses
+      fonctions du menu TEST prennent le monde, plus le contexte d'écran) ;
+    * les tâches `prompt`, `fixed_screen` et `service` (`screens::service::task`) vont dans `screens` ;
+    * `after_world`, `debug_scene_skip` et `clear_game_variables` (ex-`tasks::game::clear_variables`) vont dans
+      `screens::scene` ;
+    * `place_players` (0x20de6) va dans `actors::player::init` ; l'état du lecteur de script
+      (`ram::SPAWN_SCRIPT_STATE`) est nommé dans `world::ram`, que le décor (SET) remet à zéro sans appeler
+      `screens` ;
+    * `camera_modes` va dans `actors` avec `update_cameras` et `update_cameras_in_game` (pris à `scroll`) : ses
+      scripts créent des objets (contexte `Cx`, listes de décor) ;
+    * l'anneau des dernières natives (`note`, diagnostic d'un arrêt) va dans `world::diag`.
+  * Mesures (`measure_end.py`) : main 59 modules, composante de 46 entre couches, 27 arêtes vers une couche plus
+    haute ; branche 64 modules, **aucune composante entre couches, 0 arête vers une couche plus haute** ; restent
+    des cycles à l'intérieur d'une couche (tolérés) : `world` (9 modules : `World` contient la table, dont les étapes
+    portent des objets), `actors` (8 : familles, joueurs, aides, dispatch, caméras), `core` (`frame`, `kernel`,
+    `tasks`), `screens` (`modes`, `scene`), `services` (`config`, `eeprom`). Lignes du jeu hors
+    `tools/` : 174 191 (main 173 594, +597 : les variantes nommées deux fois). Aucun appel de méthode d'une couche
+    haute depuis une couche basse (vérifié : `world` n'appelle ni `address` ni `step`, `services` n'appelle plus
+    les accès de `scene::Ctx`).
+  * `bench` bot30k 12 000 images sans rendu, même dossier cible, meilleur de 3 en alternance, même empreinte
+    `a65ecd8aa6e38d4f` : **23 933 images/s contre 23 857 pour main 1dc7207** (+0,3 %, dans le bruit : sur 10 passes
+    alternées, médianes 23 730 contre 23 796). Piège rencontré : sans LTO, une fonction non générique n'est pas
+    incorporée d'une unité de compilation à l'autre ; après les déplacements, la branche perdait 2 à 4 % jusqu'au
+    `#[inline]` des petites fonctions appelées à chaque objet ou à chaque ligne depuis un autre module (`table::call`,
+    `call_expected`, `returned`, `ret`, `pop_return`, `has_ceded`, `note_cession`, `forget_cession`, `Point::startup`,
+    `between_two_tasks`, `traps::point`, `interrupt_mask`, `set_interrupt_mask`, `diag::note`,
+    `tasks::return_to_caller`) ; d'autres `#[inline]` essayés (méthodes de `Table`, `Class::update`) ralentissaient.
+  * `render_check` bot30k 12 000 images : identique à main (`09850058246a1e2c`), aussi avec `DDSOM_ASSETS`.
+  * Validation au code de 22c07f2 : **309/309 VALID en mode par défaut et avec `DDSOM_ASSETS`** (assets réextraits
+    par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1`, `residue: 0` dans tous les journaux (aussi 309/309
+    dans les deux modes aux étapes 1af4e1e et 55c5733) ; tests `ddsom-game --lib` (20) ; `cargo clippy` sans
+    avertissement, avec et sans `tools`, exemples et tests compris (et `ddsom`, aussi avec `--features original`).
   * Aucun code mort nouveau.
 
 **L16. État Rust plus projection** (facultatif, petit par bloc). Voir la section 2. Un bloc par commit, avec la

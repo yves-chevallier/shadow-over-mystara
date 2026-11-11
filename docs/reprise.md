@@ -4,31 +4,34 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 
 ## Point d'arrêt du 2026-11-11
 
-**main = 538d4ff** : lots L0 à L13 et L19 fusionnés (309/309 VALID dans les deux modes). **L14 (le jeu sans image
-ROM) est fait** sur la branche `wt-l14-sans-rom` (non fusionnée, voir [fin.md](fin.md) « L14 », « Résultat ») :
-machine du jeu sans ROM (`cps2::Machine::game`, `GameContents` sans région du Z80 ni programme du DSP), `ddsom
---assets` par `extract::install_game_assets` (`GameData::load`, atlas, banque d'échantillons), `rebuild` dans
-`extract` seul, débordements de l'original nommés (`data/overreads.json` : **réextraire `data`**), `Residue`
-consulté 0 fois sur les 309 scénarios dans les deux modes ; 309/309 VALID dans les deux modes, `render_check`
-identique à main, bench bot30k 20 168 im/s sans rendu (main 20 110), 3 914 avec (main 3 881). Aucun code mort
-nouveau.
+**main = 1dc7207** : lots L0 à L15 et L19 fusionnés (309/309 VALID dans les deux modes). L14 (le jeu sans image ROM)
+et L15 (`World` tient la RAM et la table des tâches, modules en six couches `hw`, `world`, `services`, `actors`,
+`screens`, `core`) sont dans main ; voir [fin.md](fin.md) « L14 » et « L15 », « Résultat ».
 
-**L15 (2026-11-11, branche `wt-l15-world`, non fusionnée)** : L15a fait (`World` : RAM de travail indexée sans
-décodage d'adresse, table des tâches en champ typé, `Machine<World>`), L15b partiel (modules rangés en six couches
-`hw`, `world`, `services`, `actors`, `screens`, `core` ; `no68k` devient `core::frame` ; `hw` hors de tout cycle ;
-27 arêtes vers une couche plus haute contre 54). Il reste une composante entre couches due aux continuations
-typées des tâches (`tasks::Step`) : **décision à prendre** entre déclarer les étapes dans `world` (voie propre,
-lourde) ou garder ce cycle (voir [fin.md](fin.md) « L15 », « Résultat »). Les chemins ont changé
-(`crate::families` → `crate::actors::families`, `ddsom_game::mem` → `ddsom_game::hw::mem`...) : les branches
-ouvertes avant L15 auront des conflits de chemins (réécriture outillée dans le commit d99e04e).
+**L15c (2026-11-11, branche `wt-l15c-couches`, non fusionnée)** : les couches n'ont plus d'arête vers le haut
+(`measure_end.py` : aucune composante entre couches, 0 arête vers une couche plus haute, contre 27). Les étapes
+des tâches (`enum` de chaque module), la table, les traps du noyau et l'API de cession (`Flow`, `Ctx`, `cede`,
+`wait`...) sont dans `world::tasks` ; le code de chaque étape reste dans son module (`steps! { impl Step {...} }`),
+`core::tasks` les exécute ; seule inversion de dépendance : le trait `Sequence` (déclaré dans `world`, mis en œuvre
+par `core`) lance la continuation d'un sous-programme qui revient sans céder. Déplacés : `dispatch` et la mise à
+jour du monde dans `actors`, `camera_modes` dans `actors`, fondus et `config` dans `services`, tâches `prompt`,
+`fixed_screen`, `service::task` dans `screens`. Détails, mesures et validation : [fin.md](fin.md) « L15c ».
+**Nouveaux chemins** (`crate::core::tasks::table` → `crate::world::tasks::table`, `core::kernel::create_task` →
+`world::tasks::traps::create_task`, `screens::modes::Flow` → `world::tasks::Flow`, `screens::scene::Ctx` →
+`world::tasks::Ctx`, `core::dispatch` → `actors::dispatch`, `core::config` → `services::config`,
+`core::tasks::fading` → `services::fading`, `services::camera_modes` → `actors::camera_modes`) : réécriture outillée
+possible pour les branches ouvertes avant (voir le commit 1af4e1e).
 
 **Pour reprendre :**
-1. Fusionner `wt-l14-sans-rom` dans main (après relecture), réextraire ses assets.
-2. Fusionner `wt-l15-world` (L15, voir ci-dessus), décider du reste de L15b, puis L16/L17 facultatifs, L18
-   (documentation finale), puis L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et le lot `touches.cfg`
-   (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours exporter
-   `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
+1. Fusionner `wt-l15c-couches` (après relecture) ; une nouvelle étape qui cède la main se déclare dans
+   `world/tasks/stages.rs` (variante, et dans `Step` si c'est un nouveau module) et se code dans son module.
+2. Puis L16/L17 facultatifs, L18 (documentation finale), L20 (cœur en bibliothèque), L21 (façade), L22 (pack HD), et
+   le lot `touches.cfg` (ci-dessous). Worktree d'un lot : copier `rom/` et `testdata/` (ignorés par git) ; toujours
+   exporter `DDSOM_ROMS` avec **exactement la même chaîne** (un chemin écrit autrement, `port/../rom`, relance la
    génération de `ddsom-rc`, ~12 min à 40 min).
+3. Piège de performance vu par L15c : sans LTO, une fonction non générique n'est pas incorporée d'une unité de
+   compilation à l'autre ; déplacer de petites fonctions appelées à chaque objet ou à chaque ligne (table des tâches,
+   `Point`, `note`) a coûté 2 à 4 % au bench jusqu'à leur `#[inline]`. Mesurer après chaque déplacement de module.
 
 **Décisions prises le 2026-11-11 :**
 * `reste.json` : le retirer des assets (`extract` ne l'écrit plus, le jeu ne le charge plus) une fois `Residue`
