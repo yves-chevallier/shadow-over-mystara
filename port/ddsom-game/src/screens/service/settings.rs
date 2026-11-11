@@ -340,7 +340,7 @@ fn show_menu(x: &mut Ctx) {
     for t in [text::TITLE.addr(), text::MENU.addr(), text::SELECT.addr(), text::HELP_START.addr()] {
         print(x, t);
     }
-    if !config::is_factory(x) {
+    if !config::is_factory(x.b) {
         paint(x, SAVE_LINE, HIGHLIGHT, 6);
     }
     let line = MENU_BLOCK.get8(x.b, field::LINE);
@@ -373,7 +373,7 @@ fn menu(x: &mut Ctx) -> Flow {
         }
         line::DEFAULT => {
             if var::SYSTEM.get(x.b) & key::START1 != 0 && held & key::SHOT1 != 0 {
-                config::reset_factory(x);
+                config::reset_factory(x.b);
                 let cont = x.v8(v::CONTINUE);
                 Byte(saved::CONTINUE_CHOSEN).set(x.b, cont);
                 paint(x, SAVE_LINE, 0, 6);

@@ -26,6 +26,7 @@
 use crate::world::World;
 
 use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::world::ram::Byte;
 use crate::world::tables::{self, engine_table};
 use crate::Native;
 
@@ -85,9 +86,9 @@ const SETTINGS: [(u32, u32); 12] =
     [(0, 0x1c), (2, 0x23), (3, 0x26), (4, 0x27), (5, 0x28), (1, 0x1d), (6, 0x29), (7, 0x73), (8, 0x84), (9, 0x85), (0x10, 0x2a), (0x11, 0x2b)];
 
 /// 0x2d5c6: are the current settings the factory ones (default block of the variant)?
-pub fn is_factory(x: &mut crate::world::tasks::Ctx) -> bool {
-    let block = block_defaults(x.b);
-    SETTINGS.iter().all(|&(byte, variable)| block.byte(x.b, byte) == x.v8(variable))
+pub fn is_factory(b: &mut World) -> bool {
+    let block = block_defaults(b);
+    SETTINGS.iter().all(|&(byte, variable)| block.byte(b, byte) == Byte::a5(variable).get(b))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -331,11 +332,11 @@ pub const INIT: Native = memory(0x2d30a, "config_init", init);
 // TEST menu, 7. CONFIGURATION: factory settings and saving
 
 /// 0x2d546: the variant's factory settings into the game variables.
-pub fn reset_factory(x: &mut crate::world::tasks::Ctx) {
-    let block = block_defaults(x.b);
+pub fn reset_factory(b: &mut World) {
+    let block = block_defaults(b);
     for (byte, variable) in SETTINGS {
-        let v = block.byte(x.b, byte);
-        x.set_v8(variable, v);
+        let v = block.byte(b, byte);
+        Byte::a5(variable).set(b, v);
     }
 }
 

@@ -307,7 +307,7 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     print(x, text::HELP.addr());
     let line = MENU_BLOCK.get8(x.b, f::CURSOR);
     arrow(x, MENU_ARROW, line);
-    if !config::is_factory(x) {
+    if !config::is_factory(x.b) {
         paint(x, MENU_CONFIG_LINE, HIGHLIGHT, 0xc);
     }
     layers_on(x);
