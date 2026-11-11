@@ -132,6 +132,24 @@ fn box_byte(a: u32) -> Option<u8> {
     k.boxes.get(off / 8).map(|h| h.bytes()[off % 8]).or_else(|| k.tail.get(off.checked_sub(8 * k.boxes.len())?).copied())
 }
 
+/// The six useful bytes of the collision box at the address `a` (offset and half-size per axis), as [`byte`] reads
+/// them one by one: a box of a box block is copied at once (the collision tests read every box of every pair).
+pub(crate) fn box_bytes(b: &mut Cps2Bus, a: u32) -> [u8; 6] {
+    if a & 0xff_ffff < RAM {
+        let blocks = &data().sprite_tables.box_blocks;
+        if let Some(k) = blocks.partition_point(|k| k.rom <= a).checked_sub(1).map(|i| &blocks[i]) {
+            let off = (a - k.rom) as usize;
+            if off % 8 == 0 {
+                if let Some(h) = k.boxes.get(off / 8) {
+                    let x = h.bytes();
+                    return [x[0], x[1], x[2], x[3], x[4], x[5]];
+                }
+            }
+        }
+    }
+    std::array::from_fn(|i| byte(b, a.wrapping_add(i as u32)))
+}
+
 /// Byte at the address `a` of a table read PC-relative.
 pub(crate) fn pc8(b: &mut Cps2Bus, a: u32) -> u8 {
     match holding(a, true) {

@@ -333,7 +333,7 @@ pub(super) fn boxes_hit_players(w: &mut World) {
         scan(w, List::Boxes, scratch::BOX_ATTACKS, |w, bx| {
             if w.is_active(bx) && bx.u8(w.b, f::ATTACK_BOX) != 0 && bx.u8(w.b, f::BOXES_OFF) == 0 {
                 let atk = object_box(w, rom::ATTACK, bx, f::ATTACK_BOX);
-                if (Pair { a: p, abox: body, b: bx, bbox: atk, signed: true }).overlaps(w) {
+                if Pair::new(w, p, body, bx, atk, true).overlaps(w) {
                     box_hits_player(w, p, bx);
                 }
             }
@@ -386,7 +386,7 @@ pub(super) fn boxes_hit_enemies(w: &mut World) {
         scan(w, List::Boxes, scratch::BOX_ATTACKS, |w, bx| {
             if w.is_active(bx) && bx.u8(w.b, f::ATTACK_BOX) != 0 && bx.u8(w.b, f::BOXES_OFF) == 0 {
                 let atk = object_box(w, rom::ATTACK, bx, f::ATTACK_BOX);
-                if (Pair { a: e, abox: body, b: bx, bbox: atk, signed: true }).overlaps(w) {
+                if Pair::new(w, e, body, bx, atk, true).overlaps(w) {
                     box_hits_enemy(w, e, bx);
                 }
             }
@@ -509,7 +509,7 @@ pub(super) fn push_probe(w: &mut World, pair: &Pair) -> Option<Push> {
 /// player has just chained into a notable push, which interrupts the loop.
 pub(super) fn push_enemy(w: &mut World, p: Obj, mine: HitBox, e: Obj, theirs: HitBox) -> bool {
     cov::hit("push_enemy");
-    let pair = Pair { a: p, abox: mine, b: e, bbox: theirs, signed: false };
+    let pair = Pair::new(w, p, mine, e, theirs, false);
     let Some(push) = push_probe(w, &pair) else { return false };
     // the axis of least penetration gives way; the player is pushed back by the depth of the other axis
     if push.depth_x <= push.depth_y {
@@ -555,7 +555,7 @@ pub(super) fn push_box(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: Hit
     if bx.u8(w.b, f::KIND) != 1 && bx.u16(w.b, f::Z) != 0 {
         return false;
     }
-    let pair = Pair { a: p, abox: mine, b: bx, bbox: theirs, signed: false };
+    let pair = Pair::new(w, p, mine, bx, theirs, false);
     let Some(push) = push_probe(w, &pair) else { return false };
     if push.depth_x <= push.depth_y {
         let d = if push.neg_x { push.depth_x.wrapping_neg() } else { push.depth_x };
@@ -659,7 +659,7 @@ pub(super) fn push_barrel(w: &mut World, p: Obj, mine: HitBox, bx: Obj, theirs: 
     if bx.u8(w.b, f::CRATE_HELD) != 0 || bx.u16(w.b, f::Z) != 0 {
         return false;
     }
-    let pair = Pair { a: p, abox: mine, b: bx, bbox: theirs, signed: false };
+    let pair = Pair::new(w, p, mine, bx, theirs, false);
     let Some(push) = push_probe(w, &pair) else { return false };
     let cmp_dir = |w: &mut World, field: u32, flip_ok: bool, bx: Obj, p: Obj| -> bool {
         let _ = (w, field, flip_ok, bx, p);
@@ -773,7 +773,7 @@ pub(super) fn players_pick_up_items(w: &mut World) {
 
 /// 0x284d2: overlap of the player and the object (Y and X axes only).
 pub(super) fn item_reached(w: &mut World, p: Obj, body: HitBox, item: Obj, pickup: HitBox) -> bool {
-    let pair = Pair { a: p, abox: body, b: item, bbox: pickup, signed: false };
+    let pair = Pair::new(w, p, body, item, pickup, false);
     pair.probe_y(w).overlaps() && pair.probe_x(w).overlaps()
 }
 

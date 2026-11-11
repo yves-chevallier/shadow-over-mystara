@@ -17,7 +17,7 @@ use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
-use crate::player::tables::{byte, long};
+use crate::player::tables::{box_bytes, long};
 
 /// Call counters of the rewritten routines (validation coverage).
 pub(crate) mod cov {
@@ -346,31 +346,36 @@ fn half_sum(a: u8, b: u8, signed: bool) -> u16 {
     }
 }
 
-/// Two objects and their boxes.
+/// Two objects and the bytes of their boxes.
 struct Pair {
     a: Obj,
-    abox: HitBox,
+    abox: [u8; 6],
     b: Obj,
-    bbox: HitBox,
+    bbox: [u8; 6],
     signed: bool,
 }
 
 /// Variant of 0x27410 (enemy attacks): only the half-depth of the attack counts.
 fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox: HitBox) -> bool {
     cov::hit("overlap3_attack");
-    let pair = Pair { a: victim, abox: vbox, b: attacker, bbox: abox, signed: false };
+    let pair = Pair::new(w, victim, vbox, attacker, abox, false);
     let (ay, ax, az) = (pair.probe_y(w), pair.probe_x(w), pair.probe_z(w));
-    let half = byte(w.b, abox.0 + HitBox::HALF_Y) as u16;
+    let half = pair.bbox[HitBox::HALF_Y as usize] as u16;
     let y = Probe { delta: ay.delta, half };
     y.overlaps() && ax.overlaps() && az.overlaps()
 }
 
 impl Pair {
+    /// The pair, with the bytes of both boxes (`player::tables::box_bytes`).
+    fn new(w: &mut World, a: Obj, abox: HitBox, b: Obj, bbox: HitBox, signed: bool) -> Pair {
+        Pair { a, abox: box_bytes(w.b, abox.0), b, bbox: box_bytes(w.b, bbox.0), signed }
+    }
+
     /// Gap of the centres on an axis: (box offset + position) of `a` minus that of `b`.
     /// `flip`: the offsets follow the object's orientation (X axis).
     fn probe(&self, w: &mut World, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
-        let mut ao = byte(w.b, self.abox.0 + off) as i8 as i16 as u16;
-        let mut bo = byte(w.b, self.bbox.0 + off) as i8 as i16 as u16;
+        let mut ao = self.abox[off as usize] as i8 as i16 as u16;
+        let mut bo = self.bbox[off as usize] as i8 as i16 as u16;
         if flip {
             if self.a.u8(w.b, f::FLIP) != 0 {
                 ao = ao.wrapping_neg();
@@ -381,7 +386,7 @@ impl Pair {
         }
         let a = ao.wrapping_add(self.a.u16(w.b, pos));
         let b = bo.wrapping_add(self.b.u16(w.b, pos));
-        let half = half_sum(byte(w.b, self.abox.0 + half), byte(w.b, self.bbox.0 + half), self.signed);
+        let half = half_sum(self.abox[half as usize], self.bbox[half as usize], self.signed);
         Probe { delta: a.wrapping_sub(b), half }
     }
     fn probe_y(&self, w: &mut World) -> Probe {
@@ -400,7 +405,7 @@ impl Pair {
 }
 
 fn overlap3(w: &mut World, a: Obj, abox: HitBox, b: Obj, bbox: HitBox) -> bool {
-    Pair { a, abox, b, bbox, signed: false }.overlaps(w)
+    Pair::new(w, a, abox, b, bbox, false).overlaps(w)
 }
 
 // ---------------------------------------------------------------------------------------------
