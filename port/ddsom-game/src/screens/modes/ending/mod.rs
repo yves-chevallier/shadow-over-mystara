@@ -21,12 +21,13 @@ use crate::world::objects::player::Player;
 use crate::world::ram::{Long, Word};
 use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
 use crate::world::objects::{pools, Obj};
 
 mod states;
 use states::*;
+pub use crate::world::tasks::stages::Ending as Step;
 
 const BLOCK: u32 = 0xff_2b00;
 mod f {
@@ -66,8 +67,7 @@ pub fn phase_28(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         Return = 0xfb2a4 => |_| Flow::Done,
         S00Video = 0xfb712 => |x| {
             regs::OBJECT_OUTPUT.set(x.b, 0x1355);
@@ -99,7 +99,7 @@ crate::steps! {
         S04Fade = 0xfb8a8 => |x| {
             crate::services::sound::play_global(x.b, crate::services::sound::CMD_2C);
             fade_settings(x, 3, 4);
-            x.subroutine(crate::core::tasks::fading::rise, Step::S04Timer)
+            x.subroutine(crate::services::fading::rise, Step::S04Timer)
         },
         S04Timer = 0xfb8c0 => |x| {
             Obj(BLOCK).set_u16(x.b, f::TIMER, 60);
@@ -109,7 +109,7 @@ crate::steps! {
         S08Fade = 0xfb916 => |x| {
             next_step(x);
             fade_settings(x, 3, 4);
-            x.subroutine(crate::core::tasks::fading::descent, Step::S08Faded)
+            x.subroutine(crate::services::fading::descent, Step::S08Faded)
         },
         S08Faded = 0xfb92c => |x| {
             let v = var::VIDEO.get(x.b) & !0xe;
@@ -151,7 +151,7 @@ crate::steps! {
             Obj(BLOCK).set_u16(x.b, f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
             // `jmp 0x9b6`: the fade task, then the return
-            crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
+            crate::world::tasks::traps::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
             Flow::Done
         },
         S10Retry = 0xfbbae => |x| {
@@ -189,7 +189,7 @@ crate::steps! {
             for (k, source) in CREDITS_FADE.into_iter().enumerate() {
                 sv::fade_source(k as u32).set(x.b, source);
             }
-            crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::FROM_WHITE);
+            crate::world::tasks::traps::create_task(x.b, 0x10, crate::screens::scene::fading::FROM_WHITE);
             crate::services::sound::play_global(x.b, crate::services::sound::CMD_33);
             fading::STEP.set(x.b, 1);
             s1c_wait_fade(x)
@@ -266,7 +266,7 @@ crate::steps! {
             var::VIDEO.set(x.b, 0x12ce);
             render(x);
             fade_settings(x, 3, 13);
-            crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
+            crate::world::tasks::traps::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
             Flow::Done
         },
         S2cLoop = 0xfc14c => |x| {
@@ -370,7 +370,7 @@ crate::steps! {
             var::VIDEO.set(x.b, 0x12ce);
             Obj(BLOCK).set_u16(x.b, f::TIMER, 240);
             fade_settings(x, 3, FADE_ALL);
-            crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
+            crate::world::tasks::traps::create_task(x.b, 0x10, crate::screens::scene::fading::RISE);
             Flow::Done
         },
         S32Faded = 0xfc450 => |x| {
@@ -393,7 +393,7 @@ crate::steps! {
                 let score = bcd_add(p.u32(x.b, Player::SCORE_BCD), reward);
                 p.set_u32(x.b, Player::SCORE_BCD, if score as i32 > 0x0999_9999 { 0x0999_9999 } else { score });
             }
-            crate::core::game::update_players(x.b);
+            crate::actors::update::update_players(x.b);
             var::PHASE.set(x.b, 20);
             crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
             // `jmp 0x133f6`: the scored startup done, then the return to the caller
@@ -444,13 +444,13 @@ fn next_step(x: &mut Ctx) {
 
 /// `0xfc4ea`: terrain (SET, SOBJ) and sprites; A0 is preserved.
 fn render(x: &mut Ctx) {
-    crate::core::dispatch::SET.update_no_next(x.b);
-    crate::core::dispatch::SOBJ.update_no_next(x.b);
+    crate::actors::dispatch::SET.update_no_next(x.b);
+    crate::actors::dispatch::SOBJ.update_no_next(x.b);
     crate::services::sprites::build_in_game(x.b);
 }
 
 /// `0xfc506`: like `render`, with the effects and the cameras (whose D4 is re-read by handlers: see
-/// `scroll::update_cameras_in_game`).
+/// `camera_modes::update_cameras_in_game`).
 fn render_scroll(x: &mut Ctx) -> Flow {
     render_scroll_d0(x, 0);
     Flow::Done
@@ -460,10 +460,10 @@ fn render_scroll(x: &mut Ctx) -> Flow {
 /// was called, `dispatch::Class::update_last_kind`; otherwise `d0`).
 fn render_scroll_d0(x: &mut Ctx, d0: u32) -> u32 {
     let mut kinds = [None; 3];
-    kinds[0] = crate::core::dispatch::SET.update_last_kind(x.b);
-    kinds[1] = crate::core::dispatch::EFFCT.update_last_kind(x.b);
-    crate::services::scroll::update_cameras_in_game(x.b);
-    kinds[2] = crate::core::dispatch::SOBJ.update_last_kind(x.b);
+    kinds[0] = crate::actors::dispatch::SET.update_last_kind(x.b);
+    kinds[1] = crate::actors::dispatch::EFFCT.update_last_kind(x.b);
+    crate::actors::camera_modes::update_cameras_in_game(x.b);
+    kinds[2] = crate::actors::dispatch::SOBJ.update_last_kind(x.b);
     crate::services::sprites::build_in_game(x.b);
     kinds.into_iter().flatten().last().map_or(d0, |kind| ((kind as u16) << 2) as u32)
 }
@@ -519,8 +519,8 @@ fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
 }
 
 /// Creates the entry fade task `entry` (slot 0x10).
-fn fade_task(x: &mut Ctx, task: crate::core::tasks::Task) {
-    crate::core::kernel::create_task(x.b, 0x10, task);
+fn fade_task(x: &mut Ctx, task: crate::world::tasks::Task) {
+    crate::world::tasks::traps::create_task(x.b, 0x10, task);
 }
 
 /// Two tile blocks of the grid `grid` one after the other from `destination`.

@@ -29,10 +29,10 @@ use cps2::{LINES, VBLANK_LINE};
 use crate::world::World;
 
 use crate::hw::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-use crate::core::kernel::Point;
+use crate::world::tasks::traps::Point;
 use crate::world::tables::engine_table;
 use crate::services::video::Layer;
-use crate::core::tasks::table::{table, Table};
+use crate::world::tasks::table::{table, Table};
 
 /// Beam position: lines elapsed since power-on (a frame starts at vblank).
 const fn beam(image: u64, line: u32) -> u64 {
@@ -64,7 +64,7 @@ pub fn execute(b: &mut World, point: Point) -> Option<Point> {
 
 /// Original subroutines.
 mod ext {
-    pub const STARTUP_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Startup;
+    pub const STARTUP_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Startup;
 }
 
 /// I/O registers.
@@ -149,7 +149,7 @@ fn reset(b: &mut World) -> Point {
     wr16(b, io::COMMANDS, io::Z80_IN_RESET);
     b.ram.fill(0);
     *table(b) = Table::default();
-    crate::core::kernel::set_interrupt_mask(b, crate::core::kernel::MASK_ALL);
+    crate::world::tasks::traps::set_interrupt_mask(b, crate::world::tasks::traps::MASK_ALL);
     let region = engine_table!(rom::HEADER).at16(b, 2);
     wr16(b, a5(var::REGION), region);
     wr16(b, io::VIDEO, 0xe);
@@ -234,11 +234,11 @@ fn boot_init(b: &mut World) -> Option<Point> {
     let stacks = (0..16).map(|i| engine_table!(rom::STACKS).nth32(b, i)).collect();
     table(b).stacks = stacks;
     // 0x2d30a (the registers that the RAM test and the stack heap leave it are read by nobody)
-    if !crate::core::config::initialize(b) {
+    if !crate::services::config::initialize(b) {
         // "EEPROM ERROR": endless loop, interrupts still masked
-        return Some(Point::Blocked(crate::core::config::BLOCKED));
+        return Some(Point::Blocked(crate::services::config::BLOCKED));
     }
-    crate::core::kernel::set_interrupt_mask(b, 0);
+    crate::world::tasks::traps::set_interrupt_mask(b, 0);
     Some(Point::Launch)
 }
 
@@ -249,6 +249,6 @@ fn launch(b: &mut World) -> Point {
         wr8(b, BUTTON_AT_STARTUP, if pressed { 0xff } else { 0 });
     }
     // 0x9b6, slot 0
-    crate::core::kernel::create_task(b, 0, ext::STARTUP_TASK);
+    crate::world::tasks::traps::create_task(b, 0, ext::STARTUP_TASK);
     Point::Start
 }

@@ -18,7 +18,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                 linked.set_u8(x.b, ScrollToObj::WAIT_FLAG, 0);
                 let n = linked.u16(x.b, ScrollToObj::LIVE).wrapping_sub(1);
                 linked.set_u16(x.b, ScrollToObj::LIVE, n);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x10);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x10);
             }
             x.free(&pools::SET);
         }

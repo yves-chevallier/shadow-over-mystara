@@ -108,7 +108,7 @@ fn boss_intro(x: &mut Ctx) {
                 let state = boss.u8(x.b, BOSS_ACTION).wrapping_add(2);
                 boss.set_u8(x.b, BOSS_ACTION, state);
             } else if Word(TIMER).get(x.b) == 40 {
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 40);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 40);
             }
         }
         12 => {

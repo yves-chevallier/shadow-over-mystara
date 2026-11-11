@@ -12,7 +12,7 @@ use super::fight;
 use super::*;
 use crate::world::objects::Current;
 use crate::world::objects::Obj;
-use crate::core::tasks::fading::Fade;
+use crate::world::tasks::stages::Fade;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
@@ -136,9 +136,9 @@ fn green_land<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- type 19, variant 0 ------------------------------------------------------------------------------
 
-/// Starts the fade task `list` (0x9b6 with A0 = the entry, slot 0x10; `tasks/fading.rs`).
+/// Starts the fade task `list` (0x9b6 with A0 = the entry, slot 0x10; `services/fading.rs`).
 fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: Fade) {
-    crate::core::kernel::create_task(x.b, 0x10, crate::core::tasks::Task::Fading(list));
+    crate::world::tasks::traps::create_task(x.b, 0x10, crate::world::tasks::Task::Fading(list));
 }
 
 fn announce<R: Bench>(x: &mut Cx<'_, R>) {

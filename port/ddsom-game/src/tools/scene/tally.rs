@@ -4,8 +4,8 @@
 
 use crate::screens::scene::tally::*;
 use crate::Native;
-use crate::screens::scene::Ctx;
-use crate::screens::modes::Flow;
+use crate::world::tasks::Ctx;
+use crate::world::tasks::Flow;
 
 /// Original entry (exit sequences left in 68000).
 pub(crate) const TALLY: Native = Native {

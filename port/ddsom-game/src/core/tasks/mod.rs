@@ -1,112 +1,25 @@
-//! Scheduler tasks written in Rust (see `docs/noyau.md`, "Rust tasks").
+//! Scheduler tasks written in Rust (see `docs/noyau.md`, "Rust tasks"): how the core runs their stages.
 //!
-//! A Rust task is a state machine whose each *step* runs between two cessions of control. Each resume
-//! point is a stage ([`Step`], one `enum` per module: `steps!`) whose original address (the one following
-//! the original's `jsr 0xa40` or `0xa86`) is now just a name; the step returns a [`Wait`], which [`cede`] hands to the
-//! kernel. The task table ([`table`]) stores the task's state, count, resume stage, registers and calls in
-//! progress ([`table::Frame`]): its 68000 stack is empty at each cession. The scheduler (`kernel`) launches a
-//! task by calling the step of its stage ([`execute`]).
+//! The table, the stages and the cessions belong to the world (`world::tasks`); each module maps its stages to their
+//! steps (`steps!`). The core runs them: the scheduler (`kernel`) launches a task by calling the step of its stage
+//! ([`execute`]), and the return of a subroutine runs the continuation of its caller ([`return_to_caller`]).
 //!
-//! Tasks: [`game`] (the game, `0x1c45a`), [`freeze`] (fast forward, `0xee080`), [`fading`] (palette fades,
-//! tasks and subroutines that cede control), [`fixed_screen`] (attract score table, `0x1835e`),
-//! [`service`] (TEST menu, `0x29162`) and [`prompt`] (blinking "INSERT COIN" text, `0xe03fe`).
+//! Tasks of the core: [`game`] (the game, `0x1c45a`) and [`freeze`] (fast forward, `0xee080`). The other tasks
+//! belong to their layer: fades (`services::fading`), attract score table (`screens::fixed_screen`), TEST menu
+//! (`screens::service::task`), blinking "INSERT COIN" text (`screens::prompt`), credits (`screens::credits_task`),
+//! player interface (`screens::hud`).
 
-pub mod fixed_screen;
-pub mod fading;
 pub mod freeze;
-pub mod prompt;
 pub mod game;
-pub mod service;
-pub mod table;
 
+use crate::world::tasks::table::{self, Next};
+use crate::world::tasks::{has_ceded, stages, Ctx, Flow, Sequence, Step, Task};
 use crate::world::World;
-
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
 use crate::Native;
-use table::Next;
 
-/// What a task asks of the scheduler at the end of a step.
-#[derive(Clone, Copy)]
-pub enum Wait {
-    /// Sleeps this number of frames (trap 3: `jsr 0xa40`, D0 = number of frames).
-    Images(u32),
-    /// Stays ready: the scheduler relaunches it as soon as it comes back to it (trap 4: `jsr 0xa86`).
-    Ready,
-}
-
-/// Cedes control: the kernel stores the task's wait and resume in the table; it will resume at `resume`
-/// (a Rust stage, which carries what it will re-read).
-pub fn cede(x: &mut Ctx, wait_kind: Wait, resume: impl Into<Next>) -> Flow {
-    let resume = resume.into();
-    match wait_kind {
-        Wait::Images(n) => crate::core::kernel::wait(x.b, n as u8, resume),
-        Wait::Ready => crate::core::kernel::cede_ready(x.b, resume),
-    }
-    Flow::Yield
-}
-
-/// `jsr 0xb64`: cedes one frame; the task will resume at `resume`.
-pub fn one_frame(x: &mut Ctx, resume: impl Into<Next>) -> Flow {
-    wait(x, 1, resume)
-}
-
-/// `jsr 0xa40`: cedes `frames` frames (D0.b of the original); the task will resume at `resume`.
-pub fn wait(x: &mut Ctx, frames: u8, resume: impl Into<Next>) -> Flow {
-    crate::core::kernel::wait(x.b, frames, resume);
-    Flow::Yield
-}
-
-/// `jmp 0xa40`: cedes `frames` frames; the task will resume at the continuation of the caller (the call in progress).
-pub fn wait_then_return(x: &mut Ctx, frames: u8) -> Flow {
-    let next = table::pop_return(x.b);
-    wait(x, frames, next)
-}
-
-/// `jmp 0xae4`: the current task restarts from zero as `task` (its entry in A0 of the original).
-pub fn restart(x: &mut Ctx, task: Task) -> Flow {
-    crate::core::kernel::restart(x.b, task);
-    Flow::Yield
-}
-
-/// `jsr 0x9f8`: the current task ends.
-pub fn finish(x: &mut Ctx) -> Flow {
-    crate::core::kernel::finish(x.b);
-    Flow::Yield
-}
-
-/// Declares the stages of a task: one variant per resume point, with the address the original resumes at
-/// (`address`, kept for diagnostics) and the step that runs there (`step`).
-#[macro_export]
-macro_rules! steps {
-    ($(#[$m:meta])* $vis:vis enum $name:ident { $($(#[$vm:meta])* $var:ident = $adr:expr => $step:expr,)* }) => {
-        $(#[$m])*
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        $vis enum $name { $($(#[$vm])* $var,)* }
-        impl $name {
-            /// Address at which the original resumes at this stage.
-            pub const fn address(self) -> u32 {
-                match self { $(Self::$var => $adr,)* }
-            }
-            /// The step of the stage.
-            pub fn step(self, x: &mut $crate::screens::scene::Ctx) -> $crate::screens::modes::Flow {
-                match self {
-                    $(Self::$var => {
-                        let step: fn(&mut $crate::screens::scene::Ctx) -> $crate::screens::modes::Flow = $step;
-                        step(x)
-                    })*
-                }
-            }
-        }
-    };
-}
-
-/// Declares the stage of each kind of task.
-macro_rules! task_steps {
-    ($($(#[$vm:meta])* $var:ident($t:ty),)*) => {
-        /// Resume point of a Rust task: the stage of its state machine.
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub enum Step { $($(#[$vm])* $var($t),)* }
+/// The step of each stage, and the address the original resumes at.
+macro_rules! run_steps {
+    ($($var:ident,)*) => {
         impl Step {
             /// Address at which the original resumes at this stage (diagnostics, comparison with the FF0064 table).
             pub fn address(self) -> u32 {
@@ -116,54 +29,47 @@ macro_rules! task_steps {
                 match self { $(Step::$var(e) => e.step(x),)* }
             }
         }
-        $(
-            impl From<$t> for Step {
-                fn from(e: $t) -> Self { Step::$var(e) }
-            }
-            impl From<$t> for Next {
-                fn from(e: $t) -> Self { Next::Step(Step::$var(e)) }
-            }
-        )*
     };
 }
 
-task_steps! {
-    Game(game::Step),
-    Freeze(freeze::Step),
-    Prompt(prompt::Step),
-    Scores(fixed_screen::Step),
-    Service(service::Step),
-    Interface(crate::screens::hud::Step),
-    Credits(crate::screens::credits_task::Step),
-    Fading(fading::Step),
-    BlackScreen(crate::screens::scene::black_screen::Step),
-    // mode machine (task 0 outside the game): its loop, then its screens
-    Modes(crate::screens::modes::Step),
-    Boot(crate::screens::modes::boot::Step),
-    Attract(crate::screens::modes::attract::Step),
-    Title(crate::screens::modes::title::Step),
-    Select(crate::screens::modes::select::Step),
-    Ranking(crate::screens::modes::ranking::Step),
-    Demo(crate::screens::modes::demo::Step),
-    Ending(crate::screens::modes::ending::Step),
-    Gameover(crate::screens::modes::gameover::Step),
-    // scene sequences (game task)
-    Exit(crate::screens::scene::exit::Step),
-    Blackout(crate::screens::scene::blackout::Step),
-    Transition(crate::screens::scene::transition::Step),
-    TransitionEarly(crate::screens::scene::transition::early::Step),
-    TransitionLate(crate::screens::scene::transition::late::Step),
-    Bonus(crate::screens::scene::bonus::Step),
-    Shop(crate::screens::scene::shop::Step),
-    Characters(crate::screens::scene::characters::Step),
-    Tally(crate::screens::scene::tally::Step),
-    // game loop when an object handler makes the task cede control: world update, dispatch
-    World(crate::core::game::Step),
-    Dispatch(crate::core::dispatch::Step),
-    // object handlers that call a subroutine that cedes (SET doors: fade to black)
-    DoorSet(crate::actors::families::set::exit_fading::Step),
-    // object handlers that make the game task wait
-    Firework(crate::actors::families::effects::g::Step),
+run_steps! {
+    Game, Freeze, Prompt, Scores, Service, Interface, Credits, Fading, BlackScreen, Modes, Boot, Attract, Title, Select,
+    Ranking, Demo, Ending, Gameover, Exit, Blackout, Transition, TransitionEarly, TransitionLate, Bonus, Shop,
+    Characters, Tally, World, Dispatch, DoorSet, Firework,
+}
+
+impl Next {
+    /// Original address (the one the original pushes).
+    pub fn address(self) -> u32 {
+        match self {
+            Next::Address(a) => a,
+            Next::Step(e) => e.address(),
+        }
+    }
+}
+
+impl Task {
+    /// The first stage of the task.
+    pub fn first_step(self) -> Step {
+        match self {
+            Task::Startup => stages::Boot::Entry.into(),
+            Task::Modes => stages::Modes::Entry.into(),
+            Task::Game => stages::Game::Entry.into(),
+            Task::Service => stages::Service::Entry.into(),
+            Task::Fading(fade) => fade.first_step().into(),
+            Task::Credits => stages::Credits::Entry.into(),
+            Task::Interface => stages::Interface::Entry.into(),
+            Task::Portraits => stages::Shop::Portraits.into(),
+            Task::Prompt => stages::Prompt::Entry.into(),
+            Task::Freeze => stages::Freeze::Entry.into(),
+            Task::Scores => stages::Scores::Entry.into(),
+        }
+    }
+
+    /// The entry address of the original (that of its first stage).
+    pub fn address(self) -> u32 {
+        self.first_step().address()
+    }
 }
 
 /// Executes stage `step` of the current task; if it finishes (`Flow::Done`, subroutine return), the continuation of
@@ -211,87 +117,37 @@ fn original_code_resumes(address: Option<u32>) {
     unreachable!("return to the original code ({address:x?}): the game has no 68000");
 }
 
-thread_local! {
-    /// The current task has ceded control (or ended) during the native in progress: the Rust functions still
-    /// in progress below it return without doing anything (see [`has_ceded`]).
-    static CEDED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// The current task ceded control during the native in progress (`kernel::cede`, `finish`, `restart`): its resume
-/// is stored in the table (stage and calls in progress), and the Rust code still in progress below the cession (object
-/// dispatch loop, world update, phase...) must return without doing anything. This is what the abandonment by panic
-/// (`Unwound`) of the outdated Rust functions used to do.
-pub fn has_ceded() -> bool {
-    CEDED.with(|c| c.get())
-}
-
-/// The kernel hands control back to the scheduler for the current task.
-pub(crate) fn note_cession() {
-    CEDED.with(|c| c.set(true));
-}
-
-/// A top-level native begins (scheduler, VBLANK, relaunched task): no cession in progress.
-pub(crate) fn forget_cession() {
-    CEDED.with(|c| c.set(false));
-}
-
-/// A task of the game, as created by `0x9b6` (`kernel::create_task`) or restarted by `0xae4` (`kernel::restart`): the
-/// original designates it by its entry address, which the reference's task table (FF0064) keeps until the task runs
-/// ([`Task::address`], compared by `table::gaps`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Task {
-    /// `0x11b16` (slot 0): initialization, warnings, creation of the credits and the freeze (`modes/boot.rs`),
-    /// then the mode machine (`modes/`), in which it continues without changing entry.
-    Startup,
-    /// `0x133fe` (slot 0): the mode machine relaunched after a game (`modes/gameover.rs`).
-    Modes,
-    /// `0x1c45a` (slot 0): the game ([`game`]).
-    Game,
-    /// `0x29162` (slot 0): TEST menu ([`service`]).
-    Service,
-    /// `0x14ba`... `0x1cf12` (slot 1): a palette fade ([`fading`]).
-    Fading(fading::Fade),
-    /// `0x13c0a` (slot 2): credits and starts (`credits_task.rs`).
-    Credits,
-    /// `0x150ac` (slot 3): player interface (`hud/`).
-    Interface,
-    /// `0xf7dfe` (slot 12): shop portraits (`scene/shop.rs`).
-    Portraits,
-    /// `0xe03fe` (slot 13): blinking "INSERT COIN" ([`prompt`]).
-    Prompt,
-    /// `0xee080` (slot 14): busy wait and fast forward ([`freeze`]).
-    Freeze,
-    /// `0x1835e` (slot 15): attract score table ([`fixed_screen`]).
-    Scores,
-}
-
-impl Task {
-    /// The first stage of the task.
-    pub fn first_step(self) -> Step {
-        match self {
-            Task::Startup => crate::screens::modes::boot::Step::Entry.into(),
-            Task::Modes => crate::screens::modes::Step::Entry.into(),
-            Task::Game => game::Step::Entry.into(),
-            Task::Service => service::Step::Entry.into(),
-            Task::Fading(fade) => fade.first_step().into(),
-            Task::Credits => crate::screens::credits_task::Step::Entry.into(),
-            Task::Interface => crate::screens::hud::Step::Entry.into(),
-            Task::Portraits => crate::screens::scene::shop::Step::Portraits.into(),
-            Task::Prompt => prompt::Step::Entry.into(),
-            Task::Freeze => freeze::Step::Entry.into(),
-            Task::Scores => fixed_screen::Step::Entry.into(),
-        }
+impl Sequence for Ctx<'_> {
+    fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow {
+        crate::world::tasks::cede(self, crate::world::tasks::Wait::Images(frames), resume)
     }
-
-    /// The entry address of the original (that of its first stage).
-    pub fn address(self) -> u32 {
-        self.first_step().address()
+    fn push_return(&mut self, next: impl Into<Next>) {
+        table::call(self.b, next);
+    }
+    fn subroutine(&mut self, sp: impl FnOnce(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow {
+        table::call(self.b, resume);
+        if sp(self) == Flow::Done {
+            return_to_caller(self.b);
+        }
+        Flow::Yield
+    }
+    fn drop_return(&mut self) {
+        table::pop_return(self.b);
+    }
+    fn return_to_caller(&mut self) {
+        return_to_caller(self.b);
+    }
+    fn or16(&mut self, off: u32, v: u16) {
+        let w = self.v16(off) | v;
+        self.set_v16(off, w);
+    }
+    fn and16(&mut self, off: u32, v: u16) {
+        let w = self.v16(off) & v;
+        self.set_v16(off, w);
     }
 }
 
 /// Natives of the Rust tasks.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    fading::NATIVES
-        .iter()
-        .chain(prompt::NATIVES)
+    crate::services::fading::NATIVES.iter().chain(crate::screens::prompt::NATIVES)
 }

@@ -17,11 +17,12 @@
 //! [`to_colours`], [`to_palettes`]) that the steps call directly (the SET doors too:
 //! `families::set::exit_fading`).
 
-use crate::world::Leftovers;
 use crate::hw::mem::{rd16, rd8, wr32, wr8, A5};
-use crate::screens::modes::Flow;
-use crate::services::palette::{brightness_step, component_step, white_out, Target};
-use crate::screens::scene::Ctx;
+use crate::services::palette::{brightness_step, component_step, white_out};
+pub use crate::world::tasks::stages::Fading as Step;
+use crate::world::tasks::stages::{Brightness, Component, Fade, Target};
+use crate::world::tasks::{Ctx, Flow};
+use crate::world::Leftovers;
 use crate::Native;
 
 /// State of the brightness fade (`A4` in the original).
@@ -50,44 +51,6 @@ const STEP_FULL: u8 = 0x10;
 /// Pages of the fades: the four pages, or the end of page 0 for the partial fade.
 const PAGES: [u32; 4] = [0x91c000, 0x91c400, 0x91c800, 0x91cc00];
 const PARTIAL_START: u32 = 0x91c3a0;
-
-/// Stages of a fade: the start of a fade task (from its entry), then the next step after each cession.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Start of a brightness fade task; `step`: imposed number of steps (otherwise that of the state).
-    BrightnessTask { fading: Brightness, step: Option<u8> },
-    /// Start of a per-component fade task (`whiten`: task `0x1ced4` first whitens the pages).
-    ComponentTask { fading: Component, whiten: bool },
-    /// Next step of a brightness fade.
-    Brightness { fading: Brightness },
-    /// Next step of a per-component fade; `saved`: the leftovers D2-D5 saved on entry.
-    Component { fading: Component, saved: Leftovers },
-}
-
-/// The fade tasks (created by `0x9b6` in slot 1), by entry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Fade {
-    /// `0x14ba`: full rise of the brightness (16 steps).
-    Rise,
-    /// `0x14c8`: rise by the number of steps of the state.
-    RiseSteps,
-    /// `0x14d0`: full descent of the brightness (16 steps).
-    Descent,
-    /// `0x14de`: descent by the number of steps of the state.
-    DescentSteps,
-    /// `0x1536`: rise of the end of page 0 only.
-    PartialRise,
-    /// `0x153e`: descent of the end of page 0 only.
-    PartialDescent,
-    /// `0x1ccf8`: per component, toward white.
-    ToWhite,
-    /// `0x1ce64`: per component, toward the colours.
-    ToColours,
-    /// `0x1ced4`: whitens the pages, then per component toward the palettes.
-    FromWhite,
-    /// `0x1cf12`: per component toward the palettes, without whitening first.
-    ToPalettes,
-}
 
 /// The fade tasks.
 const FADES: [Fade; 10] = [
@@ -161,19 +124,11 @@ impl Step {
 
 /// Cedes `delay` frames (D0.w of the original; the trap takes its low byte); what follows is stage `resume`.
 fn wait(x: &mut Ctx, delay: u16, resume: Step) -> Flow {
-    super::wait(x, delay as u8, resume)
+    crate::world::tasks::wait(x, delay as u8, resume)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Brightness
-
-/// A brightness fade: direction (D1 of the original), form (subroutine or task), pages (complete or partial).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Brightness {
-    delta: u32,
-    task: bool,
-    partial: bool,
-}
 
 impl Brightness {
     /// Address following the step's cession.
@@ -230,7 +185,7 @@ impl Brightness {
     fn end(self, x: &mut Ctx) -> Flow {
         wr8(x.b, state::PAGES, 0);
         if self.task {
-            super::finish(x)
+            crate::world::tasks::finish(x)
         } else {
             Flow::Done
         }
@@ -269,14 +224,6 @@ pub fn descent_steps(x: &mut Ctx, steps: u8) -> Flow {
 
 // ---------------------------------------------------------------------------------------------
 // Per component
-
-/// A per-component fade: target, form and address following the step's cession.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Component {
-    target: Target,
-    task: bool,
-    resume: u32,
-}
 
 /// The six per-component fades, by entry address.
 const COMPONENTS: [(u32, Component); 6] = [
@@ -318,7 +265,7 @@ impl Component {
         wr8(x.b, CURRENT_COMPONENT, 0);
         x.b.leftovers = saved;
         if self.task {
-            super::finish(x)
+            crate::world::tasks::finish(x)
         } else {
             Flow::Done
         }

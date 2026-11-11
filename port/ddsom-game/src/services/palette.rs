@@ -66,7 +66,7 @@ pub fn set_brightness(b: &mut World, level: u16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Brightness fades (V3): one step, repeated by the tasks and subroutines of `tasks::fading`
+// Brightness fades (V3): one step, repeated by the tasks and subroutines of `services::fading`
 // ---------------------------------------------------------------------------------------------
 
 /// State of a fade (from `PAGES`): byte of the pages concerned (bit k: page k), number of steps remaining, delay
@@ -419,16 +419,7 @@ pub(crate) fn flagged_pages(b: &mut World) -> Vec<(usize, u32)> {
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PALETTES + PAGE_SIZE * k as u32)).collect()
 }
 
-/// Target of a per-component fade.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Target {
-    /// White (`0x1cd32`).
-    White,
-    /// One colour per page, the high word of `SOURCES[k]` (`0x1cdd6`).
-    Colours,
-    /// A full palette per page, at address `SOURCES[k]` (`0x1cd7c`).
-    Palettes,
-}
+pub use crate::world::tasks::stages::Target;
 
 /// One per-component fade step of the checked pages (`PAGES`) towards `target`.
 pub fn component_step(b: &mut World, target: Target) {

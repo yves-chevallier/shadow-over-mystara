@@ -7,9 +7,10 @@ use super::{mode, Flow, Sequence};
 use crate::screens::scene::fading;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::world::screen_tables::Rom;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
 use crate::world::ram::Byte;
+pub use crate::world::tasks::stages::Attract as Step;
 
 /// Work RAM variables (offsets from A5).
 mod var {
@@ -28,7 +29,7 @@ const LAYER_BITS: u16 = 0xe;
 /// Byte at FF0F53, set by the fixed-screen task when the screen is ready.
 const SCREEN_READY: Byte = Byte(0xff_0f53);
 /// Fixed-screen task (object executor) and its slot.
-const FIXED_SCREEN_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Scores;
+const FIXED_SCREEN_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Scores;
 const FIXED_SCREEN_SLOT: u32 = 0xf0;
 /// Palette of the text screens and its two tile blocks ("copyright" screen).
 const TEXT_PALETTE: u16 = 0x53;
@@ -53,7 +54,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
         mode::STEP.set(x.b, 2);
         mode::BOOTED.set(x.b, 1);
         crate::actors::families::small::reset_fixed_screen(x.b);
-        crate::core::kernel::create_task(x.b, FIXED_SCREEN_SLOT, FIXED_SCREEN_TASK);
+        crate::world::tasks::traps::create_task(x.b, FIXED_SCREEN_SLOT, FIXED_SCREEN_TASK);
         return Flow::Done;
     }
     if SCREEN_READY.get(x.b) == 0 {
@@ -65,12 +66,11 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     mode::TIMER.set(x.b, 1);
     fading::DELAY.set(x.b, 3);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::FixedScreenAfterFade)
+    x.subroutine(crate::services::fading::descent, Step::FixedScreenAfterFade)
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         FixedScreenAfterFade = 0x1376e => |x| {
             var::SCROLL_2.set(x.b, 0);
             crate::services::video::clear_objects(x.b);
@@ -96,7 +96,7 @@ crate::steps! {
             crate::services::sound::play_global(x.b, SOUND_SCREEN_A);
             crate::services::sound::play_global(x.b, SOUND_SCREEN_B);
             fading::PAGES.set(x.b, 0xf);
-            crate::core::tasks::fading::rise(x)
+            crate::services::fading::rise(x)
         },
         LegalScreenFaded = 0x1381c => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
@@ -120,7 +120,7 @@ crate::steps! {
             clear_layer(x.b, Layer::Three);
             var::CAMERA.set(x.b, 0);
             var::CAMERA_2.set(x.b, 0);
-            crate::core::tasks::prompt::stop(x.b);
+            crate::screens::prompt::stop(x.b);
             x.wait(1, Step::SecondTiles)
         },
         SecondTiles = 0x1389e => |x| {
@@ -130,7 +130,7 @@ crate::steps! {
         },
         SecondFadeIn = 0x138d0 => |x| {
             fading::PAGES.set(x.b, 0xf);
-            crate::core::tasks::fading::rise(x)
+            crate::services::fading::rise(x)
         },
         SecondFaded = 0x138f8 => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
@@ -154,7 +154,7 @@ crate::steps! {
         NoticeFadeIn = 0x1395a => |x| {
             fading::PAGES.set(x.b, 0xf);
             // `jsr 0x144c`: what follows is the countdown, just after
-            x.subroutine(crate::core::tasks::fading::rise, Step::NoticeCountdown)
+            x.subroutine(crate::services::fading::rise, Step::NoticeCountdown)
         },
         NoticeCountdown = 0x13966 => notice_countdown,
         NoticeFaded = 0x1398a => |x| {
@@ -164,7 +164,7 @@ crate::steps! {
         NoticeCleared = 0x13998 => |x| {
             clear_layer(x.b, Layer::One);
             x.or16(var::LAYERS, LAYER_BITS);
-            crate::core::tasks::wait_then_return(x, 1)
+            crate::world::tasks::wait_then_return(x, 1)
         },
     }
 }
@@ -198,7 +198,7 @@ fn legal_screen_wait(x: &mut Ctx) -> Flow {
     mode::SUB.set(x.b, s);
     mode::STEP.set(x.b, 0);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::LegalScreenFaded)
+    x.subroutine(crate::services::fading::descent, Step::LegalScreenFaded)
 }
 
 
@@ -229,7 +229,7 @@ fn second_legal_wait(x: &mut Ctx) -> Flow {
     mode::SUB.set(x.b, s);
     mode::STEP.set(x.b, 0);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::SecondFaded)
+    x.subroutine(crate::services::fading::descent, Step::SecondFaded)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -258,7 +258,7 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     mode::SUB.set(x.b, 2);
     mode::STEP.set(x.b, 0);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::NoticeFaded)
+    x.subroutine(crate::services::fading::descent, Step::NoticeFaded)
 }
 
 pub const NATIVES: &[Native] = &[];

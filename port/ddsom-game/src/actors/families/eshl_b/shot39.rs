@@ -72,7 +72,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             x.move_by_table_xy();
             x.move_z();
             if (x.u16(Obj::Z) as i16) <= 0 {
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x30);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x30);
                 crate::services::sound::play(x.b, SOUND_IMPACT, x.o);
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);

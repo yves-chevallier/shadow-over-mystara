@@ -10,7 +10,8 @@ use crate::world::objects::player::Player as PlayerRecord;
 use super::bonus::{dispatch, fade};
 use crate::services::video::{clear_layer, Layer};
 use super::Ctx;
-use crate::screens::modes::{Flow, Sequence};
+pub use crate::world::tasks::stages::{Characters as Step, InterludePlayer as Player};
+use crate::world::tasks::{Flow, Sequence};
 use crate::Native;
 use crate::screens::obj;
 use crate::world::objects::Obj;
@@ -98,27 +99,7 @@ fn start(x: &mut Ctx) -> Flow {
     }
     v::MASK.set(x.b, mask);
     x.set_v8(0x5f, 0);
-    fade(x, crate::core::tasks::fading::descent, Step::FadedOut)
-}
-
-/// The player of the current interlude: its record (A6 of the original) and its `+3` byte (D1), which the original
-/// keeps in registers during the yields.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Player {
-    record: u32,
-    byte: u8,
-}
-
-/// Steps (resume points) of the state machine.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Screen cleared, cameras at the origin, interlude palettes (84); then the first player.
-    FadedOut,
-    /// After a wait, new attempt to create objects 5, 6 and 7.
-    Retry5(Player),
-    Retry6(Player),
-    Retry7(Player),
-    NextWaited,
+    fade(x, crate::services::fading::descent, Step::FadedOut)
 }
 
 impl Step {
@@ -275,7 +256,7 @@ fn end(x: &mut Ctx) -> Flow {
     skip(x);
     x.set_v8(0x33, 0);
     x.set_v8(0x3c, 1);
-    crate::core::tasks::wait_then_return(x, 1)
+    crate::world::tasks::wait_then_return(x, 1)
 }
 
 pub const NATIVES: &[Native] = &[

@@ -73,6 +73,6 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>, v: usize) {
     } else {
         x.anim_start(ANIMS[1], 1);
     }
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 8);
     crate::services::sound::play(x.b, SFX[v], x.o);
 }

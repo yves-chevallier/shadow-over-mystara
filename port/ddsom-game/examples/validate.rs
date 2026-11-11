@@ -27,7 +27,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 
 use cps2::sound::Output;
-use ddsom_game::core::tasks::table::{gaps, read, kernel_ram};
+use ddsom_game::core::kernel::gaps;
+use ddsom_game::world::tasks::table::{kernel_ram, read};
 
 /// 68000 frequency, as a multiple of the arcade's.
 const OVERCLOCK: f64 = 16.0;

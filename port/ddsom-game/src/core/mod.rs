@@ -1,7 +1,5 @@
 //! Layer `core` (docs/fin.md, section 2).
 
-pub mod config;
-pub mod dispatch;
 pub mod frame;
 pub mod game;
 pub mod kernel;

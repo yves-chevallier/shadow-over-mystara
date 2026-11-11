@@ -5,7 +5,7 @@ use crate::actors::families::set_b::fields::GameOverObj;
 
 const WAIT_FRAMES: u16 = 0x80;
 /// Per-component fade-to-white task.
-const FADE_TO_WHITE_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::ToWhite);
+const FADE_TO_WHITE_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::ToWhite);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {

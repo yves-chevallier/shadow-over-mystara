@@ -741,26 +741,6 @@ pub const NATIVES: &[Native] = &[];
 // Vertical tracking of the players and update of the two cameras
 // ---------------------------------------------------------------------------------------------
 
-/// 0x33e20: updates the two cameras. The first remembers its previous target (+0x26, +0x2a)
-/// before its mode script (0x2ede0) moves it; the second is processed by 0x32108.
-/// Returns the D4 left by the scenery copies of the two cameras (in order).
-pub fn update_cameras(b: &mut World) -> [D4Leftovers; 2] {
-    let (x, y) = (CAMERA_1.x_long(b), CAMERA_1.y_long(b));
-    CAMERA_1.set_previous_x_long(b, x);
-    CAMERA_1.set_previous_y_long(b, y);
-    [crate::services::camera_modes::update_camera_1(b), crate::services::camera_modes::update_camera_2(b)]
-}
-
-/// `update_cameras` in the game. Original glitch: the D4 of the scenery copies is reread by a following handler
-/// (boss13_dragon, frame 7241): it is the leftover D4 of the game (`dispatch::Leftovers`); A0 (camera 2) is reread by
-/// nobody.
-pub fn update_cameras_in_game(b: &mut World) {
-    for (v, m) in update_cameras(b).into_iter().flatten() {
-        let leftovers = &mut b.leftovers;
-        leftovers.d4 = leftovers.d4 & !m | v;
-    }
-}
-
 /// 0x33aa6: cameras of the scene at their starting position. The two cameras are reset to zero, the start of layer 1
 /// cleared (0x3525c); the scene chooses the camera in service (`ram::CAMERA_ALT_ACTIVE`) and the starting position of
 /// the first, then the cameras are updated (0x33e20, by the caller: `cameras_start` only does the reset).

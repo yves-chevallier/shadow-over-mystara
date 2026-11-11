@@ -9,7 +9,7 @@
 use crate::world::World;
 
 use crate::world::ram::{Byte, Long, Word};
-use crate::core::dispatch::Dispatch;
+use crate::actors::dispatch::Dispatch;
 use crate::world::Leftovers;
 use crate::world::objects::pools;
 use crate::world::objects::{Current, Obj};

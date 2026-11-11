@@ -1,235 +1,41 @@
-//! Game loop (W1): world update (`0x1c86e`), end of frame (`0x1c4c4`), phase 0
-//! (`0x1c522`, game initialisation) and phase 12 (`0x1c6a0`, the game). See `docs/boucle.md`.
+//! Game loop (W1): end of frame (`0x1c4c4`), phase 0 (`0x1c522`, game initialisation) and phase 12 (`0x1c6a0`, the
+//! game). See `docs/boucle.md`.
 //!
 //! The game task (`0x1c45a`) loops forever: one frame = one call of the current phase
 //! (`A5+0x2c`), then the clearing of the collision queues, then a cession (`0xa40`): see
-//! `tasks/game.rs`. An object handler can make the task cede control in the middle of the world
-//! update (fade to black of the doors, fireworks): the pending calls of phase 12 and of the world update
-//! are then steps ([`Step`]), where the task will resume.
+//! `tasks/game.rs`. Phase 12 calls the world update (`actors::update`); an object handler can make the task cede
+//! control in the middle of it (fade to black of the doors, fireworks): the pending calls of phase 12 and of the world
+//! update are then stages ([`Step`]), where the task will resume.
 
 use crate::world::World;
 use crate::world::ops::sbcd;
 
-use crate::core::dispatch::{self, Class};
+use crate::actors::dispatch;
+use crate::actors::update::{self, update_world};
 use crate::hw::mem::{rd16, rd8, wr16, wr8, A5};
-use crate::screens::modes::Flow;
+use crate::world::tasks::Flow;
 use crate::world::objects::pools::{self, Queue};
 use crate::world::objects::Obj;
-use crate::core::tasks::table;
+use crate::world::tasks::stages::World as Step;
+use crate::world::tasks::table;
 use crate::Native;
 
 /// Work RAM variables (offsets from A5).
 mod ram {
-    /// Game phase (byte, step of 4), step, substep.
+    /// Game phase (byte, step of 4), step.
     pub const PHASE: u32 = 0x2c;
     pub const STEP: u32 = 0x2d;
-    pub const SUBSTEP: u32 = 0x2e;
     /// "Continue" mode: phase 0 jumps to its last step.
     pub const CONTINUE: u32 = 0x25;
     /// Game active.
     pub const ACTIVE: u32 = 0x30;
     /// Scene number (signed byte).
     pub const SCENE: u32 = 0x34;
-    /// Cutscene in progress (≠ 0).
-    pub const CINEMATIC: u32 = 0x44;
     /// Step countdown (word); in game, BCD clock on three bytes.
     pub const TIMER: u32 = 0x38;
     /// Vertical scroll of plane 2 (word).
     pub const SCROLL2_Y: u32 = 0x4ba;
 }
-
-// ---------------------------------------------------------------------------------------------
-// World update (0x1c86e)
-
-/// One step of the world update.
-#[derive(Clone, Copy)]
-enum UpdateStep {
-    /// Charge gauge, with its marker (D1).
-    Gauge(u32),
-    Players,
-    PlayerParts,
-    /// Dispatch of an object class.
-    Objs(&'static Class),
-    Cameras,
-}
-use UpdateStep::{Cameras, Gauge, Objs, PlayerParts, Players};
-
-const G_PLAYER: u32 = 0x50_0001;
-const G_ENEMY: u32 = 0x45_0002;
-const G_SCENERY: u32 = 0x53_0003;
-
-/// A step and the address of its call in the original code (`jsr`, 6 bytes; the last call of
-/// each order is a `jmp`). The return address of a call is that of the resumption step ([`Step::World`]).
-type Order = &'static [(u32, UpdateStep)];
-
-/// Normal order (0x1c894): players and their shots, then bosses, enemies, enemy shots, effects, then
-/// scenery, crates, items, cameras, system objects.
-const ORDER_NORMAL: Order = &[
-    (0x1c89a, Gauge(G_PLAYER)), (0x1c8a0, Players), (0x1c8a6, PlayerParts),
-    (0x1c8ac, Objs(&dispatch::PSHL)), (0x1c8b2, Objs(&dispatch::PEFF)),
-    (0x1c8be, Gauge(G_ENEMY)), (0x1c8c4, Objs(&dispatch::BOSS)), (0x1c8ca, Objs(&dispatch::ENEMY)),
-    (0x1c8d0, Objs(&dispatch::ESHL)), (0x1c8d6, Objs(&dispatch::EFFCT)),
-    (0x1c8e2, Gauge(G_SCENERY)), (0x1c8e8, Objs(&dispatch::SET)), (0x1c8ee, Objs(&dispatch::BOX)),
-    (0x1c8f4, Objs(&dispatch::ITEM)), (0x1c8fa, Cameras),
-    (0x1c900, Objs(&dispatch::SOBJ)),
-];
-
-/// Cutscene (`A5+0x44` ≠ 0, 0x1c906): the effects come first.
-const ORDER_CINEMATIC: Order = &[
-    (0x1c90c, Gauge(G_ENEMY)), (0x1c912, Objs(&dispatch::EFFCT)),
-    (0x1c91e, Gauge(G_PLAYER)), (0x1c924, Players), (0x1c92a, PlayerParts),
-    (0x1c930, Objs(&dispatch::PSHL)), (0x1c936, Objs(&dispatch::PEFF)),
-    (0x1c942, Gauge(G_ENEMY)), (0x1c948, Objs(&dispatch::BOSS)), (0x1c94e, Objs(&dispatch::ENEMY)),
-    (0x1c954, Objs(&dispatch::ESHL)),
-    (0x1c960, Gauge(G_SCENERY)), (0x1c966, Objs(&dispatch::SET)), (0x1c96c, Objs(&dispatch::BOX)),
-    (0x1c972, Objs(&dispatch::ITEM)), (0x1c978, Cameras),
-    (0x1c97e, Objs(&dispatch::SOBJ)),
-];
-
-/// Scenes 0x45 to 0x52 (0x1c984): neither players nor enemies.
-const ORDER_REDUCED: Order = &[
-    (0x1c98a, Gauge(G_ENEMY)), (0x1c990, Objs(&dispatch::EFFCT)), (0x1c996, Objs(&dispatch::SET)),
-    (0x1c99c, Cameras), (0x1c9a2, Objs(&dispatch::PEFF)),
-    (0x1c9a8, Objs(&dispatch::SOBJ)),
-];
-
-/// Scene 8 (0x1c9ae): like the normal order, but the effects come after the cameras.
-const ORDER_SCENE_8: Order = &[
-    (0x1c9b4, Gauge(G_PLAYER)), (0x1c9ba, Players), (0x1c9c0, PlayerParts),
-    (0x1c9c6, Objs(&dispatch::PSHL)), (0x1c9cc, Objs(&dispatch::PEFF)),
-    (0x1c9d8, Gauge(G_ENEMY)), (0x1c9de, Objs(&dispatch::BOSS)), (0x1c9e4, Objs(&dispatch::ENEMY)),
-    (0x1c9ea, Objs(&dispatch::ESHL)),
-    (0x1c9f6, Gauge(G_SCENERY)), (0x1c9fc, Objs(&dispatch::SET)), (0x1ca02, Objs(&dispatch::BOX)),
-    (0x1ca08, Objs(&dispatch::ITEM)), (0x1ca0e, Cameras), (0x1ca14, Objs(&dispatch::EFFCT)),
-    (0x1ca1a, Objs(&dispatch::SOBJ)),
-];
-
-/// Update order according to the cutscene and the scene (signed comparisons on a byte).
-fn world_order(b: &mut World) -> Order {
-    let scene = rd8(b, A5 + ram::SCENE) as i8;
-    if rd8(b, A5 + ram::CINEMATIC) != 0 {
-        ORDER_CINEMATIC
-    } else if scene >= 0x53 {
-        ORDER_NORMAL
-    } else if scene >= 0x45 {
-        ORDER_REDUCED
-    } else if scene == 8 {
-        ORDER_SCENE_8
-    } else {
-        ORDER_NORMAL
-    }
-}
-
-/// Updates all the objects: players, then the ten classes in the scene's order. `Flow::Yield`: an object
-/// handler made the task cede control; it will resume at the step [`Step::World`], then at the continuation that the
-/// caller stored in its pending calls before the call.
-pub fn update_world(b: &mut World) -> Flow {
-    let order = world_order(b);
-    let order_index = ORDERS.iter().position(|&o| std::ptr::eq(o, order)).expect("update order") as u8;
-    run_steps(b, order_index, 0)
-}
-
-/// The steps `from..` of the order `ORDERS[order_index]`.
-fn run_steps(b: &mut World, order_index: u8, from: usize) -> Flow {
-    let order = ORDERS[order_index as usize];
-    for (i, &(_, step)) in order.iter().enumerate().skip(from) {
-        match step {
-            Gauge(marker) => crate::services::video::gauge_in_world(b, marker),
-            // 0x35292
-            Players => update_players(b),
-            // 0x392e4: sub-objects of the players (front and back weapons)
-            PlayerParts => update_player_parts(b),
-            // last call: a `jmp`, the dispatch loop returns directly to the caller
-            Objs(class) if i + 1 == order.len() => return class.update(b),
-            Objs(class) => {
-                table::call(b, Step::World { order_index, step: i as u8 });
-                if class.update(b) == Flow::Yield {
-                    return Flow::Yield;
-                }
-                table::pop_return(b);
-            }
-            // 0x33e20. Original glitch: the D4 of the scenery copy is reread by a following handler
-            // (boss13_dragon, frame 7241): the leftover D4 of the game; the original's A0 (camera 2) is not
-            Cameras => crate::services::scroll::update_cameras_in_game(b),
-        }
-    }
-    Flow::Done
-}
-
-/// The players' code `f` (`player::Ctx`), with the leftovers D2-D5 of the game, which it reads and writes by name.
-fn with_players(b: &mut World, f: fn(&mut crate::actors::player::Ctx)) {
-    let leftovers = b.leftovers;
-    let mut g = crate::actors::player::Ctx { leftovers, ..crate::actors::player::Ctx::new(b) };
-    f(&mut g);
-    let leftovers = g.leftovers;
-    b.leftovers = leftovers;
-}
-
-/// 0x35292: the players.
-pub fn update_players(b: &mut World) {
-    with_players(b, crate::actors::player::update::update_all);
-}
-
-/// 0x392e4: sub-objects of the players (front and back weapons).
-pub fn update_player_parts(b: &mut World) {
-    with_players(b, crate::actors::player::overlays::update);
-}
-
-/// 0x260ee: the frame's collisions (`combat`), with the leftovers D2-D5 of the game.
-pub fn update_combat(b: &mut World) {
-    let leftovers = b.leftovers;
-    let mut w = crate::actors::combat::Combat { b, a2: 0, leftovers };
-    crate::actors::combat::combat_update(&mut w);
-    let leftovers = w.leftovers;
-    b.leftovers = leftovers;
-}
-
-/// Length of an absolute `jsr`: the return address is that of the call site + 6.
-const JSR: u32 = 6;
-
-/// The four update orders.
-const ORDERS: [Order; 4] = [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_SCENE_8];
-
-/// Resumptions of the game loop when an object handler made the task cede control.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Return from the dispatch of an object class, step `step` of the order `ORDERS[order_index]`: the world
-    /// update continues at the next step, then returns to its caller.
-    World { order_index: u8, step: u8 },
-    /// Return of the world update in phase 12 (`0x1c702`): end of the phase.
-    AfterWorld,
-}
-
-impl Step {
-    /// Address that the original resumes at: the one following the call (`jsr`).
-    pub const fn address(self) -> u32 {
-        match self {
-            Step::World { order_index, step } => ORDERS[order_index as usize][step as usize].0 + JSR,
-            Step::AfterWorld => WORLD_RETURN,
-        }
-    }
-
-    pub fn step(self, x: &mut crate::screens::scene::Ctx) -> Flow {
-        match self {
-            Step::World { order_index, step } => run_steps(x.b, order_index, step as usize + 1),
-            Step::AfterWorld => {
-                phase12_after_world(x.b);
-                Flow::Done
-            }
-        }
-    }
-}
-
-/// World update called by address (tools): a handler never cedes control there.
-pub const WORLD_UPDATE: Native = Native {
-    entry: 0x1c86e,
-    name: "world_update",
-    run: crate::Body::Memory(|b| {
-        update_world(b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 
 // ---------------------------------------------------------------------------------------------
 // End of frame (0x1c4c4)
@@ -263,7 +69,7 @@ const CLEARED_B: u32 = 0xff_19f0; // A5 - 0x6610
 
 /// Players' interface task created at the end of the phase.
 const PLAYER_UI_SLOT: u32 = 0x30;
-const PLAYER_UI_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Interface;
+const PLAYER_UI_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Interface;
 
 /// `A5` bytes reset to zero on exit: flag and score.
 const EXIT_CLEARED_BYTES: [u32; 2] = [0x37, 0x5d];
@@ -362,7 +168,7 @@ fn leave(b: &mut World) {
     wr16(b, A5 + ram::TIMER + 2, 0);
     wr8(b, A5 + EXIT_CLEARED_BYTES[1], 0);
     crate::actors::families::items::clear_picked_up(b);
-    crate::core::kernel::create_task(b, PLAYER_UI_SLOT, PLAYER_UI_TASK);
+    crate::world::tasks::traps::create_task(b, PLAYER_UI_SLOT, PLAYER_UI_TASK);
 }
 
 /// Phase 0: one step per frame. The step (`A5+0x2d`: 0, 4, 8, 12, 16) chooses what follows.
@@ -398,16 +204,6 @@ pub const PHASE_0: Native = Native {
 const CLOCK: u32 = 0x38;
 /// Game frame counter (word, capped at 0xffff).
 const GAME_FRAMES: u32 = 0x54;
-/// Buttons pressed this frame (+1) and the previous one (+7), for the debug level skip.
-const BUTTONS_NOW: u32 = 0x01;
-const BUTTONS_BEFORE: u32 = 0x07;
-/// Words reset to zero by a level skip (status of each player and of its weapons).
-const PLAYER_RESET: [u32; 8] = [0x5e2, 0x7e2, 0x9e2, 0xbe2, 0x602, 0x802, 0xa02, 0xc02];
-/// Last scene number.
-const LAST_SCENE: i8 = 0x6c;
-/// Level skip buttons: next scene, previous scene.
-const BUTTONS_NEXT: u8 = 0x90;
-const BUTTONS_PREVIOUS: u8 = 0x60;
 
 
 /// Removes a frame from the clock (frames, seconds, minutes in cascade, from 59 to 00): the cascade
@@ -428,27 +224,6 @@ fn tick_clock(b: &mut World, mut borrow: bool) {
             wr16(b, A5 + CLOCK + 2, 0);
         }
     }
-}
-
-/// Debug level skip: players reset to zero, return to phase 8 (scene entry).
-fn change_scene(b: &mut World, forward: bool) {
-    for offset in PLAYER_RESET {
-        wr16(b, A5 + offset, 0);
-        wr16(b, A5 + offset + 2, 0);
-    }
-    wr8(b, A5 + 0x50, 0);
-    let scene = rd8(b, A5 + ram::SCENE);
-    let scene = if forward {
-        let next = scene.wrapping_add(1);
-        if next as i8 <= LAST_SCENE { next } else { 1 }
-    } else {
-        let previous = scene.wrapping_sub(1);
-        if previous as i8 > 0 { previous } else { LAST_SCENE as u8 }
-    };
-    wr8(b, A5 + ram::SCENE, scene);
-    wr8(b, A5 + ram::PHASE, 8);
-    wr8(b, A5 + ram::STEP, 0);
-    wr16(b, A5 + ram::SUBSTEP, 0);
 }
 
 /// Phase 12: one game frame. `Flow::Yield`: an object handler made the task cede control (it
@@ -479,45 +254,33 @@ pub fn phase12(b: &mut World) -> Flow {
 }
 
 /// Return of the world update in phase 12 (`jsr 0x1c86e` at 0x1c6fc).
-const WORLD_RETURN: u32 = 0x1c6fc + JSR;
+const WORLD_RETURN: u32 = 0x1c6fc + update::JSR;
+
+impl Step {
+    /// Address that the original resumes at: the one following the call (`jsr`).
+    pub fn address(self) -> u32 {
+        match self {
+            Step::World { order_index, step } => update::resume_address(order_index, step),
+            Step::AfterWorld => WORLD_RETURN,
+        }
+    }
+
+    pub fn step(self, x: &mut crate::world::tasks::Ctx) -> Flow {
+        match self {
+            Step::World { order_index, step } => update::run_steps(x.b, order_index, step as usize + 1),
+            Step::AfterWorld => {
+                phase12_after_world(x.b);
+                Flow::Done
+            }
+        }
+    }
+}
+
 
 /// End of phase 12, after the world update: [`after_world`], then the debug level skip.
 fn phase12_after_world(b: &mut World) {
-    after_world(b);
-    debug_scene_skip(b);
-}
-
-/// After the world update (game phase 12 `0x1c702` and demo `0x1fa4a`): sprites, collisions,
-/// pop-ups, spawn script, rank, game over; each preceded by its charge gauge.
-pub fn after_world(b: &mut World) {
-    crate::services::video::gauge_in_world(b, 0x54_0000);
-    // 0x1de96. Original glitch: D4 (attributes of the last piece) reread later (DDSOM_POISON=call_1de96:
-    // long_28_scenes, frame 10431), see `sprites::build`: the leftover D4 of the game
-    crate::services::sprites::build_in_game(b);
-    crate::services::video::gauge_in_world(b, 0x48_0002);
-    // 0x260ee
-    update_combat(b);
-    crate::services::video::gauge_in_world(b, 0x4f_001e);
-    // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
-    crate::services::popups::animate_obj(b);
-    crate::screens::scene::script::step(b);
-    // 0x1f27c
-    crate::world::objects::rank::tick(b);
-    // 0x28d8
-    crate::actors::aids::game_over(b);
-}
-
-/// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production
-/// game (bit 15 of the ROM word `0xc0`, word 0 of `startup/header`, is zero).
-pub fn debug_scene_skip(b: &mut World) {
-    if crate::world::tables::engine_table!("startup/header").at16(b, 0) & 0x8000 != 0 {
-        let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
-        if pressed & BUTTONS_NEXT == BUTTONS_NEXT {
-            change_scene(b, true);
-        } else if pressed & BUTTONS_PREVIOUS == BUTTONS_PREVIOUS {
-            change_scene(b, false);
-        }
-    }
+    crate::screens::scene::after_world(b);
+    crate::screens::scene::debug_scene_skip(b);
 }
 
 pub const PHASE_12: Native = Native {
@@ -531,33 +294,4 @@ pub const PHASE_12: Native = Native {
 };
 
 /// Native routines of the game loop.
-pub const NATIVES: &[Native] = &[WORLD_UPDATE, PHASE_0, PHASE_12];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Each class is updated only once per frame, in all the complete orders.
-    #[test]
-    fn full_orders_without_duplicates() {
-        for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_SCENE_8] {
-            let mut entries: Vec<u32> =
-                order.iter().filter_map(|(_, s)| if let Objs(class) = s { Some(class.entry) } else { None }).collect();
-            entries.sort();
-            entries.dedup();
-            assert_eq!(entries.len(), 10);
-        }
-    }
-
-    /// The call sites follow one another: a `jsr` (6 bytes), or a `move.l #,D1` (6 bytes) then the
-    /// `jsr` of the gauge.
-    #[test]
-    fn increasing_sites() {
-        for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_SCENE_8] {
-            for w in order.windows(2) {
-                let gap = w[1].0 - w[0].0;
-                assert!(gap == JSR || gap == 2 * JSR && matches!(w[1].1, Gauge(_)), "{:x}", w[1].0);
-            }
-        }
-    }
-}
+pub const NATIVES: &[Native] = &[PHASE_0, PHASE_12];

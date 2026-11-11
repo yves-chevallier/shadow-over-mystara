@@ -4,8 +4,8 @@
 
 use crate::screens::scene::bonus::*;
 use crate::Native;
-use crate::screens::scene::Ctx;
-use crate::screens::modes::Flow;
+use crate::world::tasks::Ctx;
+use crate::world::tasks::Flow;
 
 /// Original entry (sequences still in 68000).
 pub(crate) const BONUS: Native = Native {

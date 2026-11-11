@@ -55,9 +55,9 @@ pub(crate) mod ram {
 /// The four coin slot records (16 bytes, `A5+0x44e`).
 pub const COIN_SLOTS: Table = Table { base: 0xff_844e, step: 0x10, count: 4 };
 
-/// A coin slot record (see the module), designated by its address (A0 or A1 of the original).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CoinSlot(pub u32);
+/// A coin slot record (see the module), designated by its address (A0 or A1 of the original); declared with the
+/// stages of the credits task, which keep one.
+pub use crate::world::tasks::stages::CoinSlot;
 
 impl CoinSlot {
     /// Record `k` (0 to 3).

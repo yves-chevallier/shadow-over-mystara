@@ -36,7 +36,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                         x.anim_step();
                     } else {
                         x.set16(Obj::Z, 0);
-                        crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 40);
+                        crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 40);
                         x.add8(Base::SUB_STATE, 2);
                         x.set8(Base::BOX_SET, 7);
                         x.set8(Shot::ATTACK_ID, 0x1c);

@@ -18,9 +18,10 @@ use crate::world::objects::player::Player;
 use crate::screens::obj;
 use crate::world::screen_tables as tables;
 use crate::screens::vars as sv;
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::Native;
 use crate::world::objects::{pools, Obj};
+pub use crate::world::tasks::stages::Shop as Step;
 
 /// Scene exit block: the original's A0, set by the dispatch and kept across the yields.
 const EXIT_BLOCK: u32 = super::screen::blocks::EXIT;
@@ -138,16 +139,12 @@ fn open(x: &mut Ctx) -> Flow {
     x.set_v8(0x42, 2);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    x.subroutine(crate::core::tasks::fading::descent, Step::OpenFaded)
+    x.subroutine(crate::services::fading::descent, Step::OpenFaded)
 }
 
 crate::steps! {
-    /// Steps (resume points) of the shop, and the portrait task.
-    pub enum Step {
-        /// Entry of the portrait task.
+    impl Step {
         Portraits = PORTRAITS_TASK.0 => portraits,
-        /// Opening: shop number, portrait task, music, shop and player objects, then the
-        /// shop scene (69 + number) is loaded and its spawn script restarted.
         OpenFaded = 0xf7960 => |x| {
             crate::world::objects::lists::unlink_all(x.b);
             for pool in crate::world::objects::pools::POOLS {
@@ -156,7 +153,7 @@ crate::steps! {
             let scene = x.v8(0x34) as u32;
             let shop = rom::SHOP_OF_SCENE.byte(x.b, scene);
             set_b8(x, f::SHOP, shop);
-            crate::core::kernel::create_task(x.b, 192, crate::core::tasks::Task::Portraits);
+            crate::world::tasks::traps::create_task(x.b, 192, crate::world::tasks::Task::Portraits);
             x.set_v8(0x4e, (scene == 5) as u8);
             if b8(x, f::REOPENED) == 0 {
                 set_b8(x, f::RETURN_SCENE, scene as u8);
@@ -205,7 +202,7 @@ crate::steps! {
             crate::services::palette::no_brightness(x.b);
             // 0x33aa6 (D7 and A0 kept): cameras at start and updated (D4 re-read: `update_cameras_in_game`)
             crate::services::scroll::cameras_start(x.b);
-            crate::services::scroll::update_cameras_in_game(x.b);
+            crate::actors::camera_modes::update_cameras_in_game(x.b);
             x.set_v16(0x14, 0);
             crate::services::video::turn_layers_on(x.b, 0x12c0);
             super::script::reset(x.b);
@@ -216,9 +213,8 @@ crate::steps! {
             crate::services::video::clear_objects(x.b);
             crate::world::objects::lists::unlink_all(x.b);
             x.set_v8(0x3d, 1);
-            crate::core::tasks::one_frame(x, Step::LeaveWaited)
+            crate::world::tasks::one_frame(x, Step::LeaveWaited)
         },
-        /// Return from the shop: layers cleared, next state of the sequence, return scene.
         LeaveWaited = 0xf7c96 => |x| {
             clear_layers(x);
             let s = EXIT_STEP.get(x.b).wrapping_add(4);
@@ -269,7 +265,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     crate::services::video::turn_layers_on(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    crate::core::kernel::create_task(x.b, 16, crate::screens::scene::fading::RISE);
+    crate::world::tasks::traps::create_task(x.b, 16, crate::screens::scene::fading::RISE);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {
@@ -365,13 +361,13 @@ fn leave(x: &mut Ctx) -> Flow {
     if chained == 0 {
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.subroutine(crate::core::tasks::fading::descent, Step::LeaveFaded);
+        return x.subroutine(crate::services::fading::descent, Step::LeaveFaded);
     }
     if b8(x, f::EXIT_SUB) == 0 {
         add_b8(x, f::EXIT_SUB, 2);
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.subroutine(crate::core::tasks::fading::descent, Step::ChainFaded);
+        return x.subroutine(crate::services::fading::descent, Step::ChainFaded);
     }
     // next shop: the block restarts from state 0
     x.and16(0x12, 0xfffe);
@@ -379,7 +375,7 @@ fn leave(x: &mut Ctx) -> Flow {
     crate::services::video::clear_objects(x.b);
     Obj(BLOCK).set_u32(x.b, f::STATE, 0);
     crate::world::objects::lists::unlink_all(x.b);
-    crate::core::tasks::one_frame(x, Step::ReopenWaited)
+    crate::world::tasks::one_frame(x, Step::ReopenWaited)
 }
 
 /// Portrait task (0xf7dfe): for each player in the game, its portrait (two columns) and the frame that follows it;
@@ -397,7 +393,7 @@ fn portraits(x: &mut Ctx) -> Flow {
         super::tiles::glyph(b, at, tile, attr);
         super::tiles::glyph(b, at + 0x100, 0x1b2, attr);
     }
-    crate::core::tasks::finish(x)
+    crate::world::tasks::finish(x)
 }
 
 pub const NATIVES: &[Native] = &[

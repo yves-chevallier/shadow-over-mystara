@@ -18,7 +18,7 @@ use crate::screens::obj;
 
 /// `0x1fbd6`: stores the three presentation parameters (`a1`: after the operation) and prepares the display.
 pub(super) fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
-    crate::core::tasks::prompt::stop(x.b);
+    crate::screens::prompt::stop(x.b);
     Obj(mode::BASE).set_u8(x.b, f::STEP, 6);
     Obj(mode::BASE).set_u16(x.b, f::TIMER, 0);
     let b = tables::byte(x.b, a1);
@@ -44,7 +44,7 @@ pub(super) fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
     crate::services::palette::load_palette_page(x.b, 3, 84);
     fading::PAGES.set(x.b, 12);
     crate::services::palette::full_brightness(x.b);
-    crate::core::tasks::wait_then_return(x, 1)
+    crate::world::tasks::wait_then_return(x, 1)
 }
 
 pub(super) fn presentation_step(x: &mut Ctx) -> Flow {
@@ -61,8 +61,8 @@ pub(super) fn presentation_step(x: &mut Ctx) -> Flow {
 
 /// `0x1fc68`: common end of each sub-state: terrain (SET, SOBJ) and sprites (`jmp 0x1de96`).
 pub(super) fn p_render(x: &mut Ctx) -> Flow {
-    crate::core::dispatch::SET.update_no_next(x.b);
-    crate::core::dispatch::SOBJ.update_no_next(x.b);
+    crate::actors::dispatch::SET.update_no_next(x.b);
+    crate::actors::dispatch::SOBJ.update_no_next(x.b);
     crate::services::sprites::build_in_game(x.b);
     Flow::Done
 }

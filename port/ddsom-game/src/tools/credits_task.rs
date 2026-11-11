@@ -3,8 +3,8 @@
 
 
 use crate::screens::credits_task::*;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Original subroutine rewritten in the body of the task, presented as a native for the differential fuzz
 /// (`examples/fuzz_couv`); the game does not call it by its address. If it cedes control, the trial is discarded

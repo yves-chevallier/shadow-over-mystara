@@ -88,7 +88,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 let v = x.u8(Obj::VARIANT) as u32;
                 let n = tables().shard66_land_anims.at8(x.b, v) as u32;
                 x.anim_start(ANIMS.0, n as u16);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 4);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 4);
                 crate::services::sound::play(x.b, SFX_LAND, x.o);
             }
             blink(x, false);

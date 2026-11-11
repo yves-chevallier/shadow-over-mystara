@@ -57,7 +57,7 @@ use m68k::Cpu;
 pub use registry::{all_natives, game_natives, is_native};
 use registry::lookup;
 
-use crate::{hw::mem, core::frame, regs, core::tasks, Body, Native};
+use crate::{hw::mem, core::frame, regs, world::tasks, Body, Native};
 
 /// Long of the program space (see `mem::prog16`): tables that the natives for the original code read in the ROM.
 pub(crate) fn prog32(b: &mut World, a: u32) -> u32 {
@@ -92,7 +92,7 @@ impl Native {
                 // called from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5) come from the
                 // registers and the leftovers return there; on a machine with a task table (the game's) they are also
                 // those of the world.
-                let mut a = crate::core::dispatch::Dispatch::from_cpu(c);
+                let mut a = crate::actors::dispatch::Dispatch::from_cpu(c);
                 if b.tasks.is_some() {
                     b.leftovers = a.leftovers;
                 }
@@ -421,7 +421,7 @@ fn call_at_site(c: &mut Cpu, b: &mut World, addr: u32, site: &'static std::panic
         // the game: the native runs immediately; its `rts` returns to an expected call of the task (no PC, no 68000
         // stack)
         let n = lookup(addr).unwrap_or_else(|| panic!("call of {addr:06x} ({site}): no native"));
-        frame::note(b, n);
+        crate::world::diag::note(b, n);
         let frame = tasks::table::open_call(b);
         execute(n, c, b, 0);
         if tasks::has_ceded() || !tasks::table::call_returned(b, frame) {
@@ -669,7 +669,7 @@ pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
     const TASKS: usize = 0x64 / 2; // FF0064: 16 tasks of 16 bytes, state in the high byte
     (0x932..0x960).contains(&c.pc)
         && b.ram[NEW_FRAME] >> 8 == 0
-        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || tasks::freeze::idle_wait_original(&b.ram))
+        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || crate::core::tasks::freeze::idle_wait_original(&b.ram))
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
@@ -873,9 +873,9 @@ const CHECK_STEPS: u32 = 1_000_000;
 /// the kernel, 0x900-0xb70) or whose Rust version ceded is not compared (`skipped`).
 pub(crate) fn check_handler(
     n: &'static Native,
-    handler: fn(&mut World, &mut crate::core::dispatch::Dispatch),
+    handler: fn(&mut World, &mut crate::actors::dispatch::Dispatch),
     b: &mut World,
-    a: &mut crate::core::dispatch::Dispatch,
+    a: &mut crate::actors::dispatch::Dispatch,
 ) {
     if !CHECK.load(Ordering::Relaxed) || !checked(n) {
         handler(b, a);

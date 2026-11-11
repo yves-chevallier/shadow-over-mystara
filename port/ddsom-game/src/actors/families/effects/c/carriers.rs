@@ -160,7 +160,7 @@ pub(super) fn attached_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             set_hidden(x, false);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0xc);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0xc);
             x.anim_step();
         }
         5 | 6 | 8..=11 => {

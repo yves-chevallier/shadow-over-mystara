@@ -14,7 +14,8 @@
 use crate::world::World;
 
 use crate::actors::families as f;
-use crate::screens::modes::Flow;
+pub use crate::world::tasks::stages::Dispatch as Step;
+use crate::world::tasks::{Ctx, Flow, Sequence};
 use crate::world::objects::pools::{self, Pool};
 use crate::world::objects::Obj;
 use crate::{Body, Native};
@@ -115,9 +116,9 @@ impl Class {
                 let kind = object.u8(b, Obj::KIND);
                 *last_kind = Some(kind);
                 let next = Step::Dispatch { class: self.index, object, counter };
-                let call = crate::core::tasks::table::call_expected(b, next);
+                let call = crate::world::tasks::table::call_expected(b, next);
                 run_handler(b, self.handler(kind), object, counter);
-                if !crate::core::tasks::table::returned(b, call) {
+                if !crate::world::tasks::table::returned(b, call) {
                     return Flow::Yield;
                 }
             }
@@ -138,14 +139,14 @@ fn run_handler(b: &mut World, handler: Handler, object: Obj, counter: u16) {
         Handler::Rust { run, native } => (run, native),
         Handler::Dead { entry } => unreachable!("handler {entry:06x}: dead type of the original table"),
     };
-    crate::core::frame::note(b, native);
+    crate::world::diag::note(b, native);
     let mut a = Dispatch { object, counter, leftovers: b.leftovers };
     #[cfg(feature = "tools")]
     crate::tools::check_handler(native, run, b, &mut a);
     #[cfg(not(feature = "tools"))]
     run(b, &mut a);
     b.leftovers = a.leftovers;
-    crate::core::tasks::return_to_caller(b);
+    Ctx::new(b).return_to_caller();
 }
 
 /// What the dispatch loop passes to a converted handler (`Body::Handler`), instead of the registers of the
@@ -162,16 +163,6 @@ pub struct Dispatch {
 
 pub use crate::world::Leftovers;
 
-/// Resumption of a dispatch loop in which a handler made the task cede control.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Return of the handler of the current slot of class `CLASSES[class]`: the walk continues at
-    /// the next slot, then returns to the loop's caller. The original keeps the object (A0) and the counter
-    /// (D7.w) in its registers, which the cession saves and restores; here they are in the step, noted at the call of
-    /// the handler (no handler that cedes control changes them).
-    Dispatch { class: u8, object: Obj, counter: u16 },
-}
-
 impl Step {
     /// Address that the original resumes at: the one following the loop's `jsr (A1)`.
     pub const fn address(self) -> u32 {
@@ -179,7 +170,7 @@ impl Step {
         CLASSES[class as usize].entry + HANDLER_RETURN
     }
 
-    pub fn step(self, x: &mut crate::screens::scene::Ctx) -> Flow {
+    pub fn step(self, x: &mut crate::world::tasks::Ctx) -> Flow {
         let Step::Dispatch { class, object, counter } = self;
         CLASSES[class as usize].sweep(x.b, object, counter, true, &mut None)
     }
@@ -188,9 +179,9 @@ impl Step {
 /// The object that the current dispatch loop of the current task is processing (the most recent of its pending
 /// calls [`Step::Dispatch`]): that of a handler that ceded control and resumes (fireworks).
 pub fn current_object(b: &mut World) -> Option<Obj> {
-    let frames = crate::core::tasks::table::table(b).frames();
+    let frames = crate::world::tasks::table::table(b).frames();
     frames.iter().filter_map(|frame| match frame.next {
-        crate::core::tasks::table::Next::Step(crate::core::tasks::Step::Dispatch(Step::Dispatch { object, .. })) => Some(object),
+        crate::world::tasks::table::Next::Step(crate::world::tasks::Step::Dispatch(Step::Dispatch { object, .. })) => Some(object),
         _ => None,
     }).last()
 }
@@ -198,9 +189,9 @@ pub fn current_object(b: &mut World) -> Option<Obj> {
 /// The pending dispatch loop call of the current task (the most recent [`Step::Dispatch`]): the object being processed
 /// and the loop counter.
 fn current_call(b: &mut World) -> Option<(Obj, u16)> {
-    let frames = crate::core::tasks::table::table(b).frames();
+    let frames = crate::world::tasks::table::table(b).frames();
     frames.iter().filter_map(|frame| match frame.next {
-        crate::core::tasks::table::Next::Step(crate::core::tasks::Step::Dispatch(Step::Dispatch { object, counter, .. })) => {
+        crate::world::tasks::table::Next::Step(crate::world::tasks::Step::Dispatch(Step::Dispatch { object, counter, .. })) => {
             Some((object, counter))
         }
         _ => None,

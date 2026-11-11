@@ -114,7 +114,7 @@ fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.set16(Obj::Z, 0);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 8);
             x.add8(Base::SUB_STATE, 2);
             shape(x);
             x.set16(TIMER, 12);

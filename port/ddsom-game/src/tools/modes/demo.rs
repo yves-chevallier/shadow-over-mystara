@@ -4,8 +4,8 @@
 
 use crate::screens::modes::demo::*;
 use crate::Native;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 pub(crate) const RECORDER_RESET: Native = Native {
     entry: 0xe0538,

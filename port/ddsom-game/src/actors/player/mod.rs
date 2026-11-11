@@ -218,7 +218,7 @@ pub mod ram {
     pub const FRAME_COUNTER: Byte = Byte::a5(0x6f);
     /// Game version (h): selects the series of predefined names of the score table.
     pub const VERSION: Byte = Byte::a5(0x71);
-    /// Pending palette fade (state of `tasks::fading`): pages, number of steps, delay.
+    /// Pending palette fade (state of `services::fading`): pages, number of steps, delay.
     pub const FADE_PAGES: Byte = Byte::a5(0x48e);
     pub const FADE_STEPS: Byte = Byte::a5(0x48f);
     pub const FADE_DELAY: Word = Word::a5(0x490);
@@ -261,7 +261,7 @@ impl<'a> Ctx<'a> {
 
     /// Runs `f` on the player that a native at an original address receives (`Body::Handler`: the player is the
     /// object, A0 of the original), the leftovers D2-D5 passing in and out like those of the dispatch loop.
-    pub fn on_player(b: &mut World, a: &mut crate::core::dispatch::Dispatch, f: impl FnOnce(&mut Ctx, Player)) {
+    pub fn on_player(b: &mut World, a: &mut crate::actors::dispatch::Dispatch, f: impl FnOnce(&mut Ctx, Player)) {
         let mut g = Ctx { b, jumped: Jumped::default(), leftovers: a.leftovers };
         f(&mut g, Player(a.object.0));
         a.leftovers = g.leftovers;

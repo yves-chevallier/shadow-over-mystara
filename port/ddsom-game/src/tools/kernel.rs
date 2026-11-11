@@ -4,11 +4,11 @@
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::core::kernel::*;
+use crate::world::tasks::traps::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::core::tasks::table::{slot, table};
-use crate::core::tasks::Task;
+use crate::world::tasks::table::{slot, table};
+use crate::world::tasks::Task;
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $body:expr) => {
@@ -38,7 +38,7 @@ fn envelope(c: &mut Cpu, b: &mut World, frames: Option<u8>) {
 
 /// The task of the game whose entry is `entry` (A0 of the original code that calls the wrappers), if any.
 pub fn task_at(entry: u32) -> Option<Task> {
-    use crate::core::tasks::fading::Fade;
+    use crate::world::tasks::stages::Fade;
     let fades = [
         Fade::Rise,
         Fade::RiseSteps,

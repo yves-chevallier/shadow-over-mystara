@@ -28,11 +28,12 @@ use crate::world::World;
 use super::fading;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
-use crate::core::dispatch;
+use crate::actors::dispatch;
 use crate::hw::mem::A5;
-use crate::screens::modes::Sequence as _;
+use crate::world::tasks::Sequence as _;
 use crate::world::objects::Obj;
-use crate::core::tasks::table::Next;
+use crate::world::tasks::table::Next;
+pub use crate::world::tasks::stages::Exit as Step;
 use crate::Native;
 use crate::world::objects::pools;
 
@@ -103,7 +104,7 @@ pub struct Ex<'a> {
 /// A0 on the block, and A0 survives the cessions; the black screen moves it (the last object unlinked from the lists,
 /// 0xf7f12), the shop puts it back on the block. The value is kept in the task table across the cessions.
 pub fn set_dispatch_a0(b: &mut World, a0: u32) {
-    crate::core::tasks::table::table(b).scene_exit_a0 = a0;
+    crate::world::tasks::table::table(b).scene_exit_a0 = a0;
 }
 
 /// The A0 that the world update leaves (end of the last dispatch loop: the one past the last SOBJ slot).
@@ -142,10 +143,10 @@ impl<'a> Ex<'a> {
     }
 
     /// Starts the fade task `task` (delay `delay`).
-    fn fade(&mut self, delay: u16, task: crate::core::tasks::Task) {
+    fn fade(&mut self, delay: u16, task: crate::world::tasks::Task) {
         fading::DELAY.set(self.x.b, delay);
         fading::PAGES.set(self.x.b, 15);
-        crate::core::kernel::create_task(self.x.b, 0x10, task);
+        crate::world::tasks::traps::create_task(self.x.b, 0x10, task);
     }
 
     /// Opens message `n` (0xc8312); its (16-bit) address goes to `+0x12`. Original glitch: the failure is not
@@ -233,9 +234,9 @@ impl<'a> Ex<'a> {
         // `jsr 0xa40` (or `jmp 0xa40` without its own resume: the task will resume after the current call)
         let resume_point = match resume {
             Some(resume) => resume.into(),
-            None => crate::core::tasks::table::pop_return(self.x.b),
+            None => crate::world::tasks::table::pop_return(self.x.b),
         };
-        crate::core::kernel::wait(self.x.b, frames, resume_point);
+        crate::world::tasks::traps::wait(self.x.b, frames, resume_point);
         self.handed_off = true;
     }
 }
@@ -445,7 +446,7 @@ fn run_sequence(ex: &mut Ex) {
 /// the resume will end up returning to the original dispatch; otherwise the end of frame compares byte `+2` of the
 /// block designated by A0, which the state may have changed.
 fn run_shared(ex: &mut Ex, shared: Shared) {
-    use crate::screens::modes::{Flow, Sequence};
+    use crate::world::tasks::{Flow, Sequence};
     let run: fn(&mut Ctx) -> Flow = match shared {
         Shared::Tally => super::tally::run,
         Shared::Bonus => super::bonus::run,
@@ -461,7 +462,7 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         return;
     }
     ex.x.drop_return();
-    ex.a0 = Some(crate::core::tasks::table::table(ex.x.b).scene_exit_a0);
+    ex.a0 = Some(crate::world::tasks::table::table(ex.x.b).scene_exit_a0);
 }
 
 /// A state jumps to the start of the original dispatch (`bra entry`) after changing step: the state of the
@@ -497,8 +498,8 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
     match update {
         Update::Reduced => {
-            crate::core::game::update_players(ex.x.b);
-            crate::core::game::update_player_parts(ex.x.b);
+            crate::actors::update::update_players(ex.x.b);
+            crate::actors::update::update_player_parts(ex.x.b);
             for class in CLASSES {
                 class.update_no_next(ex.x.b);
             }
@@ -507,7 +508,7 @@ fn run_update(ex: &mut Ex, update: Update) {
         _ => {
             ex.x.world();
             if update == Update::Full {
-                crate::core::game::update_combat(ex.x.b);
+                crate::actors::update::update_combat(ex.x.b);
             }
         }
     }
@@ -629,24 +630,6 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
 // ---------------------------------------------------------------------------------------------
 // Resumes
 
-/// Steps of the scene exit: dispatch tails of the sequences (return of a shared state that ceded control) and
-/// resumes after the yield of the final state.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Dispatch tail of the sequence of the given index (`entry + 10`).
-    DispatchTail(u8),
-    /// `0xf32cc`: `0xc0c` then `0xe0882`.
-    Both,
-    /// `0xf481a`: `0xc0c`.
-    Sound,
-    /// `0xf4b48`: `0xe0882`.
-    Command,
-    /// `0xf3cec`: `0xc0c`, then two waiting frames before `TwiceEnd`.
-    Twice,
-    /// `0xf3cfa`: `0xe0882`.
-    TwiceEnd,
-}
-
 /// Entries of the `jsr (A1)` dispatches, by sequence index (27 has its dispatch after a 10-byte test).
 const DISPATCHERS: [(u8, u32); 29] = [
     (1, 0xf32d8), (2, 0xf33fe), (3, 0xf3594), (4, 0xf3686), (5, 0xf3812), (7, 0xf39f4), (8, 0xf3b18),
@@ -677,7 +660,7 @@ impl Step {
         }
     }
 
-    pub fn step(self, x: &mut Ctx) -> crate::screens::modes::Flow {
+    pub fn step(self, x: &mut Ctx) -> crate::world::tasks::Flow {
         match self {
             Step::DispatchTail(index) => dispatch_tail(x, index),
             Step::Both => {
@@ -688,11 +671,11 @@ impl Step {
             Step::Command | Step::TwiceEnd => crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop),
             Step::Twice => {
                 crate::services::video::black_screen(x.b);
-                crate::core::kernel::wait(x.b, 2, Step::TwiceEnd);
-                return crate::screens::modes::Flow::Yield;
+                crate::world::tasks::traps::wait(x.b, 2, Step::TwiceEnd);
+                return crate::world::tasks::Flow::Yield;
             }
         }
-        crate::screens::modes::Flow::Done
+        crate::world::tasks::Flow::Done
     }
 }
 
@@ -700,7 +683,7 @@ impl Step {
 /// update), where the resumes after a yield return. A0 is the one the state left.
 fn dispatch_tail(x: &mut Ctx, index: u8) {
     let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("rewritten sequence") };
-    let a0 = crate::core::tasks::table::table(x.b).scene_exit_a0;
+    let a0 = crate::world::tasks::table::table(x.b).scene_exit_a0;
     let mut ex = Ex { x: Ctx::new(x.b), handed_off: false, entry: 0, dispatch_return: None, a0: Some(a0) };
     finish_frame(&mut ex, sequence);
 }

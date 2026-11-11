@@ -128,7 +128,7 @@ mod storm {
                 x.set_bit(Obj::FLAGS, 1, hidden);
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, Player::ACTION_TIMER);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, d0);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, d0);
                 crate::services::sound::play(x.b, SFX_RUMBLE, x.o);
             }
             4 => {
@@ -137,7 +137,7 @@ mod storm {
                 }
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, Player::ACTION_TIMER);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, d0);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, d0);
                 if x.u8(BOLTS) != 0 {
                     return;
                 }
@@ -153,7 +153,7 @@ mod storm {
                     x.add8(Shot::SUB_STATE, 4);
                     let owner = x.linked(f::OWNER);
                     let d0 = owner.u16(x.b, Player::ACTION_TIMER);
-                    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, d0);
+                    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, d0);
                     spawn_sparks(x);
                     shake_tail(x);
                 }

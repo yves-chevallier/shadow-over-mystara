@@ -643,7 +643,7 @@ fn describe(muts: &[Mutation]) -> String {
 /// reference machine has no Rust table): states, counts, stacks, entries, free stacks.
 fn table_from_original(b: &mut Cps2Bus) {
     use ddsom_game::hw::mem::{rd32, rd8};
-    use ddsom_game::core::tasks::table::{self, Slot, State, Resume};
+    use ddsom_game::world::tasks::table::{self, Slot, State, Resume};
     use ddsom_game::tools::kernel::task_at;
     let mut t = table::Table::default();
     for (k, e) in t.slots.iter_mut().enumerate() {
@@ -695,10 +695,10 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
     }
     // original kernel RAM: the native keeps the task table in Rust; compared separately
     if let Some(t) = b1.ext.as_deref().and_then(|e| e.as_any().downcast_ref::<ddsom_game::world::Parked>()).and_then(|p| p.tasks.as_ref()) {
-        diffs.extend(ddsom_game::core::tasks::table::gaps(t, &b2.ram, false));
+        diffs.extend(ddsom_game::core::kernel::gaps(t, &b2.ram, false));
     }
     for i in 0..0x800usize {
-        if ddsom_game::core::tasks::table::kernel_ram(2 * i as u32) {
+        if ddsom_game::world::tasks::table::kernel_ram(2 * i as u32) {
             b1.ram[i] = b2.ram[i];
         }
     }

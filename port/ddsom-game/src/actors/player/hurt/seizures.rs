@@ -17,7 +17,7 @@ pub(super) fn crash_landing(g: &mut Ctx, p: Player) {
     if altitude(g, p) > 0 {
         return;
     }
-    crate::services::camera_modes::start_shake(g.b, crate::services::camera_modes::shake::A, 10);
+    crate::actors::camera_modes::start_shake(g.b, crate::actors::camera_modes::shake::A, 10);
     p.set_u32(g, Obj::Z, 0);
     if ram::FROZEN.get(g.b) == 0 {
         let hp = p.u16(g, Player::HP).wrapping_sub(p.u8(g, Player::TIMER_6F) as u16);

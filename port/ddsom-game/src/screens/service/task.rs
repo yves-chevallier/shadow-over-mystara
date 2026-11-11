@@ -4,19 +4,16 @@
 //! each frame, the menu state handler (`service::handler`), followed by a wait frame. The
 //! exit (9. EXIT) replaces the task with the boot task.
 
-use crate::screens::modes::{Flow, Sequence};
-use crate::screens::scene::Ctx;
+use crate::world::tasks::{Flow, Sequence};
+use crate::world::tasks::Ctx;
 use crate::screens::service::{self, MENU, MENU_LONGS};
+pub use crate::world::tasks::stages::Service as Step;
 
 crate::steps! {
-    /// Stages of the task.
-    pub enum Step {
+    impl Step {
         Entry = 0x29162 => entry,
-        /// After the wait frame: one turn.
         Turn = 0x29190 => turn,
-        /// Return of the handler when it ceded control on the way: the wait frame.
         HandlerReturn = 0x2918a => wait,
-        /// Resume of the menu after the wait frame that follows the clearing of the screen (`service::show_menu`).
         MenuAfterClear = 0x291ec => service::menu_after_clear,
     }
 }
@@ -28,7 +25,7 @@ fn entry(x: &mut Ctx) -> Flow {
     for k in 0..MENU_LONGS {
         crate::hw::mem::wr32(x.b, MENU + 4 * k, 0);
     }
-    crate::core::kernel::kill_task(x.b, KILLED_SLOT as u32);
+    crate::world::tasks::traps::kill_task(x.b, KILLED_SLOT as u32);
     turn(x)
 }
 
@@ -47,5 +44,5 @@ fn turn(x: &mut Ctx) -> Flow {
 
 /// `0x2918a`: `jsr 0xb64`, then a new turn.
 fn wait(x: &mut Ctx) -> Flow {
-    crate::core::tasks::one_frame(x, Step::Turn)
+    crate::world::tasks::one_frame(x, Step::Turn)
 }

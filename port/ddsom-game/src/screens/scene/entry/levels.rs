@@ -272,7 +272,7 @@ pub(super) fn scene_11(x: &mut Ctx) {
                 x.set_v16(0x4ba, 0x100);
                 Word(TIMER).set(x.b, 12);
                 crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_WHITE_VALUE);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 60);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 60);
             }
         }
         12 => {

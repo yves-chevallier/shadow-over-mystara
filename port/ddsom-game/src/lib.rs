@@ -67,7 +67,7 @@ pub enum Body {
     Memory(fn(&mut World)),
     /// Object handler without registers: it receives what the dispatch loop passes it (the object, the counter,
     /// the leftovers that the handlers pass to each other: `dispatch::Dispatch`); the return is done for it.
-    Handler(fn(&mut World, &mut crate::core::dispatch::Dispatch)),
+    Handler(fn(&mut World, &mut crate::actors::dispatch::Dispatch)),
 }
 
 impl Native {

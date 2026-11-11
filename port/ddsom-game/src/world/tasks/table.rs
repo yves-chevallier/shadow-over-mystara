@@ -5,15 +5,15 @@
 //! the original's state and wait count, the 68000 stack given to the task and what is needed to resume it:
 //! its entry as long as it has not run (the [`Task`], which starts at its first stage), then the Rust stage where it
 //! will resume (what it re-reads on resuming is in the fields of the stage, no longer in saved registers), and its
-//! calls in progress ([`Frame`]). The table also keeps where the processor is (`kernel::Point`).
+//! calls in progress ([`Frame`]). The table also keeps where the processor is (`traps::Point`).
 //!
 //! The table belongs to the world (`World::tasks`): the game machine no longer writes FF0052-FF01A5 (scheduler
 //! stack, current task, stack heap, records), and the cession wrappers no longer save the
-//! registers on the task's stack. [`gaps`] compares the table with that of the RAM of a reference machine.
+//! registers on the task's stack. `kernel::gaps` compares the table with that of the RAM of a reference machine.
 //!
 //! A task always resumes at a stage ([`Step`], `Resume::Step`) and its calls in progress continue at stages
 //! ([`Next::Step`]): the scheduler calls its step without setting a PC. The original address of the stage
-//! (`Step::address`) is now only used for diagnostics, and for the registers the original leaves there (foreign
+//! (`address`, in the stage's module) is now only used for diagnostics, and for the registers the original leaves there (foreign
 //! epilogue of the
 //! bubbles). A continuation designated by an address ([`Next::Address`]) is now just a return of the 68000 stack: that
 //! of a call by address (`crate::call`, sentinel) or of a diagnostic tool that calls a native.
@@ -89,7 +89,7 @@ pub enum Resume {
     /// restores them; the probe `DDSOM_POISON=resume` (`diag::probe_launch`, all registers and flags inverted on
     /// resuming, 296 scenarios) shows that only a few are re-read, and they are named fields of the stages that
     /// re-read them (see `tasks::resume_step`). The restored SR is always that of user mode, interrupts
-    /// allowed: no task cedes while masking them (`kernel::cede`).
+    /// allowed: no task cedes while masking them (`traps::wait`).
     Step(Step),
     /// Tools: a slot of a table rebuilt from the reference's FF0064 table (`fuzz_couv`) whose entry or PC is not
     /// the entry of a task of the game.
@@ -102,16 +102,6 @@ pub enum Resume {
 pub enum Next {
     Address(u32),
     Step(Step),
-}
-
-impl Next {
-    /// Original address (the one the original pushes).
-    pub fn address(self) -> u32 {
-        match self {
-            Next::Address(a) => a,
-            Next::Step(e) => e.address(),
-        }
-    }
 }
 
 impl From<Step> for Next {
@@ -232,13 +222,13 @@ pub struct Table {
     /// Free stacks: the last is the next one given (the FF005A heap of the original, filled by `boot_init`).
     pub stacks: Vec<u32>,
     /// Where the processor is (boot or scheduler point, or task in progress).
-    pub point: crate::core::kernel::Point,
-    /// Slot that the scheduler examines (`kernel::Point::Exam`; the original's A0 = its record, D0.w = slots left).
+    pub point: super::traps::Point,
+    /// Slot that the scheduler examines (`Point::Exam`; the original's A0 = its record, D0.w = slots left).
     pub exam: usize,
-    /// Interrupt mask (level of the original's SR): see `kernel::interrupt_mask`.
+    /// Interrupt mask (level of the original's SR): see `traps::interrupt_mask`.
     pub interrupt_mask: u8,
     /// During the VBLANK interrupt (`Point::Interruption`): the point where the processor will return.
-    pub interrupted: Option<crate::core::kernel::Point>,
+    pub interrupted: Option<super::traps::Point>,
     /// Number of the next expected call, and last expected call returned (see [`call_expected`]).
     next_call: u32,
     returned: Option<u32>,
@@ -525,109 +515,10 @@ pub fn pop_calls(b: &mut World, n: usize) -> Vec<Next> {
 /// Bytes of the original kernel RAM (offset from FF0000) that the game no longer holds in RAM: scheduler
 /// stack, current task and top of the heap (FF0052-FF005D), records (FF0064-FF0163), stack heap
 /// (FF0166-FF01A5), task stacks (FF01A6-FF0DA5) and supervisor stack (up to FF0E65). The tools that compare the
-/// game RAM with that of the original ignore them and compare the table with [`gaps`]. FF0E66 and beyond are
+/// game RAM with that of the original ignore them and compare the table with `kernel::gaps`. FF0E66 and beyond are
 /// game variables (relative to A5: `placement::LAST_X`...), compared like the rest of the RAM.
 pub fn kernel_ram(offset: u32) -> bool {
     (0x52..0x5e).contains(&offset) || (0x64..0x164).contains(&offset) || (0x166..0xe66).contains(&offset)
-}
-
-// ---------------------------------------------------------------------------------------------
-// Differential test: Rust table against the FF0064 table of an original machine
-
-/// Fields of a record of the original.
-mod field {
-    pub const STATE: u32 = 0;
-    pub const COUNT: u32 = 1;
-    pub const PC: u32 = 4;
-    pub const USP: u32 = 8;
-    pub const STACK: u32 = 0xc;
-}
-
-/// Resumes of the original's cession wrappers (`0xa40`/`0xb64`, `0xa86`): they restore the 15 registers
-/// saved on the task's stack then return (`rts`) to the resume address.
-const ORIGINAL_RESUMES: [u32; 2] = [0xa4c, 0xa8c];
-/// Stack heap of the original: top (FF005A) and bottom.
-const HEAP: u32 = 0xff_005a;
-const HEAP_BOTTOM: u32 = 0xff_01a6;
-
-/// Slot of the main task (game, mode machine), which the freeze task counts down itself.
-const MAIN: usize = 0;
-
-/// The two states of the main task differ only by one frame counted down by the freeze task (fast forward).
-/// When the game works to the end of the frame (fast forward of a loaded scene), the frame end falls at a
-/// moment that depends on the duration of the routines, native or original: shortly before or after a pass of the
-/// freeze, or even
-/// in the middle (count decremented, state not yet "ready").
-fn one_gap_countdown(rust: (State, u8), original: (u8, u8)) -> bool {
-    let waits = State::Waiting.byte();
-    let next = |(state, count): (u8, u8)| match (state == waits, count.wrapping_sub(1)) {
-        (true, 0) => Some((State::Ready.byte(), 0)),
-        (true, remainder) => Some((waits, remainder)),
-        _ => None,
-    };
-    let rust = (rust.0.byte(), rust.1);
-    // "running" equals "ready"; "waiting" at zero is a freeze countdown interrupted between the count and the state
-    let normal = |(state, count): (u8, u8)| {
-        let ready = state == State::InProgress.byte() || state == waits && count == 0;
-        (if ready { State::Ready.byte() } else { state }, count)
-    };
-    let (rust, original) = (normal(rust), normal(original));
-    rust == original || next(rust) == Some(original) || next(original) == Some(rust)
-}
-
-/// Differences between the Rust table and the FF0064 table of the RAM `ram` (FF0000-FFFFFF) of an original machine,
-/// at the
-/// same frame: state ("ready" and "running" merged: the frame end may fall while a task runs
-/// in the original; for the main task, a one-frame gap counted down by the freeze is allowed, see
-/// [`one_gap_countdown`]), count, stack, entry of a new task, and stack heap. With `all`, the resume address
-/// of the tasks that ceded too (diagnostics): it may differ with no effect (a native sometimes resumes at an identical
-/// copy of the original resume code, `0xf32cc` for `0xf5902`).
-pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
-    let word = |a: u32| ram[(a as usize & 0xffff) / 2];
-    let byte = |a: u32| (word(a & !1) >> if a & 1 == 0 { 8 } else { 0 }) as u8;
-    let long = |a: u32| (word(a) as u32) << 16 | word(a + 2) as u32;
-    let mut gaps = Vec::new();
-    for (k, e) in t.slots.iter().enumerate() {
-        let r = record(k);
-        let state = byte(r + field::STATE);
-        let normal = |o: u8| if o == State::InProgress.byte() { State::Ready.byte() } else { o };
-        let mut gap = |what: &str, rust: u32, original: u32| {
-            if rust != original {
-                gaps.push(format!("task {k}: {what} {rust:x} instead of {original:x}"));
-            }
-        };
-        let count = byte(r + field::COUNT);
-        if !(k == MAIN && one_gap_countdown((e.state, e.count), (state, count))) {
-            gap("state", normal(e.state.byte()) as u32, normal(state) as u32);
-            gap("count", e.count as u32, count as u32);
-        }
-        if e.state == State::Free || state == State::Free.byte() {
-            continue;
-        }
-        gap("stack", e.stack, long(r + field::STACK));
-        let in_progress = e.state == State::InProgress || state == State::InProgress.byte();
-        match e.resume {
-            Resume::Entry(task) => gap("entry", task.address(), long(r + field::PC)),
-            #[cfg(feature = "tools")]
-            Resume::Address(address) => gap("entry", address, long(r + field::PC)),
-            // the stack of a running task has changed since its cession
-            Resume::Step(step) if all && !in_progress => {
-                let usp = long(r + field::USP);
-                if !ORIGINAL_RESUMES.contains(&long(r + field::PC)) {
-                    gap("resume (PC of the record)", step.address(), long(r + field::PC));
-                    continue;
-                }
-                gap("resume", step.address(), long(usp + 60));
-            }
-            Resume::Step(_) => {}
-        }
-    }
-    let top = if long(HEAP) == 0 { HEAP_BOTTOM } else { long(HEAP) };
-    let heap: Vec<u32> = (top..HEAP_BOTTOM).step_by(4).rev().map(long).collect();
-    if heap != t.stacks {
-        gaps.push(format!("stack heap {:x?} instead of {:x?}", t.stacks, heap));
-    }
-    gaps
 }
 
 #[cfg(test)]
@@ -665,17 +556,6 @@ mod tests {
         assert_eq!(t.ret(), Return::Render);
         assert_eq!(t.ret(), Return::Next(Next::Address(0x1341a)));
         assert_eq!(t.ret(), Return::Stack68000);
-    }
-
-    #[test]
-    fn a_frame_counted_down_by_freeze_is_allowed() {
-        assert!(one_gap_countdown((State::Waiting, 1), (4, 0)));
-        assert!(!one_gap_countdown((State::Waiting, 2), (8, 0)));
-        assert!(one_gap_countdown((State::Waiting, 2), (1, 3)));
-        assert!(one_gap_countdown((State::Ready, 0), (1, 1)));
-        assert!(!one_gap_countdown((State::Waiting, 3), (1, 1)));
-        assert!(one_gap_countdown((State::Waiting, 1), (1, 0)));
-        assert!(one_gap_countdown((State::Ready, 0), (1, 0)));
     }
 
     #[test]

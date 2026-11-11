@@ -17,17 +17,15 @@ pub mod ranking;
 pub mod select;
 pub mod title;
 
-use crate::world::World;
-
 use crate::world::objects::Obj;
 use crate::world::ram::Byte;
 
 /// Bytes set by the entry of the mode loop (`A5-0x7151`, `A5-0x7152`, h).
 const MODE_LOOP_FLAGS: Byte = Byte(0xff_0eaf);
 const MODE_LOOP_FLAGS_B: Byte = Byte(0xff_0eae);
-use crate::screens::scene::Ctx;
-use crate::core::tasks::table::Next;
+use crate::world::tasks::{Ctx, Flow, Sequence};
 use crate::Native;
+pub use crate::world::tasks::stages::Modes as Step;
 
 /// Mode machine state block (`A0` in the original) and its fields.
 pub mod mode {
@@ -48,66 +46,6 @@ pub mod mode {
 }
 
 
-/// Continuation of a handler: finished (it returns to what follows the current call) or not (it yielded to
-/// the scheduler, jumped to another native, or gave up: the task will continue elsewhere).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Flow {
-    Done,
-    Yield,
-}
-
-/// Yields and calls that may yield, seen from a screen sequence.
-pub trait Sequence {
-    /// Yields `frames` frames to the scheduler; the task will resume at `resume` (Rust step, or the address
-    /// following the original's `jsr 0xa40`). The sequence must return `Flow::Yield` immediately.
-    fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow;
-    /// Calls a Rust subroutine that may cede control (fade, black screen: `tasks::fading::descent`,
-    /// `video::black_screen::start`...): `resume` is stored in the current calls; if it returns without yielding,
-    /// it runs at once.
-    fn subroutine(&mut self, sp: impl FnOnce(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow;
-    /// `bsr`/`jsr` call whose continuation is a resume native: stored in the task's current calls
-    /// (`tasks::table::Frame`), it will resume when the callee returns.
-    fn push_return(&mut self, next: impl Into<Next>);
-    /// The callee returned without going through its `rts` (Rust function that returned `Flow::Done`): the
-    /// current call opened by `push_return` is abandoned.
-    fn drop_return(&mut self);
-    /// Work RAM words and bytes, by offset from A5.
-    fn or16(&mut self, off: u32, v: u16);
-    fn and16(&mut self, off: u32, v: u16);
-}
-
-/// Call of a native subroutine from a Rust step: its continuation is a current call of the task, not a pushed
-/// address.
-fn push(b: &mut World, next: impl Into<Next>) {
-    crate::core::tasks::table::call(b, next);
-}
-
-impl Sequence for Ctx<'_> {
-    fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow {
-        crate::core::tasks::cede(self, crate::core::tasks::Wait::Images(frames), resume)
-    }
-    fn push_return(&mut self, next: impl Into<Next>) {
-        push(self.b, next);
-    }
-    fn subroutine(&mut self, sp: impl FnOnce(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow {
-        push(self.b, resume);
-        if sp(self) == Flow::Done {
-            crate::core::tasks::return_to_caller(self.b);
-        }
-        Flow::Yield
-    }
-    fn drop_return(&mut self) {
-        crate::core::tasks::table::pop_return(self.b);
-    }
-    fn or16(&mut self, off: u32, v: u16) {
-        let w = self.v16(off) | v;
-        self.set_v16(off, w);
-    }
-    fn and16(&mut self, off: u32, v: u16) {
-        let w = self.v16(off) & v;
-        self.set_v16(off, w);
-    }
-}
 
 /// Access to the screens' state block (`mode::BASE`) and usual calls.
 pub trait Block {
@@ -139,7 +77,7 @@ impl Block for Ctx<'_> {
         self.set_m8(2, s);
     }
     fn render(&mut self) {
-        for class in [&crate::core::dispatch::SET, &crate::core::dispatch::EFFCT, &crate::core::dispatch::SOBJ] {
+        for class in [&crate::actors::dispatch::SET, &crate::actors::dispatch::EFFCT, &crate::actors::dispatch::SOBJ] {
             class.update_no_next(self.b);
         }
         crate::services::sprites::build_in_game(self.b);
@@ -150,13 +88,9 @@ impl Block for Ctx<'_> {
 // The loop
 
 crate::steps! {
-    /// Steps of the mode machine loop (`0x133fe`).
-    pub enum Step {
-        /// Loop entry (task 0 restarted after a game, or end of startup).
+    impl Step {
         Entry = 0x133fe => start,
-        /// The handler yielded: one yield frame, then a new turn.
         AfterHandler = 0x1341a => |x| x.wait(1, Step::AfterWait),
-        /// After the yield: a new turn.
         AfterWait = 0x13422 => turn,
     }
 }
@@ -164,7 +98,7 @@ crate::steps! {
 /// One turn: calls the mode handler, which returns to [`Step::AfterHandler`].
 fn turn(x: &mut Ctx) -> Flow {
     let m = mode::MODE.get(x.b);
-    push(x.b, Step::AfterHandler);
+    crate::world::tasks::table::call(x.b, Step::AfterHandler);
     match m {
         0 => init(x),
         2 => dispatch(x),

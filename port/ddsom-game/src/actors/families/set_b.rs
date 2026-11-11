@@ -80,7 +80,7 @@ mod ram {
 }
 
 /// Freezes the game and darkens the screen: `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` steps, palettes
-/// whitened (0x1686) then fade task 0x14de (`tasks/fading.rs`).
+/// whitened (0x1686) then fade task 0x14de (`services/fading.rs`).
 fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
     x.set_a5_u16(vars::FADE_DELAY, 1);
     x.set_a5_u8(vars::FADE_PAGES, 0xc);
@@ -90,13 +90,13 @@ fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
 }
 
 /// Fade-to-black task (steps of state `A5+0x48f`).
-const FADE_TO_BLACK_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::DescentSteps);
+const FADE_TO_BLACK_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::DescentSteps);
 /// Slot of the fade task (offset in the task table).
 const FADE_TASK_SLOT: u32 = 0x10;
 
 /// Creates the fade task `entry` (0x9b6, D0 = 0x10, A0 = the entry).
-fn start_fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::core::tasks::Task) {
-    crate::core::kernel::create_task(x.b, FADE_TASK_SLOT, task);
+fn start_fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::world::tasks::Task) {
+    crate::world::tasks::traps::create_task(x.b, FADE_TASK_SLOT, task);
 }
 
 // ---------------------------------------------------------------------------------------------

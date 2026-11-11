@@ -225,7 +225,7 @@ fn dive(g: &mut Ctx, p: Player) {
         let vx = if p.u8(g, Player::FACING) == 0 { -0x200i16 } else { 0x200 };
         p.set_u16(g, Obj::VX, vx as u16);
     }
-    crate::services::camera_modes::start_shake(g.b, crate::services::camera_modes::shake::A, 0x10);
+    crate::actors::camera_modes::start_shake(g.b, crate::actors::camera_modes::shake::A, 0x10);
     g.sound(rom::SOUND_BOUNCE, p);
 }
 
@@ -608,7 +608,7 @@ fn spin_drop(g: &mut Ctx, p: Player) {
             } else {
                 next_step(g, p);
                 animation::start_plain(g, p, 0x24);
-                crate::services::camera_modes::start_shake(g.b, crate::services::camera_modes::shake::A, 8);
+                crate::actors::camera_modes::start_shake(g.b, crate::actors::camera_modes::shake::A, 8);
             }
         }
         6 => {

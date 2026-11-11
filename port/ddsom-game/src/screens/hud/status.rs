@@ -7,8 +7,8 @@ use crate::world::World;
 
 use super::layer::{clear_cell, Brush, COLUMN};
 use super::{panel, slot, var, Slot};
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 use crate::world::objects::Obj;
 
 /// Status line variables (A5 - 0x70f5 and following) and of A5.

@@ -154,6 +154,11 @@ pub const GAME_OVER_DELAY: Word = Word(0xff2a3a);
 /// Switches word (DSW) read at VBLANK (`FF7FD0`): bit 0x200 no damage display, 0x400 charge gauge
 /// inactive, 0x800 collisions with the terrain.
 pub const DSW: Word = Word::a5(0x7fd0);
+/// State of the spawn script reader (`scene::script`, `A5-0x55cc`): 0 loads the scene's script, 2 reads, 4 moves to 6,
+/// 6 done. Reset by the scene changes (0xf2e56), also those of the scenery objects.
+pub const SPAWN_SCRIPT_STATE: Byte = Byte(0xff_2a34);
+/// [`SPAWN_SCRIPT_STATE`]: the reader loads the scene's script at its next frame.
+pub const SPAWN_SCRIPT_LOAD: u8 = 0;
 /// The four player records (0x200 bytes; fields: `player::Player`).
 pub const PLAYERS: Table = Table { base: A5 + 0x5de, step: 0x200, count: 4 };
 

@@ -13,12 +13,13 @@ use super::Ctx;
 use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
 use crate::hw::video::{Cell, Vram, SCROLL1, TEXT};
 use crate::world::ram::{Byte, Long};
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::world::ops::abcd;
 use crate::world::objects::Obj;
 use crate::Native;
 use crate::world::screen_tables as tables;
 use crate::screens::obj;
+pub use crate::world::tasks::stages::Tally as Step;
 
 /// Tally variables (work RAM, under A5).
 mod v {
@@ -200,21 +201,19 @@ fn start(x: &mut Ctx) -> Flow {
     // 0xf68c8: the fade task (A0 kept)
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 13);
-    crate::core::kernel::create_task(x.b, 16, fading::DESCENT_STEP);
+    crate::world::tasks::traps::create_task(x.b, 16, fading::DESCENT_STEP);
     x.push_return(Step::AfterFade);
     x.wait(1, Step::FadeWait)
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         FadeWait = 0xf6906 => |x| {
             if fading::PAGES.get(x.b) != 0 {
                 return x.wait(1, Step::FadeWait);
             }
             Flow::Done
         },
-        /// End of sub-state 0: the banner is drawn off-screen, then its first step.
         AfterFade = 0xf596e => |x| {
             banner(x);
             v::BANNER_AT.set(x.b, 48);

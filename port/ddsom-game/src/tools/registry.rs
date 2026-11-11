@@ -12,10 +12,10 @@ const MEMORY: &[Native] = &[
     services::sprites::RESET_LISTS,
     services::sound::SEND_TO_Z80,
     screens::credits::READ_COIN_SLOTS,
-    core::config::DEFAULTS,
-    core::config::VALIDATE,
-    core::config::VARIABLES,
-    core::config::INIT,
+    services::config::DEFAULTS,
+    services::config::VALIDATE,
+    services::config::VARIABLES,
+    services::config::INIT,
 ];
 
 /// Index of the native routines by entry address. A binary sieve avoids the search for the vast majority of blocks.
@@ -71,11 +71,12 @@ pub fn game_natives() -> impl Iterator<Item = &'static Native> {
         .chain(services::video::NATIVES)
         .chain(services::palette::NATIVES)
         .chain(services::scroll::NATIVES)
-        .chain(services::camera_modes::NATIVES)
+        .chain(actors::camera_modes::NATIVES)
         .chain(world::terrain::NATIVES)
         .chain(actors::families::NATIVES)
         .chain(actors::families::natives())
         .chain(core::game::NATIVES)
+        .chain(crate::actors::update::NATIVES)
         .chain(screens::scene::natives())
         .chain(screens::modes::natives())
         .chain(core::tasks::natives())
@@ -98,9 +99,9 @@ mod tests {
     /// Each handler of a dispatch table is a native of the game, at the address that the original table holds.
     #[test]
     fn dispatch_handlers_are_game_natives() {
-        for class in core::dispatch::CLASSES {
+        for class in actors::dispatch::CLASSES {
             for handler in class.handlers {
-                if let core::dispatch::Handler::Rust { native, .. } = handler {
+                if let actors::dispatch::Handler::Rust { native, .. } = handler {
                     assert!(game_natives().any(|n| n.entry == native.entry), "{:06x} ({})", native.entry, native.name);
                 }
             }

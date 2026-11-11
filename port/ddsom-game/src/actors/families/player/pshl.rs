@@ -573,7 +573,7 @@ mod burst {
         x.set8(FLASH_TIMER, 4);
         vars::SCROLL_Y_PLANE1.set(x.b, 0x100);
         crate::services::palette::set_flash_color(x.b, crate::services::palette::FLASH_COLOR_RED);
-        crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x20);
+        crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x20);
         x.anim(ANIMS.0, 1);
         crate::services::sound::play(x.b, SFX_FLAME, x.o);
         x.reinsert();

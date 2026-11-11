@@ -21,16 +21,18 @@
 
 use super::{Flow, Sequence};
 use crate::screens::scene::fading;
-use crate::core::dispatch;
+use crate::actors::dispatch;
 use crate::actors::families::effects_creators::{banner, element_d_interface};
 use crate::hw::video::{palette, SCROLL2, SCROLL3};
 use crate::world::objects::player::Player;
 use crate::world::ram::{Byte, Long, Word};
 use crate::world::screen_tables::Rom;
 use crate::world::objects::{pools, Obj};
-use crate::screens::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
+use crate::screens::scene::{PLAYERS, PLAYER_STRIDE};
+use crate::world::tasks::Ctx;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::Native;
+pub use crate::world::tasks::stages::Select as Step;
 
 /// Work RAM variables (absolute addresses).
 mod var {
@@ -271,8 +273,7 @@ fn objects_0(x: &mut Ctx) -> Flow {
     x.wait(2, Step::FadeStart)
 }
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         FadeStart = 0x1cc0c => |x| {
             fading::DELAY.set(x.b, 1);
             fading::PAGES.set(x.b, 0xf);
@@ -325,7 +326,7 @@ crate::steps! {
         Step8Show = 0x1d31c => |x| {
             let v = var::VIDEO.get(x.b) | 0xe;
             var::VIDEO.set(x.b, v);
-            crate::core::tasks::wait_then_return(x, 1)
+            crate::world::tasks::wait_then_return(x, 1)
         },
         StepEFaded = 0x1d498 => |x| {
             crate::world::objects::pools::SET.reset(x.b);
@@ -373,8 +374,8 @@ fn clear_layers(x: &mut Ctx) {
 }
 
 /// Creates the entry task `entry` in slot `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
-fn create_task(x: &mut Ctx, task: crate::core::tasks::Task, slot: u16) {
-    crate::core::kernel::create_task(x.b, slot as u32, task);
+fn create_task(x: &mut Ctx, task: crate::world::tasks::Task, slot: u16) {
+    crate::world::tasks::traps::create_task(x.b, slot as u32, task);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -659,7 +660,7 @@ fn step_6(x: &mut Ctx) -> Flow {
     crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0x1c });
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::Step6Faded)
+    x.subroutine(crate::services::fading::descent, Step::Step6Faded)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -792,7 +793,7 @@ fn step_e(x: &mut Ctx) -> Flow {
     var::SUB.set(x.b, 0);
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(|x| crate::core::tasks::fading::descent_steps(x, 8), Step::StepEFaded)
+    x.subroutine(|x| crate::services::fading::descent_steps(x, 8), Step::StepEFaded)
 }
 
 pub const NATIVES: &[Native] = &[

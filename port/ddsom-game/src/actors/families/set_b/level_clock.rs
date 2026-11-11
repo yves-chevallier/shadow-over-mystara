@@ -67,7 +67,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TICK, 0x50);
             speech(x, 0);
             x.set16(CUE, 0x28);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x28);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x28);
             crate::services::sound::play(x.b, ON, x.o);
         }
         2 => {
@@ -80,7 +80,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TICK, 0x3c);
             speech(x, 1);
             x.set16(CUE, 0x28);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x28);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x28);
         }
         4 => {
             countdown(x, 0x3c, 1);
@@ -90,7 +90,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(SetObj::SUBSTATE, 2);
             speech(x, 2);
             x.set16(CUE, 0x78);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x78);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, 0x78);
             crate::services::sound::play(x.b, ON, x.o);
         }
         6 => {

@@ -1,6 +1,6 @@
 //! TEST menu (M1, `docs/service.md`): the cabinet's service menu and its test screens.
 //!
-//! The menu task (`tasks/service.rs`) calls the handler of the current state every frame:
+//! The menu task (`service/task.rs`) calls the handler of the current state every frame:
 //! preparation (0), menu (2) or chosen screen (4). The state lives in the [`MENU`] record (FF1CF8,
 //! reset to zero when the task is created):
 //!
@@ -22,15 +22,16 @@ pub mod io_tests;
 pub mod memory;
 pub mod test_pattern;
 pub mod settings;
+pub mod task;
 
 use crate::hw::video::{regs, Cell, PALETTES};
 use crate::world::ram::Long;
 use crate::world::screen_tables::Rom;
 use crate::screens::block::Block;
-use crate::core::config;
+use crate::services::config;
 use crate::services::video::Layer;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Menu record (A5 - 0x6308), 0x60 bytes.
 pub const MENU: u32 = 0xff_1cf8;
@@ -89,7 +90,7 @@ pub mod key {
 }
 
 /// Entry of the startup task, which the menu task becomes again on leaving.
-const BOOT_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Startup;
+const BOOT_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Startup;
 
 /// Menu texts (descriptors in ROM).
 mod text {
@@ -292,7 +293,7 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
     for off in var::SCROLLS {
         x.set_v16(off, 0);
     }
-    crate::core::tasks::one_frame(x, crate::core::tasks::service::Step::MenuAfterClear)
+    crate::world::tasks::one_frame(x, crate::screens::service::task::Step::MenuAfterClear)
 }
 
 /// `0x291ec`: the menu, once the screen is cleared.
@@ -364,7 +365,7 @@ fn exit(x: &mut Ctx) -> Flow {
         x.set_v32(off, 0);
     }
     var::ACTIVE.set(x.b, 0);
-    crate::core::tasks::restart(x, BOOT_TASK)
+    crate::world::tasks::restart(x, BOOT_TASK)
 }
 
 /// `0x29a48`: held 1P start and fire 1: return to the menu.

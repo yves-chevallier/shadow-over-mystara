@@ -341,7 +341,7 @@ pub(super) fn bubble_reads<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: &Table,
 /// A1-A4 (those addresses): the task resumes in Rust, without registers.
 /// Original glitch: the rest of the frame (next objects, sprites, collisions, end of frame) is skipped.
 pub(super) fn foreign_epilogue<R>(ctx: &mut Cx<'_, R>) {
-    crate::core::tasks::table::pop_calls(ctx.b, 4);
+    crate::world::tasks::table::pop_calls(ctx.b, 4);
 }
 
 /// `0xaace8`: common continuation. For character 1 the original jumps into the epilogue of another routine (`movem.l

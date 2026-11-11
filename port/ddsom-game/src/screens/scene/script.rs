@@ -27,7 +27,7 @@ use crate::Native;
 use crate::world::ram::{Byte, Long};
 
 /// Reader state (byte) and cursor in the script (long).
-const STATE: Byte = Byte(0xff_2a34);
+const STATE: Byte = crate::world::ram::SPAWN_SCRIPT_STATE;
 const CURSOR: Long = Long(0xff_2a30);
 /// Script table (one long per scene, as data) and per-class allocators (words, program space).
 const SCRIPTS: Rom = Rom::at(0xf2f62);
@@ -39,7 +39,7 @@ const RANK: Byte = Byte::a5(0x7f93);
 const FIELD_42: u32 = 0x42;
 
 mod state {
-    pub const LOAD: u8 = 0;
+    pub const LOAD: u8 = crate::world::ram::SPAWN_SCRIPT_LOAD;
     pub const READ: u8 = 2;
     pub const ENDING: u8 = 4;
 }

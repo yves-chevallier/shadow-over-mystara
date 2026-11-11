@@ -455,3 +455,47 @@ pub const JOIN: &[Native] = &[
     join_entry!(0x3168, "player_join_refill_3", 2, Join::Refill),
     join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
 ];
+
+// ---------------------------------------------------------------------------------------------
+// Placement at scene entry (0x20de6)
+
+/// Players' entry position: 4 pairs (X, Y) of words per scene.
+pub const START_POSITIONS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2123c);
+/// One byte per player and per scene (`+0x2c` of the player).
+pub const START_STATES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2196c);
+/// Player field: rank of arrival in the scene.
+const ARRIVAL_RANK: u32 = 0x7d;
+
+/// 0x20de6: places each player in the game in front of the camera, from the scene tables (consumed in the order
+/// of the players in the game). Returns the number of players placed: the rank of the next one (D2, that the original
+/// leaves to its callers).
+pub fn place_players(b: &mut World) -> u8 {
+    use crate::world::objects::player::Player;
+    use crate::world::objects::Obj;
+    use crate::world::ram;
+    let scene = ram::SCENE.get(b) as u32;
+    let mut positions = scene << 4;
+    let mut states = scene << 2;
+    let (camera_x, camera_y) =
+        if ram::CAMERA_ALT_ACTIVE.get(b) != 0 { (ram::CAMERA_ALT_X, ram::CAMERA_ALT_Y) } else { (ram::CAMERA_X, ram::CAMERA_Y) };
+    let mut rank = 0u8;
+    for k in 0..4 {
+        let p = ram::PLAYERS.nth(k).0;
+        if Obj(p).u8(b, Player::ACTIVE) == 0 || Obj(p).u16(b, Player::HP) == 0 {
+            continue;
+        }
+        let (dx, dy) = (camera_x.get(b), camera_y.get(b));
+        let (px, py) = (START_POSITIONS.word(b, positions), START_POSITIONS.word(b, positions + 2));
+        positions += 4;
+        let p = Obj(p);
+        p.set_u16(b, Obj::X, px.wrapping_add(dx));
+        p.set_u16(b, Obj::Y, py.wrapping_add(dy));
+        p.set_z(b, 0);
+        let state = START_STATES.byte(b, states);
+        p.set_u8(b, Player::FACING, state);
+        states += 1;
+        p.set_u8(b, ARRIVAL_RANK, rank);
+        rank += 1;
+    }
+    rank
+}

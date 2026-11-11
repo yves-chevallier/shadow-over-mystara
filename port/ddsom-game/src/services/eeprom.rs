@@ -316,7 +316,7 @@ pub fn tester(b: &mut World) -> bool {
     if !PATTERNS.iter().all(|&m| test_pattern_word(b, m)) {
         return false;
     }
-    crate::core::config::validate(b);
+    crate::services::config::validate(b);
     all_eeprom(b);
     write_verify(b);
     true

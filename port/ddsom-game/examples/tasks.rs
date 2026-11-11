@@ -1,6 +1,7 @@
 //! Task table at a given frame, in the original machine (records FF0064) and in the game (Rust
 //! table), then their differences: tasks <roms> <eeprom> <scenario> <frame>
-use ddsom_game::core::tasks::table::{gaps, record, read, Resume};
+use ddsom_game::core::kernel::gaps;
+use ddsom_game::world::tasks::table::{record, read, Resume};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();

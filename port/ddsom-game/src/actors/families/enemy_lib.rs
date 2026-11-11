@@ -413,13 +413,13 @@ pub fn animation_of_mark<R: Bench>(x: &mut Cx<'_, R>, set: u32) {
 /// 0x2824, 0x2860, 0x289c: shake of the camera in service for `frames` frames, in mode 0x54, 0x58 or 0x5c
 /// (`camera_modes.rs`).
 pub fn shake_54<R: Bench>(x: &mut Cx<'_, R>, frames: u16) {
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, frames);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, frames);
 }
 pub fn shake_58<R: Bench>(x: &mut Cx<'_, R>, frames: u16) {
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, frames);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, frames);
 }
 pub fn shake_5c<R: Bench>(x: &mut Cx<'_, R>, frames: u16) {
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, frames);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, frames);
 }
 
 /// Walk points around the target: 0xe886 (the farthest, except the last), 0xe914 (reached: another one), 0xeff2 (the

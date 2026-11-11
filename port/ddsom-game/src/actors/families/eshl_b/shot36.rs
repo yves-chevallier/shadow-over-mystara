@@ -30,7 +30,7 @@ fn state<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(Base::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
                 crate::services::sound::play(x.b, SOUND_LAND, x.o);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x20);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x20);
                 ai_start(x, ANIMS.0, 1);
             }
             2 => {

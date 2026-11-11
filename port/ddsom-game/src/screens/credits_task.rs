@@ -22,7 +22,7 @@
 
 use crate::screens::credits_screen::{self, FIRST_COIN_SLOT};
 use crate::screens::scene::fading;
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::screens::credits::CoinSlot;
 use crate::hw::io::{IN2, IN2_SERVICE};
 use crate::hw::video::regs;
@@ -30,8 +30,9 @@ use crate::world::objects::player::Player;
 use crate::world::ram::{Long, PLAYERS};
 use crate::world::screen_tables::Rom;
 use crate::world::objects::{pools, Obj};
-use crate::screens::scene::Ctx;
-use crate::core::tasks;
+use crate::world::tasks::Ctx;
+pub use crate::world::tasks::stages::{Credits as Step, GameStart, Seq};
+use crate::world::tasks;
 use crate::services::video::{load_grid, Grid};
 
 /// Sounds of the credits screen.
@@ -42,8 +43,8 @@ mod sound {
 }
 
 /// The game task, and the TEST menu task (which the end of the teardown starts in slot 0).
-const GAME_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Game;
-const SERVICE_TASK: crate::core::tasks::Task = crate::core::tasks::Task::Service;
+const GAME_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Game;
+const SERVICE_TASK: crate::world::tasks::Task = crate::world::tasks::Task::Service;
 /// Texts displayed by the credits screen (addresses of pointers or strings in ROM).
 const TEXT_CREDITS: Rom = Rom::at(0x14ea2);
 const TEXT_TABLE: Rom = Rom::at(0x15060);
@@ -98,7 +99,7 @@ mod at {
 /// Kills the tasks at these offsets in the table (`0xa14`, D0 = offset).
 fn kill(x: &mut Ctx, slots: &[u16]) {
     for &s in slots {
-        crate::core::kernel::kill_task(x.b, s as u32);
+        crate::world::tasks::traps::kill_task(x.b, s as u32);
     }
 }
 
@@ -116,32 +117,6 @@ fn video_on(x: &mut Ctx) {
 
 // ---------------------------------------------------------------------------------------------
 // The task loop
-
-/// Steps of the task: its entry, and each return from a call that may cede control.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// `0x13c0a`.
-    Entry,
-    /// After `bsr 0x13c2c` (credits state), `0x1436e` (locks), and after the turn's cession.
-    AfterState,
-    AfterContinue,
-    AfterWait,
-    /// Teardown, after the screen is cleared.
-    ShutdownAfterClear,
-    /// First preparation of the screen, after the clearing.
-    AfterInitClear,
-    /// Return of the `k`-th start call of a sequence (the last of sequence B lands on `0x13fa8`, the end).
-    Sequence(Seq, usize),
-    /// Game resumption: after the fade to black, then after the clearing.
-    AfterFade,
-    AfterFadeClear,
-    /// Start of a player in "continue" mode, after the screen is cleared.
-    StartAfterClear(GameStart),
-    /// Lock pulse after its first cession.
-    PulseAfterWait,
-    /// Return of the pulse of coin slot `k - 1`: that of coin slot `k` (1 to 3).
-    Lock(usize),
-}
 
 impl Step {
     /// Address that the original resumes at in this step.
@@ -227,7 +202,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     crate::services::palette::load_all_palettes(x.b);
     crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
-    crate::core::kernel::create_task(x.b, 0, SERVICE_TASK);
+    crate::world::tasks::traps::create_task(x.b, 0, SERVICE_TASK);
     tasks::finish(x)
 }
 
@@ -268,7 +243,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     var::FLAGS.set(x.b, flags);
     var::CLEAR_FLAG.set(x.b, 0);
     var::SCREEN_FLAG.set(x.b, 1);
-    crate::core::tasks::game::clear_variables(x.b);
+    crate::screens::scene::clear_game_variables(x.b);
     crate::actors::player::init::clear_all_players(x.b);
     crate::services::sprites::clear_lists(x.b);
     regs::OBJECT_OUTPUT.set(x.b, OUTPUT_ON);
@@ -285,7 +260,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
         o.set_u16(x.b, Obj::X, px);
         o.set_u16(x.b, Obj::Z, pz);
     }
-    crate::core::dispatch::SOBJ.update_no_next(x.b);
+    crate::actors::dispatch::SOBJ.update_no_next(x.b);
     // two grids of each kind, the second following the first
     let end = load_grid(x.b, Grid::Blocks4x4, 5, crate::hw::video::TEXT.at(0x0).0);
     load_grid(x.b, Grid::Blocks4x4, 6, end.destination);
@@ -354,13 +329,13 @@ fn pulse(x: &mut Ctx, slot: CoinSlot) -> Flow {
     }
     slot.set_counted(x.b, counter - 1);
     crate::services::video::lock_counters(x.b, PULSE_BITS);
-    crate::core::tasks::wait(x, PULSE_FRAMES, Step::PulseAfterWait)
+    crate::world::tasks::wait(x, PULSE_FRAMES, Step::PulseAfterWait)
 }
 
 /// `0x143c8`: unlocks, then the second wait (`jmp 0xa40`): the task will resume at the continuation of the caller.
 fn pulse_after_wait(x: &mut Ctx) -> Flow {
     crate::services::video::unlock_counters(x.b, PULSE_BITS);
-    crate::core::tasks::wait_then_return(x, PULSE_FRAMES)
+    crate::world::tasks::wait_then_return(x, PULSE_FRAMES)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -372,13 +347,6 @@ type Start = (u32, u8, u32);
 const SEQ_A: [Start; 4] = [(0, 1, 0), (0, 2, 1), (0, 4, 2), (0, 8, 3)];
 const SEQ_B: [Start; 4] = [(0, 1, 0), (0, 2, 1), (1, 4, 2), (1, 8, 3)];
 const SEQ_C: [Start; 4] = [(0, 1, 0), (1, 2, 1), (2, 4, 2), (3, 8, 3)];
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Seq {
-    A,
-    B,
-    C,
-}
 
 impl Seq {
     fn calls(self) -> &'static [Start; 4] {
@@ -457,7 +425,7 @@ fn end(x: &mut Ctx) -> Flow {
     crate::services::palette::full_brightness(x.b);
     fading::DELAY.set(x.b, 2);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::AfterFade)
+    x.subroutine(crate::services::fading::descent, Step::AfterFade)
 }
 
 fn after_fade_clear(x: &mut Ctx) -> Flow {
@@ -472,26 +440,12 @@ fn after_fade_clear(x: &mut Ctx) -> Flow {
 /// `jmp 0x9b6` with A0 = game task, D0 = slot 0: the game task is created, and we return to the
 /// caller of `0x13c2c`.
 fn create_game_task(x: &mut Ctx) -> Flow {
-    crate::core::kernel::create_task(x.b, 0, GAME_TASK);
+    crate::world::tasks::traps::create_task(x.b, 0, GAME_TASK);
     Flow::Done
 }
 
 // ---------------------------------------------------------------------------------------------
 // Start of a player (0x140b4)
-
-/// A player start (A1, D2, A3 and D3 of the original, kept while the screen is cleared in a start in
-/// "continue" mode).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct GameStart {
-    /// Record of the paying coin slot.
-    coin_slot: CoinSlot,
-    /// Player number.
-    player: u8,
-    /// Player record.
-    record: u32,
-    /// Credits debited.
-    cost: u8,
-}
 
 /// `0x140b4`: the player whose start button is `mask` (IN2) enters the game.
 fn start_player(x: &mut Ctx, mut d: GameStart, mask: u8) -> Flow {
@@ -520,7 +474,7 @@ fn start_after_clear(x: &mut Ctx, d: GameStart) -> Flow {
     video_on(x);
     let flags = var::FLAGS.get(x.b) & !1;
     var::FLAGS.set(x.b, flags);
-    crate::core::tasks::game::clear_variables(x.b);
+    crate::screens::scene::clear_game_variables(x.b);
     crate::actors::player::init::clear_all_players(x.b);
     var::SCROLL_MODE.set(x.b, 0);
     crate::services::sprites::clear_lists(x.b);
@@ -534,7 +488,7 @@ fn join(x: &mut Ctx, d: GameStart) -> Flow {
     crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     let credits = d.coin_slot.credits(x.b).wrapping_sub(d.cost);
     d.coin_slot.set_credits(x.b, credits);
-    crate::core::tasks::game::clear_variables(x.b);
+    crate::screens::scene::clear_game_variables(x.b);
     Player(d.record).obj().set_active(x.b, 1);
     Player(d.record).obj().set_u8(x.b, Player::INDEX, d.player);
     let started = var::STARTED.get(x.b) | 1 << (d.player & 7);

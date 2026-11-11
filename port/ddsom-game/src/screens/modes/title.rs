@@ -15,10 +15,11 @@ use crate::actors::effects_aids::scenery_6;
 use crate::actors::families::creators::set_15_pure;
 use crate::services::palette::{load_palette_set, load_palette_page};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
 use crate::world::objects::{pools, Obj};
 use crate::screens::obj;
+pub use crate::world::tasks::stages::Title as Step;
 
 /// Fields of the state block (offsets from `mode::BASE`).
 mod f {
@@ -99,8 +100,8 @@ fn unlink_and_clear_lists(x: &mut Ctx) {
 }
 
 /// Creates the fade task `entry` (slot 0x10), A0 preserved.
-fn start_fade_task(x: &mut Ctx, task: crate::core::tasks::Task) {
-    crate::core::kernel::create_task(x.b, 0x10, task);
+fn start_fade_task(x: &mut Ctx, task: crate::world::tasks::Task) {
+    crate::world::tasks::traps::create_task(x.b, 0x10, task);
 }
 
 /// Common fade settings (delay, pages).
@@ -161,8 +162,7 @@ fn t00_reset(x: &mut Ctx) -> Flow {
     x.wait(4, Step::T00Load)
 }
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         T00Load = 0xfa2fe => |x| {
             var::CAMERA_Y.set(x.b, 0x300);
             for off in [var::CAMERA_X, var::SCROLL_1_X, var::SCROLL_2_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
@@ -184,7 +184,7 @@ crate::steps! {
             x.next_step();
             crate::services::sound::play_global(x.b, crate::services::sound::CMD_06);
             fade_setup(x, 3, FADE_PAGES_ALL);
-            crate::core::tasks::fading::rise(x)
+            crate::services::fading::rise(x)
         },
         T06Object = 0xfa472 => t06_object,
         T06Retry = 0xfa486 => t06_object,
@@ -261,7 +261,7 @@ crate::steps! {
         T1aRetry = 0xfa7fc => t1a_object,
         T1cText = 0xfa88e => |x| {
             x.render();
-            crate::core::tasks::prompt::launch(x.b);
+            crate::screens::prompt::launch(x.b);
             x.set_m16(f::TIMER, 300);
             crate::services::text::print(x.b, RIGHTS_TEXT.addr());
             let region = var::REGION.get(x.b);
@@ -272,7 +272,7 @@ crate::steps! {
         },
         T1eWait = 0xfa90e => |x| leave_wait(x, Step::T1eWait, Step::T1eCleared, false),
         T1eCleared = 0xfa94e => |x| {
-            crate::core::tasks::prompt::stop(x.b);
+            crate::screens::prompt::stop(x.b);
             clear_layer(x.b, Layer::One);
             clear_layer(x.b, Layer::Two);
             x.or16(var::LAYERS, LAYER_BITS);
@@ -376,7 +376,7 @@ fn t04_fade_out(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    crate::core::tasks::fading::descent(x)
+    crate::services::fading::descent(x)
 }
 
 /// Step 6: next background; creates the variant 7 object (waits if the pool is full).
@@ -556,7 +556,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
     x.set_m16(f::TIMER, left);
     if left != 0 {
-        crate::core::tasks::return_to_caller(x.b);
+        x.return_to_caller();
         return Flow::Yield;
     }
     t18_text_object(x)
@@ -686,7 +686,7 @@ fn leave_wait(x: &mut Ctx, loop_resume: Step, cleared: Step, second_title: bool)
 fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
     match step {
         0 => {
-            crate::core::tasks::prompt::stop(x.b);
+            crate::screens::prompt::stop(x.b);
             x.next_step();
             reset_objects(x);
             Flow::Done

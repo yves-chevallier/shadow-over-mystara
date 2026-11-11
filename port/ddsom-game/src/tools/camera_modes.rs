@@ -1,10 +1,10 @@
-//! Tools: the natives of `crate::services::camera_modes` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::camera_modes` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::services::camera_modes::*;
+use crate::actors::camera_modes::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::services::scroll::{CAMERA_1, CAMERA_2};

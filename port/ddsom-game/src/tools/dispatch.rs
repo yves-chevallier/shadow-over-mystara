@@ -1,11 +1,11 @@
-//! Tools: the natives of `crate::core::dispatch` for the original code that calls them (arguments and results in the registers
+//! Tools: the natives of `crate::actors::dispatch` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
 
-use crate::core::dispatch::*;
+use crate::actors::dispatch::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::screens::modes::Flow;
+use crate::world::tasks::Flow;
 
 macro_rules! natives {
     ($($ident:ident, $name:literal, $class:expr;)*) => {$(

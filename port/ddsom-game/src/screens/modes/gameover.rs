@@ -13,11 +13,12 @@ use super::{mode, Flow, Sequence};
 use crate::hw::video::regs;
 use crate::screens::scene::fading;
 use crate::screens::vars as sv;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
+pub use crate::world::tasks::stages::Gameover as Step;
 
 /// Mode machine loop, which the task becomes.
-const MODE_LOOP: crate::core::tasks::Task = crate::core::tasks::Task::Modes;
+const MODE_LOOP: crate::world::tasks::Task = crate::world::tasks::Task::Modes;
 
 /// Player interface task (slot 0x30).
 const PLAYER_UI_SLOT: u16 = 0x30;
@@ -25,15 +26,14 @@ const VIDEO_ON: u16 = 0x12ce;
 
 /// Phase 20 of the game (`0x1c80c`): game over.
 pub fn phase_20(x: &mut Ctx) -> Flow {
-    crate::core::kernel::kill_task(x.b, PLAYER_UI_SLOT as u32);
+    crate::world::tasks::traps::kill_task(x.b, PLAYER_UI_SLOT as u32);
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::core::tasks::fading::descent, Step::Faded)
+    x.subroutine(crate::services::fading::descent, Step::Faded)
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         Faded = 0x1c828 => |x| {
             regs::LAYER_CONTROL.set(x.b, VIDEO_ON);
             sv::LAYERS.set(x.b, VIDEO_ON);
@@ -48,7 +48,7 @@ crate::steps! {
             reset_modes(x);
             mode::BOOTED.set(x.b, 1);
             crate::services::sound::service(x.b, crate::services::sound::Service::GeneralStop);
-            crate::core::tasks::restart(x, MODE_LOOP)
+            crate::world::tasks::restart(x, MODE_LOOP)
         },
     }
 }

@@ -7,7 +7,7 @@ use crate::world::World;
 use super::{choice, draw, panel, player, select, var, Slot};
 use crate::world::ops::sbcd;
 use crate::actors::player::init::Join;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 
 mod play;
 mod choose;

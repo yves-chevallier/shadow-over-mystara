@@ -3,12 +3,12 @@
 use crate::world::World;
 use m68k::Cpu;
 
-use crate::core::dispatch::Dispatch;
+use crate::actors::dispatch::Dispatch;
 
 use crate::world::Leftovers;
 use crate::hw::mem::rd32;
 use crate::world::objects::Obj;
-use crate::core::tasks::table::{table_if, Next, OutsideFrame, Table};
+use crate::world::tasks::table::{table_if, Next, OutsideFrame, Table};
 use crate::core::tasks::return_to_caller;
 
 /// Where the original code resumes after a native that returned to it.

@@ -1,22 +1,12 @@
 use super::super::set_b;
 use super::{Bench, Cx};
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::world::objects::Obj;
+pub use crate::world::tasks::stages::DoorSet as Step;
 
-/// Brightness fade parameters (`tasks::fading`): pages (bit k: page k) and delay between two steps.
+/// Brightness fade parameters (`services::fading`): pages (bit k: page k) and delay between two steps.
 pub(super) const PAGES: u32 = 0x48e;
 const DELAY: u32 = 0x490;
-
-/// Where the task resumes after the fade (return address of the original's call to 0x1460).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// Porte de sortie (SET 7), changement de zone (0xcb896) : `exit_gate::after_fade`.
-    Zone(Obj),
-    /// Exit door (SET 7), next scene (0xcb9c0): `exit_gate::next_scene`.
-    Scene(Obj),
-    /// Porte de passage (SET 29, 0xd8f06) : `set_b::door_b::after_fade`.
-    Passage(Obj),
-}
 
 impl Step {
     pub const fn address(self) -> u32 {
@@ -28,9 +18,9 @@ impl Step {
     }
 
     /// The end of the door's handler, then its return (`rts`) into the dispatch loop.
-    pub fn step(self, s: &mut crate::screens::scene::Ctx) -> Flow {
+    pub fn step(self, s: &mut crate::world::tasks::Ctx) -> Flow {
         let (Step::Zone(door) | Step::Scene(door) | Step::Passage(door)) = self;
-        crate::core::dispatch::resume_handler(s.b, Some(door), |b, a| {
+        crate::actors::dispatch::resume_handler(s.b, Some(door), |b, a| {
             let mut x = Cx { c: a, b, o: door };
             match self {
                 Step::Zone(_) => super::exit_gate::after_fade(&mut x),
@@ -54,8 +44,8 @@ pub fn fade_to_black<R: Bench>(x: &mut Cx<'_, R>, next: fn(Obj) -> Step) {
     let door = x.o;
     let leftovers = crate::world::Leftovers { d2: *x.c.d2(), d3: *x.c.d3(), d4: *x.c.d4(), d5: *x.c.d5() };
     x.b.leftovers = leftovers;
-    let mut s = crate::screens::scene::Ctx::new(&mut *x.b);
-    s.subroutine(crate::core::tasks::fading::descent, next(door));
+    let mut s = crate::world::tasks::Ctx::new(&mut *x.b);
+    s.subroutine(crate::services::fading::descent, next(door));
     let l = x.b.leftovers;
     (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (l.d2, l.d3, l.d4, l.d5);
 }

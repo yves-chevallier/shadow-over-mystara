@@ -9,11 +9,12 @@
 //! The step is the same at entry (`0xee080`, new task) and after each of the two cessions (`0xee0fa`,
 //! `0xee16a`: the original loops back with a `bra 0xee080`): three stages ([`Step`]), a single step.
 
-use super::table::{record, table, State, Resume, Table, SLOTS};
-use super::{cede, Wait};
+use crate::world::tasks::table::{record, table, State, Resume, Table, SLOTS};
+use crate::world::tasks::{cede, Wait};
 use crate::hw::mem::A5;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
+pub use crate::world::tasks::stages::Freeze as Step;
 
 /// Work RAM variables (offsets from A5).
 mod var {
@@ -36,12 +37,9 @@ const BUTTON_MASK: u8 = 0x16;
 const NORMAL: u16 = 0x80;
 
 crate::steps! {
-    /// Stages of the task: its entry, and the returns from its two cessions.
-    pub enum Step {
+    impl Step {
         Entry = 0xee080 => step,
-        /// After a cession with no effect.
         AfterCession = 0xee0fa => step,
-        /// After a cession that counted down the main task.
         AfterCountdown = 0xee16a => step,
     }
 }
@@ -94,7 +92,7 @@ pub fn idle_wait(tasks: &Table, ram: &[u16]) -> bool {
     }
     // it ceded through `jsr 0xa86` from one of its two cessions, and it is the last task launched
     // (the scheduler state is then that of each following pass)
-    let ceded = matches!(tasks.slots[SLOT].resume, Resume::Step(super::Step::Freeze(Step::AfterCession | Step::AfterCountdown)));
+    let ceded = matches!(tasks.slots[SLOT].resume, Resume::Step(crate::world::tasks::Step::Freeze(Step::AfterCession | Step::AfterCountdown)));
     let main_waiting = tasks.slots[MAIN].state == State::Waiting;
     ceded && tasks.current == SLOT && !step_would_act(ram, main_waiting)
 }

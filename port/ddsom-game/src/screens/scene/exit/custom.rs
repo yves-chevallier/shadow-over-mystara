@@ -189,7 +189,7 @@ pub(super) fn seq2_countdown(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.set_b16(blk::TIMER, 128);
-        crate::services::camera_modes::start_shake(ex.x.b, crate::services::camera_modes::shake::B, 30);
+        crate::actors::camera_modes::start_shake(ex.x.b, crate::actors::camera_modes::shake::B, 30);
         crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_98);
     }
 }
@@ -450,7 +450,7 @@ pub(super) fn seq35_message(ex: &mut Ex) {
     // Original glitch: the failure is not tested, the A1 left by the allocation is stored
     let set = crate::actors::families::creators::set_15_pure(ex.x.b, 24).unwrap_or_else(|a1| a1);
     ex.set_b16(blk::OBJECT, set.0 as u16);
-    crate::services::camera_modes::start_shake(ex.x.b, crate::services::camera_modes::shake::B, 0x7fff);
+    crate::actors::camera_modes::start_shake(ex.x.b, crate::actors::camera_modes::shake::B, 0x7fff);
     crate::services::sound::play_global(ex.x.b, crate::services::sound::CMD_9A);
 }
 

@@ -12,13 +12,14 @@ use crate::world::ram::{Byte, Long, Word};
 use crate::screens::scene::fading;
 use crate::world::screen_tables::Rom;
 use crate::screens::vars as sv;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
+pub use crate::world::tasks::stages::Boot as Step;
 
 /// Tasks created at the end of startup: credits and freeze.
 mod task {
-    pub const CREDITS: crate::core::tasks::Task = crate::core::tasks::Task::Credits;
-    pub const FREEZE: crate::core::tasks::Task = crate::core::tasks::Task::Freeze;
+    pub const CREDITS: crate::world::tasks::Task = crate::world::tasks::Task::Credits;
+    pub const FREEZE: crate::world::tasks::Task = crate::world::tasks::Task::Freeze;
 }
 
 /// Starting palette: eight longs from the ROM copied into the palette table.
@@ -41,9 +42,7 @@ const SLOT_CREDITS: u32 = 0x20;
 const SLOT_FREEZE: u32 = 0xe0;
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
-        /// Task entry (`0x11b16`): black screen, then initialisation.
+    impl Step {
         Entry = 0x11b16 => |x| x.subroutine(crate::screens::scene::black_screen::start, Step::Init),
         Init = 0x11b22 => |x| {
             crate::services::palette::load_all_palettes(x.b);
@@ -53,7 +52,7 @@ crate::steps! {
             }
             fading::PAGES.set(x.b, 0xf);
             crate::services::palette::full_brightness(x.b);
-            if !crate::core::config::initialize(x.b) {
+            if !crate::services::config::initialize(x.b) {
                 return Flow::Yield;
             }
             crate::screens::credits::initialize(x.b);
@@ -68,7 +67,7 @@ crate::steps! {
             default_high_scores(x);
             crate::services::video::copy_fixed_screens(x.b);
             crate::actors::families::items::clear_picked_up(x.b);
-            crate::core::tasks::game::clear_variables(x.b);
+            crate::screens::scene::clear_game_variables(x.b);
             COIN_SOUND.set(x.b, 0);
             regs::VIDEO_CONTROL.set(x.b, 0xe);
             sv::VIDEO_FLAGS.set(x.b, 0xe);
@@ -103,11 +102,11 @@ crate::steps! {
                 STARTUP_SWITCH.set(x.b, 1);
             }
             crate::services::eeprom::initialize_accounting(x.b);
-            if !crate::core::config::initialize(x.b) {
+            if !crate::services::config::initialize(x.b) {
                 return Flow::Yield;
             }
-            crate::core::kernel::create_task(x.b, SLOT_CREDITS, task::CREDITS);
-            crate::core::kernel::create_task(x.b, SLOT_FREEZE, task::FREEZE);
+            crate::world::tasks::traps::create_task(x.b, SLOT_CREDITS, task::CREDITS);
+            crate::world::tasks::traps::create_task(x.b, SLOT_FREEZE, task::FREEZE);
             // the task continues in the mode machine loop (`jmp 0x133fe`)
             crate::screens::modes::start(x)
         },

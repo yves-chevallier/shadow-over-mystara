@@ -60,7 +60,7 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             sound(x, 0);
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S11Faded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S11Faded.into()))
         }
         _ => Flow::Done,
     }
@@ -131,7 +131,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
                 Flow::Done
             }
         },
-        12 => fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S13Faded.into())),
+        12 => fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S13Faded.into())),
         _ => Flow::Done,
     }
 }
@@ -187,7 +187,7 @@ pub(super) fn s13_leave(x: &mut Ctx) -> Flow {
     }
     next(x);
     VARS_BLOCK.set8(x.b, var::SUB, 0);
-    fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, Caller)
+    fade(x, SCENE_PAGES, crate::services::fading::descent, Caller)
 }
 pub(super) fn s13_set_11(x: &mut Ctx) -> Flow {
     or_yield!(set_object(x, 11, Step::S13Retry11));
@@ -204,7 +204,7 @@ pub(super) fn s13_time_out(x: &mut Ctx) -> Flow {
             next_sub(x);
             fading::DELAY.set(x.b, 1);
             fading::PAGES.set(x.b, SCENE_PAGES);
-            goto(x, crate::core::tasks::fading::to_white, At(Step::S13OutFaded.into()))
+            goto(x, crate::services::fading::to_white, At(Step::S13OutFaded.into()))
         }
         2 => s13_out_scenery(x),
         4 => {

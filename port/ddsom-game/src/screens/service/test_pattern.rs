@@ -3,8 +3,8 @@
 
 use super::{decimal, exit_check, f, layers_off, layers_on, next_step, print, var, MENU_BLOCK};
 use crate::hw::video::{Cell, Vram};
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Help common to the test patterns: "EXIT = 1P START & SHOT1".
 const HELP: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2a076);

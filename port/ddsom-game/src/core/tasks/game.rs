@@ -14,27 +14,13 @@
 //!
 //! The step starts at `0x1c4b0` = [`crate::GAME_STEP`], where the reference machine caps the number of steps per frame
 //! (`cps2::StepCap`, tested on the PC); the game counts its steps itself (`frame::game_step`): a step beyond the
-//! cap is held until the start of the next frame, just after VBLANK (`kernel::Point::StepKept`).
+//! cap is held until the start of the next frame, just after VBLANK (`traps::Point::StepKept`).
 
-use super::{cede, Wait};
+use crate::world::tasks::{cede, Wait};
 use crate::hw::mem::{rd8, wr32, wr8, A5};
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
-
-/// Stages of the game task (the game step, `0x1c4b0`, remains a native: see above).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    Entry,
-    /// Start of turn: return from the frame end, or from a phase that pops its own return.
-    Tour,
-    /// The game step: the current phase. `d4`: the D4 that the previous step left and that the phase re-reads
-    /// (leftover of the
-    /// dispatch loop, `dispatch::Leftovers::d4`: the pilotless raft, 0xad7b0, adds it to the players'
-    /// position); the original keeps it in its registers, which the cession saves and restores.
-    Frame { d4: u32 },
-    /// Return from the phase: frame end (`game::frame_end`), then the next turn.
-    FrameEnd,
-}
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
+pub use crate::world::tasks::stages::Game as Step;
 
 impl Step {
     /// Address at which the original resumes at this stage.
@@ -97,16 +83,8 @@ mod at {
 }
 
 /// Current call of the task: `next` will resume when the callee returns (nothing is pushed on the 68000 stack).
-fn push(x: &mut Ctx, next: impl Into<super::table::Next>) {
-    super::table::call(x.b, next);
-}
-
-/// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero (the registers of the original loop,
-/// D0 = 0, D6.w = -1, A0 = end of the area, are reread by nobody).
-pub fn clear_variables(b: &mut crate::world::World) {
-    for i in 0..16 {
-        wr32(b, A5 + var::PHASE + 4 * i, 0);
-    }
+fn push(x: &mut Ctx, next: impl Into<crate::world::tasks::table::Next>) {
+    crate::world::tasks::table::call(x.b, next);
 }
 
 /// `0x1c45a`: phase and stage to zero.
@@ -149,7 +127,7 @@ fn wait(x: &mut Ctx) -> Flow {
 fn step(x: &mut Ctx) -> Flow {
     if !crate::core::frame::game_step() {
         let d4 = x.b.leftovers.d4;
-        crate::core::kernel::keep_step(x.b, d4);
+        crate::world::tasks::traps::keep_step(x.b, d4);
         return Flow::Yield;
     }
     wr8(x.b, STEPPED, 0xff);

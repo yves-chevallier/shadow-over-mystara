@@ -30,7 +30,8 @@ pub mod transition;
 
 use crate::world::World;
 
-use crate::hw::mem::A5;
+use crate::hw::mem::{rd8, wr16, wr8, A5};
+use crate::world::tasks::Ctx;
 use crate::world::ram::{Byte, Long, Word};
 use crate::world::objects::{pools, Obj};
 use crate::Native;
@@ -74,12 +75,12 @@ pub const fn scratch(offset16: u16) -> u32 {
     A5 - 0x1_0000 + offset16 as u32
 }
 
-/// The brightness fade driven by the fade tasks (`tasks/fading.rs`): pages concerned, steps left,
+/// The brightness fade driven by the fade tasks (`services/fading.rs`): pages concerned, steps left,
 /// delay between two steps; and the entries of these tasks, which the screens create in slot 0x10.
 pub mod fading {
     use crate::world::ram::{Word, Byte};
-    use crate::core::tasks::fading::Fade;
-    use crate::core::tasks::Task;
+    use crate::world::tasks::stages::Fade;
+    use crate::world::tasks::Task;
 
     /// Pages concerned (bit k: page k).
     pub const PAGES: Byte = Byte::a5(0x48e);
@@ -99,24 +100,88 @@ pub mod fading {
 
     /// Creates the fade task `task` in slot 0x10 (`jsr 0x9b6`).
     pub fn launch(b: &mut crate::world::World, task: Task) {
-        crate::core::kernel::create_task(b, 0x10, task);
+        crate::world::tasks::traps::create_task(b, 0x10, task);
     }
 }
 
-/// Context of a scene sequence: the machine, and named accesses to work RAM.
-pub struct Ctx<'a> {
-    pub b: &'a mut World,
-    /// Scene entry (phase 8): the address of the phase handler, which the original keeps in A0 (`jsr (A0)` of the
-    /// game loop and of the demo) and which the opening sequences reread as an object (original glitch: see
-    /// `entry::phase_8`); 0 elsewhere.
-    pub phase_handler: u32,
+/// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero (the registers of the original loop,
+/// D0 = 0, D6.w = -1, A0 = end of the area, are reread by nobody).
+pub fn clear_game_variables(b: &mut World) {
+    for i in 0..16 {
+        crate::hw::mem::wr32(b, A5 + var::PHASE + 4 * i, 0);
+    }
 }
 
-impl<'a> Ctx<'a> {
-    pub fn new(b: &'a mut World) -> Self {
-        Ctx { b, phase_handler: 0 }
-    }
+/// After the world update (game phase 12 `0x1c702` and demo `0x1fa4a`): sprites, collisions,
+/// pop-ups, spawn script, rank, game over; each preceded by its charge gauge.
+pub fn after_world(b: &mut World) {
+    crate::services::video::gauge_in_world(b, 0x54_0000);
+    // 0x1de96. Original glitch: D4 (attributes of the last piece) reread later (DDSOM_POISON=call_1de96:
+    // long_28_scenes, frame 10431), see `sprites::build`: the leftover D4 of the game
+    crate::services::sprites::build_in_game(b);
+    crate::services::video::gauge_in_world(b, 0x48_0002);
+    // 0x260ee
+    crate::actors::update::update_combat(b);
+    crate::services::video::gauge_in_world(b, 0x4f_001e);
+    // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
+    crate::services::popups::animate_obj(b);
+    crate::screens::scene::script::step(b);
+    // 0x1f27c
+    crate::world::objects::rank::tick(b);
+    // 0x28d8
+    crate::actors::aids::game_over(b);
+}
 
+// ---------------------------------------------------------------------------------------------
+// Debug level skip
+
+/// Buttons pressed this frame (+1) and the previous one (+7), for the debug level skip.
+const BUTTONS_NOW: u32 = 0x01;
+const BUTTONS_BEFORE: u32 = 0x07;
+/// Words reset to zero by a level skip (status of each player and of its weapons).
+const PLAYER_RESET: [u32; 8] = [0x5e2, 0x7e2, 0x9e2, 0xbe2, 0x602, 0x802, 0xa02, 0xc02];
+/// Last scene number.
+const LAST_SCENE: i8 = 0x6c;
+/// Level skip buttons: next scene, previous scene.
+const BUTTONS_NEXT: u8 = 0x90;
+const BUTTONS_PREVIOUS: u8 = 0x60;
+
+/// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production
+/// game (bit 15 of the ROM word `0xc0`, word 0 of `startup/header`, is zero).
+pub fn debug_scene_skip(b: &mut World) {
+    if crate::world::tables::engine_table!("startup/header").at16(b, 0) & 0x8000 != 0 {
+        let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
+        if pressed & BUTTONS_NEXT == BUTTONS_NEXT {
+            change_scene(b, true);
+        } else if pressed & BUTTONS_PREVIOUS == BUTTONS_PREVIOUS {
+            change_scene(b, false);
+        }
+    }
+}
+
+/// Debug level skip: players reset to zero, return to phase 8 (scene entry).
+fn change_scene(b: &mut World, forward: bool) {
+    for offset in PLAYER_RESET {
+        wr16(b, A5 + offset, 0);
+        wr16(b, A5 + offset + 2, 0);
+    }
+    wr8(b, A5 + 0x50, 0);
+    let scene = var::SCENE.get(b);
+    let scene = if forward {
+        let next = scene.wrapping_add(1);
+        if next as i8 <= LAST_SCENE { next } else { 1 }
+    } else {
+        let previous = scene.wrapping_sub(1);
+        if previous as i8 > 0 { previous } else { LAST_SCENE as u8 }
+    };
+    var::SCENE.set(b, scene);
+    wr8(b, A5 + var::PHASE, 8);
+    var::STEP.set(b, 0);
+    wr16(b, A5 + var::SUB, 0);
+}
+
+/// Named accesses to work RAM and scene services of a step's context.
+impl Ctx<'_> {
     // --- work RAM variables ---------------------------------------------------------
 
     pub fn v8(&mut self, off: u32) -> u8 {
@@ -172,8 +237,8 @@ impl<'a> Ctx<'a> {
     /// handler yields here (the original's call by address did not allow it).
     #[track_caller]
     pub fn world(&mut self) {
-        let flow = crate::core::game::update_world(self.b);
-        assert!(flow == crate::screens::modes::Flow::Done, "scene sequence: a handler ceded control during the world update");
+        let flow = crate::actors::update::update_world(self.b);
+        assert!(flow == crate::world::tasks::Flow::Done, "scene sequence: a handler ceded control during the world update");
         crate::services::sprites::build_in_game(self.b);
     }
 
@@ -218,8 +283,8 @@ impl<'a> Ctx<'a> {
         fading::STEP.set(self.b, 1);
         self.start_fade_task(crate::screens::scene::fading::FROM_WHITE);
     }
-    fn start_fade_task(&mut self, task: crate::core::tasks::Task) {
-        crate::core::kernel::create_task(self.b, 0x10, task);
+    fn start_fade_task(&mut self, task: crate::world::tasks::Task) {
+        crate::world::tasks::traps::create_task(self.b, 0x10, task);
     }
 
     /// Creates an active object (allocator `alloc`), of type `kind`; the original writes without testing the carry.

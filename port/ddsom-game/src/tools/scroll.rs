@@ -161,7 +161,7 @@ pub(crate) const FOLLOW_PLAYERS_Y: Native = Native {
 
 /// `update_cameras` with the registers of the original: D4 of the scenery copies, A0 = camera 2.
 pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut World) {
-    for (v, m) in update_cameras(b).into_iter().flatten() {
+    for (v, m) in crate::actors::camera_modes::update_cameras(b).into_iter().flatten() {
         c.d[4] = c.d[4] & !m | v;
     }
     c.a[0] = CAMERA_2.0 .0;

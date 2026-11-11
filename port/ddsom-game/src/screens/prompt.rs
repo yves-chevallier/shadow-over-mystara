@@ -6,11 +6,12 @@
 //! `0xf38`, erased by `0xf4a`). The displayed text is kept at `A5-0x5ac2`: `0xe03c6` erases it when stopping the task,
 //! `0xe03e4` launches it.
 
-use super::{cede, Wait};
+use crate::world::tasks::{cede, Wait};
 use crate::hw::mem::{rd32, wr32, A5};
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 use crate::Native;
+pub use crate::world::tasks::stages::Prompt as Step;
 
 /// Displayed text (long).
 const SHOWN: u32 = A5 - 0x5ac2;
@@ -45,8 +46,7 @@ const SHOW_FRAMES: u32 = 40;
 const HIDE_FRAMES: u32 = 20;
 
 crate::steps! {
-    /// Stages: the entry, then after the display and after the erasure, for each of the two families of texts.
-    pub enum Step {
+    impl Step {
         Entry = 0xe03fe => entry,
         CoinsShown = 0xe0440 => |x| {
             print_shown(x, Print::ClearCoins);
@@ -97,12 +97,12 @@ fn print_shown(x: &mut Ctx, print: Print) {
 pub fn stop(b: &mut crate::world::World) {
     let text = rd32(b, SHOWN);
     crate::services::text::clear_blocks(b, text, 0);
-    crate::core::kernel::kill_task(b, SLOT);
+    crate::world::tasks::traps::kill_task(b, SLOT);
 }
 
 /// `0xe03e4`: launches the task; registers kept.
 pub fn launch(b: &mut crate::world::World) {
-    crate::core::kernel::create_task(b, SLOT, super::Task::Prompt);
+    crate::world::tasks::traps::create_task(b, SLOT, crate::world::tasks::Task::Prompt);
 }
 
 pub const STOP: Native = Native {

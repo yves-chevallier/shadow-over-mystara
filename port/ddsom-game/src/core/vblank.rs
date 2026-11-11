@@ -3,7 +3,7 @@
 //! In order: CPS-A display registers (scroll of the three planes, 0x722), input reading
 //! (0x80c), video control register (0x902), sending of commands to the Z80 (0x68c), reading of
 //! the coin slots (0x143da), bookkeeping (0x2dcf6), then waking of the waiting tasks (task
-//! table, `tasks/table.rs`). All registers are saved and restored.
+//! table, `world/tasks/table.rs`). All registers are saved and restored.
 //!
 //! The original code tests three ROM bytes (0xc4, 0xc5, 0xc7), debugging flags: all
 //! zero in this game (no wait for the test input, no dump combination, DSW settings
@@ -163,7 +163,7 @@ fn video_control(b: &mut World) {
 /// Wakes the tasks whose wait count falls to zero (Rust table, `tasks::table`).
 fn wake_tasks(b: &mut World) {
     let mut slowdown = rd8(b, a5(var::SLOWDOWN));
-    crate::core::tasks::table::table(b).count_down_frame(&mut slowdown);
+    crate::world::tasks::table::table(b).count_down_frame(&mut slowdown);
     wr8(b, a5(var::SLOWDOWN), slowdown);
 }
 

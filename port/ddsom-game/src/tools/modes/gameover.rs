@@ -5,8 +5,8 @@
 use crate::screens::modes::gameover::*;
 use crate::tools::frames::*;
 use crate::Native;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 pub(crate) const PHASE_20: Native = Native {
     entry: 0x1c80c,

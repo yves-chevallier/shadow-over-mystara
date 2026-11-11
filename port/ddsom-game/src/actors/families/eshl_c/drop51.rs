@@ -45,7 +45,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(Obj::STATE, 2);
             crate::actors::families::effects_creators::debris(x.b, x.o, 3);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 8);
         }
         4 => {
             x.add8(Obj::STATE, 2);

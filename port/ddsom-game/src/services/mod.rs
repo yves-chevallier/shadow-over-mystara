@@ -1,7 +1,8 @@
 //! Layer `services` (docs/fin.md, section 2).
 
-pub mod camera_modes;
+pub mod config;
 pub mod eeprom;
+pub mod fading;
 pub mod inputs;
 pub mod palette;
 pub mod popups;

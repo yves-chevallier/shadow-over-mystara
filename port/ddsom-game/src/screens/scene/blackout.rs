@@ -11,8 +11,9 @@ use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
 use crate::services::video::{clear_layer, Layer};
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::Native;
+pub use crate::world::tasks::stages::Blackout as Step;
 
 const DISPATCH: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0xf7eda);
 /// Palettes of the next scene: set for page 0 (negative: none), then D0 of 0x1a60a, 0x1a67e, 0x1a8b2.
@@ -45,7 +46,7 @@ pub fn run(x: &mut Ctx) -> Flow {
             x.set_v8(0x5f, 0);
             x.set_v16(0x490, 3);
             x.set_v8(0x48e, 15);
-            x.subroutine(crate::core::tasks::fading::descent, Step::Faded)
+            x.subroutine(crate::services::fading::descent, Step::Faded)
         }
         2 => {
             palettes(x);
@@ -57,8 +58,7 @@ pub fn run(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         Faded = at::FADED.0 => |x| {
             x.set_v8(0x48e, 15);
             crate::services::palette::no_brightness(x.b);
@@ -83,7 +83,6 @@ crate::steps! {
             x.set_v16(0x14, 0x12c0 & 0xfff1);
             x.wait(1, Step::Cleared)
         },
-        /// Layers cleared, scrolls and cameras reset.
         Cleared = at::CLEARED.0 => |x| {
             regs::OBJECT_OUTPUT.set(x.b, 0x1355);
             clear_layer(x.b, Layer::One);

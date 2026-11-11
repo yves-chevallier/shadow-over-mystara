@@ -3,7 +3,7 @@
 //!
 //! The game has no processor: the machine's `Cpu` is not used (the machine advances its cycle counter for its
 //! schedule). The game is at a
-//! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
+//! *point* (`traps::Point`, stored in the task table): a startup step, a scheduler point
 //! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
 //! stage (`tasks::execute`). A native always runs in full, even when
 //! it would overflow onto the next interrupt: none is replaced by its original. An impossible point stops the game
@@ -35,15 +35,14 @@
 //! scheduler to the next ([`Snapshot`]), the frame is finished. Safety cap: at most [`NATIVES_CAP`]
 //! points per frame (counted in [`summary`]).
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use cps2::StepCap;
 use crate::world::World;
 
-use crate::core::kernel::Point;
-use crate::core::tasks::table::{read, table};
-use crate::Native;
+use crate::world::tasks::traps::Point;
+use crate::world::tasks::table::{read, table};
 
 /// The game runs without a 68000 (a single machine in the process, the game's: the `validate` reference machine
 /// does not run natives).
@@ -88,7 +87,7 @@ struct Snapshot {
     palette: Vec<u16>,
     qram: Vec<u8>,
     regs: ([u16; 6], [u16; 32], [u16; 32], u16, u16),
-    table: Option<crate::core::tasks::table::Table>,
+    table: Option<crate::world::tasks::table::Table>,
     leftovers: crate::world::Leftovers,
 }
 
@@ -125,20 +124,8 @@ struct Image {
     snapshot: Option<Snapshot>,
 }
 
-/// The last natives run, oldest first from `next` (a ring).
-#[derive(Clone, Copy)]
-struct Last {
-    natives: [Option<&'static Native>; LAST_NATIVES],
-    next: usize,
-}
-
-/// Natives kept for the diagnostic of a stop.
-const LAST_NATIVES: usize = 8;
-
 thread_local! {
     static IMAGE: RefCell<Image> = RefCell::new(Image { number: u64::MAX, ..Image::default() });
-    /// Last natives run (diagnosing a stop).
-    static LAST: Cell<Last> = const { Cell::new(Last { natives: [None; LAST_NATIVES], next: 0 }) };
 }
 
 /// Processor work during a line (`cps2::Machine::line_work`). The cap on game steps is only read for
@@ -157,9 +144,9 @@ pub fn line(b: &mut World, cap: Option<&mut StepCap>) {
     let poison_stack = crate::world::diag::poison_active("stack");
     loop {
         // a top-level point: no cession in progress
-        crate::core::tasks::forget_cession();
+        crate::world::tasks::forget_cession();
         // the point and the interrupt mask, read in the task table once (before startup: reset, all masked)
-        let (point, mask) = read(b).map_or((Point::Reset, crate::core::kernel::MASK_ALL), |t| (t.point, t.interrupt_mask));
+        let (point, mask) = read(b).map_or((Point::Reset, crate::world::tasks::traps::MASK_ALL), |t| (t.point, t.interrupt_mask));
         if poison_stack && !point.startup() {
             poison_stacks(b);
         }
@@ -195,7 +182,7 @@ pub fn line(b: &mut World, cap: Option<&mut StepCap>) {
                 }
                 table(b).point = Point::Task;
                 crate::core::tasks::execute(crate::core::tasks::game::Step::Frame { d4 }.into(), b);
-                crate::core::kernel::point(b)
+                crate::world::tasks::traps::point(b)
             }
         };
         if next == Point::Task {
@@ -282,26 +269,6 @@ fn frame_done(b: &World, point: Point) -> bool {
     })
 }
 
-/// Notes the native about to run (handler of a dispatch table), for diagnosing a stop (`DDSOM_SANS_TRACE=frame`:
-/// each native of the frame).
-pub(crate) fn note(b: &World, n: &'static Native) {
-    LAST.with(|last| {
-        let mut l = last.get();
-        l.natives[l.next] = Some(n);
-        l.next = (l.next + 1) % LAST_NATIVES;
-        last.set(l);
-    });
-    if trace(b) {
-        eprintln!("{}:{} {:06x} {} mask={}", b.hw.frame, b.hw.scanline, n.entry, n.name, crate::core::kernel::interrupt_mask(b));
-    }
-}
-
-/// Diagnostics: `DDSOM_SANS_TRACE=n` prints each native run during frame n.
-fn trace(b: &World) -> bool {
-    static IMAGE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
-    *IMAGE.get_or_init(|| std::env::var("DDSOM_SANS_TRACE").ok().and_then(|v| v.parse().ok())) == Some(b.hw.frame)
-}
-
 /// Start of the message of a stop (panic) of the game without a 68000.
 pub const STOP: &str = "without 68000: ";
 
@@ -316,12 +283,9 @@ fn stop(b: &mut World, cause: String) -> ! {
         let frames: Vec<String> = e.frames.iter().map(|k| format!("{:x?}@{}", k.next, k.calls)).collect();
         m += &format!(" ; task {k} ({:?}, {:?}) ; frames [{}]", e.task, e.state, frames.join(" "));
     }
-    m += &format!(" ; interrupt mask {}", crate::core::kernel::interrupt_mask(b));
-    let l = LAST.with(Cell::get);
-    let last: Vec<String> = (0..LAST_NATIVES)
-        .filter_map(|k| l.natives[(l.next + k) % LAST_NATIVES])
-        .map(|n| format!("{}@{:x}", n.name, n.entry))
-        .collect();
+    m += &format!(" ; interrupt mask {}", crate::world::tasks::traps::interrupt_mask(b));
+    let last: Vec<String> =
+        crate::world::diag::last_natives().into_iter().map(|n| format!("{}@{:x}", n.name, n.entry)).collect();
     m += &format!(" ; last natives: {}", last.join(" "));
     #[cfg(feature = "tools")]
     if let Some((site, routine)) = crate::call_site() {

@@ -49,25 +49,25 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             if camera_x(x) >= 0x100 {
                 crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
                 x.add8(SetObj::SUBSTATE, 2);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x1e);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x1e);
             }
         }
         4 => {
             if camera_x(x) >= 0x180 {
                 next(x, 0x28);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x28);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x28);
             }
         }
         6 => {
             if countdown(x) {
                 next(x, 0x28);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x28);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x28);
             }
         }
         8 => {
             if countdown(x) {
                 next(x, 0x28);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x28);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x28);
             }
         }
         10 => {
@@ -79,7 +79,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         12 => {
             if camera_x(x) >= 0x200 {
                 next(x, 0x32);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x32);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x32);
                 crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
             }
         }
@@ -87,7 +87,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             if countdown(x) {
                 eshl_creators::single_25(&mut Pure, x.b, x.o);
                 next(x, 0x32);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x32);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, 0x32);
             }
         }
         16 => explosions(x),
@@ -100,7 +100,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         20 => {
             if camera_x(x) >= 0x2b0 {
                 next(x, 0x28);
-                crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x50);
+                crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, 0x50);
                 crate::services::sound::play(x.b, crate::services::sound::CMD_9A_B, x.o);
             }
         }
@@ -141,7 +141,7 @@ fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if countdown(x) {
         x.add8(SetObj::SUBSTATE, 2);
-        crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0x32);
+        crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0x32);
     }
 }
 

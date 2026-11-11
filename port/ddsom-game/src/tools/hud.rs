@@ -4,7 +4,7 @@
 
 use crate::screens::hud::*;
 use crate::Native;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 
 /// Original subroutines rewritten inside the task body, presented as natives for the
 /// differential fuzz (`examples/fuzz_couv`); the game does not call them by their address.

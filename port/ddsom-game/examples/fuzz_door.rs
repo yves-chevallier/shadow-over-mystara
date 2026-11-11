@@ -22,7 +22,7 @@ use std::path::Path;
 
 use cps2::Cps2Bus;
 use ddsom_game::hw::mem::{rd32, wr16, wr32, wr8, A5};
-use ddsom_game::core::tasks::table::{self, Resume, Next};
+use ddsom_game::world::tasks::table::{self, Resume, Next};
 use m68k::Cpu;
 
 /// Entries of the two doors (SET types 7 and 29).
@@ -70,7 +70,7 @@ fn original(c: &mut Cpu, b: &mut Cps2Bus, stop: u32, without_cession: bool) -> O
 }
 
 /// The step where the current task, which has yielded, will resume (user-mode SR, like `kernel::launch`).
-fn resume(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::core::tasks::Step> {
+fn resume(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::world::tasks::Step> {
     let resume = World::lend(b, |w| {
         let t = table::table(w);
         t.slots[t.current].resume

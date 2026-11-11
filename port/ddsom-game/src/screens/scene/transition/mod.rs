@@ -30,9 +30,9 @@ use super::Ctx;
 use crate::screens::scene::fading;
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::hw::mem::A5;
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::world::objects::Obj;
-use crate::core::tasks::table::Next;
+use crate::world::tasks::table::Next;
 use crate::Native;
 
 /// Script variables (A6).
@@ -100,6 +100,7 @@ macro_rules! or_yield {
 }
 use or_yield;
 use crate::screens::obj;
+pub use crate::world::tasks::stages::Transition as Step;
 
 // ---------------------------------------------------------------------------------------------
 // Variables
@@ -175,7 +176,7 @@ fn end(x: &mut Ctx) -> Flow {
 
 /// Cedes `n` frames (`moveq #n,D0 ; jsr/jmp 0xa40`).
 fn yield_frames(x: &mut Ctx, n: u8, ret: Ret) -> Flow {
-    goto(x, |x| crate::core::tasks::wait_then_return(x, n), ret)
+    goto(x, |x| crate::world::tasks::wait_then_return(x, n), ret)
 }
 
 /// Jumps to a subroutine that yields (`bsr`, or `bra` which returns to the caller of the script), storing the
@@ -196,9 +197,8 @@ fn show_and_fade_in(x: &mut Ctx, ret: Ret) -> Flow {
     x.wait(1, Step::FadeInAfterFrame)
 }
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
-        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::core::tasks::fading::rise, Caller),
+    impl Step {
+        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::services::fading::rise, Caller),
         SpritesAfterFrame = 0xfa1ca => |x| {
             crate::services::sprites::build_in_game(x.b);
             Flow::Done
@@ -214,13 +214,13 @@ fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow
 }
 
 /// Fade with given delay and pages, without waiting for its end: fade task `task` (0xfa1fa, 0xfa214).
-fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: crate::core::tasks::Task) {
+fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: crate::world::tasks::Task) {
     fading::DELAY.set(x.b, delay);
     fading::PAGES.set(x.b, pages);
     start_task(x, task);
 }
-fn start_task(x: &mut Ctx, task: crate::core::tasks::Task) {
-    crate::core::kernel::create_task(x.b, 0x10, task);
+fn start_task(x: &mut Ctx, task: crate::world::tasks::Task) {
+    crate::world::tasks::traps::create_task(x.b, 0x10, task);
 }
 
 /// 0xfa158: planes 2 and 3 hidden, one frame.
@@ -255,7 +255,7 @@ fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Next>) -> Flow {
 
 /// 0xfa1e2: world update (A0 and A6 kept).
 fn world(x: &mut Ctx) {
-    let flow = crate::core::game::update_world(x.b);
+    let flow = crate::actors::update::update_world(x.b);
     assert!(flow == Flow::Done, "transition script: a handler yielded control during the world update");
 }
 

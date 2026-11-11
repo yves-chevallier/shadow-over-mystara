@@ -13,9 +13,9 @@
 use crate::world::ram::{Byte, Word};
 use crate::hw::video::Cell;
 use super::{arrow, back_to_menu, clear_screen, f, horizontal, key, layers_off, layers_on, move_arrow, paint, pressed, print, shots, var, vertical, HIGHLIGHT, MENU_BLOCK};
-use crate::core::config;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::services::config;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Fields of the record specific to the screen.
 mod field {

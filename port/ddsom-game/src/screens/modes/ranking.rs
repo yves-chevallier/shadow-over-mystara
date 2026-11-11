@@ -20,12 +20,13 @@ use crate::screens::scene::fading;
 use crate::world::screen_tables::{self as tables, Rom};
 use crate::screens::vars as sv;
 use crate::world::objects::pools;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::services::video::{clear_layer, Layer};
 use crate::Native;
 use crate::world::ram::{Long, Word};
 use crate::world::objects::Obj;
 use crate::screens::obj;
+pub use crate::world::tasks::stages::Ranking as Step;
 
 pub(super) const STATE: u32 = 0xff_2b10;
 mod f {
@@ -77,8 +78,7 @@ fn post_game(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         Return = 0xfc584 => |_| Flow::Done,
         S0Video = 0xfc5cc => |x| {
             regs::OBJECT_OUTPUT.set(x.b, 0x1355);
@@ -166,7 +166,7 @@ fn reset_objects(x: &mut Ctx) {
 
 /// One render: PEFF, EFFCT, sprites (`0xfc91c`).
 fn render(x: &mut Ctx) {
-    for class in [&crate::core::dispatch::PEFF, &crate::core::dispatch::EFFCT] {
+    for class in [&crate::actors::dispatch::PEFF, &crate::actors::dispatch::EFFCT] {
         class.update_no_next(x.b);
     }
     crate::services::sprites::build_in_game(x.b);
@@ -325,7 +325,7 @@ fn sa_leave(x: &mut Ctx) -> Flow {
     crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 4 });
     fading::PAGES.set(x.b, 0xf);
     fading::DELAY.set(x.b, 3);
-    x.subroutine(crate::core::tasks::fading::descent, Step::SaFaded)
+    x.subroutine(crate::services::fading::descent, Step::SaFaded)
 }
 
 pub const NATIVES: &[Native] = &[];

@@ -45,7 +45,7 @@ const MESSAGE_DONE: u32 = 0x22;
 /// State 0: clears everything, copies the players' rewards, then falls into state 2.
 pub(super) fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
-    crate::core::kernel::kill_task(x.b, 0x30);
+    crate::world::tasks::traps::kill_task(x.b, 0x30);
     reset_pools(x);
     crate::services::video::black_screen(x.b);
     unlink_and_clear_lists(x);
@@ -126,7 +126,7 @@ pub(super) fn s08_object(x: &mut Ctx) -> Flow {
     let v = var::VIDEO.get(x.b) | 0xe;
     var::VIDEO.set(x.b, v);
     fade_settings(x, 3, FADE_ALL);
-    crate::core::tasks::fading::rise(x)
+    crate::services::fading::rise(x)
 }
 
 /// State 10: waits for the object's signal, then opens message 89.
@@ -378,7 +378,7 @@ pub(super) fn s1e_object(x: &mut Ctx) -> Flow {
     // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40`. Original glitch: the yield lasts D0 frames, as the render leaves it
     // (type × 4 of the last object whose handler was called)
     let d0 = render_scroll_d0(x, 1);
-    crate::core::tasks::wait(x, d0 as u8, Step::S1eRetry)
+    crate::world::tasks::wait(x, d0 as u8, Step::S1eRetry)
 }
 
 /// State 34: SET 16 object, fade (task), then SET 20 object.
@@ -482,13 +482,13 @@ pub(super) fn s2e_dialogue(x: &mut Ctx) -> Flow {
     let o = Obj(link(x));
     if o.u8(x.b, SUB_STATE) == 6 {
         fade_settings(x, 3, FADE_ALL);
-        return x.subroutine(crate::core::tasks::fading::rise, Step::S2eOpened);
+        return x.subroutine(crate::services::fading::rise, Step::S2eOpened);
     }
     if o.u8(x.b, SUB_STATE) != 10 {
         return render_flow(x);
     }
     fade_settings(x, 3, FADE_ALL);
-    x.subroutine(crate::core::tasks::fading::descent, Step::S2eClosed)
+    x.subroutine(crate::services::fading::descent, Step::S2eClosed)
 }
 
 /// State 48: rewards: palettes, then one object per player who won a reward.
@@ -534,7 +534,7 @@ pub(super) fn s32_end(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     fade_settings(x, 3, FADE_ALL);
-    x.subroutine(crate::core::tasks::fading::descent, Step::S32Faded)
+    x.subroutine(crate::services::fading::descent, Step::S32Faded)
 }
 
 /// Decimal-coded addition (eight digits, final carry lost): four `abcd`.

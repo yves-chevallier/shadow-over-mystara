@@ -66,8 +66,8 @@ pub(crate) fn resume_scenery<R: Bench>(x: &mut Cx<'_, R>, cameras: Cameras) {
         Cameras::Start => crate::services::scroll::cameras_start(x.b),
         Cameras::Return => crate::services::scroll::cameras_return(x.b),
     }
-    crate::services::scroll::update_cameras(x.b);
-    crate::screens::scene::script::reset(x.b);
+    crate::actors::camera_modes::update_cameras(x.b);
+    crate::world::ram::SPAWN_SCRIPT_STATE.set(x.b, crate::world::ram::SPAWN_SCRIPT_LOAD);
     crate::services::palette::load_scene_palettes(x.b);
     crate::services::palette::load_scene_page(x.b, 2);
     crate::services::palette::load_scene_page(x.b, 3);
@@ -86,7 +86,7 @@ pub(crate) fn resume_scenery_lit<R: Bench>(x: &mut Cx<'_, R>, cameras: Cameras) 
 /// 0x20de6: every player in game placed in front of the camera. Original glitch: the rank of the last one stays in
 /// D2.
 pub(crate) fn place_players<R: Bench>(x: &mut Cx<'_, R>) {
-    *x.c.d2() = crate::screens::scene::entry::place_players(x.b) as u32;
+    *x.c.d2() = crate::actors::player::init::place_players(x.b) as u32;
 }
 
 /// 0xcc0ca: the scene starts again (scenery resumed); each living player goes back to normal play (hidden and in a

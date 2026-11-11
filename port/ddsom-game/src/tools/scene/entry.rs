@@ -16,7 +16,7 @@ pub(crate) const PLACE_PLAYERS: Native = Native {
     name: "scene_place_players",
     run: crate::Body::WithCpu(|c, b| {
         let scene = var::SCENE.get(b) as u32;
-        let rank = place_players(b) as u32;
+        let rank = crate::actors::player::init::place_players(b) as u32;
         // D0/D1: the camera added to the last player placed, otherwise the table offsets of the scene
         (c.d[0], c.d[1]) = if rank == 0 {
             (scene << 4, scene << 2)
@@ -33,8 +33,8 @@ pub(crate) const PLACE_PLAYERS: Native = Native {
             c.flags_logic(0, Size::Byte);
         }
         c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-        c.a[2] = table::START_POSITIONS.addr() + (scene << 4) + 4 * rank;
-        c.a[3] = table::START_STATES.addr() + (scene << 2) + rank;
+        c.a[2] = crate::actors::player::init::START_POSITIONS.addr() + (scene << 4) + 4 * rank;
+        c.a[3] = crate::actors::player::init::START_STATES.addr() + (scene << 2) + rank;
         crate::tools::frames::rts(c, b);
     }),
     touches_sound: false,

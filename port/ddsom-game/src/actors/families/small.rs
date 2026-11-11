@@ -502,6 +502,6 @@ pub const SHAKES: &[Native] = &[
     handler_without(0x65236, "enemy_shake_c", |b, a| run_shake(b, a, 0x65236)),
 ];
 
-fn run_shake(b: &mut World, a: &mut crate::core::dispatch::Dispatch, routine: u32) {
+fn run_shake(b: &mut World, a: &mut crate::actors::dispatch::Dispatch, routine: u32) {
     own_reaction(&mut crate::actors::families::cx::Gx::dispatch(b, a), routine);
 }

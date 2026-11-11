@@ -1,4 +1,5 @@
 use super::*;
+pub use crate::world::tasks::stages::Firework as Step;
 
 // ---------------------------------------------------------------------------------------------
 // Type 80: fireworks of a character's scene (created by `0x23606`, variants 2 and 3)
@@ -10,8 +11,8 @@ pub(super) mod fireworks {
     pub const GO: u8 = 0x12;
     pub const BACK: u8 = 0xc;
     /// Fade tasks (programs of `0x9b6`): toward black, then back.
-    pub const FADE_OUT: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::ToWhite);
-    pub const FADE_IN: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::FromWhite);
+    pub const FADE_OUT: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::ToWhite);
+    pub const FADE_IN: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::FromWhite);
     pub const TIMER: u32 = 0x58;
     pub const DELAY: u32 = 0x5a;
     pub const HOST: u32 = 0x56;
@@ -37,7 +38,7 @@ pub(super) fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
         _ => free(x),
     }
     // the game task waits (`hero_rockets`): the end of the handler is step `AfterState`
-    if crate::core::tasks::has_ceded() {
+    if crate::world::tasks::has_ceded() {
         return;
     }
     fireworks_tail(x);
@@ -160,8 +161,8 @@ pub(super) fn copy_block<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
 }
 
 /// Launches fade task `program` (`0x9b6`, D0.w = 0x10), A0 kept.
-pub(super) fn fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::core::tasks::Task) {
-    crate::core::kernel::create_task(x.b, 0x10, task);
+pub(super) fn fade_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::world::tasks::Task) {
+    crate::world::tasks::traps::create_task(x.b, 0x10, task);
 }
 
 pub(super) fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -386,8 +387,8 @@ pub(super) fn hero_rockets<R: Bench>(x: &mut Cx<'_, R>) {
     // The whole game waits four frames (`jsr 0xa40` in the middle of the dispatch loop): the task will resume at step
     // `AfterWait`, then, on return, at `AfterState` (the end of the handler), like the original (the trap leaves D0 and
     // D1, which nobody reads).
-    crate::core::tasks::table::call(x.b, Step::AfterState);
-    crate::core::kernel::wait(x.b, 4, Step::AfterWait);
+    crate::world::tasks::table::call(x.b, Step::AfterState);
+    crate::world::tasks::traps::wait(x.b, 4, Step::AfterWait);
     // the dispatch loop and the pending Rust callers give up (`tasks::has_ceded`): the task will resume through the
     // steps, then through the loop's pending call (`dispatch::Step::Dispatch`)
 }
@@ -458,18 +459,14 @@ pub(super) fn hero_lift_off<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 crate::steps! {
-    /// Resumptions of the game task when the fireworks (type 80) made it wait (`hero_rockets`); the
-    /// context returned by the core has the object in A0.
-    pub enum Step {
-        /// After the four-frame wait: fade back.
+    impl Step {
         AfterWait = 0xb91d0 => |x| {
-            crate::core::dispatch::resume_handler(x.b, None, |b, a| fireworks_fade_back(&mut Gx::dispatch(b, a)));
-            crate::screens::modes::Flow::Done
+            crate::actors::dispatch::resume_handler(x.b, None, |b, a| fireworks_fade_back(&mut Gx::dispatch(b, a)));
+            crate::world::tasks::Flow::Done
         },
-        /// Return from the jump through the state table (`jsr (table,PC)`): end of the handler.
         AfterState = 0xb8f04 => |x| {
-            crate::core::dispatch::resume_handler(x.b, None, |b, a| fireworks_tail(&mut Gx::dispatch(b, a)));
-            crate::screens::modes::Flow::Done
+            crate::actors::dispatch::resume_handler(x.b, None, |b, a| fireworks_tail(&mut Gx::dispatch(b, a)));
+            crate::world::tasks::Flow::Done
         },
     }
 }

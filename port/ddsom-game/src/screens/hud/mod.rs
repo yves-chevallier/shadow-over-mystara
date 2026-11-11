@@ -45,11 +45,12 @@ use crate::world::screen_tables::Rom;
 use crate::world::World;
 
 use crate::hw::mem::A5;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 use crate::Native;
 use crate::world::ram::Byte;
 use crate::world::objects::Obj;
+pub use crate::world::tasks::stages::Interface as Step;
 
 /// Work RAM variables (absolute addresses or offsets from A5).
 pub mod var {
@@ -243,12 +244,9 @@ const LAYOUTS: Rom = Rom::at(0x15164);
 const CABINET: Byte = Byte::a5(0x20);
 
 crate::steps! {
-    /// Task steps (the top of the loop, `0x15178`, is never a resume: the entry chains into it).
-    pub enum Step {
+    impl Step {
         Entry = 0x150ac => entry,
-        /// Wait for the game start.
         Starting = 0x15146 => starting,
-        /// After the cession of a turn.
         AfterWait = 0x15212 => tour,
     }
 }
@@ -276,7 +274,7 @@ fn entry(x: &mut Ctx) -> Flow {
     for k in 1..4 {
         Slot::new(k).set_p8(x.b, panel::INDEX, k as u8);
     }
-    crate::core::tasks::one_frame(x, Step::Starting)
+    crate::world::tasks::one_frame(x, Step::Starting)
 }
 
 /// 0x15146: layout according to the cabinet; outside the game, panels displayed in layout 0; in the game, wait for
@@ -290,7 +288,7 @@ fn starting(x: &mut Ctx) -> Flow {
         var::LAYOUT.set(x.b, 0);
         slot::forget_displayed(x.b);
     } else if (var::PHASE.get(x.b) as i8) < 4 {
-        return crate::core::tasks::one_frame(x, Step::Starting);
+        return crate::world::tasks::one_frame(x, Step::Starting);
     }
     tour(x)
 }
@@ -329,7 +327,7 @@ fn tour(x: &mut Ctx) -> Flow {
     // 0x19b2a, 0x19b9c: the pending events credited to the players' counters
     crate::world::events::credit_points(x.b);
     crate::world::events::credit_counter(x.b);
-    crate::core::tasks::one_frame(x, Step::AfterWait)
+    crate::world::tasks::one_frame(x, Step::AfterWait)
 }
 
 /// Native routines of the player interface.

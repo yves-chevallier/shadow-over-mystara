@@ -27,7 +27,7 @@ fn main() {
     // stack (below FF2A1A). A register left free by a native routine is only a copy
     // there; if it were really used, the difference would show up elsewhere.
     // + the kernel RAM, which the game keeps in its task table in Rust.
-    let saved = |a: usize| ddsom_game::core::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a);
+    let saved = |a: usize| ddsom_game::world::tasks::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a);
     let t0 = std::time::Instant::now();
     let mut first = None;
     for f in 0..frames {

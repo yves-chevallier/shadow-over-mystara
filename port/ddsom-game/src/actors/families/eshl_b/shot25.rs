@@ -60,7 +60,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     x.set32(Obj::Z, 0);
     crate::actors::families::effects_creators::debris(x.b, x.o, 3);
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 8);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 8);
     crate::services::sound::play(x.b, IMPACT_EFFECT, x.o);
     if x.u16(Shot25::LINK) != 0 {
         let shadow = x.linked(Shot25::LINK);

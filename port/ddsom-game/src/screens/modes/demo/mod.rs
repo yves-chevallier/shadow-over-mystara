@@ -28,13 +28,14 @@ use crate::actors::families::creators::set_15_pure;
 use crate::world::objects::Obj;
 use crate::services::video::{clear_layer, Layer};
 use crate::world::objects::pools;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Ctx;
 use crate::Native;
 
 mod presentation;
 mod recorder;
 use presentation::*;
 use recorder::*;
+pub use crate::world::tasks::stages::Demo as Step;
 pub use recorder::{reset_recorder, stop_recorder};
 #[cfg(feature = "tools")]
 pub(crate) use recorder::reset_recorder_by;
@@ -88,7 +89,7 @@ mod var {
 
 mod ext {
     /// Player interface task.
-    pub const PLAYER_UI: crate::core::tasks::Task = crate::core::tasks::Task::Interface;
+    pub const PLAYER_UI: crate::world::tasks::Task = crate::world::tasks::Task::Interface;
 }
 
 /// ROM tables (data, or addresses read by the original code relative to the PC).
@@ -154,7 +155,7 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
     match step {
         0 => start_a(x),
         2 => {
-            crate::core::tasks::prompt::launch(x.b);
+            crate::screens::prompt::launch(x.b);
             loop_a(x)
         }
         6 => presentation_step(x),
@@ -164,8 +165,7 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
     }
 }
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         ReturnA = 0x1f33a => |_| Flow::Done,
         LoopA = 0x1f932 => loop_a,
         AfterYieldA = 0x1f962 => after_yield_a,
@@ -183,7 +183,6 @@ crate::steps! {
             var::VIDEO.set(x.b, v);
             Flow::Done
         },
-        /// The jump from `0x1fce4` to `0x1fc68` leaves the `bsr` address on the stack: the terrain is rendered twice.
         PresentAgain = 0x1fdba => p_render,
         P4Hide = 0x1ff5e => |x| {
             let v = var::VIDEO.get(x.b) & !0xe;
@@ -216,11 +215,8 @@ crate::steps! {
             crate::services::sound::service(x.b, crate::services::sound::Service::Ff05);
             Flow::Done
         },
-        /// Phase returns (`jsr (A0)` of the two loops): a phase may cede control, then come back here.
         AfterPhaseA = 0x1f98c => after_phase,
         AfterPhaseB = 0x20a98 => after_phase,
-        /// Return from the world update in demo phase 12 (`jsr 0x1c86e` at `0x1fa44`), when
-        /// an object handler made the task cede control.
         AfterWorld = 0x1fa4a => demo_after_world,
     }
 }
@@ -249,7 +245,7 @@ fn clear_lists_and_objects(x: &mut Ctx) {
 }
 
 fn start_a(x: &mut Ctx) -> Flow {
-    crate::core::tasks::prompt::stop(x.b);
+    crate::screens::prompt::stop(x.b);
     x.next_step();
     let which = rd_state(x, f::ALTERNATE);
     Obj(mode::BASE).set_u8(x.b, f::ALTERNATE, which ^ 4);
@@ -321,7 +317,7 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
     Obj(mode::BASE).set_u32(x.b, f::SCRIPT, a1);
     clear::STARTED.set(x.b, 0);
     var::SCREEN_WAIT.set(x.b, 3);
-    crate::core::kernel::create_task(x.b, 0x30, ext::PLAYER_UI);
+    crate::world::tasks::traps::create_task(x.b, 0x30, ext::PLAYER_UI);
     Flow::Done
 }
 
@@ -447,7 +443,7 @@ fn scene_end_common(x: &mut Ctx, resume: Step) -> Flow {
     stop_recorder(x.b);
     var::PHASE.set(x.b, 0);
     var::PLAYERS_PRESENT.set(x.b, 0);
-    crate::core::kernel::kill_task(x.b, 0x30);
+    crate::world::tasks::traps::kill_task(x.b, 0x30);
     clear_lists_and_objects(x);
     x.wait(1, resume)
 }
@@ -472,7 +468,7 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     var::PHASE.set(x.b, 0);
     Obj(mode::BASE).set_u16(x.b, f::STEP, 0);
     var::PLAYERS_PRESENT.set(x.b, 0);
-    crate::core::kernel::kill_task(x.b, 0x30);
+    crate::world::tasks::traps::kill_task(x.b, 0x30);
     clear_lists_and_objects(x);
     x.wait(1, Step::EndClear)
 }
@@ -493,7 +489,7 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
     x.push_return(Step::ReturnB);
     match step {
         0 => {
-            crate::core::tasks::prompt::stop(x.b);
+            crate::screens::prompt::stop(x.b);
             x.next_step();
             Obj(mode::BASE).set_u32(x.b, f::SCRIPT, table::SCRIPT_B.addr());
             let t = var::DEMO_TIME.get(x.b);
@@ -504,7 +500,7 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
             next_operation_b(x)
         }
         2 => {
-            crate::core::tasks::prompt::launch(x.b);
+            crate::screens::prompt::launch(x.b);
             loop_b(x)
         }
         4 => scene_next_b(x),
@@ -557,7 +553,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                 } else {
                     fading::DELAY.set(x.b, 2);
                     fading::PAGES.set(x.b, 15);
-                    crate::core::kernel::create_task(x.b, 0x10, crate::screens::scene::fading::DESCENT);
+                    crate::world::tasks::traps::create_task(x.b, 0x10, crate::screens::scene::fading::DESCENT);
                     crate::services::sound::service(x.b, crate::services::sound::Service::Ff07 { lock: 0, line: 0 });
                 }
             }
@@ -586,7 +582,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
     var::PHASE.set(x.b, 0);
     Obj(mode::BASE).set_u16(x.b, f::STEP, 0);
     var::PLAYERS_PRESENT.set(x.b, 0);
-    crate::core::kernel::kill_task(x.b, 0x30);
+    crate::world::tasks::traps::kill_task(x.b, 0x30);
     clear_layer(x.b, Layer::One);
     crate::services::video::clear_layer1_start(x.b);
     palette(1, 0xe).set(x.b, 0xf112);
@@ -605,17 +601,17 @@ pub(crate) fn demo_phase_12(x: &mut Ctx) -> Flow {
     crate::services::inputs::copy_in_game(x.b);
     demo_inputs(x);
     x.push_return(Step::AfterWorld);
-    if crate::core::game::update_world(x.b) == Flow::Yield {
+    if crate::actors::update::update_world(x.b) == Flow::Yield {
         return Flow::Yield;
     }
     x.drop_return();
     demo_after_world(x)
 }
 
-/// `0x1fa4a`: like game phase 12 (`game::after_world`); the original ends with `jmp 0x28d8` (the end of
+/// `0x1fa4a`: like game phase 12 (`scene::after_world`); the original ends with `jmp 0x28d8` (the end of
 /// the game, then its `rts`).
 fn demo_after_world(x: &mut Ctx) -> Flow {
-    crate::core::game::after_world(x.b);
+    crate::screens::scene::after_world(x.b);
     Flow::Done
 }
 

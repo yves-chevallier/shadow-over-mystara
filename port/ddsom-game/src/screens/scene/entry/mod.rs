@@ -11,13 +11,11 @@
 //! (`scratch`). A scene without its own sequence (the majority) only does a fade and immediately goes
 //! to phase 12. See `docs/scenes.md` for the scene table.
 
-use crate::screens::vars as sv;
 use crate::world::World;
 use super::fading;
 
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::actors::families::effects_creators as creators;
-use crate::core::game;
 use crate::world::objects::Obj;
 use crate::world::objects::pools;
 
@@ -33,10 +31,6 @@ pub(crate) mod table {
     pub const PALETTE_B: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x21bb0);
     /// One byte per scene (copied to `A5+0x3e` and `A5+0x40`), index ×2.
     pub const SCENE_BYTE: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x21156);
-    /// Players' entry position: 4 pairs (X, Y) of words per scene.
-    pub const START_POSITIONS: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2123c);
-    /// One byte per player and per scene (`+0x2c` of the player).
-    pub const START_STATES: crate::world::screen_tables::Rom = crate::world::screen_tables::Rom::at(0x2196c);
 }
 
 /// Work RAM variables outside the A5 ± 0x7fff page, cleared on entry.
@@ -51,9 +45,6 @@ mod ram {
     pub const WORD_G: Word = Word(0xff_204c);
     pub const WORD_H: Word = Word(0xff_2040);
 }
-
-/// Player field: rank of arrival in the scene.
-const ARRIVAL_RANK: u32 = 0x7d;
 
 const STEP_INIT: u8 = 0;
 const STEP_SEQUENCE: u8 = 2;
@@ -95,9 +86,9 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x49, pb);
     crate::screens::modes::demo::reset_recorder(x.b);
     crate::services::sprites::clear_lists(x.b);
-    // 0x33aa6: cameras at start, then their update (D4 of which is re-read: `scroll::update_cameras_in_game`)
+    // 0x33aa6: cameras at start, then their update (D4 of which is re-read: `camera_modes::update_cameras_in_game`)
     crate::services::scroll::cameras_start(x.b);
-    crate::services::scroll::update_cameras_in_game(x.b);
+    crate::actors::camera_modes::update_cameras_in_game(x.b);
     script::reset(x.b);
     for pool in crate::world::objects::pools::POOLS {
         pool.reset(x.b);
@@ -126,7 +117,7 @@ fn init_scene(x: &mut Ctx) {
         }
     }
     var::PLAYERS.set(x.b, alive);
-    place_players(x.b);
+    crate::actors::player::init::place_players(x.b);
 }
 
 fn clear_player(x: &mut Ctx, p: u32) {
@@ -143,37 +134,6 @@ fn clear_player(x: &mut Ctx, p: u32) {
     for off in PLAYER_SPELL_SLOTS.step_by(4) {
         p.set_u32(x.b, off, 0);
     }
-}
-
-/// 0x20de6: places each player in the game in front of the camera, from the scene tables (consumed in the order
-/// of the players in the game). Returns the number of players placed: the rank of the next one (D2, that the original
-/// leaves to its callers).
-pub fn place_players(b: &mut World) -> u8 {
-    let scene = var::SCENE.get(b) as u32;
-    let mut positions = scene << 4;
-    let mut states = scene << 2;
-    let (camera_x, camera_y) =
-        if var::USE_ALT_CAMERA.get(b) != 0 { (sv::CAMERA_2_X, sv::CAMERA_2_Y) } else { (sv::CAMERA_X, sv::CAMERA_Y) };
-    let mut rank = 0u8;
-    for k in 0..4 {
-        let p = PLAYERS + k * PLAYER_STRIDE;
-        if Obj(p).u8(b, player::ACTIVE) == 0 || Obj(p).u16(b, player::HEALTH) == 0 {
-            continue;
-        }
-        let (dx, dy) = (camera_x.get(b), camera_y.get(b));
-        let (px, py) = (table::START_POSITIONS.word(b, positions), table::START_POSITIONS.word(b, positions + 2));
-        positions += 4;
-        let p = Obj(p);
-        p.set_u16(b, Obj::X, px.wrapping_add(dx));
-        p.set_u16(b, Obj::Y, py.wrapping_add(dy));
-        p.set_z(b, 0);
-        let state = table::START_STATES.byte(b, states);
-        p.set_u8(b, crate::world::objects::player::Player::FACING, state);
-        states += 1;
-        p.set_u8(b, ARRIVAL_RANK, rank);
-        rank += 1;
-    }
-    rank
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -236,7 +196,7 @@ pub fn phase_8(b: &mut World, handler: u32) {
             let scene = var::SCENE.get(x.b);
             sequence(scene)(&mut x);
             script::step(x.b);
-            game::debug_scene_skip(x.b);
+            super::debug_scene_skip(x.b);
         }
         _ => {}
     }

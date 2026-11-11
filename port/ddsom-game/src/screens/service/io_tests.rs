@@ -7,8 +7,8 @@ use crate::hw::video::{regs, Cell};
 use crate::world::ram::Long;
 use crate::world::screen_tables as tables;
 use super::{exit_check, f, hex_digits, key, layers_off, layers_on, next_step, pressed, print, var, MENU_BLOCK};
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Players displayed according to the coin slot type (`A5+0x1d`: 0-2 two players, 3-6 three, 7+ four).
 fn players(x: &mut Ctx) -> u32 {

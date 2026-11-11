@@ -6,6 +6,7 @@ use crate::screens::scene::fading;
 mod timed;
 use timed::*;
 use crate::screens::obj;
+pub use crate::world::tasks::stages::TransitionEarly as Step;
 pub use timed::{scene_11, scene_13};
 
 /// Engine routines specific to these scripts.
@@ -33,8 +34,7 @@ pub fn scene_1(x: &mut Ctx) -> Flow {
     }
 }
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
+    impl Step {
         S1Shown = 0xf829a => |x| {
             sound(x, 8);
             next(x);
@@ -55,7 +55,7 @@ crate::steps! {
             layers_or(x, 0xc);
             x.wait(1, Step::S2Drawn)
         },
-        S2Drawn = 0xf83cc => |x| fade(x, ALL_PAGES, crate::core::tasks::fading::rise, Caller),
+        S2Drawn = 0xf83cc => |x| fade(x, ALL_PAGES, crate::services::fading::rise, Caller),
         S2Faded = 0xf8456 => |x| hide_layers(x, At(Step::S2Cleared.into())),
         S2Cleared = 0xf8464 => |x| {
             clear_layer(x.b, Layer::Two);
@@ -71,7 +71,7 @@ crate::steps! {
             tiles(x, TB, 0, end);
             show_layers(x, At(Step::S5Shown.into()))
         },
-        S5Shown = 0xf8524 => |x| fade(x, SCENE_PAGES, crate::core::tasks::fading::rise, At(Step::S5FadedIn.into())),
+        S5Shown = 0xf8524 => |x| fade(x, SCENE_PAGES, crate::services::fading::rise, At(Step::S5FadedIn.into())),
         S5FadedIn = 0xf8528 => s5_second_message,
         S5Retry2 = 0xf853c => s5_second_message,
         S5TextFaded = 0xf8556 => |x| hide_layers(x, At(Step::S5TextHidden.into())),
@@ -81,7 +81,7 @@ crate::steps! {
             VARS_BLOCK.set16(x.b, var::TIMER, 120);
             sprites_next_frame(x, Step::S5TextShown)
         },
-        S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, crate::core::tasks::fading::rise, At(Step::S5TextFadedIn.into())),
+        S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, crate::services::fading::rise, At(Step::S5TextFadedIn.into())),
         S5TextFadedIn = 0xf8586 => |x| {
             next(x);
             Flow::Done
@@ -129,7 +129,7 @@ crate::steps! {
             next(x);
             show_layers(x, At(Step::S4SecondShown.into()))
         },
-        S4SecondShown = 0xf8982 => |x| fade(x, SCENE_PAGES, crate::core::tasks::fading::rise, Caller),
+        S4SecondShown = 0xf8982 => |x| fade(x, SCENE_PAGES, crate::services::fading::rise, Caller),
         S4Faded = 0xf8a84 => |x| hide_layers(x, At(Step::S4FadedHidden.into())),
         S4FadedHidden = 0xf8a88 => |x| home_camera_1(x, At(Step::S4Homed.into())),
         S4Homed = 0xf8a8c => |x| {
@@ -138,7 +138,7 @@ crate::steps! {
             dark_palette(x, 87);
             show_layers(x, At(Step::S4Dark.into()))
         },
-        S4Dark = 0xf8ab4 => |x| fade(x, SCENE_PAGES, crate::core::tasks::fading::rise, At(Step::S4DarkIn.into())),
+        S4Dark = 0xf8ab4 => |x| fade(x, SCENE_PAGES, crate::services::fading::rise, At(Step::S4DarkIn.into())),
         S4DarkIn = 0xf8ab8 => s4_message_92,
         S4Retry92 = 0xf8acc => s4_message_92,
         S4RetryWizard = 0xf8aea => s4_wizard,
@@ -214,7 +214,7 @@ crate::steps! {
             VARS_BLOCK.set16(x.b, var::TIMER, 10);
             fading::DELAY.set(x.b, 4);
             fading::PAGES.set(x.b, ALL_PAGES);
-            crate::core::tasks::fading::rise(x)
+            crate::services::fading::rise(x)
         },
         S11Retry17 = 0xf8db4 => s11_message_17,
         S11Retry18 = 0xf8e48 => s11_message_18,
@@ -238,7 +238,7 @@ crate::steps! {
         S13Shown = 0xf8f02 => |x| {
             fading::DELAY.set(x.b, 4);
             fading::PAGES.set(x.b, ALL_PAGES);
-            crate::core::tasks::fading::rise(x)
+            crate::services::fading::rise(x)
         },
         S13LeftDrawn = 0xf8f98 => |x| yield_frames(x, 1, At(Step::S13LeftWaited.into())),
         S13LeftWaited = 0xf8fa0 => |x| hide_layers(x, At(Step::S13LeftHidden.into())),
@@ -284,9 +284,8 @@ crate::steps! {
             }
             fading::DELAY.set(x.b, 1);
             fading::PAGES.set(x.b, SCENE_PAGES);
-            goto(x, crate::core::tasks::fading::to_palettes, Caller)
+            goto(x, crate::services::fading::to_palettes, Caller)
         },
-        /// state 6: new terrain, dialogue 30
         S13Closing = 0xf919e => |x| yield_frames(x, 1, At(Step::S13ClosingWaited.into())),
         S13ClosingWaited = 0xf91a6 => |x| hide_layers(x, At(Step::S13ClosingHidden.into())),
         S13ClosingHidden = 0xf91aa => |x| {
@@ -302,7 +301,7 @@ crate::steps! {
             yield_frames(x, 4, At(Step::S13ClosingDrawn.into()))
         },
         S13ClosingDrawn = 0xf9210 => |x| show_layers(x, At(Step::S13ClosingShown.into())),
-        S13ClosingShown = 0xf9214 => |x| fade(x, SCENE_PAGES, crate::core::tasks::fading::rise, At(Step::S13ClosingIn.into())),
+        S13ClosingShown = 0xf9214 => |x| fade(x, SCENE_PAGES, crate::services::fading::rise, At(Step::S13ClosingIn.into())),
         S13ClosingIn = 0xf921a => s13_message_30,
         S13Retry30 = 0xf922e => s13_message_30,
         S13Faded = 0xf938a => |x| hide_layers(x, At(Step::S13End.into())),
@@ -375,7 +374,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             let scene = answer(x, 0xf847c);
             VARS_BLOCK.set8(x.b, var::MESSAGE, scene);
             sound(x, 0);
-            fade(x, ALL_PAGES, crate::core::tasks::fading::descent, At(Step::S2Faded.into()))
+            fade(x, ALL_PAGES, crate::services::fading::descent, At(Step::S2Faded.into()))
         }
         _ => Flow::Done,
     }
@@ -404,20 +403,20 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S5Faded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S5Faded.into()))
         }
         6 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S5TextFaded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S5TextFaded.into()))
         }
         8 => {
             if !any_button(x) && !tick(x) {
                 return Flow::Done;
             }
             sound(x, 0);
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S5EndFaded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S5EndFaded.into()))
         }
         _ => Flow::Done,
     }
@@ -485,13 +484,13 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S4Faded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S4Faded.into()))
         }
         10 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, crate::core::tasks::fading::descent, At(Step::S4SecondFaded.into()))
+            fade(x, SCENE_PAGES, crate::services::fading::descent, At(Step::S4SecondFaded.into()))
         }
         12 => {
             if !message_done(x) {

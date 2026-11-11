@@ -85,7 +85,7 @@ const SETTINGS: [(u32, u32); 12] =
     [(0, 0x1c), (2, 0x23), (3, 0x26), (4, 0x27), (5, 0x28), (1, 0x1d), (6, 0x29), (7, 0x73), (8, 0x84), (9, 0x85), (0x10, 0x2a), (0x11, 0x2b)];
 
 /// 0x2d5c6: are the current settings the factory ones (default block of the variant)?
-pub fn is_factory(x: &mut crate::screens::scene::Ctx) -> bool {
+pub fn is_factory(x: &mut crate::world::tasks::Ctx) -> bool {
     let block = block_defaults(x.b);
     SETTINGS.iter().all(|&(byte, variable)| block.byte(x.b, byte) == x.v8(variable))
 }
@@ -320,10 +320,10 @@ fn error(b: &mut World) {
         crate::hw::mem::wr16(b, CASE_ERROR + 0x80 * k, ch);
         crate::hw::mem::wr16(b, CASE_ERROR + 0x80 * k + 2, 8);
     }
-    crate::core::kernel::block(b, BLOCKED);
+    crate::world::tasks::traps::block(b, BLOCKED);
 }
 
-/// Native of 0x2d30a (startup calls it by address). After "EEPROM ERROR", the task is blocked (`kernel::block`):
+/// Native of 0x2d30a (startup calls it by address). After "EEPROM ERROR", the task is blocked (`traps::block`):
 /// the return is then that of no call.
 pub const INIT: Native = memory(0x2d30a, "config_init", init);
 
@@ -331,7 +331,7 @@ pub const INIT: Native = memory(0x2d30a, "config_init", init);
 // TEST menu, 7. CONFIGURATION: factory settings and saving
 
 /// 0x2d546: the variant's factory settings into the game variables.
-pub fn reset_factory(x: &mut crate::screens::scene::Ctx) {
+pub fn reset_factory(x: &mut crate::world::tasks::Ctx) {
     let block = block_defaults(x.b);
     for (byte, variable) in SETTINGS {
         let v = block.byte(x.b, byte);

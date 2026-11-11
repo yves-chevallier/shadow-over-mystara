@@ -19,10 +19,11 @@
 use crate::actors::aids::divide;
 use crate::screens::scene::fading;
 use crate::hw::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
-use crate::screens::modes::{Flow, Sequence};
-use crate::screens::scene::Ctx;
+use crate::world::tasks::{Flow, Sequence};
+use crate::world::tasks::Ctx;
 use crate::services::video::Grid;
 use crate::world::objects::pools;
+pub use crate::world::tasks::stages::Scores as Step;
 
 /// State block of the screen (`A0`, A5 - 0x70b0).
 mod state {
@@ -55,11 +56,9 @@ mod var {
 }
 
 crate::steps! {
-    /// Stages of the task: the entry and the cession return, each of which does one turn.
-    pub enum Step {
+    impl Step {
         Entry = 0x1835e => tour,
         Resume = 0x18384 => tour,
-        /// Return from the stage call (`jsr (table,PC)`): the objects, the sprites, a cession frame.
         AfterStep = at::AFTER_STEP => after_step,
     }
 }
@@ -393,7 +392,7 @@ fn end(x: &mut Ctx) -> Flow {
     }
     let finished = rd8(x.b, state::FINISHED).wrapping_add(1);
     wr8(x.b, state::FINISHED, finished);
-    super::finish(x)
+    crate::world::tasks::finish(x)
 }
 
 /// One turn of the loop: the stage, the objects, the sprites, a cession frame.
@@ -413,8 +412,8 @@ fn tour(x: &mut Ctx) -> Flow {
 
 /// `0x1836e`: return from the stage.
 fn after_step(x: &mut Ctx) -> Flow {
-    crate::core::dispatch::EFFCT.update_no_next(x.b);
-    crate::core::dispatch::SET.update_no_next(x.b);
+    crate::actors::dispatch::EFFCT.update_no_next(x.b);
+    crate::actors::dispatch::SET.update_no_next(x.b);
     crate::services::sprites::build_in_game(x.b);
-    super::one_frame(x, Step::Resume)
+    crate::world::tasks::one_frame(x, Step::Resume)
 }

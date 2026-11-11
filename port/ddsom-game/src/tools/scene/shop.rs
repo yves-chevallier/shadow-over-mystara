@@ -4,8 +4,8 @@
 
 use crate::screens::scene::shop::*;
 use crate::Native;
-use crate::screens::scene::Ctx;
-use crate::screens::modes::Flow;
+use crate::world::tasks::Ctx;
+use crate::world::tasks::Flow;
 
 pub(crate) const SHOP: Native = Native {
     entry: 0xf792e,

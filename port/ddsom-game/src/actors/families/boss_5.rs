@@ -190,7 +190,7 @@ fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             var::FADE_PAGES.set(x.b, 0xf);
             var::FADE_STEPS.set(x.b, 8);
             // 0x9b6 with A0 = 0x14de, D0.w = 0x10: fade task (counting down the number of steps of `A5+0x48f`)
-            crate::screens::scene::fading::launch(x.b, crate::screens::scene::fading::DESCENT_STEP);
+            crate::world::tasks::traps::create_task(x.b, 0x10, crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::DescentSteps));
             intro_wait_scene(x);
         }
         4 => intro_wait_scene(x),

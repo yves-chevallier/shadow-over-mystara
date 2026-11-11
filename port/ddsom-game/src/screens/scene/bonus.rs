@@ -12,12 +12,13 @@ use super::screen::blocks::{EXIT_STEP, EXIT_SUB_STEP};
 use crate::hw::video::{PALETTES, SCROLL1, SCROLL2, SCROLL3, TEXT};
 use crate::world::ram::{Long, Word};
 use crate::world::screen_tables as tables;
-use crate::screens::modes::{Flow, Sequence};
+use crate::world::tasks::{Flow, Sequence};
 use crate::Native;
 use crate::actors::families::effects_creators::{end_screen, or_rest};
 use crate::world::objects::{pools, Obj};
 use crate::services::video::{load_grid, clear_layer, Layer, Grid};
 use crate::screens::obj;
+pub use crate::world::tasks::stages::Bonus as Step;
 
 /// Bonus screen variables (below A5).
 mod v {
@@ -89,7 +90,7 @@ pub fn dispatch(x: &mut Ctx, _table: u32) -> u8 {
 
 /// Fade to black or from black (delay 4, all pages, 15 steps); the routine cedes control and returns to
 /// `resume`.
-pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::core::tasks::table::Next>) -> Flow {
+pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::world::tasks::table::Next>) -> Flow {
     fading::STEP.set(x.b, 15);
     fading::DELAY.set(x.b, 4);
     fading::PAGES.set(x.b, 15);
@@ -163,13 +164,11 @@ fn start(x: &mut Ctx) -> Flow {
         EXIT_STEP.set(x.b, s);
         return Flow::Done;
     }
-    fade(x, crate::core::tasks::fading::descent, Step::FadedOut)
+    fade(x, crate::services::fading::descent, Step::FadedOut)
 }
 
 crate::steps! {
-    /// Steps (resume points) of the state machine.
-    pub enum Step {
-        /// The cameras are set aside and placed on the bonus terrain.
+    impl Step {
         FadedOut = at::FADED_OUT.0 => |x| {
             next_sub_step(x);
             let main = (x.v16(a5::CAM_X), x.v16(a5::CAM_Y));
@@ -199,7 +198,6 @@ crate::steps! {
             crate::services::palette::load_palette_set(x.b, 2);
             Flow::Done
         },
-        /// The bonus title (SET object type 0, variant 69).
         Started = at::STARTED.0 => |x| {
             if let Some(o) = pools::SET.alloc(x.b) {
                 for (off, v) in [(Obj::ACTIVE, 1), (Obj::KIND, 0), (Obj::VARIANT, 69), (obj::INDEX, 3)] {
@@ -208,14 +206,12 @@ crate::steps! {
             }
             Flow::Done
         },
-        /// The bonus screen is cleared; outside scene 1 the state is finished, in scene 1 the palette pages come back
-        /// after four frames.
         Ended = 0xf6380 => |x| {
             next_sub_step(x);
             screen::clear_bonus_frame(x.b);
             let counter = v::COUNTER.get(x.b) as i16 as i32 as u32 & 0xff_ffff;
             Obj(counter).set_u32(x.b, Obj::STATE, 0x0600_0000);
-            crate::core::dispatch::EFFCT.update_no_next(x.b);
+            crate::actors::dispatch::EFFCT.update_no_next(x.b);
             crate::services::sprites::build_in_game(x.b);
             if x.v8(a5::SCENE) != 1 {
                 x.set_v8(0x3c, 0xff);
@@ -236,8 +232,7 @@ crate::steps! {
             }
             Flow::Done
         },
-        /// Last frame: fade from black, then the next state of the sequence.
-        LastFrame = 0xf6470 => |x| fade(x, crate::core::tasks::fading::rise, Step::FadedIn),
+        LastFrame = 0xf6470 => |x| fade(x, crate::services::fading::rise, Step::FadedIn),
         FadedIn = 0xf6488 => |x| {
             leave(x);
             Flow::Done
@@ -364,7 +359,7 @@ fn objects(x: &mut Ctx) -> Flow {
     }
     x.set_v8(0x3c, 2);
     crate::services::palette::load_palette_page(x.b, 1, 1);
-    fade(x, crate::core::tasks::fading::rise, Step::Started)
+    fade(x, crate::services::fading::rise, Step::Started)
 }
 
 /// 0xf67fa: the bonus terrain, rectangle of cells read from ROM (width, height, then the cells by columns).
@@ -435,7 +430,7 @@ fn end(x: &mut Ctx) -> Flow {
     if !tick16(x, v::SECONDS_WORD) {
         return Flow::Done;
     }
-    fade(x, crate::core::tasks::fading::descent, Step::Ended)
+    fade(x, crate::services::fading::descent, Step::Ended)
 }
 
 pub const NATIVES: &[Native] = &[

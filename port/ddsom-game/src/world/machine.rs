@@ -1,6 +1,6 @@
 //! Common context of the native routines: the machine (the bus) and the shared services.
 //!
-//! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
+//! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `tasks::Ctx`,
 //! `combat::Combat`...); all of them hold `b: &mut World`. Rather than a base structure that
 //! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
 //! the [`Machine`] trait, which gives them the common services once: the random draw. The data of the original are

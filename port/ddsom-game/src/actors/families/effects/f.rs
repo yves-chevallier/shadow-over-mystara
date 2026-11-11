@@ -65,8 +65,8 @@ fn load_palette<R: Bench>(x: &mut Cx<'_, R>, from: &Table, to: u32) {
 }
 
 /// Launches task `program` (0x9b6) with parameter D0.w = `param`.
-fn new_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::core::tasks::Task, param: u16) {
-    crate::core::kernel::create_task(x.b, param as u32, task);
+fn new_task<R: Bench>(x: &mut Cx<'_, R>, task: crate::world::tasks::Task, param: u16) {
+    crate::world::tasks::traps::create_task(x.b, param as u32, task);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -167,7 +167,7 @@ fn opening_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(fields::STATE, 2);
     clear_scene(x);
     crate::services::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
-    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::C, 0x20);
+    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::C, 0x20);
 }
 
 /// Ends (state 6) the objects of the two pools. Like the original, an object of the first pool marked
@@ -428,7 +428,7 @@ fn timer_out<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 mod passage {
     pub const ANIM_SET: crate::world::data::RomAddr = crate::world::data::RomAddr(0x196a28);
-    pub const FADE_PROGRAM: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::FromWhite);
+    pub const FADE_PROGRAM: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::FromWhite);
 }
 
 fn passage<R: Bench>(x: &mut Cx<'_, R>) {
@@ -520,7 +520,7 @@ mod launcher {
     /// Palette save (0x91c000, 33 × 32 bytes) for the fade.
     pub const PALETTE_RAM: u32 = 0x91c000;
     pub const PALETTE_COPY: u32 = 0xff1190;
-    pub const FADE_PROGRAM: crate::core::tasks::Task = crate::core::tasks::Task::Fading(crate::core::tasks::fading::Fade::ToWhite);
+    pub const FADE_PROGRAM: crate::world::tasks::Task = crate::world::tasks::Task::Fading(crate::world::tasks::stages::Fade::ToWhite);
 }
 
 fn launcher<R: Bench>(x: &mut Cx<'_, R>) {

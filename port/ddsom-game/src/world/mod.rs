@@ -22,11 +22,12 @@ pub mod record;
 pub mod rng;
 pub mod screen_tables;
 pub mod tables;
+pub mod tasks;
 pub mod terrain;
 
 use cps2::{Board, Cps2Bus};
 
-use crate::core::tasks::table::Table;
+use crate::world::tasks::table::Table;
 
 /// What the world holds besides the RAM, parked in the bus extension (`Cps2Bus::ext`) while the RAM is on a bus
 /// (tools).

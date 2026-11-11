@@ -94,6 +94,26 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     Some(indices.iter().zip(SLOTS).map(|(&index, slot)| (index, slot)).collect())
 }
 
+/// 0x33e20: updates the two cameras. The first remembers its previous target (+0x26, +0x2a)
+/// before its mode script (0x2ede0) moves it; the second is processed by 0x32108.
+/// Returns the D4 left by the scenery copies of the two cameras (in order).
+pub fn update_cameras(b: &mut World) -> [crate::services::scroll::D4Leftovers; 2] {
+    let (x, y) = (CAMERA_1.x_long(b), CAMERA_1.y_long(b));
+    CAMERA_1.set_previous_x_long(b, x);
+    CAMERA_1.set_previous_y_long(b, y);
+    [update_camera_1(b), update_camera_2(b)]
+}
+
+/// `update_cameras` in the game. Original glitch: the D4 of the scenery copies is reread by a following handler
+/// (boss13_dragon, frame 7241): it is the leftover D4 of the game (`dispatch::Leftovers`); A0 (camera 2) is reread by
+/// nobody.
+pub fn update_cameras_in_game(b: &mut World) {
+    for (v, m) in update_cameras(b).into_iter().flatten() {
+        let leftovers = &mut b.leftovers;
+        leftovers.d4 = leftovers.d4 & !m | v;
+    }
+}
+
 /// 0x2ede0: camera 1 (A5+0x4fe) is initialised at the first call of a scene, then updated each frame.
 /// Returns the D4 left by the scenery copy.
 pub fn update_camera_1(b: &mut World) -> crate::services::scroll::D4Leftovers {

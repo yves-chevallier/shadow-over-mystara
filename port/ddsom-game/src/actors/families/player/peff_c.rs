@@ -422,8 +422,8 @@ mod holy {
                 crate::services::sound::play(x.b, SFX_END, x.o);
             } else {
                 // the table designates the shake by its routine (0x2824, 0x2860, 0x289c)
-                let mode = crate::services::camera_modes::shake::of_routine(player_data().holy_shake_table.long_at(x.b, command as u32));
-                crate::services::camera_modes::start_shake(x.b, mode, duration as u16);
+                let mode = crate::actors::camera_modes::shake::of_routine(player_data().holy_shake_table.long_at(x.b, command as u32));
+                crate::actors::camera_modes::start_shake(x.b, mode, duration as u16);
             }
         }
         x.add8(DURATION, 0xff);

@@ -115,7 +115,7 @@ pub(super) fn lob_active<R: Bench>(x: &mut Cx<'_, R>) {
                     wr16(x.b, o.0 + Obj::Y, py);
                 }
             }
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, 0xf);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, 0xf);
             x.anim_start(lob::ANIM_SET.0, 2);
             let shake = match v {
                 4 => 0xa,

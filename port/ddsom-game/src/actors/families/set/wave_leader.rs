@@ -89,7 +89,7 @@ fn substate<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(SetObj::SUBSTATE, 2);
-            crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::B, CAMERA_LOCK_PARAM as u16);
+            crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::B, CAMERA_LOCK_PARAM as u16);
         }
         2 => {
             let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));

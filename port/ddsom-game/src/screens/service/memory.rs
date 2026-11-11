@@ -14,8 +14,8 @@
 
 use super::{back_to_menu, f, layers_off, layers_on, next_step, print, MENU_BLOCK};
 use crate::hw::io::Memory;
-use crate::screens::modes::Flow;
-use crate::screens::scene::Ctx;
+use crate::world::tasks::Flow;
+use crate::world::tasks::Ctx;
 
 /// Entry of the test in the original (called by `bsr` from step 2 of the screen).
 pub const CHECK: crate::world::data::RomAddr = crate::world::data::RomAddr(0x2cf26);
@@ -67,7 +67,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
         2 => {
             // the original masks interrupts around the test (trap 12): no effect on an instantaneous test
             if !check(x) {
-                crate::core::kernel::block(x.b, BLOCKED.0);
+                crate::world::tasks::traps::block(x.b, BLOCKED.0);
                 return Flow::Yield;
             }
             next_step(x);

@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::tasks::fading::Fade;
+use crate::world::tasks::stages::Fade;
 
 // ---------------------------------------------------------------------------------------------
 // Types 82 and 83: spark placed on an object; rain of sparks
@@ -158,7 +158,7 @@ pub(super) fn ending_piece<R: Bench>(x: &mut Cx<'_, R>) {
                 if (x.u16(Obj::X) as i16) <= 0x80 {
                     x.add8(f::SUB_STATE, 2);
                     wr8(x.b, floater::STEP, 0x14);
-                    crate::services::camera_modes::start_shake(x.b, crate::services::camera_modes::shake::A, 0x10);
+                    crate::actors::camera_modes::start_shake(x.b, crate::actors::camera_modes::shake::A, 0x10);
                     return;
                 }
                 // shakes in place, every other frame
@@ -241,7 +241,7 @@ pub(super) fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Launches script task `entry` (0x9b6, `trap #0`), A0 kept.
 pub(super) fn start_script<R: Bench>(x: &mut Cx<'_, R>, fade: Fade) {
-    crate::core::kernel::create_task(x.b, 0x10, crate::core::tasks::Task::Fading(fade));
+    crate::world::tasks::traps::create_task(x.b, 0x10, crate::world::tasks::Task::Fading(fade));
 }
 
 pub(super) fn finale_trigger<R: Bench>(x: &mut Cx<'_, R>) {
