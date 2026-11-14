@@ -35,7 +35,11 @@ Copier `ddsom.zip` et `qsound.zip` à la racine du dépôt, puis :
     unzip -o ddsom.zip -d rom
     unzip -o qsound.zip -d rom
 
-(`./play.sh` fait ces deux décompressions lui-même s'il manque `rom/ddsom.key` ou `rom/dl-1425.bin`.)
+(`./play.sh` et `make assets` font ces deux décompressions eux-mêmes s'il manque `rom/ddsom.key` ou
+`rom/dl-1425.bin`.)
+
+En bref, avec le `Makefile` : `make assets` (extraction), `make build` (compilation du jeu), `make play` (compile
+et joue depuis `assets/`). Les sections suivantes détaillent les mêmes commandes.
 
 ## 3. Extraire les ressources
 
